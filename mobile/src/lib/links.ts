@@ -1,6 +1,7 @@
 import { Alert } from 'react-native'
 import * as WebBrowser from 'expo-web-browser'
 import { apiHost, apiOrigin } from '@/config/env'
+import { t } from '@/i18n'
 import { useSettings } from '@/stores/settings'
 
 /**
@@ -44,7 +45,7 @@ export function isOwnHost(u: URL) {
 export async function openExternalUrl(raw: string): Promise<void> {
   const u = parseSafeUrl(raw)
   if (!u) {
-    Alert.alert('Lien bloqué', 'Ce lien utilise un protocole non autorisé.')
+    Alert.alert(t('store.links.blocked'), t('store.links.blockedBody'))
     return
   }
   const open = () =>
@@ -59,11 +60,11 @@ export async function openExternalUrl(raw: string): Promise<void> {
     return
   }
   Alert.alert(
-    'Ouvrir un lien externe ?',
-    `Tu vas quitter ForgeChat vers :\n\n${u.host}\n\n${u.toString().slice(0, 200)}`,
+    t('store.links.openTitle'),
+    t('store.links.leaving', { host: u.host, url: u.toString().slice(0, 200) }),
     [
-      { text: 'Annuler', style: 'cancel' },
-      { text: 'Ouvrir', onPress: () => void open() },
+      { text: t('common.cancel'), style: 'cancel' },
+      { text: t('store.links.open'), onPress: () => void open() },
     ],
   )
 }

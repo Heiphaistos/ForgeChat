@@ -18,7 +18,7 @@ export function isSameDay(a: string, b: string): boolean {
 }
 
 const MONTHS = ['janv.', 'févr.', 'mars', 'avr.', 'mai', 'juin', 'juil.', 'août', 'sept.', 'oct.', 'nov.', 'déc.']
-const MONTHS_EN = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+export const MONTHS_EN = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
 /** « 12 mars » / « Mar 12 ». */
 const dayMonth = (d: Date) => t('date.dayMonth', { d: d.getDate(), m: (useLang.getState().lang === 'en' ? MONTHS_EN : MONTHS)[d.getMonth()]! })
@@ -51,9 +51,9 @@ export function formatRelative(iso: string): string {
 }
 
 export function formatBytes(n: number): string {
-  if (n < 1024) return `${n} o`
-  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} Ko`
-  return `${(n / 1024 / 1024).toFixed(1)} Mo`
+  if (n < 1024) return t('store.format.bytes', { n })
+  if (n < 1024 * 1024) return t('store.format.kilobytes', { n: (n / 1024).toFixed(1) })
+  return t('store.format.megabytes', { n: (n / 1024 / 1024).toFixed(1) })
 }
 
 export function formatDuration(ms: number): string {

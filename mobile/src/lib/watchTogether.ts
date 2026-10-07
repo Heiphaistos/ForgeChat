@@ -2,6 +2,8 @@
 // store et le lecteur intégré (components/WatchPlayer.tsx, WebView + API IFrame YouTube).
 // Mêmes règles que le web (client/src/lib/watchTogether.ts).
 
+import { t, type Key } from '@/i18n'
+
 const ID_RE = /^[A-Za-z0-9_-]{11}$/
 
 /**
@@ -70,13 +72,13 @@ export function watchLink(w: WatchInfo, now: number): string {
   return `https://www.youtube.com/watch?v=${w.videoId}${t > 0 ? `&t=${t}s` : ''}`
 }
 
-const ERRORS: Record<string, string> = {
-  rate_limited: 'Doucement : 5 actions au plus toutes les 10 secondes.',
-  invalid_url: 'Adresse YouTube invalide.',
-  queue_full: 'La file d’attente est pleine (20 vidéos).',
+const ERRORS: Record<string, Key> = {
+  rate_limited: 'store.watch.rateLimited',
+  invalid_url: 'store.watch.invalidUrl',
+  queue_full: 'store.watch.queueFull',
 }
 /** Message d'un WATCH_ERROR (`reason`). */
-export const watchErrorMessage = (reason: unknown) => (typeof reason === 'string' && ERRORS[reason]) || 'Action refusée.'
+export const watchErrorMessage = (reason: unknown) => t((typeof reason === 'string' && ERRORS[reason]) || 'store.watch.refused')
 
 // ─── Lecteur intégré : pont WebView ─────────────────────────────────────────
 

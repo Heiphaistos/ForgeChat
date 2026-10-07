@@ -1,5 +1,6 @@
 import * as LocalAuthentication from 'expo-local-authentication'
 import { create } from 'zustand'
+import { t } from '@/i18n'
 import { useSettings } from './settings'
 
 /**
@@ -41,8 +42,8 @@ export const useLock = create<LockState>((set, get) => ({
     set({ authenticating: true })
     try {
       const res = await LocalAuthentication.authenticateAsync({
-        promptMessage: 'Déverrouiller ForgeChat',
-        cancelLabel: 'Annuler',
+        promptMessage: t('store.lock.prompt'),
+        cancelLabel: t('common.cancel'),
         disableDeviceFallback: false, // repli sur le code de l'appareil
       })
       if (res.success) set({ locked: false })

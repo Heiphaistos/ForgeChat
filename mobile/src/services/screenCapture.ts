@@ -1,5 +1,6 @@
 import { Alert, Platform } from 'react-native'
 import { SCREEN_SHARE_WARNING } from '@/features/calls/screenShareLogic'
+import { t } from '@/i18n'
 
 /**
  * Partage d'écran Android (MediaProjection), diffusé par LiveKit (setScreenShareEnabled).
@@ -17,9 +18,9 @@ export const screenShareSupported = Platform.OS === 'android'
 /** Avertit avant de partager : résout true si l'utilisateur confirme. */
 export function confirmScreenShare(): Promise<boolean> {
   return new Promise((resolve) => {
-    Alert.alert('Partager ton écran ?', SCREEN_SHARE_WARNING, [
-      { text: 'Annuler', style: 'cancel', onPress: () => resolve(false) },
-      { text: 'Partager', onPress: () => resolve(true) },
+    Alert.alert(t('store.screen.confirmTitle'), SCREEN_SHARE_WARNING, [
+      { text: t('common.cancel'), style: 'cancel', onPress: () => resolve(false) },
+      { text: t('store.screen.share'), onPress: () => resolve(true) },
     ], { cancelable: true, onDismiss: () => resolve(false) })
   })
 }

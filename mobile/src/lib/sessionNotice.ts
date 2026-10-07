@@ -1,6 +1,8 @@
+import type { Key } from '@/i18n'
 import { ApiError } from './http'
 
-export const SESSION_EXPIRED_NOTICE = 'Session expirée, reconnecte-toi.'
+/** Clé du message (traduit à l'affichage). */
+export const SESSION_EXPIRED_NOTICE: Key = 'store.session.expired'
 
 /**
  * Échec de la reprise de session au démarrage :

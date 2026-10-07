@@ -11,6 +11,7 @@ import { useTyping } from './typing'
 import { useUi } from './ui'
 import { useUnread } from './unread'
 import { classifyBootstrapFailure, SESSION_EXPIRED_NOTICE } from '@/lib/sessionNotice'
+import { t } from '@/i18n'
 
 /**
  * Cycle de vie de la session.
@@ -98,7 +99,7 @@ export const useAuth = create<AuthState>((set, get) => {
         } else {
           logger.warn('auth', 'bootstrap refusé', e)
           await wipeLocal()
-          set({ status: 'signedOut', user: null, notice: SESSION_EXPIRED_NOTICE })
+          set({ status: 'signedOut', user: null, notice: t(SESSION_EXPIRED_NOTICE) })
         }
       }
     },
@@ -147,7 +148,7 @@ export const useAuth = create<AuthState>((set, get) => {
 onSessionExpired(() => {
   if (useAuth.getState().status !== 'signedIn') return
   void wipeLocal().then(() =>
-    useAuth.setState({ status: 'signedOut', user: null, notice: 'Ta session a expiré ou a été révoquée. Reconnecte-toi.' }),
+    useAuth.setState({ status: 'signedOut', user: null, notice: t('store.session.revoked') }),
   )
 })
 

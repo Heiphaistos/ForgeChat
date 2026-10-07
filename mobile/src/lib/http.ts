@@ -36,7 +36,7 @@ export class ApiError extends Error {
 
 export class SessionExpiredError extends ApiError {
   constructor() {
-    super(401, 'Session expirée, reconnecte-toi.', 'session_expired')
+    super(401, t('store.session.expired'), 'session_expired')
     this.name = 'SessionExpiredError'
   }
 }
@@ -162,7 +162,7 @@ async function doRefresh(): Promise<string> {
 
   const data = (await res.json()) as { access_token?: unknown; refresh_token?: unknown }
   if (typeof data.access_token !== 'string' || typeof data.refresh_token !== 'string') {
-    throw new ApiError(500, 'Réponse de refresh invalide')
+    throw new ApiError(500, t('store.api.badRefresh'))
   }
   // Persister le NOUVEAU refresh AVANT d'exposer l'access token : l'ancien est déjà invalide.
   await tokens.setRefreshToken(data.refresh_token)
@@ -232,7 +232,7 @@ async function send<T>(method: string, p: string, opts: RequestOptions<T>, retri
     const parsed = opts.schema.safeParse(json)
     if (!parsed.success) {
       logger.warn('http', `réponse inattendue ${method} ${p}`, parsed.error.issues.slice(0, 3))
-      throw new ApiError(500, 'Réponse serveur inattendue', 'bad_response')
+      throw new ApiError(500, t('store.api.badResponse'), 'bad_response')
     }
     return parsed.data
   }

@@ -4,6 +4,7 @@ import { AppRegistry, AppState, Platform } from 'react-native'
 import { create } from 'zustand'
 import { settingsApi, settingsKey, type ServerSideSettings } from '@/api/settings'
 import { inQuietHours, keepConnectedEnabled, noticeFor, type LocalNotice } from '@/features/notifications/backgroundRules'
+import { t } from '@/i18n'
 import { logger } from '@/lib/logger'
 import { qk, queryClient } from '@/lib/queryClient'
 import { realtime, type RealtimeEvent } from '@/lib/realtime'
@@ -122,11 +123,11 @@ export function bindKeepAlive(): () => void {
   const unring = () => void Notifications.dismissNotificationAsync('call').catch(() => undefined)
   offs.push(
     useCall.subscribe((s, p) => {
-      if (s.incoming && !p.incoming) ring(s.incoming.fromUsername, s.incoming.callType === 'video' ? 'Appel vidéo entrant…' : 'Appel vocal entrant…')
+      if (s.incoming && !p.incoming) ring(s.incoming.fromUsername, t(s.incoming.callType === 'video' ? 'store.notify.incomingVideo' : 'store.notify.incomingVoice'))
       else if (!s.incoming && p.incoming) unring()
     }),
     useGroupCall.subscribe((s, p) => {
-      if (s.ring && !p.ring) ring(s.ring.fromUsername, 'Appel de groupe entrant…')
+      if (s.ring && !p.ring) ring(s.ring.fromUsername, t('store.notify.incomingGroup'))
       else if (!s.ring && p.ring) unring()
     }),
   )

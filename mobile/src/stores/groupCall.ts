@@ -6,6 +6,7 @@ import { logger } from '@/lib/logger'
 import { realtime } from '@/lib/realtime'
 import { callAudio, leaveRoom, liveKitAccess, streamOf, CAMERA_RESOLUTION } from '@/services/livekit'
 import { ensureMediaPermissions, ringtones } from '@/services/media'
+import { t } from '@/i18n'
 import { registerSignOutHook } from './auth'
 
 /**
@@ -123,21 +124,21 @@ export const useGroupCall = create<GroupCallState>((set, get) => {
         if (id) realtime.send({ type: 'GROUP_CALL_LEAVE', group_id: id })
         cleanup(
           reason === DisconnectReason.PARTICIPANT_REMOVED
-            ? 'Tu as quitté l’appel de groupe.'
+            ? t('store.groupCall.left')
             : reason !== DisconnectReason.CLIENT_INITIATED
-              ? 'Appel interrompu : connexion au serveur audio/vidéo perdue.'
+              ? t('store.groupCall.mediaLost')
               : null,
         )
       })
     try {
-      await callAudio.start(get().speaker, `Appel de groupe${get().groupName ? ` : ${get().groupName}` : ''}`)
+      await callAudio.start(get().speaker, get().groupName ? t('store.groupCall.title', { name: get().groupName ?? '' }) : t('call.group'))
       const turn = await voiceApi.turnServers()
       await r.connect(res.access.url, res.access.token, { autoSubscribe: true, ...(turn.length ? { rtcConfig: { iceServers: turn } } : {}) })
     } catch (err) {
       logger.warn('group-call', 'connexion LiveKit', err)
       if (gen === generation) {
         if (groupId) realtime.send({ type: 'GROUP_CALL_LEAVE', group_id: groupId })
-        cleanup('Impossible de joindre le serveur audio/vidéo.')
+        cleanup(t('store.groupCall.mediaUnreachable'))
       }
       return
     }
@@ -152,7 +153,7 @@ export const useGroupCall = create<GroupCallState>((set, get) => {
       if (!get().camOff) await r.localParticipant.setCameraEnabled(true, CAMERA_OPTIONS)
     } catch (err) {
       logger.warn('group-call', 'publication', err)
-      set({ error: 'Micro ou caméra inaccessible.' })
+      set({ error: t('store.groupCall.mediaBlocked') })
     }
     refreshLocal()
   }
@@ -192,7 +193,7 @@ export const useGroupCall = create<GroupCallState>((set, get) => {
 
   realtime.on('GROUP_CALL_ERROR', (e) => {
     if (e.group_id !== get().groupId) return
-    cleanup(e.reason === 'unavailable' ? 'Serveur audio/vidéo indisponible.' : 'Appel de groupe refusé.')
+    cleanup(t(e.reason === 'unavailable' ? 'store.groupCall.mediaUnavailable' : 'store.groupCall.refused'))
   })
 
   return {
@@ -212,7 +213,7 @@ export const useGroupCall = create<GroupCallState>((set, get) => {
     join: async (groupId, type, groupName) => {
       if (get().groupId === groupId) return
       if (get().groupId) get().leave()
-      if (!realtime.isOpen) throw new Error('Connexion temps réel indisponible')
+      if (!realtime.isOpen) throw new Error(t('store.realtimeDown'))
       if (get().ring?.groupId === groupId) stopRing()
       const gen = ++generation
       set({ groupId, groupName: groupName ?? null, status: 'connecting', camOff: type !== 'video', micMuted: false, speaker: true, error: null })
@@ -220,8 +221,8 @@ export const useGroupCall = create<GroupCallState>((set, get) => {
       if (!(await ensureMediaPermissions(video))) {
         video = false
         if (type !== 'video' || !(await ensureMediaPermissions(false))) {
-          if (gen === generation) cleanup('Permission micro refusée')
-          throw new Error('Permission micro refusée')
+          if (gen === generation) cleanup(t('store.micDenied'))
+          throw new Error(t('store.micDenied'))
         }
       }
       if (gen !== generation) return
@@ -254,13 +255,13 @@ export const useGroupCall = create<GroupCallState>((set, get) => {
         return
       }
       if (!(await ensureMediaPermissions(true))) {
-        set({ error: 'Permission caméra refusée' })
+        set({ error: t('store.cameraDenied') })
         return
       }
       set({ camOff: false })
       await r.localParticipant.setCameraEnabled(true, CAMERA_OPTIONS).catch((e: unknown) => {
         logger.warn('group-call', 'caméra', e)
-        set({ camOff: true, error: 'Caméra indisponible.' })
+        set({ camOff: true, error: t('store.cameraUnavailable') })
       })
       refreshLocal()
     },

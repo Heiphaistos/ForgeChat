@@ -9,6 +9,8 @@
  * En plus, comme le web : mode focus et heures calmes coupent tout.
  */
 
+import { t } from '@/i18n'
+
 export interface NotifyContext {
   myId: string | null
   /** Statut « Ne pas déranger ». */
@@ -39,7 +41,7 @@ const obj = (v: unknown): Record<string, unknown> | null =>
 
 /** Texte d'aperçu : jetons de mention lisibles, caractères de contrôle retirés, tronqué. */
 function clip(content: unknown): string {
-  const raw = typeof content === 'string' && content.trim() ? content : 'Pièce jointe'
+  const raw = typeof content === 'string' && content.trim() ? content : t('store.notify.attachment')
   const s = raw.replace(/<@[!&]?[0-9a-f-]{36}>/gi, '@…').replace(/[\u0000-\u0009\u000b-\u001f\u007f]/g, '')
   return s.length > PREVIEW_MAX ? `${s.slice(0, PREVIEW_MAX)}…` : s
 }
@@ -52,20 +54,20 @@ export function noticeFor(e: { type: string; [k: string]: unknown }, c: NotifyCo
     const id = str(group ? e.group_id : e.dm_id)
     const m = obj(e.message)
     if (!id || !m || c.dnd || c.isMuted(id)) return null
-    const sender = str(m.sender_username) ?? 'Quelqu’un'
+    const sender = str(m.sender_username) ?? t('store.notify.someone')
     if (!str(m.sender_id) || m.sender_id === c.myId) return null
     if (!group) {
       return {
         id: `msg:${id}`,
         title: sender,
-        body: c.preview ? clip(m.content) : 'Nouveau message privé',
+        body: c.preview ? clip(m.content) : t('store.notify.newDm'),
         data: { kind: 'dm', dm_id: id },
       }
     }
     return {
       id: `msg:${id}`,
-      title: c.groupName(id) ?? 'Groupe',
-      body: c.preview ? `${sender} : ${clip(m.content)}` : `Nouveau message de ${sender}`,
+      title: c.groupName(id) ?? t('store.notify.group'),
+      body: c.preview ? t('store.notify.preview', { name: sender, text: clip(m.content) }) : t('store.notify.newGroupMessage', { name: sender }),
       data: { kind: 'group', group_id: id },
     }
   }
@@ -75,11 +77,11 @@ export function noticeFor(e: { type: string; [k: string]: unknown }, c: NotifyCo
     const serverId = str(m.server_id)
     const channelId = str(m.channel_id)
     if (!serverId || !channelId || m.author_id === c.myId) return null
-    const author = str(m.author_username) ?? 'Quelqu’un'
+    const author = str(m.author_username) ?? t('store.notify.someone')
     return {
       id: `msg:${channelId}`,
-      title: `${str(m.server_name) ?? 'Serveur'} · #${str(m.channel_name) ?? 'salon'}`,
-      body: c.preview ? `${author} : ${clip(m.content)}` : `${author} t'a mentionné`,
+      title: `${str(m.server_name) ?? t('store.notify.server')} · #${str(m.channel_name) ?? t('store.voice.channel')}`,
+      body: c.preview ? t('store.notify.preview', { name: author, text: clip(m.content) }) : t('store.notify.mentioned', { name: author }),
       data: { kind: 'channel', server_id: serverId, channel_id: channelId },
     }
   }

@@ -6,6 +6,7 @@ import { router } from 'expo-router'
 import { Alert, Platform } from 'react-native'
 import { pushApi } from '@/api/push'
 import { PUSH_AVAILABLE } from '@/config/env'
+import { t } from '@/i18n'
 import { logger } from '@/lib/logger'
 import { registerPreSignOutHook, registerSignOutHook } from '@/stores/auth'
 import { useSettings } from '@/stores/settings'
@@ -45,14 +46,14 @@ export function setupNotificationChannels() {
 
   if (Platform.OS === 'android') {
     void Notifications.setNotificationChannelAsync('messages', {
-      name: 'Messages',
+      name: t('store.push.channelMessages'),
       importance: Notifications.AndroidImportance.HIGH,
       lockscreenVisibility: Notifications.AndroidNotificationVisibility.PRIVATE,
       vibrationPattern: [0, 200, 100, 200],
       lightColor: '#5865f2',
     })
     void Notifications.setNotificationChannelAsync('calls', {
-      name: 'Appels',
+      name: t('store.push.channelCalls'),
       importance: Notifications.AndroidImportance.MAX,
       lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
       vibrationPattern: [0, 800, 600, 800],
@@ -66,13 +67,13 @@ export function setupNotificationChannels() {
  * le WebSocket, donc app ouverte : notification locale si elles sont permises, sinon simple alerte.
  */
 export async function showReminder(content: string | null): Promise<void> {
-  const body = content?.trim().slice(0, 200) || 'Rappel !'
+  const body = content?.trim().slice(0, 200) || t('store.push.reminderBody')
   if (PUSH_AVAILABLE) {
     try {
       const { status } = await Notifications.getPermissionsAsync()
       if (status === 'granted') {
         await Notifications.scheduleNotificationAsync({
-          content: { title: '⏰ Rappel', body, data: { kind: 'reminder' } },
+          content: { title: t('store.push.reminderTitle'), body, data: { kind: 'reminder' } },
           trigger: Platform.OS === 'android' ? { channelId: 'messages' } : null,
         })
         return
@@ -81,7 +82,7 @@ export async function showReminder(content: string | null): Promise<void> {
       logger.warn('push', 'rappel', e)
     }
   }
-  Alert.alert('⏰ Rappel', body)
+  Alert.alert(t('store.push.reminderTitle'), body)
 }
 
 /** Route vers l'écran correspondant à une notification touchée. */

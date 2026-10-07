@@ -1,3 +1,4 @@
+import { t } from '@/i18n'
 import { http, path } from '@/lib/http'
 import { LIMITS } from '@/config/env'
 import { adaptMessage } from '@/features/chat/adapters'
@@ -166,7 +167,7 @@ export const messagesApi = {
   /** Traduction en `lang` (salons et DM 1:1 seulement côté serveur). */
   async translate(messageId: string, lang = 'fr'): Promise<string> {
     const r = await http.post<{ translated?: unknown }>(path`/messages/${messageId}/translate`, { target_lang: lang })
-    if (typeof r?.translated !== 'string') throw new Error('Traduction indisponible')
+    if (typeof r?.translated !== 'string') throw new Error(t('store.api.translationUnavailable'))
     return r.translated
   },
 

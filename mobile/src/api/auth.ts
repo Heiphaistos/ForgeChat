@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { t } from '@/i18n'
 import { ApiError, http } from '@/lib/http'
 import type { AuthResponse, Session, User } from '@/types/models'
 
@@ -29,7 +30,7 @@ export const authApi = {
       return (await http.post('/auth/login', body, { auth: false, schema: authSchema })) as AuthResponse
     } catch (e) {
       if (e instanceof ApiError && e.status === 401) {
-        throw new ApiError(401, totpCode ? 'Code 2FA invalide.' : 'Email ou mot de passe incorrect.', 'bad_credentials')
+        throw new ApiError(401, t(totpCode ? 'auth.invalidTotp' : 'store.api.badCredentials'), 'bad_credentials')
       }
       throw e
     }

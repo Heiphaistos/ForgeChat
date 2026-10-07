@@ -8,6 +8,7 @@ import { realtime, type RealtimeEvent } from '@/lib/realtime'
 import { callAudio, leaveRoom, liveKitAccess, stopScreenShare, streamOf, CAMERA_RESOLUTION } from '@/services/livekit'
 import { ensureMediaPermissions } from '@/services/media'
 import { playSoundFile } from '@/services/soundboard'
+import { t } from '@/i18n'
 import { getMyId, registerSignOutHook } from './auth'
 
 /**
@@ -254,7 +255,7 @@ export const useVoice = create<VoiceState>((set, get) => {
     clearRejoinTimer()
     rejoinTimer = setTimeout(() => {
       rejoinTimer = null
-      if (get().channelId === channelId) fail('Connexion au salon vocal perdue. Rejoins-le.')
+      if (get().channelId === channelId) fail(t('store.voice.lost'))
     }, REJOIN_TIMEOUT_MS)
   }
 
@@ -297,17 +298,17 @@ export const useVoice = create<VoiceState>((set, get) => {
       })
       .on(RoomEvent.Disconnected, (reason) => {
         if (room !== r || reason === DisconnectReason.CLIENT_INITIATED || !get().channelId) return
-        if (reason === DisconnectReason.DUPLICATE_IDENTITY) return fail('Ce salon vocal a été rejoint depuis un autre appareil.')
+        if (reason === DisconnectReason.DUPLICATE_IDENTITY) return fail(t('store.voice.otherDevice'))
         // WebSocket ouvert : éjection voulue par le serveur (salon supprimé, exclusion…). Fermé : le
         // serveur nous a sortis parce que la connexion est tombée ; VOICE_JOIN sera rejoué.
         if ((reason === DisconnectReason.PARTICIPANT_REMOVED || reason === DisconnectReason.ROOM_DELETED) && realtime.isOpen) {
-          return fail('Tu as été retiré du salon vocal.')
+          return fail(t('store.voice.removed'))
         }
         set({ mediaStatus: 'reconnecting' })
         if (realtime.isOpen) rejoin()
       })
     try {
-      await callAudio.start(get().speaker, `Vocal : ${get().channelName ?? 'salon'}`)
+      await callAudio.start(get().speaker, t('store.voice.title', { name: get().channelName ?? t('store.voice.channel') }))
       const turn = await voiceApi.turnServers()
       await r.connect(access.url, access.token, { autoSubscribe: true, ...(turn.length ? { rtcConfig: { iceServers: turn } } : {}) })
     } catch (err) {
@@ -315,7 +316,7 @@ export const useVoice = create<VoiceState>((set, get) => {
       if (room === r) {
         room = null
         roomName = null
-        set({ mediaStatus: 'failed', error: 'Impossible de joindre le serveur audio/vidéo. Vérifie ta connexion puis réessaie.' })
+        set({ mediaStatus: 'failed', error: t('store.voice.mediaUnreachable') })
       }
       return
     }
@@ -333,7 +334,7 @@ export const useVoice = create<VoiceState>((set, get) => {
       }
     } catch (err) {
       logger.warn('voice', 'publication micro/caméra', err)
-      set({ error: 'Ton micro ou ta caméra n’a pas pu être diffusé. Vérifie les permissions du salon.' })
+      set({ error: t('store.voice.publishFailed') })
     }
   }
 
@@ -395,7 +396,7 @@ export const useVoice = create<VoiceState>((set, get) => {
         handRaised: raw.hand_raised === true || hands.has(raw.user_id),
       })
       if (recording && !before.get(raw.user_id)?.recording) {
-        set({ notice: `🔴 ${isStr(raw.username) ? raw.username : 'Un membre'} enregistre cette conversation` })
+        set({ notice: t('store.voice.recording', { name: isStr(raw.username) ? raw.username : t('store.voice.aMember') }) })
       }
     }
     set({ handRaised: !!me && hands.has(me) })
@@ -450,7 +451,7 @@ export const useVoice = create<VoiceState>((set, get) => {
     const screen = e.screen === true
     const recording = e.recording === true
     patchPeer(e.user_id, { muted: e.muted === true, video: e.video === true, screen, recording, ...(screen ? {} : { screenStream: null }) })
-    if (recording && !before.recording) set({ notice: `🔴 ${before.username} a commencé à enregistrer la conversation` })
+    if (recording && !before.recording) set({ notice: t('store.voice.recordingStarted', { name: before.username }) })
   })
 
   realtime.on('VOICE_JOIN_ERROR', (e) => {
@@ -458,16 +459,16 @@ export const useVoice = create<VoiceState>((set, get) => {
     if (!s.channelId || (e.channel_id !== undefined && e.channel_id !== s.channelId && e.channel_id !== s.entryChannelId)) return
     fail(
       e.reason === 'wrong_password'
-        ? 'Mot de passe vocal incorrect'
+        ? t('store.voice.wrongPassword')
         : e.reason === 'channel_full' || e.reason === 'full'
-          ? `Salon plein${typeof e.limit === 'number' && typeof e.current === 'number' ? ` (${e.current}/${e.limit})` : ''}`
+          ? typeof e.limit === 'number' && typeof e.current === 'number' ? t('store.voice.fullCount', { current: e.current, limit: e.limit }) : t('store.voice.full')
           : e.reason === 'missing_permission'
-            ? 'Tu n’as pas la permission de rejoindre ce salon vocal'
+            ? t('store.voice.noPermission')
             : e.reason === 'rate_limited'
-              ? 'Trop de tentatives : patiente quelques secondes'
+              ? t('store.voice.rateLimited')
               : e.reason === 'media_unavailable'
-                ? 'Serveur audio/vidéo indisponible'
-                : 'Impossible de rejoindre',
+                ? t('store.voice.mediaUnavailable')
+                : t('voice.joinFailed'),
     )
   })
 
@@ -476,11 +477,11 @@ export const useVoice = create<VoiceState>((set, get) => {
     if (!here(e.channel_id)) return
     if (e.permission === 'STREAM') {
       get().stopScreenShare()
-      set({ error: 'Tu n’as pas la permission de partager ton écran sur ce serveur.' })
+      set({ error: t('store.voice.noStream') })
     } else if (e.permission === 'SPEAK_VOICE') {
       canSpeak = false
       setLocked()
-      set({ muted: true, error: 'Tu n’as pas la permission de parler dans ce salon : micro coupé.' })
+      set({ muted: true, error: t('store.voice.noSpeak') })
       setMic(false)
     }
   })
@@ -507,11 +508,7 @@ export const useVoice = create<VoiceState>((set, get) => {
       applyAudioAll()
     }
     set({
-      notice: deafened
-        ? 'Un modérateur t’a mis en sourdine sur ce serveur.'
-        : muted
-          ? 'Un modérateur t’a rendu muet sur ce serveur.'
-          : 'Ton micro a été rétabli par un modérateur.',
+      notice: t(deafened ? 'store.voice.serverDeafened' : muted ? 'store.voice.serverMuted' : 'store.voice.unmutedByMod'),
     })
     broadcastState()
   })
@@ -519,18 +516,18 @@ export const useVoice = create<VoiceState>((set, get) => {
   realtime.on('VOICE_MOVE', (e) => {
     const s = get()
     if (!s.channelId || !isStr(e.channel_id) || !isStr(e.server_id)) return
-    const name = isStr(e.channel_name) ? e.channel_name : 'Salon vocal'
+    const name = isStr(e.channel_name) ? e.channel_name : t('voice.fallback')
     const listenOnly = s.listenOnly
     s.leave()
     get()
       .join(e.server_id, e.channel_id, name, undefined, listenOnly)
-      .then(() => set({ notice: `Un modérateur t’a déplacé vers « ${name} ».` }))
+      .then(() => set({ notice: t('store.voice.moved', { name }) }))
       .catch((err: unknown) => logger.warn('voice', 'déplacement', err))
   })
 
   realtime.on('VOICE_FORCE_DISCONNECT', (e) => {
     if (!get().channelId || (e.channel_id != null && !here(e.channel_id))) return
-    fail('Un modérateur t’a déconnecté du salon vocal.')
+    fail(t('store.voice.kicked'))
   })
 
   realtime.on('HAND_RAISE', (e) => {
@@ -607,7 +604,7 @@ export const useVoice = create<VoiceState>((set, get) => {
     const hands = st.hands.filter((x) => x.userId !== u.userId)
     set({
       stage: { ...st, hands: raised ? [...hands, u] : hands, requested: mine && !raised ? false : st.requested },
-      ...(raised && !mine ? { notice: `✋ ${u.username} demande à parler` } : {}),
+      ...(raised && !mine ? { notice: t('store.voice.handRaised', { name: u.username }) } : {}),
     })
   })
 
@@ -642,7 +639,7 @@ export const useVoice = create<VoiceState>((set, get) => {
       const cur = get()
       if ((cur.channelId === channelId || cur.entryChannelId === channelId) && (cur.joined || cur.joining) && cur.listenOnly === listenOnly) return
       if (cur.channelId) cur.leave()
-      if (!realtime.isOpen) throw new Error('Connexion temps réel indisponible')
+      if (!realtime.isOpen) throw new Error(t('store.realtimeDown'))
       const gen = ++joinGeneration
       canSpeak = true
       serverMuted = false
@@ -673,8 +670,8 @@ export const useVoice = create<VoiceState>((set, get) => {
         quality: null,
       })
       if (!listenOnly && !(await ensureMediaPermissions(false))) {
-        if (gen === joinGeneration) set({ joining: false, channelId: null, entryChannelId: null, error: 'Permission micro refusée' })
-        throw new Error('Permission micro refusée')
+        if (gen === joinGeneration) set({ joining: false, channelId: null, entryChannelId: null, error: t('store.micDenied') })
+        throw new Error(t('store.micDenied'))
       }
       if (gen !== joinGeneration) return // leave() ou autre join() pendant la demande de permission
       realtime.send({ type: 'VOICE_JOIN', channel_id: channelId, listen_only: listenOnly, ...(password ? { password } : {}) })
@@ -723,11 +720,7 @@ export const useVoice = create<VoiceState>((set, get) => {
       if (s.muted && !speakAllowed()) {
         // Parole interdite par le serveur ou écoute seule : le dire au lieu de ne rien faire.
         set({
-          notice: s.stage
-            ? 'Tu es dans l’audience : demande la parole pour parler.'
-            : s.listenOnly
-              ? 'Mode écoute seule : rejoins le salon normalement pour parler.'
-              : 'Tu ne peux pas parler dans ce salon pour le moment.',
+          notice: t(s.stage ? 'store.voice.audience' : s.listenOnly ? 'store.voice.listenOnlySpeak' : 'store.voice.cantSpeak'),
         })
         return
       }
@@ -742,7 +735,7 @@ export const useVoice = create<VoiceState>((set, get) => {
     toggleDeafen: () => {
       const s = get()
       if (s.deafened && serverDeafened) {
-        set({ notice: 'Un modérateur t’a mis en sourdine : tu ne peux pas la retirer.' })
+        set({ notice: t('store.voice.deafLocked') })
         return
       }
       const deafened = !s.deafened
@@ -772,18 +765,18 @@ export const useVoice = create<VoiceState>((set, get) => {
         return
       }
       if (!speakAllowed()) {
-        set({ notice: s.listenOnly ? 'Mode écoute seule : caméra indisponible.' : 'Tu ne peux pas diffuser dans ce salon pour le moment.' })
+        set({ notice: t(s.listenOnly ? 'store.voice.listenOnlyCamera' : 'store.voice.cantStream') })
         return
       }
       if (!(await ensureMediaPermissions(true))) {
-        set({ error: 'Permission caméra refusée' })
+        set({ error: t('store.cameraDenied') })
         return
       }
       try {
         await r.localParticipant.setCameraEnabled(true, { facingMode: get().facing, ...CAMERA_OPTIONS })
       } catch (e) {
         logger.warn('voice', 'caméra', e)
-        set({ error: 'Caméra indisponible.' })
+        set({ error: t('store.cameraUnavailable') })
         return
       }
       if (room !== r) return
@@ -855,7 +848,7 @@ export const useVoice = create<VoiceState>((set, get) => {
     stageRequestSpeak: () => {
       const st = get().stage
       if (!st || st.requested) return
-      set({ stage: { ...st, requested: true }, notice: 'Demande envoyée aux modérateurs.' })
+      set({ stage: { ...st, requested: true }, notice: t('store.voice.requestSent') })
       realtime.send({ type: 'STAGE_REQUEST_SPEAK', channel_id: st.channelId })
     },
 

@@ -7,6 +7,9 @@
  * - Seuls les liens http(s) sont reconnus.
  */
 
+import { t, useLang } from '@/i18n'
+import { MONTHS_EN } from './format'
+
 export type TimestampFormat = 'R' | 'r' | 'D' | 'd' | 'F' | 'f' | 'T' | 't'
 
 export type InlineNode =
@@ -165,13 +168,15 @@ function pushText(blocks: BlockNode[], text: string) {
 const pad = (n: number) => String(n).padStart(2, '0')
 const MONTHS = ['janv.', 'févr.', 'mars', 'avr.', 'mai', 'juin', 'juil.', 'août', 'sept.', 'oct.', 'nov.', 'déc.']
 const DAYS = ['dimanche', 'lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi']
+const DAYS_EN = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
 
 /** Texte d'un horodatage « <t:unix:fmt> » en heure locale ; R/r : mêmes libellés relatifs que le web. */
 export function formatTimestamp(unix: number, fmt: TimestampFormat, now = Date.now()): string {
   const d = new Date(unix * 1000)
   if (Number.isNaN(d.getTime())) return '—'
   const date = `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`
-  const longDate = `${d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear()}`
+  const en = useLang.getState().lang === 'en'
+  const longDate = `${d.getDate()} ${(en ? MONTHS_EN : MONTHS)[d.getMonth()]} ${d.getFullYear()}`
   const time = `${pad(d.getHours())}:${pad(d.getMinutes())}`
   switch (fmt) {
     case 'd':
@@ -185,19 +190,19 @@ export function formatTimestamp(unix: number, fmt: TimestampFormat, now = Date.n
     case 'f':
       return `${longDate} ${time}`
     case 'F':
-      return `${DAYS[d.getDay()]} ${longDate} ${time}`
+      return `${(en ? DAYS_EN : DAYS)[d.getDay()]} ${longDate} ${time}`
     default: {
       const diff = now - d.getTime()
       const abs = Math.abs(diff)
-      if (abs < 60_000) return "à l'instant"
+      if (abs < 60_000) return t('date.justNow')
       const [n, unit] =
         abs < 3_600_000
-          ? [Math.floor(abs / 60_000), 'minute']
+          ? ([Math.floor(abs / 60_000), 'store.time.minute'] as const)
           : abs < 86_400_000
-            ? [Math.floor(abs / 3_600_000), 'heure']
-            : [Math.floor(abs / 86_400_000), 'jour']
-      const label = `${n} ${unit}${n > 1 ? 's' : ''}`
-      return diff < 0 ? `dans ${label}` : `il y a ${label}`
+            ? ([Math.floor(abs / 3_600_000), 'store.time.hour'] as const)
+            : ([Math.floor(abs / 86_400_000), 'store.time.day'] as const)
+      const label = `${n} ${t(unit)}${n > 1 ? 's' : ''}`
+      return t(diff < 0 ? 'store.time.in' : 'store.time.ago', { label })
     }
   }
 }

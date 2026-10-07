@@ -11,6 +11,7 @@ import { callAudio, leaveRoom, liveKitAccess, stopScreenShare, streamOf, CAMERA_
 import { ensureMediaPermissions, ringtones } from '@/services/media'
 import type { ConversationSummary } from '@/types/models'
 import { getMyId, registerSignOutHook } from './auth'
+import { t, type Key } from '@/i18n'
 import { useGroupCall } from './groupCall'
 import { useVoice } from './voice'
 
@@ -185,7 +186,7 @@ export const useCall = create<CallState>((set, get) => {
       if (get().phase === 'connected' || get().phase === 'idle') return
       const { partnerId, dmId } = get()
       if (partnerId && dmId) realtime.send({ type: 'DM_CALL_HANGUP', to: partnerId, dm_id: dmId })
-      cleanup('Connexion impossible')
+      cleanup(t('store.call.connectFailed'))
     }, CONNECT_TIMEOUT_MS)
   }
 
@@ -215,15 +216,15 @@ export const useCall = create<CallState>((set, get) => {
         if (!isPartner(p)) return
         set({ remoteVideo: null })
         partnerGoneTimer = setTimeout(() => {
-          if (room === r) cleanup('Appel terminé')
+          if (room === r) cleanup(t('store.call.ended'))
         }, PARTNER_GONE_MS)
       })
       .on(RoomEvent.Disconnected, (reason) => {
         if (room !== r) return
-        if (reason !== DisconnectReason.CLIENT_INITIATED) cleanup('Connexion au serveur audio/vidéo perdue')
+        if (reason !== DisconnectReason.CLIENT_INITIATED) cleanup(t('store.call.mediaLost'))
       })
     try {
-      await callAudio.start(get().speaker, `Appel avec ${get().partnerName ?? 'ton correspondant'}`)
+      await callAudio.start(get().speaker, t('store.call.title', { name: get().partnerName ?? t('store.call.yourContact') }))
       const turn = await voiceApi.turnServers()
       await r.connect(access.url, access.token, { autoSubscribe: true, ...(turn.length ? { rtcConfig: { iceServers: turn } } : {}) })
     } catch (err) {
@@ -231,7 +232,7 @@ export const useCall = create<CallState>((set, get) => {
       if (gen === callGeneration) {
         const { partnerId, dmId } = get()
         if (partnerId && dmId) realtime.send({ type: 'DM_CALL_HANGUP', to: partnerId, dm_id: dmId })
-        cleanup('Impossible de joindre le serveur audio/vidéo')
+        cleanup(t('store.call.mediaUnreachable'))
       }
       return
     }
@@ -244,14 +245,14 @@ export const useCall = create<CallState>((set, get) => {
     } catch (err) {
       // iOS : micro refusé dans les réglages (pas de demande préalable comme sur Android).
       logger.warn('call', 'publication micro', err)
-      set({ micMuted: true, warning: 'Micro inaccessible : autorise-le dans les réglages du téléphone.' })
+      set({ micMuted: true, warning: t('store.call.micBlocked') })
     }
     if (get().callType === 'video') {
       try {
         await r.localParticipant.setCameraEnabled(true, { facingMode: get().facing, ...CAMERA_OPTIONS })
       } catch (err) {
         logger.warn('call', 'caméra indisponible, repli audio', err)
-        set({ callType: 'voice', camOff: true, warning: 'Caméra indisponible : appel vocal.' })
+        set({ callType: 'voice', camOff: true, warning: t('store.call.cameraFallback') })
       }
     }
     if (gen !== callGeneration) return
@@ -356,7 +357,7 @@ export const useCall = create<CallState>((set, get) => {
     if (inc && e.dm_id === inc.dmId) clearIncoming()
   })
 
-  const remoteEnded = (reason: string) => (e: RealtimeEvent) => {
+  const remoteEnded = (reason: Key) => (e: RealtimeEvent) => {
     const inc = get().incoming
     if (inc && e.dm_id === inc.dmId && (!e.from || e.from === inc.fromUserId)) {
       clearIncoming()
@@ -367,23 +368,23 @@ export const useCall = create<CallState>((set, get) => {
     if (e.reason === 'timeout') {
       // Fin de sonnerie décidée par le serveur. Déjà décroché (appel croisé : notre propre appel
       // sonne encore côté serveur) : sans objet.
-      if (phase === 'calling') cleanup('Pas de réponse')
+      if (phase === 'calling') cleanup(t('store.call.noAnswer'))
       return
     }
-    if (phase !== 'idle') cleanup(reason)
+    if (phase !== 'idle') cleanup(t(reason))
   }
-  realtime.on('DM_CALL_ENDED', remoteEnded('Appel terminé'))
-  realtime.on('DM_CALL_DECLINED', remoteEnded('Appel refusé'))
+  realtime.on('DM_CALL_ENDED', remoteEnded('store.call.ended'))
+  realtime.on('DM_CALL_DECLINED', remoteEnded('store.call.declined'))
   realtime.on('DM_CALL_ERROR', (e) => {
     if (get().phase === 'idle') return
     if (e.dm_id && e.dm_id !== get().dmId) return
-    cleanup(e.reason === 'offline' ? 'Ton correspondant est hors ligne' : e.reason === 'rate_limited' ? 'Trop d’appels, patiente un peu' : 'Appel impossible')
+    cleanup(t(e.reason === 'offline' ? 'store.call.offline' : e.reason === 'rate_limited' ? 'store.call.rateLimited' : 'store.call.failed'))
   })
 
   // WebSocket rétabli pendant que l'on sonnait : le serveur a classé l'appel « manqué » à la
   // coupure, l'autre côté a cessé de sonner. Le média d'un appel décroché, lui, survit (SFU).
   realtime.onOpen(() => {
-    if (get().phase === 'calling') cleanup('Connexion perdue')
+    if (get().phase === 'calling') cleanup(t('voice.lost'))
   })
 
   return {
@@ -408,7 +409,7 @@ export const useCall = create<CallState>((set, get) => {
 
     start: async (dmId, partnerId, partnerName, type, partnerAvatar = null) => {
       if (busy || get().phase !== 'idle') return
-      if (!realtime.isOpen) throw new Error('Connexion temps réel indisponible')
+      if (!realtime.isOpen) throw new Error(t('store.realtimeDown'))
       busy = true
       const gen = callGeneration
       // Phase posée AVANT les await : un DM_CALL_ERROR/ENDED distant ou un hangup() local pendant
@@ -416,20 +417,20 @@ export const useCall = create<CallState>((set, get) => {
       set({ phase: 'calling', dmId, partnerId, partnerName, partnerAvatar, endedWith: null, callType: type, endReason: null, warning: null, speaker: type === 'video' })
       try {
         const granted = await mediaAccess(type)
-        if (!granted) throw new Error('Permission micro refusée')
+        if (!granted) throw new Error(t('store.micDenied'))
         if (gen !== callGeneration) return
-        if (granted !== type) set({ callType: granted, speaker: false, warning: 'Caméra refusée : appel vocal.' })
+        if (granted !== type) set({ callType: granted, speaker: false, warning: t('store.call.cameraDenied') })
         ringtones.keepScreenOn(true)
         ringtones.startRingback()
         realtime.send({ type: 'DM_CALL_INIT', to: partnerId, dm_id: dmId, call_type: granted })
         ringTimeout = setTimeout(() => {
           if (get().phase === 'calling') {
             realtime.send({ type: 'DM_CALL_HANGUP', to: partnerId, dm_id: dmId })
-            cleanup('Pas de réponse')
+            cleanup(t('store.call.noAnswer'))
           }
         }, RING_TIMEOUT_MS)
       } catch (e) {
-        cleanup(e instanceof Error ? e.message : 'Appel impossible')
+        cleanup(e instanceof Error ? e.message : t('store.call.failed'))
         throw e
       } finally {
         busy = false
@@ -463,9 +464,9 @@ export const useCall = create<CallState>((set, get) => {
       })
       try {
         const granted = await mediaAccess(inc.callType)
-        if (!granted) throw new Error('Micro inaccessible — appel refusé')
+        if (!granted) throw new Error(t('store.call.micDeclined'))
         if (gen !== callGeneration) return
-        if (granted !== inc.callType) set({ callType: granted, speaker: false, warning: 'Caméra refusée : appel vocal.' })
+        if (granted !== inc.callType) set({ callType: granted, speaker: false, warning: t('store.call.cameraDenied') })
         ringtones.keepScreenOn(true)
         awaitingMedia = true
         realtime.send({ type: 'DM_CALL_ACCEPT', to: inc.fromUserId, dm_id: inc.dmId })
@@ -474,7 +475,7 @@ export const useCall = create<CallState>((set, get) => {
         // gen !== callGeneration ⇒ appel déjà terminé (raccroché distant…) : pas de DECLINE en double.
         if (gen === callGeneration) {
           realtime.send({ type: 'DM_CALL_DECLINE', to: inc.fromUserId, dm_id: inc.dmId })
-          cleanup(e instanceof Error ? e.message : 'Micro inaccessible — appel refusé')
+          cleanup(e instanceof Error ? e.message : t('store.call.micDeclined'))
         }
       } finally {
         busy = false
@@ -491,7 +492,7 @@ export const useCall = create<CallState>((set, get) => {
     hangup: () => {
       const { partnerId, dmId, phase } = get()
       if (partnerId && dmId && phase !== 'idle') realtime.send({ type: 'DM_CALL_HANGUP', to: partnerId, dm_id: dmId })
-      cleanup('Appel terminé')
+      cleanup(t('store.call.ended'))
     },
 
     toggleMic: () => {

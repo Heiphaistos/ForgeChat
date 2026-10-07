@@ -6,6 +6,7 @@ import { AppRegistry, Platform } from 'react-native'
 import InCallManager from 'react-native-incall-manager'
 import { APP_ENV, BUILD_LIVEKIT_HOST, apiHostname } from '@/config/env'
 import { parseLiveKitAccess, type LiveKitAccess } from '@/config/livekitUrl'
+import { t } from '@/i18n'
 import { logger } from '@/lib/logger'
 
 /**
@@ -99,7 +100,7 @@ function serial(fn: () => Promise<void>): Promise<void> {
  * gardé allumé et service au premier plan (micro et caméra continuent en arrière-plan).
  */
 export const callAudio = {
-  start: (speaker: boolean, title = 'Appel en cours') => serial(async () => {
+  start: (speaker: boolean, title = t('voice.inCall')) => serial(async () => {
     try {
       callService?.start(title)
       InCallManager.setKeepScreenOn(true)

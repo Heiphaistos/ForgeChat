@@ -1,3 +1,4 @@
+import { t } from '@/i18n'
 import { http, path } from '@/lib/http'
 import { normalizePoll, type Poll, type PollBody } from '@/features/chat/polls'
 
@@ -5,7 +6,7 @@ import { normalizePoll, type Poll, type PollBody } from '@/features/chat/polls'
 export const pollsApi = {
   async get(serverId: string, channelId: string, pollId: string): Promise<Poll> {
     const poll = normalizePoll(await http.get<unknown>(path`/servers/${serverId}/channels/${channelId}/polls/${pollId}`))
-    if (!poll) throw new Error('Sondage illisible')
+    if (!poll) throw new Error(t('store.api.pollUnreadable'))
     return poll
   },
   vote: (serverId: string, channelId: string, pollId: string, optionIds: string[]) =>
