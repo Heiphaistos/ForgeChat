@@ -10,6 +10,7 @@ import { useContextMenu } from '../ui/ContextMenu'
 import UserPopup from '../UserPopup'
 import { useMemberModeration } from './MemberModeration'
 import { RoleIcon, useRoleDecor, type RoleDecor } from '../../hooks/useRoleDecor'
+import { AvatarDecoration } from '../ui/ProfileDecor'
 
 interface Props {
   serverId: string
@@ -67,11 +68,13 @@ function MemberRow({ m, decor, onClick, onContextMenu, onLongPress }: { m: any; 
       onTouchMove={() => { if (longPressTimer.current) { clearTimeout(longPressTimer.current); longPressTimer.current = null } }}
     >
       <div className="relative flex-shrink-0">
+        <AvatarDecoration id={m.avatar_decoration} size={32}>
         <div className="w-8 h-8 rounded-full bg-fc-accent flex items-center justify-center font-semibold text-sm text-white overflow-hidden">
           {m.avatar
             ? <img src={mediaUrl(m.avatar)} alt={m.nickname ?? m.username} loading="lazy" decoding="async" className="w-full h-full rounded-full object-cover" />
             : (m.nickname ?? m.username).charAt(0).toUpperCase()}
         </div>
+        </AvatarDecoration>
         <div
           className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-fc-channel ${STATUS_COLORS[m.liveStatus] ?? 'bg-fc-muted'}`}
           aria-label={statusLabel}

@@ -7,6 +7,7 @@ import { fr } from 'date-fns/locale'
 import api, { mediaUrl } from '../api/client'
 import { useNavigate } from 'react-router-dom'
 import UserPrivateNotes from './UserPrivateNotes'
+import { AvatarDecoration, ProfileEffect, profileThemeBackground } from './ui/ProfileDecor'
 
 const ACTIVITY_ICONS: Record<string, string> = {
   playing: '🎮',
@@ -83,6 +84,7 @@ export default function UserPopup({ userId, serverId, anchorX, anchorY, onClose 
   const banner = member?.server_banner ?? user?.banner
   const avatar = member?.server_avatar ?? user?.avatar
   const bio = member?.server_bio ?? user?.bio
+  const theme = profileThemeBackground(user?.profile_color_primary, user?.profile_color_accent)
 
   const openDm = useMutation({
     mutationFn: () => api.post(`/dms/${userId}`).then(r => r.data),
@@ -129,27 +131,30 @@ export default function UserPopup({ userId, serverId, anchorX, anchorY, onClose 
       role="dialog"
       aria-modal="false"
       aria-label={user ? `Profil de ${user.username}` : 'Profil utilisateur'}
-      style={style}
+      style={theme ? { ...style, background: theme } : style}
       className={isSheet
         ? 'bg-fc-bg border-t border-fc-hover rounded-t-2xl shadow-2xl overflow-y-auto overscroll-contain pb-[max(env(safe-area-inset-bottom),0.5rem)] sheet-slide-up'
         : 'w-[340px] bg-fc-bg border border-fc-hover rounded-xl shadow-2xl overflow-y-auto'}
     >
+      {user && <ProfileEffect id={user.profile_effect} />}
       {/* Banner */}
       <div className="h-28 relative" aria-hidden>
         {banner
           ? <img src={mediaUrl(banner)} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
           : <div
               className="w-full h-full"
-              style={{ background: user ? getUserGradient(user.username) : 'linear-gradient(135deg, #5865f2 0%, #9b59b6 100%)' }}
+              style={{ background: theme ?? (user ? getUserGradient(user.username) : 'linear-gradient(135deg, #5865f2 0%, #9b59b6 100%)') }}
             />
         }
         {/* Avatar */}
         <div className="absolute -bottom-12 left-4">
+          <AvatarDecoration id={user?.avatar_decoration} size={84}>
           <div className="w-24 h-24 rounded-full border-[6px] border-fc-bg bg-fc-accent flex items-center justify-center font-bold text-3xl text-white overflow-hidden">
             {avatar
               ? <img src={mediaUrl(avatar)} alt={user?.username} loading="lazy" decoding="async" className="w-full h-full object-cover" />
               : (user?.username?.charAt(0)?.toUpperCase() ?? '?')}
           </div>
+          </AvatarDecoration>
           {user && (
             <div
               className={`absolute bottom-1 right-1 w-6 h-6 rounded-full border-4 border-fc-bg ${STATUS_COLOR[user.status] ?? 'bg-fc-muted'}`}

@@ -5,6 +5,7 @@ import { MessageCircle, Users, ChevronDown, ChevronUp, ArrowLeft } from 'lucide-
 import api, { mediaUrl } from '../api/client'
 import { useAuth } from '../store/auth'
 import toast from 'react-hot-toast'
+import { AvatarDecoration, ProfileEffect, profileThemeBackground } from '../components/ui/ProfileDecor'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -21,6 +22,10 @@ interface UserPublic {
   activity_name: string | null
   activity_detail: string | null
   created_at: string
+  avatar_decoration?: string | null
+  profile_color_primary?: number | null
+  profile_color_accent?: number | null
+  profile_effect?: string | null
 }
 
 interface MutualServer {
@@ -243,7 +248,8 @@ export default function UserProfilePage() {
         </button>
 
         {/* Carte profil */}
-        <div className="bg-fc-channel rounded-xl overflow-hidden mb-4">
+        <div className="bg-fc-channel rounded-xl overflow-hidden mb-4 relative" style={{ background: profileThemeBackground(user.profile_color_primary, user.profile_color_accent) }}>
+          <ProfileEffect id={user.profile_effect} />
           {/* Banner */}
           <div className="relative h-48">
             {user.banner ? (
@@ -258,7 +264,9 @@ export default function UserProfilePage() {
               <div aria-hidden className="w-full h-full bg-gradient-to-br from-indigo-700/60 via-purple-700/40 to-fc-accent/30" />
             )}
             {/* Gradient overlay */}
-            <div aria-hidden className="absolute inset-0 bg-gradient-to-t from-fc-channel via-transparent to-transparent" />
+            {user.profile_color_primary == null && user.profile_color_accent == null && (
+              <div aria-hidden className="absolute inset-0 bg-gradient-to-t from-fc-channel via-transparent to-transparent" />
+            )}
           </div>
 
           {/* Avatar + infos */}
@@ -266,6 +274,7 @@ export default function UserProfilePage() {
             <div className="flex items-end gap-4 -mt-12 mb-4">
               {/* Avatar */}
               <div className="relative flex-shrink-0">
+                <AvatarDecoration id={user.avatar_decoration} size={88}>
                 <div className="w-24 h-24 rounded-full bg-fc-bg border-4 border-fc-channel overflow-hidden flex items-center justify-center font-bold text-3xl text-white">
                   {user.avatar ? (
                     <img src={mediaUrl(user.avatar)} alt={user.username} loading="lazy" decoding="async" className="w-full h-full object-cover" />
@@ -273,6 +282,7 @@ export default function UserProfilePage() {
                     <span aria-hidden>{user.username.charAt(0).toUpperCase()}</span>
                   )}
                 </div>
+                </AvatarDecoration>
                 {/* Indicateur statut */}
                 <span
                   aria-label={statusLabel(user.status)}

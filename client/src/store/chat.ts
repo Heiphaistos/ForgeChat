@@ -53,6 +53,7 @@ interface Message {
   author_username: string
   author_discriminator: string
   author_avatar: string | null
+  author_avatar_decoration?: string | null
   author_is_bot: boolean
   author_verified?: boolean
   attachments: Attachment[]
@@ -78,7 +79,7 @@ interface ChatState {
   mergeAttachments: (channelId: string, msgId: string, attachments: Attachment[]) => void
   deleteMessage: (channelId: string, msgId: string) => void
   clearChannel: (channelId: string) => void
-  updateUserInMessages: (userId: string, username: string, avatar: string | null) => void
+  updateUserInMessages: (userId: string, username: string, avatar: string | null, decoration: string | null) => void
   setTyping: (channelId: string, userId: string, username: string) => void
   clearTyping: (channelId: string, userId: string) => void
   addReaction: (channelId: string, msgId: string, emoji: string, userId: string, me: boolean, isSuper?: boolean) => void
@@ -132,13 +133,14 @@ export const useChat = create<ChatState>()(
       s.messagesByChannel[channelId] = []
     }),
 
-    updateUserInMessages: (userId, username, avatar) => set(s => {
+    updateUserInMessages: (userId, username, avatar, decoration) => set(s => {
       for (const msgs of Object.values(s.messagesByChannel)) {
         if (!msgs) continue
         for (const msg of msgs) {
           if (msg.author_id === userId) {
             msg.author_username = username
             msg.author_avatar = avatar
+            msg.author_avatar_decoration = decoration
           }
         }
       }

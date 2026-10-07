@@ -4,6 +4,7 @@ import { Camera, Trash2 } from 'lucide-react'
 import { Field } from './shared'
 import api, { mediaUrl } from '../../api/client'
 import toast from 'react-hot-toast'
+import ProfileCosmetics from './ProfileCosmetics'
 
 interface Props {
   user: any
@@ -171,6 +172,8 @@ export default function ProfileSection({ user, updateMe }: Props) {
       >
         {saveBio.isPending ? 'Sauvegarde...' : 'Sauvegarder le profil'}
       </button>
+
+      <ProfileCosmetics user={user} updateMe={updateMe} />
     </div>
   )
 }
