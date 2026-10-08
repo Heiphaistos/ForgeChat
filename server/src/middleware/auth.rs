@@ -124,10 +124,20 @@ fn revoke_key(user_id: Uuid) -> String {
 }
 
 pub async fn revoke_all_tokens(state: &AppState, user_id: Uuid) {
+    revoke_tokens_before(state, user_id, chrono::Utc::now().timestamp()).await
+}
+
+/// Révocation stricte (bannissement, déconnexion forcée par un administrateur) : un jeton émis dans la
+/// seconde même de la décision est coupé aussi.
+pub async fn revoke_all_tokens_strict(state: &AppState, user_id: Uuid) {
+    revoke_tokens_before(state, user_id, chrono::Utc::now().timestamp() + 1).await
+}
+
+async fn revoke_tokens_before(state: &AppState, user_id: Uuid, ts: i64) {
     use redis::AsyncCommands;
     let mut redis = state.redis.lock().await;
     let _: () = redis
-        .set_ex(revoke_key(user_id), chrono::Utc::now().timestamp(), 2 * 3600)
+        .set_ex(revoke_key(user_id), ts, 2 * 3600)
         .await
         .unwrap_or(());
     drop(redis);

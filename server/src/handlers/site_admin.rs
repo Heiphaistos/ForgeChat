@@ -149,7 +149,7 @@ pub async fn sync_banned_set(state: &AppState) {
 async fn cut_access(state: &AppState, user_id: Uuid, notify: &str) {
     let _ = sqlx::query("DELETE FROM refresh_tokens WHERE user_id=$1").bind(user_id).execute(&state.db).await;
     let _ = sqlx::query("DELETE FROM user_sessions WHERE user_id=$1").bind(user_id).execute(&state.db).await;
-    crate::middleware::auth::revoke_all_tokens(state, user_id).await;
+    crate::middleware::auth::revoke_all_tokens_strict(state, user_id).await;
     state.broadcast_to_user(user_id, json!({ "type": notify }).to_string()).await;
 }
 
