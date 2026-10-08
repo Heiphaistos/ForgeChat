@@ -1,0 +1,106 @@
+# Vérifications à chaque push et pull request : client web, serveur Rust, application mobile.
+# Aucune action tierce : seul `checkout` (épinglé comme dans applications.yml) ; Node et Rust
+# sont préinstallés sur les runners ubuntu-24.04.
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  client:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: client
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: npm ci --no-audit --no-fund
+      - run: npx tsc --noEmit
+      - run: npx eslint src --quiet
+      - name: Tests unitaires
+        run: |
+          set -e
+          for f in scripts/*.test.mjs; do echo "== $f"; node --test "$f"; done
+      - run: npx vite build
+
+  server:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: server
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: cargo check --locked
+      - run: cargo test --locked
+
+  # Parcours réels contre un serveur local (Postgres + Redis jetables).
+  api:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    needs: [client, server]
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: forgechat
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: forgechat
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U forgechat" --health-interval 5s --health-timeout 5s --health-retries 10
+      redis:
+        image: redis:7
+        ports: ['6379:6379']
+    env:
+      DATABASE_URL: postgres://forgechat:ci@127.0.0.1:5432/forgechat
+      REDIS_URL: redis://127.0.0.1:6379
+      JWT_SECRET: ci-secret-ci-secret-ci-secret-ci-secret
+      PORT: '58080'
+      UPLOAD_DIR: /tmp/uploads
+      FRONTEND_URL: http://localhost:5173
+      FORGECHAT_API_URL: http://127.0.0.1:58080
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Construire et démarrer le serveur
+        working-directory: server
+        run: |
+          mkdir -p /tmp/uploads
+          cargo build --locked
+          ./target/debug/forgechat > /tmp/server.log 2>&1 &
+          for i in $(seq 1 60); do curl -sf "$FORGECHAT_API_URL/api/health" >/dev/null && exit 0; sleep 1; done
+          cat /tmp/server.log; exit 1
+      - run: npm ci --no-audit --no-fund
+        working-directory: client
+      - name: Le premier compte devient administrateur, puis les inscriptions passent sur invitation
+        working-directory: client
+        run: |
+          # Base vide : première inscription libre = administrateur du site (voir scripts/admin.api.mjs).
+          node --experimental-strip-types scripts/admin.api.mjs
+      - name: Parcours messagerie, communauté et fichiers chiffrés (inscription libre pour les comptes de test)
+        working-directory: client
+        run: |
+          PGPASSWORD=ci psql -h 127.0.0.1 -U forgechat forgechat -c "UPDATE site_settings SET value='open' WHERE key='registration_mode'"
+          for s in messaging community e2e-files; do node --experimental-strip-types scripts/$s.api.mjs; done
+
+  mobile:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: npm run typecheck
+      - run: npx jest --ci --no-watchman

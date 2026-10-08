@@ -24,7 +24,8 @@ async function api(method, path, { token, body } = {}) {
 const PASSWORD = 'Mot de passe de test 42!'
 const uniq = () => Math.random().toString(36).slice(2, 8)
 // La limite d'inscriptions par IP (5 / 15 min) est testée ailleurs : on la remet à zéro (Redis local).
-const resetRegisterLimit = () => { try { execSync("redis-cli --scan --pattern 'register_attempts:*' | xargs -r redis-cli del", { stdio: 'ignore' }) } catch { /* redis-cli absent */ } }
+const REDIS_DB = process.env.FORGECHAT_REDIS_DB ?? '0'
+const resetRegisterLimit = () => { try { execSync(`redis-cli -n ${REDIS_DB} --scan --pattern 'register_attempts:*' | xargs -r redis-cli -n ${REDIS_DB} del`, { stdio: 'ignore' }) } catch { /* redis-cli absent */ } }
 async function register(name, invite_code) {
   resetRegisterLimit()
   const user = { username: `${name}${uniq()}`, email: `${name}${uniq()}@test.local`, password: PASSWORD }

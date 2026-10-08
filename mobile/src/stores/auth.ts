@@ -49,7 +49,7 @@ interface AuthState {
   notice: string | null
   bootstrap: () => Promise<void>
   login: (email: string, password: string, totpCode?: string) => Promise<void>
-  register: (username: string, email: string, password: string) => Promise<void>
+  register: (username: string, email: string, password: string, inviteCode?: string) => Promise<void>
   logout: (scope?: 'current' | 'all') => Promise<void>
   /** Fin de session sans appel serveur (session déjà révoquée côté serveur). */
   signOutLocally: (notice?: string) => Promise<void>
@@ -127,8 +127,8 @@ export const useAuth = create<AuthState>((set, get) => {
       await acceptSession(res)
     },
 
-    register: async (username, email, password) => {
-      const res = await authApi.register(username, email, password)
+    register: async (username, email, password, inviteCode) => {
+      const res = await authApi.register(username, email, password, inviteCode)
       rememberPassword(password)
       await acceptSession(res)
     },

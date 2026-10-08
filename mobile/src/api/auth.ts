@@ -37,10 +37,10 @@ export const authApi = {
     }
   },
 
-  async register(username: string, email: string, password: string): Promise<AuthResponse> {
+  async register(username: string, email: string, password: string, inviteCode?: string): Promise<AuthResponse> {
     return (await http.post(
       '/auth/register',
-      { username: username.trim(), email: email.trim().toLowerCase(), password },
+      { username: username.trim(), email: email.trim().toLowerCase(), password, ...(inviteCode?.trim() ? { invite_code: inviteCode.trim() } : {}) },
       { auth: false, schema: authSchema },
     )) as AuthResponse
   },
