@@ -28,25 +28,11 @@ import { E2EBadge, useConvEncrypted } from '../e2e/E2EBadge'
 import DisappearingControl from '../components/chat/DisappearingControl'
 import { rememberConvName } from '../e2e/searchIndex'
 import { E2ECallBadge } from '../e2e/E2ECallBadge'
+import { fetchDmMessages, openDm, type RawDm } from '../e2e/dmMessages'
 import { filesExtra, prepareFiles, type PreparedFiles } from '../e2e/files'
 import { isQueued } from '../lib/offline'
 import { RemoteSupportButton, useSupportSender } from '../components/chat/RemoteSupport'
 import type { SupportPayload } from '../lib/remoteSupport'
-
-/** Message de MP tel que renvoyé par le serveur. */
-type RawDm = RawMsg & { reply_to?: { id: string; content: string | null; enc?: EncPayload | null; client_msg_id?: string | null; sender_id: string; sender_username: string } | null }
-
-/** Déchiffre un MP et l'aperçu du message auquel il répond. */
-async function openDm(dmId: string, m: RawDm) {
-  const o = await openMessage('dm', dmId, m)
-  const r = m.reply_to
-  if (r?.enc) {
-    const text = await openText('dm', dmId, r.enc, r.sender_id, r.client_msg_id)
-    return { ...o, reply_to: { ...r, content: text ?? tr('e2e.msg.locked') }, ...(text === null ? { e2e_reply: 'locked' as const } : {}) }
-  }
-  return o
-}
-
 
 const STATUS_LABEL: Record<string, Key> = {
   online: 'presence.online',
@@ -251,16 +237,7 @@ export default function DMPage() {
 
   const { data: messages = [], isError: dmMessagesError, refetch: refetchDmMessages } = useQuery({
     queryKey: ['dm_messages', dmId, highlightMessageId ?? null],
-    queryFn: async () => {
-      const open = (list: RawDm[]) => Promise.all(list.map(m => openDm(dmId!, m)))
-      if (highlightMessageId) {
-        try {
-          const res = await api.get(`/dms/${dmId}/messages?around=${highlightMessageId}&limit=50`)
-          if (res.data?.length > 0) return open(res.data)
-        } catch {}
-      }
-      return api.get(`/dms/${dmId}/messages`).then(r => open(r.data))
-    },
+    queryFn: () => fetchDmMessages(dmId!, highlightMessageId),
     enabled: !!dmId,
     staleTime: highlightMessageId ? 0 : 30_000,
   })

@@ -62,3 +62,13 @@ test('messages en attente remplacés par leur version lisible, les autres intact
   assert.equal(isLocked(out[3]), true)
   assert.equal(isLocked(null), false)
 })
+
+test('message chiffré jamais ouvert (préchargement brut) : remplacé par sa version déchiffrée', () => {
+  const enc = { v: 1, epoch: 0, iv: 'a', ct: 'b' }
+  const prev = [{ id: 'r', content: null, enc }, { id: 'o', content: 'déjà lu', enc, e2e: 'ok' }]
+  assert.equal(isLocked(prev[0]), true)
+  assert.equal(isLocked(prev[1]), false)
+  const out = mergeUnlocked(prev, [{ id: 'r', content: 'bonjour', enc, e2e: 'ok' }, { id: 'o', content: 'autre', enc, e2e: 'ok' }])
+  assert.equal(out[0].content, 'bonjour')
+  assert.equal(out[1].content, 'déjà lu')
+})

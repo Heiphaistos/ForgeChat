@@ -1063,6 +1063,8 @@ function AppInner() {
             <Route path="admin/signalements" element={<DmReportsAdminPage />} />
             <Route path="import-discord" element={<ImportDiscordPage />} />
           </Route>
+          {/* Adresse inconnue : accueil plutôt qu'un écran noir. */}
+          <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
         {/* Montés ici (racine, hors de <Routes>) et non dans MainLayout : /settings est une
             route de premier niveau, structurellement HORS de MainLayout (plein écran sans

@@ -37,6 +37,7 @@ import { useMemberModeration } from '../chat/MemberModeration'
 import { useRemoteSupportItem } from '../chat/RemoteSupport'
 import { t as tr, useT } from '../../i18n'
 import { openMessages, type RawMsg } from '../../e2e/conversations'
+import { fetchDmMessages } from '../../e2e/dmMessages'
 import AnimatedImg from '../ui/AnimatedImg'
 import UserName from '../ui/UserName'
 
@@ -709,7 +710,8 @@ export default function ChannelSidebar() {
               onMouseEnter={() => {
                 qc.prefetchQuery({
                   queryKey: ['dm_messages', dm.id, null],
-                  queryFn: () => api.get(`/dms/${dm.id}/messages`).then(r => r.data),
+                  // Même forme que DMPage : déchiffrés (des messages bruts s'affichaient vides).
+                  queryFn: () => fetchDmMessages(dm.id),
                   staleTime: 30_000,
                 })
               }}

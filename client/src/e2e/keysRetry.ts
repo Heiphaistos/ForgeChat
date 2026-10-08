@@ -34,12 +34,15 @@ export const becameReady = <K>(s: { status: string; priv: K | null }, prev: { st
 export const cacheUsable = <K>(hit: { priv: K | null; at: number } | undefined, priv: K | null, force: boolean, now: number) =>
   !!hit && hit.priv === priv && (!force || now - hit.at < 1000)
 
-interface Lockable { id: string; e2e?: string; e2e_reply?: string }
+interface Lockable { id: string; e2e?: string; e2e_reply?: string; enc?: unknown }
 
-/** Message (ou aperçu de sa réponse) chiffré pas encore lisible. */
+/**
+ * Message (ou aperçu de sa réponse) chiffré pas encore lisible, y compris jamais ouvert (`enc` sans
+ * `e2e` : arrivé brut dans un cache) — sinon il restait vide pour toujours.
+ */
 export const isLocked = (m: unknown) => {
   const o = m as Lockable | null
-  return o?.e2e === 'locked' || o?.e2e_reply === 'locked'
+  return o?.e2e === 'locked' || o?.e2e_reply === 'locked' || (!!o?.enc && !o.e2e)
 }
 
 /** Remplace chaque message en attente par sa version lisible rechargée (même id), sans toucher aux autres. */
