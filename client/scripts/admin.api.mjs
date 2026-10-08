@@ -163,8 +163,50 @@ for (const [label, id] of [['propriétaire du site', ownerId], ['El Patron', non
 ok((await api('POST', `${S}/members/${host.id}/timeout`, { token: leaTok, body: { duration_minutes: 5 } })).status === 200, 'El Patron peut mettre en timeout même le propriétaire du serveur')
 ok((await api('DELETE', `${S}/members/${host.id}/timeout`, { token: leaTok })).status === 200, '… et lever le timeout')
 
+// ── Modération de l'instance : annuaire, supervision visible, suspension, suppression
+const srv2 = (await api('POST', '/api/servers', { token: host.token, body: { name: 'Serveur à superviser' } })).body
+const full2 = (await api('GET', `/api/servers/${srv2.id}`, { token: host.token })).body
+const chan2 = full2.channels?.find(c => c.type === 'text')?.id
+ok(!!chan2, 'serveur à superviser : salon texte présent')
+await api('POST', `/api/servers/${srv2.id}/channels/${chan2}/messages`, { token: host.token, body: { content: 'contenu douteux' } })
+const S2 = `/api/servers/${srv2.id}`
+const dir = (await api('GET', `/api/admin/servers?q=${encodeURIComponent('Serveur à superviser')}`, { token: adminToken })).body
+const row2 = dir.servers?.find(x => x.id === srv2.id)
+ok(row2 && row2.members === 1 && row2.messages >= 1 && row2.owner === host.username && !row2.joined && !row2.supervising, 'annuaire : serveur d’un tiers (membres, messages, propriétaire)', JSON.stringify(row2))
+ok((await api('GET', '/api/admin/servers', { token: plain.token })).status === 403, 'annuaire des serveurs refusé à un membre ordinaire')
+ok((await api('POST', `/api/admin/servers/${srv2.id}/supervise`, { token: plain.token })).status === 403, 'superviser un serveur refusé à un membre ordinaire')
+ok((await api('GET', S2, { token: adminToken })).status === 403, 'sans supervision : pas d’accès (adhésion requise)')
+ok((await api('POST', `/api/admin/servers/${srv2.id}/supervise`, { token: adminToken })).status === 204, 'supervision du serveur (sans invitation ni consentement)')
+ok((await api('GET', S2, { token: adminToken })).status === 200, 'supervision : serveur ouvert')
+const msgs2 = (await api('GET', `${S2}/channels/${chan2}/messages`, { token: adminToken })).body
+const bad = Array.isArray(msgs2) ? msgs2.find(m => m.content === 'contenu douteux') : null
+ok(!!bad, 'supervision : messages du serveur lisibles')
+ok((await api('DELETE', `${S2}/channels/${chan2}/messages/${bad?.id}`, { token: adminToken })).status < 300, 'supervision : suppression d’un message abusif')
+const audit2 = JSON.stringify((await api('GET', `${S2}/audit`, { token: host.token })).body)
+ok(audit2.includes('site_supervision'), 'le propriétaire du serveur voit la supervision dans son journal d’audit')
+const dir2 = (await api('GET', `/api/admin/servers?filter=supervised`, { token: adminToken })).body.servers.find(x => x.id === srv2.id)
+ok(dir2?.supervising === true && dir2.members === 1, 'annuaire : « supervisé », le superviseur n’est pas compté parmi les membres')
+ok((await api('POST', `/api/admin/servers/${srv2.id}/suspend`, { token: adminToken, body: { reason: 'Contenu illicite' } })).status === 204, 'suspension du serveur')
+const susp = await api('GET', S2, { token: host.token })
+ok(susp.status === 403 && /suspendu/.test(susp.body?.error ?? ''), 'serveur suspendu : son propriétaire est refusé avec un message', `${susp.status} ${JSON.stringify(susp.body)}`)
+ok((await api('GET', S2, { token: adminToken })).status === 200, 'serveur suspendu : El Patron y accède toujours')
+ok((await api('DELETE', `/api/admin/servers/${srv2.id}/suspend`, { token: adminToken })).status === 204, 'levée de la suspension')
+ok((await api('GET', S2, { token: host.token })).status === 200, 'serveur rétabli pour ses membres')
+ok((await api('DELETE', `/api/admin/servers/${srv2.id}/supervise`, { token: adminToken })).status === 204, 'fin de la supervision')
+ok((await api('GET', S2, { token: adminToken })).status === 403, 'supervision terminée : accès fermé')
+ok((await api('GET', S2, { token: host.token })).status === 200, 'l’adhésion du propriétaire du serveur n’est pas touchée')
+const wrongPw = await api('DELETE', `/api/admin/servers/${srv2.id}`, { token: adminToken, body: { password: 'faux' } })
+ok(wrongPw.status === 400 || wrongPw.status === 403, 'suppression refusée sans le bon mot de passe', `${wrongPw.status}`)
+ok((await api('DELETE', `/api/admin/servers/${srv2.id}`, { token: adminToken, body: { password: PASSWORD } })).status === 204, 'suppression du serveur avec le mot de passe')
+ok((await api('GET', S2, { token: host.token })).status >= 400, 'serveur supprimé')
+// Un El Patron qui perd le rôle perd aussi ses supervisions
+const srv3 = (await api('POST', '/api/servers', { token: host.token, body: { name: 'Autre serveur' } })).body
+ok((await api('POST', `/api/admin/servers/${srv3.id}/supervise`, { token: leaTok })).status === 204, 'un El Patron supervise un serveur')
+ok((await api('GET', `/api/servers/${srv3.id}`, { token: leaTok })).status === 200, '… et y accède')
+
 ok((await api('PUT', `/api/admin/users/${nonAdmin.id}/patron`, { token: adminToken, body: { patron: false } })).status === 204, 'le propriétaire retire le rôle')
 ok((await api('GET', '/api/admin/me', { token: leaTok })).status === 403, 'rôle retiré : accès coupé aussitôt')
+ok((await api('GET', `/api/servers/${srv3.id}`, { token: leaTok })).status === 403, 'rôle retiré : sa supervision disparaît avec lui')
 ok((await api('POST', `${S}/members/${nonAdmin.id}/kick`, { token: host.token })).status === 200, 'rôle retiré : le compte redevient un simple membre (expulsable)')
 ok((await api('GET', '/api/admin/diagnostics', { token: leaTok })).status === 403, 'rôle retiré : rapports d’erreurs refusés')
 
@@ -175,7 +217,7 @@ await api('PUT', '/api/admin/settings', { token: adminToken, body: { registratio
 ok((await api('PUT', '/api/admin/settings', { token: adminToken, body: { registration_mode: 'nimporte' } })).status === 400, 'mode inconnu refusé')
 
 const audit = (await api('GET', '/api/admin/audit', { token: adminToken })).body.entries.map(e => e.action)
-ok(['ban', 'unban', 'force_logout', 'create_invite', 'revoke_invite', 'set_registration_mode', 'grant_patron', 'revoke_patron'].every(a => audit.includes(a)), 'journal des actions complet', audit.join(','))
+ok(['ban', 'unban', 'force_logout', 'create_invite', 'revoke_invite', 'set_registration_mode', 'grant_patron', 'revoke_patron', 'supervise_server', 'suspend_server', 'unsuspend_server', 'end_supervision', 'delete_server'].every(a => audit.includes(a)), 'journal des actions complet', audit.join(','))
 
 const detail = (await api('GET', `/api/admin/users/${nonAdmin.id}`, { token: adminToken })).body
 ok(Array.isArray(detail.sessions) && Array.isArray(detail.servers) && Array.isArray(detail.invited), 'détail d’un compte (appareils, serveurs, invités)')
