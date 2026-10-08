@@ -14,6 +14,7 @@ import { usePresence } from '@/stores/presence'
 import { colors, font, spacing } from '@/theme'
 import { useAppearance } from '@/theme/prefs'
 import { AccountSwitcher } from '@/features/account/AccountSwitcher'
+import { useSiteAdmin } from '@/features/admin/useSiteAdmin'
 
 
 // Panneau « Infos dev » : retiré du bundle du client-apk. EXPO_PUBLIC_APP_ENV est inliné à la
@@ -33,6 +34,7 @@ export default function YouScreen() {
   const streamer = useAppearance((s) => s.streamerMode)
   const [statusOpen, setStatusOpen] = useState(false)
   const [logoutOpen, setLogoutOpen] = useState(false)
+  const { admin: isSiteAdmin } = useSiteAdmin()
   if (!user) return null
   // « idle » (écrit par le web) et « away » (écrit par le mobile) = Absent.
   const status = normalizeStatus(user.status)
@@ -77,6 +79,12 @@ export default function YouScreen() {
       </Section>
 
       <AccountSwitcher />
+
+      {isSiteAdmin ? (
+        <Section>
+          <Row icon="ribbon-outline" title="Administration" subtitle="Comptes, invitations, bannissements" onPress={() => router.push('/admin')} chevron />
+        </Section>
+      ) : null}
 
       <Section title={t('you.settings')}>
         <Row icon="shield-checkmark-outline" title={t('you.security')} onPress={() => router.push('/settings/security')} chevron />

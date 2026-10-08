@@ -143,18 +143,23 @@ const invite = async () => (await api('POST', '/api/admin/invites', { token: adm
 const host = await register('hote', await invite())
 const plain = await register('simple', await invite())
 const srv = (await api('POST', '/api/servers', { token: host.token, body: { name: 'Jotunheim test' } })).body
-ok(!!srv?.id && !!srv.invite_code, 'serveur d’un tiers créé', JSON.stringify(srv))
-for (const tok of [adminToken, leaTok, plain.token]) await api('POST', `/api/servers/join/${srv.invite_code}`, { token: tok })
+ok(!!srv?.id, 'serveur d’un tiers créé', JSON.stringify(srv))
+const hostInvite = (await api('POST', `/api/servers/${srv.id}/invites`, { token: host.token, body: { max_uses: 10 } })).body
+ok(!!hostInvite?.code, 'invitation du serveur créée par son propriétaire', JSON.stringify(hostInvite))
+for (const [name, tok] of [['admin', adminToken], ['lea', leaTok], ['simple', plain.token]]) {
+  const j = await api('POST', `/api/servers/join/${hostInvite.code}`, { token: tok })
+  ok(j.status === 200, `${name} rejoint le serveur du tiers`, `${j.status} ${JSON.stringify(j.body)}`)
+}
 const S = `/api/servers/${srv.id}`
 for (const [label, id] of [['propriétaire du site', ownerId], ['El Patron', nonAdmin.id]]) {
   ok((await api('POST', `${S}/members/${id}/kick`, { token: host.token })).status === 403, `${label} : impossible à expulser`)
   ok((await api('POST', `${S}/members/${id}/ban`, { token: host.token, body: {} })).status === 403, `${label} : impossible à bannir du serveur`)
-  ok((await api('POST', `${S}/members/${id}/timeout`, { token: host.token, body: { duration_minutes: 10 } })).status === 403, `${label} : impossible à mettre en timeout`)
-  ok((await api('PATCH', `${S}/members/${id}/voice`, { token: host.token, body: { mute: true } })).status === 403, `${label} : impossible à rendre muet`)
+  { const r = await api('POST', `${S}/members/${id}/timeout`, { token: host.token, body: { duration_minutes: 10 } }); ok(r.status === 403, `${label} : impossible à mettre en timeout`, `${r.status} ${JSON.stringify(r.body)}`) }
+  { const r = await api('PATCH', `${S}/members/${id}/voice`, { token: host.token, body: { mute: true } }); ok(r.status === 403, `${label} : impossible à rendre muet`, `${r.status} ${JSON.stringify(r.body)}`) }
   ok((await api('PATCH', `${S}/members/${id}/voice`, { token: host.token, body: { deafen: true } })).status === 403, `${label} : impossible à rendre sourd`)
 }
-ok((await api('PATCH', S, { token: leaTok, body: { name: 'Renommé par El Patron' } })).status === 200, 'El Patron (simple membre) renomme le serveur d’un tiers')
-ok((await api('POST', `${S}/members/${plain.id}/kick`, { token: adminToken })).status === 200, 'le propriétaire du site (simple membre) expulse un membre')
+{ const r = await api('PATCH', S, { token: leaTok, body: { name: 'Renommé par El Patron' } }); ok(r.status === 200, 'El Patron (simple membre) renomme le serveur d’un tiers', `${r.status} ${JSON.stringify(r.body)}`) }
+{ const r = await api('POST', `${S}/members/${plain.id}/kick`, { token: adminToken }); ok(r.status === 200, 'le propriétaire du site (simple membre) expulse un membre', `${r.status} ${JSON.stringify(r.body)}`) }
 ok((await api('POST', `${S}/members/${host.id}/timeout`, { token: leaTok, body: { duration_minutes: 5 } })).status === 200, 'El Patron peut mettre en timeout même le propriétaire du serveur')
 ok((await api('DELETE', `${S}/members/${host.id}/timeout`, { token: leaTok })).status === 200, '… et lever le timeout')
 
