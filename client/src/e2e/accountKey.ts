@@ -83,8 +83,22 @@ async function newKeyMaterial(userId: string, password: string) {
   return { priv, pub, code, body }
 }
 
+// Une seule initialisation à la fois par compte : le mode strict de React (et deux fenêtres qui démarrent
+// ensemble) la lançaient deux fois, la seconde création de clé échouait et verrouillait l'écran alors que
+// la clé était déjà prête.
+const initInFlight = new Map<string, Promise<void>>()
+
 /** Au démarrage d'une session : clé locale, sinon ouverture/création avec le mot de passe saisi. */
-export async function initAccountKey(userId: string) {
+export function initAccountKey(userId: string): Promise<void> {
+  let p = initInFlight.get(userId)
+  if (!p) {
+    p = runInitAccountKey(userId).finally(() => { initInFlight.delete(userId) })
+    initInFlight.set(userId, p)
+  }
+  return p
+}
+
+async function runInitAccountKey(userId: string) {
   const stored = await idb<StoredKey | undefined>('readonly', s => s.get(userId)).catch(() => undefined)
   if (stored?.priv) {
     typedPassword = null
@@ -100,6 +114,8 @@ export async function initAccountKey(userId: string) {
       return
     } catch { /* mot de passe changé par e-mail : écran de déverrouillage */ }
   }
+  // Une autre exécution a pu terminer entre-temps : ne jamais verrouiller une clé déjà prête.
+  if (useAccountKey.getState().status === 'ready') return
   useAccountKey.setState({ status: 'locked', mode: keys ? 'unlock' : 'setup' })
 }
 
