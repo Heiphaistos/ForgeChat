@@ -262,7 +262,7 @@ pub struct ReauthBody {
 /// Confirmation forte avant une action irréversible : mot de passe obligatoire, et code de double
 /// authentification (ou code de secours) si elle est activée. 5 échecs par quart d'heure.
 /// Erreurs : 400 « Mot de passe incorrect », 403 `totp_required` si le code manque, 400 si faux.
-pub async fn verify_reauth(state: &AppState, user_id: Uuid, body: &ReauthBody) -> Result<()> {
+pub(crate) async fn verify_reauth(state: &AppState, user_id: Uuid, body: &ReauthBody) -> Result<()> {
     use redis::AsyncCommands;
     // Seuls les ÉCHECS comptent (comme à la connexion) : un propriétaire qui supprime plusieurs
     // serveurs d'affilée avec le bon mot de passe n'est jamais bloqué.
@@ -1054,14 +1054,31 @@ pub async fn require_member(
     state: &AppState, user_id: Uuid, server_id: Uuid,
 ) -> Result<()> {
     let ok = sqlx::query_scalar::<_, bool>(
-        "SELECT EXISTS(SELECT 1 FROM server_members WHERE user_id=$1 AND server_id=$2)"
+        "SELECT EXISTS(SELECT 1 FROM server_members sm JOIN servers s ON s.id = sm.server_id
+         WHERE sm.user_id=$1 AND sm.server_id=$2 AND (s.suspended_at IS NULL OR fc_is_god($1)))"
     )
     .bind(user_id)
     .bind(server_id)
     .fetch_one(&state.db)
     .await?;
 
-    if !ok { Err(AppError::Forbidden) } else { Ok(()) }
+    if ok { Ok(()) } else { Err(denied_member(state, server_id).await) }
+}
+
+/// Refus d'accès à un serveur : message explicite quand il est suspendu par l'administration.
+async fn denied_member(state: &AppState, server_id: Uuid) -> AppError {
+    let suspended: bool = sqlx::query_scalar("SELECT suspended_at IS NOT NULL FROM servers WHERE id=$1")
+        .bind(server_id)
+        .fetch_optional(&state.db)
+        .await
+        .ok()
+        .flatten()
+        .unwrap_or(false);
+    if suspended {
+        AppError::ForbiddenMsg("Ce serveur est suspendu par l'administration de ForgeChat".into())
+    } else {
+        AppError::Forbidden
+    }
 }
 
 /// Vérifie membership + appartenance canal en 2 queries parallèles.
@@ -1071,13 +1088,15 @@ pub async fn require_member_and_channel(
 ) -> Result<()> {
     let (member_ok, channel_ok) = tokio::try_join!(
         sqlx::query_scalar::<_, bool>(
-            "SELECT EXISTS(SELECT 1 FROM server_members WHERE user_id=$1 AND server_id=$2)"
+            "SELECT EXISTS(SELECT 1 FROM server_members sm JOIN servers s ON s.id = sm.server_id
+             WHERE sm.user_id=$1 AND sm.server_id=$2 AND (s.suspended_at IS NULL OR fc_is_god($1)))"
         ).bind(user_id).bind(server_id).fetch_one(&state.db),
         sqlx::query_scalar::<_, bool>(
             "SELECT EXISTS(SELECT 1 FROM channels WHERE id=$1 AND server_id=$2)"
         ).bind(channel_id).bind(server_id).fetch_one(&state.db),
     )?;
-    if !member_ok || !channel_ok { return Err(AppError::Forbidden); }
+    if !member_ok { return Err(denied_member(state, server_id).await); }
+    if !channel_ok { return Err(AppError::Forbidden); }
     // Un canal masqué par ses overrides (VIEW_CHANNEL refusé) n'était protégé
     // que dans les diffusions temps réel : l'historique restait lisible par
     // n'importe quel membre. Tous les accès « canal » passent par ici.

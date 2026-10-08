@@ -447,11 +447,216 @@ pub async fn set_patron(
             .await?;
     } else {
         sqlx::query("DELETE FROM site_role_members WHERE role='el-patron' AND user_id=$1").bind(user_id).execute(&state.db).await?;
+        // Plus de rôle, plus de supervision : ses adhésions de supervision disparaissent avec lui.
+        sqlx::query("DELETE FROM server_members WHERE user_id=$1 AND supervisor").bind(user_id).execute(&state.db).await?;
     }
     if body.patron {
         lift_sanctions(&state).await;
     }
     audit(&state, claims.sub, if body.patron { "grant_patron" } else { "revoke_patron" }, Some(user_id), json!({})).await;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+// ─── Serveurs : annuaire, supervision, suspension, suppression ─────────────
+//
+// El Patron modère l'instance : il voit tous les serveurs et peut y entrer sans y avoir été invité.
+// La supervision est VISIBLE (le superviseur apparaît dans les membres, une ligne « supervision par
+// l'administration » est écrite dans le journal du serveur et dans le journal admin). Elle ne donne aucun accès aux
+// messages privés ni au contenu chiffré de bout en bout : un superviseur est exclu des destinataires de
+// clés des salons chiffrés (e2e_channel::viewers).
+
+#[derive(Deserialize)]
+pub struct ServersQuery {
+    pub q: Option<String>,
+    /// all | public | suspended | supervised
+    pub filter: Option<String>,
+    pub limit: Option<i64>,
+    pub offset: Option<i64>,
+}
+
+pub async fn list_servers(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+    Query(q): Query<ServersQuery>,
+) -> Result<Json<Value>> {
+    require_site_admin(&state, &claims).await?;
+    let limit = q.limit.unwrap_or(50).clamp(1, 200);
+    let offset = q.offset.unwrap_or(0).max(0);
+    let like = q.q.as_deref().map(str::trim).filter(|s| !s.is_empty()).map(|s| format!("%{}%", s.replace('%', "\\%").replace('_', "\\_")));
+    let rows = sqlx::query(
+        "SELECT s.id, s.name, s.icon, s.is_public, s.created_at, s.suspended_at, s.suspended_reason,
+                s.owner_id, o.username AS owner_name,
+                (SELECT COUNT(*) FROM server_members sm WHERE sm.server_id = s.id AND NOT sm.supervisor) AS members,
+                (SELECT COUNT(*) FROM channels c WHERE c.server_id = s.id) AS channels,
+                (SELECT COUNT(*) FROM messages m JOIN channels c ON c.id = m.channel_id WHERE c.server_id = s.id) AS messages,
+                (SELECT COALESCE(SUM(a.size), 0)::bigint FROM attachments a
+                   JOIN messages m ON m.id = a.message_id JOIN channels c ON c.id = m.channel_id
+                  WHERE c.server_id = s.id) AS storage_bytes,
+                EXISTS(SELECT 1 FROM server_members sm WHERE sm.server_id = s.id AND sm.user_id = $1) AS joined,
+                EXISTS(SELECT 1 FROM server_members sm WHERE sm.server_id = s.id AND sm.user_id = $1 AND sm.supervisor) AS supervising,
+                COUNT(*) OVER() AS total
+         FROM servers s LEFT JOIN users o ON o.id = s.owner_id
+         WHERE ($2::text IS NULL OR s.name ILIKE $2 OR o.username ILIKE $2 OR s.id::text ILIKE $2)
+           AND (CASE $3
+                  WHEN 'public' THEN s.is_public
+                  WHEN 'suspended' THEN s.suspended_at IS NOT NULL
+                  WHEN 'supervised' THEN EXISTS(SELECT 1 FROM server_members sm WHERE sm.server_id = s.id AND sm.user_id = $1 AND sm.supervisor)
+                  ELSE TRUE END)
+         ORDER BY s.created_at DESC
+         LIMIT $4 OFFSET $5",
+    )
+    .bind(claims.sub)
+    .bind(like)
+    .bind(q.filter.as_deref().unwrap_or("all"))
+    .bind(limit)
+    .bind(offset)
+    .fetch_all(&state.db)
+    .await?;
+    let total = rows.first().map(|r| r.get::<i64, _>("total")).unwrap_or(0);
+    let servers: Vec<Value> = rows
+        .iter()
+        .map(|r| {
+            json!({
+                "id": r.get::<Uuid, _>("id"),
+                "name": r.get::<String, _>("name"),
+                "icon": r.get::<Option<String>, _>("icon"),
+                "is_public": r.get::<bool, _>("is_public"),
+                "created_at": r.get::<DateTime<Utc>, _>("created_at"),
+                "owner_id": r.get::<Option<Uuid>, _>("owner_id"),
+                "owner": r.get::<Option<String>, _>("owner_name"),
+                "members": r.get::<i64, _>("members"),
+                "channels": r.get::<i64, _>("channels"),
+                "messages": r.get::<i64, _>("messages"),
+                "storage_bytes": r.get::<i64, _>("storage_bytes"),
+                "suspended_at": r.get::<Option<DateTime<Utc>>, _>("suspended_at"),
+                "suspended_reason": r.get::<Option<String>, _>("suspended_reason"),
+                "joined": r.get::<bool, _>("joined"),
+                "supervising": r.get::<bool, _>("supervising"),
+            })
+        })
+        .collect();
+    Ok(Json(json!({ "total": total, "servers": servers })))
+}
+
+async fn server_name(state: &AppState, server_id: Uuid) -> Result<String> {
+    sqlx::query_scalar::<_, String>("SELECT name FROM servers WHERE id=$1")
+        .bind(server_id)
+        .fetch_optional(&state.db)
+        .await?
+        .ok_or_else(|| AppError::NotFound("Serveur introuvable".into()))
+}
+
+/// Écrit une ligne dans le journal d'audit du serveur lui-même (lisible par ses modérateurs).
+async fn server_audit(state: &AppState, server_id: Uuid, admin: Uuid, action: &str, details: Value) {
+    let _ = sqlx::query(
+        "INSERT INTO audit_log (server_id, action, user_id, username, details)
+         VALUES ($1, $2, $3, (SELECT username FROM users WHERE id=$3), $4)",
+    )
+    .bind(server_id)
+    .bind(action)
+    .bind(admin)
+    .bind(details)
+    .execute(&state.db)
+    .await;
+}
+
+/// Entre dans un serveur en superviseur (visible), sans invitation ni consentement.
+pub async fn supervise_server(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+    Path(server_id): Path<Uuid>,
+) -> Result<StatusCode> {
+    require_site_admin(&state, &claims).await?;
+    let name = server_name(&state, server_id).await?;
+    let inserted = sqlx::query(
+        "INSERT INTO server_members (user_id, server_id, supervisor) VALUES ($1, $2, TRUE) ON CONFLICT DO NOTHING",
+    )
+    .bind(claims.sub)
+    .bind(server_id)
+    .execute(&state.db)
+    .await?;
+    if inserted.rows_affected() > 0 {
+        let note = "Supervision par l'administration de ForgeChat (modération de l'instance)";
+        server_audit(&state, server_id, claims.sub, "site_supervision", json!({ "note": note })).await;
+        audit(&state, claims.sub, "supervise_server", None, json!({ "server_id": server_id, "server": name })).await;
+    }
+    Ok(StatusCode::NO_CONTENT)
+}
+
+/// Quitte la supervision. Une adhésion ordinaire (non posée par la supervision) n'est jamais retirée.
+pub async fn end_supervision(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+    Path(server_id): Path<Uuid>,
+) -> Result<StatusCode> {
+    require_site_admin(&state, &claims).await?;
+    let done = sqlx::query("DELETE FROM server_members WHERE user_id=$1 AND server_id=$2 AND supervisor")
+        .bind(claims.sub)
+        .bind(server_id)
+        .execute(&state.db)
+        .await?;
+    if done.rows_affected() > 0 {
+        server_audit(&state, server_id, claims.sub, "site_supervision_end", json!({})).await;
+        audit(&state, claims.sub, "end_supervision", None, json!({ "server_id": server_id })).await;
+    }
+    Ok(StatusCode::NO_CONTENT)
+}
+
+#[derive(Deserialize)]
+pub struct SuspendBody {
+    pub reason: Option<String>,
+}
+
+pub async fn suspend_server(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+    Path(server_id): Path<Uuid>,
+    Json(body): Json<SuspendBody>,
+) -> Result<StatusCode> {
+    require_site_admin(&state, &claims).await?;
+    let name = server_name(&state, server_id).await?;
+    let reason = body.reason.map(|r| r.trim().chars().take(300).collect::<String>()).filter(|r| !r.is_empty());
+    sqlx::query("UPDATE servers SET suspended_at=COALESCE(suspended_at, NOW()), suspended_reason=$2 WHERE id=$1")
+        .bind(server_id)
+        .bind(&reason)
+        .execute(&state.db)
+        .await?;
+    state
+        .broadcast_to_server_members(server_id, json!({ "type": "SERVER_SUSPENDED", "server_id": server_id, "reason": reason }).to_string())
+        .await;
+    server_audit(&state, server_id, claims.sub, "site_suspend", json!({ "reason": reason })).await;
+    audit(&state, claims.sub, "suspend_server", None, json!({ "server_id": server_id, "server": name, "reason": reason })).await;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+pub async fn unsuspend_server(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+    Path(server_id): Path<Uuid>,
+) -> Result<StatusCode> {
+    require_site_admin(&state, &claims).await?;
+    let name = server_name(&state, server_id).await?;
+    sqlx::query("UPDATE servers SET suspended_at=NULL, suspended_reason=NULL WHERE id=$1").bind(server_id).execute(&state.db).await?;
+    server_audit(&state, server_id, claims.sub, "site_unsuspend", json!({})).await;
+    audit(&state, claims.sub, "unsuspend_server", None, json!({ "server_id": server_id, "server": name })).await;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+/// Suppression définitive d'un serveur (hébergement abusif) : mot de passe (et 2FA) de l'administrateur exigés.
+pub async fn delete_server_admin(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+    Path(server_id): Path<Uuid>,
+    body: Option<Json<crate::handlers::servers::ReauthBody>>,
+) -> Result<StatusCode> {
+    require_site_admin(&state, &claims).await?;
+    crate::handlers::servers::verify_reauth(&state, claims.sub, &body.map(|b| b.0).unwrap_or_default()).await?;
+    let name = server_name(&state, server_id).await?;
+    state
+        .broadcast_to_server_members(server_id, json!({ "type": "SERVER_DELETE", "server_id": server_id }).to_string())
+        .await;
+    sqlx::query("DELETE FROM servers WHERE id=$1").bind(server_id).execute(&state.db).await?;
+    audit(&state, claims.sub, "delete_server", None, json!({ "server_id": server_id, "server": name })).await;
     Ok(StatusCode::NO_CONTENT)
 }
 

@@ -194,6 +194,41 @@ fn with_server(mut b: Value, fp: &str) -> PostEnvelopes {
     serde_json::from_value(b).unwrap()
 }
 
+/// Un superviseur (modération de l'instance par El Patron) n'est jamais destinataire de clés d'un salon chiffré :
+/// il ne peut ni lire l'état des clés, ni en recevoir, ni en poser.
+#[tokio::test]
+#[ignore]
+async fn e2e_supervisor_never_holds_keys() {
+    use crate::handlers::e2e_channel as ch;
+    let url = std::env::var("FORGECHAT_TEST_DATABASE_URL").expect("FORGECHAT_TEST_DATABASE_URL");
+    let db = PgPool::connect(&url).await.unwrap();
+    sqlx::migrate!("./migrations").run(&db).await.unwrap();
+
+    let (o, a, sup) = (user(&db, true).await, user(&db, true).await, user(&db, true).await);
+    let s: Uuid = sqlx::query_scalar("INSERT INTO servers (name, owner_id) VALUES ('supervise', $1) RETURNING id")
+        .bind(o).fetch_one(&db).await.unwrap();
+    sqlx::query("INSERT INTO roles (server_id, name, permissions, is_everyone) VALUES ($1, '@everyone', 0, TRUE)")
+        .bind(s).execute(&db).await.unwrap();
+    for (m, owner, supervisor) in [(o, true, false), (a, false, false), (sup, false, true)] {
+        sqlx::query("INSERT INTO server_members (user_id, server_id, is_owner, supervisor) VALUES ($1, $2, $3, $4)")
+            .bind(m).bind(s).bind(owner).bind(supervisor).execute(&db).await.unwrap();
+    }
+    let chan: Uuid = sqlx::query_scalar("INSERT INTO channels (server_id, name) VALUES ($1, 'général') RETURNING id")
+        .bind(s).fetch_one(&db).await.unwrap();
+    let conv = Conv::Channel(chan);
+
+    let mut mem = members(&db, conv).await.unwrap();
+    mem.sort();
+    let mut want = vec![o, a];
+    want.sort();
+    assert_eq!(mem, want, "le superviseur n'est pas un détenteur possible de clé");
+    assert!(ch::viewers(&db, chan).await.unwrap().iter().all(|u| *u != sup));
+    assert!(require_member(&db, conv, sup).await.is_err(), "pas d'accès à l'état des clés du salon");
+    // Ni pour lui-même, ni offerte par un membre : les enveloppes n'ont que des membres pour destinataires.
+    assert_eq!(err(store_envelopes(&db, conv, sup, &body(&db, 0, true, &[sup], 9).await).await), "FORBIDDEN");
+    assert_eq!(err(store_envelopes(&db, conv, a, &body(&db, 0, true, &[a, sup], 9).await).await), "FORBIDDEN");
+}
+
 #[tokio::test]
 #[ignore]
 async fn e2e_channels() {

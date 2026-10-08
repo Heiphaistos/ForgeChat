@@ -176,7 +176,7 @@ pub async fn after_join(state: &AppState, server_id: Uuid) {
     ).bind(server_id).fetch_optional(&state.db).await else { return };
     let (count, secs): (i32, i32) = (r.get("raid_join_count"), r.get("raid_join_seconds"));
     let recent: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM server_members WHERE server_id=$1 AND NOT is_owner AND joined_at > NOW() - $2 * INTERVAL '1 second'"
+        "SELECT COUNT(*) FROM server_members WHERE server_id=$1 AND NOT is_owner AND NOT supervisor AND joined_at > NOW() - $2 * INTERVAL '1 second'"
     ).bind(server_id).bind(secs as f64).fetch_one(&state.db).await.unwrap_or(0);
     if recent >= count as i64 {
         tracing::warn!("Anti-raid : {recent} arrivées en {secs} s sur {server_id}, verrouillage");

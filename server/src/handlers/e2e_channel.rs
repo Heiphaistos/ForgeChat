@@ -31,7 +31,7 @@ pub async fn viewers(db: &PgPool, channel: Uuid) -> Result<Vec<Uuid>> {
         "SELECT sm.user_id FROM server_members sm
          JOIN channels c ON c.server_id = sm.server_id
          JOIN users u ON u.id = sm.user_id
-         WHERE c.id = $1 AND NOT u.is_bot",
+         WHERE c.id = $1 AND NOT u.is_bot AND NOT sm.supervisor",
     )
     .bind(channel)
     .fetch_all(db)
