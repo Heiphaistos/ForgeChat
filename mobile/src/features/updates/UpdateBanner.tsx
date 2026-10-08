@@ -26,7 +26,7 @@ function Action({ label, onPress, primary }: { label: string; onPress: () => voi
 export function UpdateBanner() {
   const t = useT()
   const insets = useSafeAreaInsets()
-  const { update, phase, progress, error, dismissed } = useUpdate()
+  const { update, phase, dismissed } = useUpdate()
   if (!update || dismissed) return null
   const version = update.version
   const later = () => useUpdate.setState({ dismissed: true })
@@ -36,23 +36,19 @@ export function UpdateBanner() {
   let body: string | null = null
   let actions: ReactNode
   switch (phase) {
-    case 'downloading':
-      title = t('store.update.downloading', { version, percent: progress === null ? '' : `${Math.round(progress * 100)} %` })
-      actions = <Action label={t('store.update.later')} onPress={later} />
-      break
     case 'ready':
       title = t('store.update.ready', { version })
       body = t('store.update.readyBody')
       actions = (
         <>
           <Action label={t('store.update.later')} onPress={later} />
-          <Action label={t('store.update.install')} onPress={install} primary />
+          <Action label={t('store.update.retry')} onPress={install} primary />
         </>
       )
       break
     case 'error':
       title = t('store.update.failed')
-      body = t(error === 'sha' ? 'store.update.badSha' : 'store.update.failedBody')
+      body = t('store.update.failedBody')
       actions = (
         <>
           <Action label={t('store.update.later')} onPress={later} />
@@ -87,11 +83,6 @@ export function UpdateBanner() {
         </Text>
       </View>
       {body ? <Text style={styles.body}>{body}</Text> : null}
-      {phase === 'downloading' ? (
-        <View style={styles.track} accessibilityRole="progressbar" accessibilityValue={{ min: 0, max: 100, now: Math.round((progress ?? 0) * 100) }}>
-          <View style={[styles.fill, { width: `${Math.round((progress ?? 0) * 100)}%` }]} />
-        </View>
-      ) : null}
       <View style={styles.actions}>{actions}</View>
     </View>
   )
@@ -114,8 +105,6 @@ const styles = StyleSheet.create({
   head: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   title: { flex: 1, color: colors.text, fontSize: font.md, fontWeight: '700' },
   body: { color: colors.textMuted, fontSize: font.sm },
-  track: { height: 6, borderRadius: radius.full, backgroundColor: colors.bgHover, overflow: 'hidden' },
-  fill: { height: 6, backgroundColor: colors.primary },
   actions: { flexDirection: 'row', justifyContent: 'flex-end', flexWrap: 'wrap', gap: spacing.sm },
   action: { paddingHorizontal: spacing.md, paddingVertical: 8, borderRadius: radius.sm },
   actionText: { color: colors.textSecondary, fontSize: font.sm, fontWeight: '700' },

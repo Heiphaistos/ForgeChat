@@ -1,5 +1,4 @@
 import { compareVersions, fetchAvailableUpdate, isDue, parseManifest, parseVersion, shaMatches, CHECK_INTERVAL_MS } from '@/features/updates/updateCheck'
-import type { UpdateNative } from '@/features/updates/installer'
 
 /**
  * Vérification des mises à jour (manifeste publié par le serveur ForgeChat) : format des versions,
@@ -99,7 +98,6 @@ describe('requête vers le serveur', () => {
 
 describe('vérification automatique (démarrage et retour au premier plan)', () => {
   let env: { UPDATES_MANIFEST_URL: string | null; APP_VERSION: string }
-  const mockDiscard = jest.fn()
 
   function load() {
     jest.resetModules()
@@ -107,7 +105,6 @@ describe('vérification automatique (démarrage et retour au premier plan)', () 
     jest.doMock('@/lib/logger', () => ({ logger: { debug: jest.fn(), warn: jest.fn() } }))
     jest.doMock('@/config/env', () => env)
     jest.doMock('@/i18n', () => ({ t: (key: string) => key }))
-    jest.doMock('@/features/updates/installer', () => ({ updateNative: { discardUpdate: mockDiscard } }))
     const settings: Record<string, unknown> = { updateCheck: true, updateLastCheckAt: 0, updateSkippedVersion: null }
     settings.set = (patch: Record<string, unknown>) => Object.assign(settings, patch)
     jest.doMock('@/stores/settings', () => ({ useSettings: { getState: () => settings } }))
@@ -119,7 +116,6 @@ describe('vérification automatique (démarrage et retour au premier plan)', () 
   }
 
   beforeEach(() => {
-    mockDiscard.mockClear()
     env = { UPDATES_MANIFEST_URL: MANIFEST, APP_VERSION: '1.0.0' }
   })
 
@@ -153,11 +149,10 @@ describe('vérification automatique (démarrage et retour au premier plan)', () 
     await expect(run(6_000, fetchMock)).resolves.toMatchObject({ version: '1.2.0' })
   })
 
-  it('à jour : l’APK resté dans le cache est supprimé', async () => {
+  it('à jour : pas de bannière', async () => {
     env = { UPDATES_MANIFEST_URL: MANIFEST, APP_VERSION: '1.2.0' }
     const { run, useUpdate } = load()
     await expect(run(Date.now(), jest.fn().mockResolvedValue(response(200, manifest())))).resolves.toBeNull()
-    expect(mockDiscard).toHaveBeenCalled()
     expect(useUpdate.getState().update).toBeNull()
   })
 
@@ -185,39 +180,20 @@ describe('vérification automatique (démarrage et retour au premier plan)', () 
   })
 })
 
-describe('téléchargement et installation dans l’app', () => {
+describe('installation (navigateur, jamais depuis l’app)', () => {
   const UPDATE = { version: '1.2.0', url: APK, sha256: SHA }
 
-  function load() {
+  function load(os: 'android' | 'ios', openURL = jest.fn().mockResolvedValue(true)) {
     jest.resetModules()
     jest.dontMock('@/features/updates/installer') // simulé par le bloc précédent
-    jest.doMock('expo', () => ({ requireOptionalNativeModule: () => null }))
-    jest.doMock('expo-linking', () => ({ openURL: jest.fn().mockResolvedValue(true) }))
-    jest.doMock('react-native', () => ({ Platform: { OS: 'android' } }))
-    jest.doMock('@/lib/logger', () => ({ logger: { debug: jest.fn(), warn: jest.fn() } }))
+    jest.doMock('expo-linking', () => ({ openURL }))
+    jest.doMock('react-native', () => ({ Platform: { OS: os } }))
     /* eslint-disable @typescript-eslint/no-require-imports */
     const installer = require('@/features/updates/installer') as typeof import('@/features/updates/installer')
     const { useUpdate, offerUpdate } = require('@/features/updates/updateStore') as typeof import('@/features/updates/updateStore')
     /* eslint-enable @typescript-eslint/no-require-imports */
     offerUpdate(UPDATE)
-    return { startUpdate: installer.startUpdate, useUpdate }
-  }
-
-  type Progress = (e: { received: number; total: number }) => void
-  function fakeNative(downloadedSha: string) {
-    const listeners: Progress[] = []
-    return {
-      downloadUpdate: jest.fn(async (_url: string, _sha: string) => {
-        listeners.forEach((fn) => fn({ received: 50, total: 100 }))
-        return downloadedSha
-      }),
-      installUpdate: jest.fn(async () => true),
-      discardUpdate: jest.fn(),
-      addListener: jest.fn((_event: 'onUpdateProgress', fn: Progress) => {
-        listeners.push(fn)
-        return { remove: jest.fn() }
-      }),
-    } satisfies UpdateNative
+    return { startUpdate: installer.startUpdate, useUpdate, openURL }
   }
 
   it('compare les empreintes (casse ignorée, format strict)', () => {
@@ -226,54 +202,29 @@ describe('téléchargement et installation dans l’app', () => {
     expect(shaMatches('', '')).toBe(false)
   })
 
-  it('empreinte conforme : progression visible puis installeur Android', async () => {
-    const { startUpdate, useUpdate } = load()
-    const native = fakeNative(SHA)
-    const seen: (number | null)[] = []
-    const off = useUpdate.subscribe((s) => seen.push(s.progress))
-    await startUpdate(native)
-    off()
-    expect(native.downloadUpdate).toHaveBeenCalledWith(APK, SHA)
-    expect(seen).toContain(0.5)
-    expect(native.installUpdate).toHaveBeenCalledTimes(1)
+  it('Android : ouvre l’APK dans le navigateur (installeur du système, pas de sélecteur d’explorateurs)', async () => {
+    const { startUpdate, useUpdate, openURL } = load('android')
+    await startUpdate()
+    expect(openURL).toHaveBeenCalledWith(APK)
     expect(useUpdate.getState().phase).toBe('ready')
   })
 
-  it('empreinte différente : fichier supprimé, JAMAIS installé', async () => {
-    const { startUpdate, useUpdate } = load()
-    const native = fakeNative('b'.repeat(64))
-    await startUpdate(native)
-    expect(native.discardUpdate).toHaveBeenCalled()
-    expect(native.installUpdate).not.toHaveBeenCalled()
-    expect(useUpdate.getState()).toMatchObject({ phase: 'error', error: 'sha' })
-  })
-
-  it('fichier déjà remis : un nouvel appui retélécharge et le redépose', async () => {
-    const { startUpdate, useUpdate } = load()
-    const native = fakeNative(SHA)
-    await startUpdate(native)
+  it('Android : aucun navigateur → erreur, réessayable', async () => {
+    const { startUpdate, useUpdate, openURL } = load('android', jest.fn().mockRejectedValueOnce(new Error('no')).mockResolvedValue(true))
+    await startUpdate()
+    expect(useUpdate.getState().phase).toBe('error')
+    await startUpdate()
+    expect(openURL).toHaveBeenCalledTimes(2)
     expect(useUpdate.getState().phase).toBe('ready')
-    await startUpdate(native)
-    expect(native.downloadUpdate).toHaveBeenCalledTimes(2)
-    expect(native.installUpdate).toHaveBeenCalledTimes(2)
   })
 
-  it('dépôt dans Téléchargements impossible : erreur, réessayable', async () => {
-    const { startUpdate, useUpdate } = load()
-    const native = fakeNative(SHA)
-    native.installUpdate.mockRejectedValueOnce(new Error('Téléchargements inaccessible'))
-    await startUpdate(native)
-    expect(useUpdate.getState()).toMatchObject({ phase: 'error', error: 'network' })
-  })
-
-  it('échec du téléchargement : erreur réseau, réessayable', async () => {
-    const { startUpdate, useUpdate } = load()
-    const native = fakeNative(SHA)
-    native.downloadUpdate.mockRejectedValueOnce(new Error('HTTP 503'))
-    await startUpdate(native)
-    expect(useUpdate.getState()).toMatchObject({ phase: 'error', error: 'network' })
-    await startUpdate(native)
-    expect(useUpdate.getState().phase).toBe('ready')
+  it('iOS : AltStore, puis SideStore, puis le lien direct', async () => {
+    const openURL = jest.fn().mockRejectedValueOnce(new Error('pas d’AltStore')).mockResolvedValue(true)
+    const { startUpdate } = load('ios', openURL)
+    await startUpdate()
+    expect(openURL.mock.calls[0][0]).toBe(`altstore://install?url=${encodeURIComponent(APK)}`)
+    expect(openURL.mock.calls[1][0]).toBe(`sidestore://install?url=${encodeURIComponent(APK)}`)
+    expect(openURL).toHaveBeenCalledTimes(2)
   })
 })
 

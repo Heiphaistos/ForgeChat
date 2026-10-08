@@ -4,12 +4,11 @@ import { APP_VERSION, UPDATES_MANIFEST_URL } from '@/config/env'
 import { t } from '@/i18n'
 import { logger } from '@/lib/logger'
 import { useSettings } from '@/stores/settings'
-import { updateNative } from './installer'
 import { fetchAvailableUpdate, isDue, type AvailableUpdate } from './updateCheck'
+import { offerUpdate } from './updateStore'
 
 // Lu à l'appel (les tests simulent react-native sans Platform).
 const platform = () => (Platform?.OS === 'ios' ? 'ios' : 'android')
-import { offerUpdate } from './updateStore'
 
 let inFlight = false
 
@@ -25,8 +24,6 @@ export async function runAutomaticUpdateCheck(now = Date.now(), fetchImpl: typeo
   try {
     const update = await fetchAvailableUpdate(UPDATES_MANIFEST_URL, APP_VERSION, fetchImpl, platform())
     set({ updateLastCheckAt: now })
-    // À jour : l'APK d'une mise à jour déjà installée n'a plus rien à faire dans le cache.
-    if (!update) updateNative?.discardUpdate()
     if (!update || update.version === updateSkippedVersion) return null
     offerUpdate(update)
     return update

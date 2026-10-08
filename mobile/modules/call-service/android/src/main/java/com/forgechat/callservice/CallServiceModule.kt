@@ -14,7 +14,6 @@ import javax.crypto.spec.SecretKeySpec
  * Démarre / arrête le service au premier plan des appels et salons vocaux (src/services/livekit.ts),
  * celui du mode « Notifications sans Google » (src/services/keepAlive.ts),
  * redémarre l'app (changement de thème, src/theme : les couleurs sont lues au lancement)
- * installe les mises à jour publiées par le serveur (UpdateInstaller, src/features/updates)
  * et pilote la fenêtre des appels vidéo : plein écran immersif, image dans l'image (CallWindow).
  */
 class CallServiceModule : Module() {
@@ -93,50 +92,12 @@ class CallServiceModule : Module() {
       Base64.encodeToString(out, Base64.NO_WRAP)
     }
 
-    // ── Mise à jour de l'APK (UpdateInstaller, src/features/updates/installer.ts) ──
-    Events("onUpdateProgress", "onPipChange", "onVolumeKey")
+    Events("onPipChange", "onVolumeKey")
 
-    // Téléchargement sur un fil dédié : la file des AsyncFunction est partagée par tous les modules Expo.
-    AsyncFunction("downloadUpdate") { url: String, expectedSha: String, promise: Promise ->
-      val ctx = appContext.reactContext
-      if (ctx == null) {
-        promise.reject("ERR_UPDATE", "contexte indisponible", null)
-      } else {
-        Thread {
-          try {
-            val sha = UpdateInstaller.download(ctx, url, expectedSha) { received, total ->
-              sendEvent("onUpdateProgress", mapOf("received" to received.toDouble(), "total" to total.toDouble()))
-            }
-            promise.resolve(sha)
-          } catch (e: Exception) {
-            Log.w("ForgeUpdate", "téléchargement impossible", e)
-            promise.reject("ERR_UPDATE", e.message ?: "téléchargement impossible", e)
-          }
-        }.start()
-      }
-    }
-
-    // Copie de l'APK dans Téléchargements sur un fil dédié (plusieurs dizaines de Mo).
-    AsyncFunction("installUpdate") { promise: Promise ->
-      val ctx = appContext.currentActivity ?: appContext.reactContext
-      if (ctx == null) {
-        promise.reject("ERR_UPDATE", "contexte indisponible", null)
-      } else {
-        Thread {
-          try {
-            promise.resolve(UpdateInstaller.install(ctx))
-          } catch (e: Exception) {
-            Log.w("ForgeUpdate", "remise de l'APK impossible", e)
-            promise.reject("ERR_UPDATE", e.message ?: "remise de l'APK impossible", e)
-          }
-        }.start()
-      }
-    }
-
-    Function("discardUpdate") {
-      val ctx = appContext.reactContext ?: return@Function null
-      UpdateInstaller.discard(ctx)
-      null
+    // Mises à jour : passées au navigateur (src/features/updates/installer.ts). On efface l'APK
+    // laissé dans le cache par l'ancien téléchargement intégré (jusqu'à la 1.16.0).
+    OnCreate {
+      appContext.reactContext?.cacheDir?.let { java.io.File(it, "updates").deleteRecursively() }
     }
 
     // Fichiers chiffrés de bout en bout (src/e2e/files.ts, FileCrypto.java) : chiffrés / déchiffrés

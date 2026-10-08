@@ -48,7 +48,7 @@ describe('modules/call-service', () => {
       const body = kt.slice(kt.indexOf(`Function("${f}")`))
       expect(body.slice(0, body.indexOf('\n    }'))).toMatch(/\n {6}null$/)
     }
-    expect(kt).toContain('Events("onUpdateProgress", "onPipChange", "onVolumeKey")')
+    expect(kt).toContain('Events("onPipChange", "onVolumeKey")')
     const win = readFileSync(join(dir, 'CallWindow.kt'), 'utf8')
     // Tout sur le fil UI ; entrée automatique Android 12+ ; ratio borné (sinon Android lève une exception).
     expect(win.match(/runOnUiThread/g)?.length).toBe(3)
