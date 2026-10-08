@@ -116,6 +116,16 @@ export function ConfidentialitePage() {
       <Block title="Responsable de traitement">
         <p>L'éditeur du site (voir les <Link to="/mentions-legales" className="text-fc-accent hover:underline">mentions légales</Link>), joignable à <Mail />.</p>
       </Block>
+      <Block title="Modération de l'instance">
+        <p>
+          L'administrateur du site (rôle « El Patron ») modère l'instance. Il peut voir la liste des serveurs (nom, propriétaire, nombre de membres,
+          de salons et de messages, volume de fichiers), <strong className="text-white">entrer dans un serveur sans y avoir été invité</strong> pour
+          traiter un signalement ou un hébergement abusif, et suspendre ou supprimer un serveur ou un compte. Cette supervision est{' '}
+          <strong className="text-white">visible</strong> : l'administrateur apparaît parmi les membres du serveur et une ligne est inscrite dans son
+          journal d'audit. Elle ne donne <strong className="text-white">aucun accès aux messages privés ni au contenu chiffré de bout en bout</strong> :
+          l'administrateur ne reçoit aucune clé.
+        </p>
+      </Block>
       <Block title="Chiffrement de bout en bout">
         <p>
           Messages privés, groupes, salons de serveur, fils, forums, sondages, messages programmés, ainsi que la voix, la vidéo et le partage d'écran
@@ -298,6 +308,12 @@ export function CguPage() {
         <p>
           Chaque serveur est modéré par son propriétaire et les rôles qu'il désigne, qui peuvent ajouter leurs propres règles. L'éditeur peut retirer
           un contenu, suspendre ou supprimer un compte ou un serveur qui enfreint ces conditions, et coopère avec les autorités sur réquisition.
+        </p>
+      </Block>
+      <Block title="Modération de l'instance">
+        <p>
+          L'administrateur peut suspendre ou supprimer un compte ou un serveur qui héberge des contenus illicites, ou dont l'usage est abusif, et
+          entrer dans un serveur en supervision (visible de ses membres) pour traiter un signalement. Voir la politique de confidentialité.
         </p>
       </Block>
       <Block title="Signalement">

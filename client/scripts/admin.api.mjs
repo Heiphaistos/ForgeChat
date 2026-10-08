@@ -168,20 +168,21 @@ const srv2 = (await api('POST', '/api/servers', { token: host.token, body: { nam
 const full2 = (await api('GET', `/api/servers/${srv2.id}`, { token: host.token })).body
 const chan2 = full2.channels?.find(c => c.type === 'text')?.id
 ok(!!chan2, 'serveur à superviser : salon texte présent')
-await api('POST', `/api/servers/${srv2.id}/channels/${chan2}/messages`, { token: host.token, body: { content: 'contenu douteux' } })
+// Les salons de serveur sont chiffrés de bout en bout : un message en clair est refusé, même à l'hôte.
+const plainRefused = await api('POST', `/api/servers/${srv2.id}/channels/${chan2}/messages`, { token: host.token, body: { content: 'contenu douteux' } })
+ok(plainRefused.status === 400 && /PLAINTEXT_REFUSED/.test(plainRefused.body?.error ?? ''), 'salon de serveur : message en clair refusé (chiffrement de bout en bout)', `${plainRefused.status}`)
 const S2 = `/api/servers/${srv2.id}`
 const dir = (await api('GET', `/api/admin/servers?q=${encodeURIComponent('Serveur à superviser')}`, { token: adminToken })).body
 const row2 = dir.servers?.find(x => x.id === srv2.id)
-ok(row2 && row2.members === 1 && row2.messages >= 1 && row2.owner === host.username && !row2.joined && !row2.supervising, 'annuaire : serveur d’un tiers (membres, messages, propriétaire)', JSON.stringify(row2))
+ok(row2 && row2.members === 1 && row2.channels >= 1 && row2.owner === host.username && !row2.joined && !row2.supervising, 'annuaire : serveur d’un tiers (membres, messages, propriétaire)', JSON.stringify(row2))
 ok((await api('GET', '/api/admin/servers', { token: plain.token })).status === 403, 'annuaire des serveurs refusé à un membre ordinaire')
 ok((await api('POST', `/api/admin/servers/${srv2.id}/supervise`, { token: plain.token })).status === 403, 'superviser un serveur refusé à un membre ordinaire')
 ok((await api('GET', S2, { token: adminToken })).status === 403, 'sans supervision : pas d’accès (adhésion requise)')
 ok((await api('POST', `/api/admin/servers/${srv2.id}/supervise`, { token: adminToken })).status === 204, 'supervision du serveur (sans invitation ni consentement)')
 ok((await api('GET', S2, { token: adminToken })).status === 200, 'supervision : serveur ouvert')
-const msgs2 = (await api('GET', `${S2}/channels/${chan2}/messages`, { token: adminToken })).body
-const bad = Array.isArray(msgs2) ? msgs2.find(m => m.content === 'contenu douteux') : null
-ok(!!bad, 'supervision : messages du serveur lisibles')
-ok((await api('DELETE', `${S2}/channels/${chan2}/messages/${bad?.id}`, { token: adminToken })).status < 300, 'supervision : suppression d’un message abusif')
+const hist = await api('GET', `${S2}/channels/${chan2}/messages`, { token: adminToken })
+ok(hist.status === 200 && Array.isArray(hist.body), 'supervision : salons et historique accessibles (le contenu reste chiffré)', `${hist.status}`)
+ok((await api('GET', `${S2}/members`, { token: adminToken })).status === 200, 'supervision : liste des membres')
 const audit2 = JSON.stringify((await api('GET', `${S2}/audit`, { token: host.token })).body)
 ok(audit2.includes('site_supervision'), 'le propriétaire du serveur voit la supervision dans son journal d’audit')
 const dir2 = (await api('GET', `/api/admin/servers?filter=supervised`, { token: adminToken })).body.servers.find(x => x.id === srv2.id)

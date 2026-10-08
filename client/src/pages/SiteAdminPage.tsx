@@ -9,8 +9,8 @@ import { useSiteAdmin, useSiteAdminInfo } from '../hooks/useSiteAdmin'
 
 /** Administration du site : comptes, invitations, bannissements, réglages, journal. */
 
-type Tab = 'overview' | 'users' | 'invites' | 'settings' | 'audit'
-const TABS: [Tab, string][] = [['overview', 'Aperçu'], ['users', 'Comptes'], ['invites', 'Invitations'], ['settings', 'Réglages'], ['audit', 'Journal']]
+type Tab = 'overview' | 'users' | 'servers' | 'invites' | 'settings' | 'audit'
+const TABS: [Tab, string][] = [['overview', 'Aperçu'], ['users', 'Comptes'], ['servers', 'Serveurs'], ['invites', 'Invitations'], ['settings', 'Réglages'], ['audit', 'Journal']]
 
 interface Overview {
   total_users: number; online_now: number; new_24h: number; new_7d: number; new_30d: number
@@ -37,6 +37,8 @@ const ACTIONS: Record<string, string> = {
   grant_patron: 'a donné le rôle El Patron à', revoke_patron: 'a retiré le rôle El Patron à',
   ban: 'a banni', unban: 'a débanni', force_logout: 'a déconnecté', create_invite: 'a créé une invitation',
   revoke_invite: 'a révoqué une invitation',   set_registration_mode: 'a changé le mode d’inscription',
+  supervise_server: 'supervise le serveur', end_supervision: 'a terminé la supervision de', suspend_server: 'a suspendu le serveur',
+  unsuspend_server: 'a rétabli le serveur', delete_server: 'a supprimé le serveur',
 }
 const inviteLink = (code: string) => `${SERVER_URL || window.location.origin}/register?code=${code}`
 
@@ -171,6 +173,105 @@ function UsersTab() {
   )
 }
 
+interface AdminServer {
+  id: string; name: string; is_public: boolean; created_at: string; owner: string | null
+  members: number; channels: number; messages: number; storage_bytes: number
+  suspended_at: string | null; suspended_reason: string | null; joined: boolean; supervising: boolean
+}
+const sizeLabel = (n: number) => (n >= 1e9 ? `${(n / 1e9).toFixed(1)} Go` : n >= 1e6 ? `${(n / 1e6).toFixed(1)} Mo` : `${Math.round(n / 1e3)} Ko`)
+
+/** Modération de l'instance : tous les serveurs, avec supervision visible, suspension et suppression. */
+function ServersTab() {
+  const qc = useQueryClient()
+  const nav = useNavigate()
+  const [q, setQ] = useState('')
+  const [filter, setFilter] = useState('all')
+  const [del, setDel] = useState<AdminServer | null>(null)
+  const [pw, setPw] = useState('')
+  const { data, isLoading } = useQuery<{ total: number; servers: AdminServer[] }>({
+    queryKey: ['site-admin', 'servers', q, filter],
+    queryFn: () => api.get('/admin/servers', { params: { q, filter, limit: 100 } }).then(r => r.data),
+    placeholderData: prev => prev,
+  })
+  const refresh = () => { qc.invalidateQueries({ queryKey: ['site-admin'] }); qc.invalidateQueries({ queryKey: ['servers'] }) }
+  const fail = (e: any) => toast.error(e?.response?.data?.error ?? 'Action impossible')
+  const supervise = useMutation({ mutationFn: (id: string) => api.post(`/admin/servers/${id}/supervise`), onSuccess: (_r, id) => { refresh(); nav(`/servers/${id}`) }, onError: fail })
+  const endSup = useMutation({ mutationFn: (id: string) => api.delete(`/admin/servers/${id}/supervise`), onSuccess: () => { toast.success('Supervision terminée'); refresh() }, onError: fail })
+  const suspend = useMutation({ mutationFn: ({ id, reason }: { id: string; reason: string }) => api.post(`/admin/servers/${id}/suspend`, { reason }), onSuccess: () => { toast.success('Serveur suspendu'); refresh() }, onError: fail })
+  const resume = useMutation({ mutationFn: (id: string) => api.delete(`/admin/servers/${id}/suspend`), onSuccess: () => { toast.success('Serveur rétabli'); refresh() }, onError: fail })
+  const remove = useMutation({
+    mutationFn: ({ id, password }: { id: string; password: string }) => api.delete(`/admin/servers/${id}`, { data: { password } }),
+    onSuccess: () => { toast.success('Serveur supprimé'); setDel(null); setPw(''); refresh() }, onError: fail,
+  })
+
+  return (
+    <div className="space-y-3">
+      <p className="text-xs text-fc-muted">
+        La supervision t’ajoute comme membre visible du serveur (inscrit dans son journal d’audit et dans le tien). Les messages privés et les
+        salons chiffrés de bout en bout restent illisibles : tu ne reçois aucune clé.
+      </p>
+      <div className="flex flex-wrap gap-2 items-center">
+        <div className="relative flex-1 min-w-[200px]">
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-fc-muted" />
+          <input value={q} onChange={e => setQ(e.target.value)} placeholder="Nom du serveur, propriétaire ou identifiant…" className="w-full pl-8 pr-3 py-2 bg-fc-input rounded text-white text-sm outline-none focus:ring-2 focus:ring-fc-accent" />
+        </div>
+        <select value={filter} onChange={e => setFilter(e.target.value)} className="px-3 py-2 bg-fc-input rounded text-white text-sm outline-none">
+          <option value="all">Tous</option><option value="public">Publics</option><option value="suspended">Suspendus</option><option value="supervised">Supervisés</option>
+        </select>
+        <span className="text-sm text-fc-muted">{data?.total ?? 0} serveur(s)</span>
+      </div>
+      {isLoading && <p className="text-fc-muted">Chargement…</p>}
+      <div className="rounded-lg border border-fc-hover overflow-hidden divide-y divide-fc-hover">
+        {data?.servers.map(s => (
+          <div key={s.id} className="bg-fc-channel">
+            <div className="flex flex-wrap items-center gap-3 px-3 py-2.5">
+              <div className="min-w-0 flex-1 basis-48">
+                <div className="text-white text-sm font-medium truncate">
+                  {s.name}
+                  {s.is_public && <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded bg-fc-hover text-fc-muted">PUBLIC</span>}
+                  {s.suspended_at && <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded bg-red-500/20 text-red-400">SUSPENDU</span>}
+                  {s.supervising && <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded bg-yellow-500/20 text-yellow-400">SUPERVISÉ</span>}
+                </div>
+                <div className="text-xs text-fc-muted truncate">Propriétaire : {s.owner ?? '—'} · créé le {fmt(s.created_at)}</div>
+              </div>
+              <div className="text-xs text-fc-muted basis-56">
+                <div>{s.members} membre(s) · {s.channels} salon(s)</div>
+                <div>{s.messages.toLocaleString('fr-FR')} message(s) · {sizeLabel(s.storage_bytes)} de fichiers</div>
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {s.joined && !s.supervising ? (
+                  <button onClick={() => nav(`/servers/${s.id}`)} className="px-2 py-1 text-xs rounded bg-fc-hover text-white hover:bg-fc-accent/30">Ouvrir</button>
+                ) : (
+                  <button onClick={() => supervise.mutate(s.id)} className="px-2 py-1 text-xs rounded bg-yellow-500/20 text-yellow-300 hover:bg-yellow-500/30">{s.supervising ? 'Ouvrir' : 'Superviser'}</button>
+                )}
+                {s.supervising && <button onClick={() => endSup.mutate(s.id)} className="px-2 py-1 text-xs rounded text-fc-muted hover:text-white hover:bg-fc-hover">Terminer</button>}
+                {s.suspended_at
+                  ? <button onClick={() => resume.mutate(s.id)} className="px-2 py-1 text-xs rounded bg-green-600/20 text-green-400 hover:bg-green-600/30">Rétablir</button>
+                  : <button onClick={() => { const reason = window.prompt(`Suspendre « ${s.name} » ? Motif (affiché dans le journal) :`); if (reason !== null) suspend.mutate({ id: s.id, reason }) }} className="px-2 py-1 text-xs rounded text-orange-300 hover:bg-orange-500/20">Suspendre</button>}
+                <button onClick={() => setDel(s)} className="p-1.5 rounded text-red-400 hover:bg-red-500/20" title="Supprimer le serveur" aria-label={`Supprimer ${s.name}`}><Trash2 size={15} /></button>
+              </div>
+            </div>
+            {s.suspended_at && <div className="px-3 py-1.5 text-xs bg-red-500/10 text-red-300">Suspendu le {fmt(s.suspended_at)}{s.suspended_reason ? ` — ${s.suspended_reason}` : ''}</div>}
+          </div>
+        ))}
+      </div>
+      {del && (
+        <div role="dialog" aria-modal="true" aria-label="Supprimer le serveur" className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/70 px-4">
+          <form onSubmit={e => { e.preventDefault(); remove.mutate({ id: del.id, password: pw }) }} className="bg-fc-channel rounded-lg p-5 w-full max-w-sm space-y-3 border border-fc-hover">
+            <h2 className="text-white font-semibold">Supprimer « {del.name} » ?</h2>
+            <p className="text-sm text-fc-muted">Suppression définitive : salons, messages et fichiers disparaissent. Confirme avec ton mot de passe.</p>
+            <input type="password" autoFocus value={pw} onChange={e => setPw(e.target.value)} autoComplete="current-password" placeholder="Ton mot de passe" className="w-full px-3 py-2 bg-fc-input rounded text-white text-sm outline-none focus:ring-2 focus:ring-fc-accent" />
+            <div className="flex justify-end gap-2">
+              <button type="button" onClick={() => { setDel(null); setPw('') }} className="px-3 py-1.5 text-sm rounded text-fc-muted hover:text-white">Annuler</button>
+              <button type="submit" disabled={!pw || remove.isPending} className="px-3 py-1.5 text-sm rounded bg-red-600 hover:bg-red-500 text-white disabled:opacity-50">Supprimer définitivement</button>
+            </div>
+          </form>
+        </div>
+      )}
+    </div>
+  )
+}
+
 function InvitesTab() {
   const qc = useQueryClient()
   const [note, setNote] = useState('')
@@ -249,6 +350,7 @@ function AuditTab() {
         <div key={e.id} className="px-3 py-2 bg-fc-channel text-sm text-fc-text flex flex-wrap gap-x-2">
           <span className="text-fc-muted w-36">{fmt(e.created_at)}</span>
           <span><b className="text-white">{e.admin ?? 'Administrateur supprimé'}</b> {ACTIONS[e.action] ?? e.action}{e.target ? <> <b className="text-white">{e.target}</b></> : null}
+            {typeof e.detail?.server === 'string' ? <b className="text-white"> {e.detail.server}</b> : null}
             {typeof e.detail?.reason === 'string' && e.detail.reason ? <span className="text-fc-muted"> — {e.detail.reason}</span> : null}
             {typeof e.detail?.mode === 'string' ? <span className="text-fc-muted"> → {e.detail.mode}</span> : null}</span>
         </div>
@@ -281,6 +383,7 @@ export default function SiteAdminPage() {
         </div>
         {tab === 'overview' && <OverviewTab />}
         {tab === 'users' && <UsersTab />}
+        {tab === 'servers' && <ServersTab />}
         {tab === 'invites' && <InvitesTab />}
         {tab === 'settings' && <SettingsTab />}
         {tab === 'audit' && <AuditTab />}

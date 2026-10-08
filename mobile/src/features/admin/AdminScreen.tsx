@@ -1,11 +1,14 @@
 import { useMutation, useQuery } from '@tanstack/react-query'
 import * as Clipboard from 'expo-clipboard'
+import { router } from 'expo-router'
 import { useState } from 'react'
 import { Alert, Modal, Pressable, ScrollView, Share, StyleSheet, Text, View } from 'react-native'
 import {
   adminApi,
   inviteLink,
+  type AdminServer,
   type AdminUser,
+  type ServerFilter,
   type AuditEntry,
   type Invite,
   type RegistrationMode,
@@ -20,10 +23,11 @@ import { useSiteAdmin } from './useSiteAdmin'
 
 /** Administration du site (rôle El Patron) : aperçu, comptes, invitations, réglages, journal. */
 
-type Tab = 'overview' | 'users' | 'invites' | 'settings' | 'audit'
+type Tab = 'overview' | 'users' | 'servers' | 'invites' | 'settings' | 'audit'
 const TABS: [Tab, string][] = [
   ['overview', 'Aperçu'],
   ['users', 'Comptes'],
+  ['servers', 'Serveurs'],
   ['invites', 'Invitations'],
   ['settings', 'Réglages'],
   ['audit', 'Journal'],
@@ -49,6 +53,11 @@ const ACTIONS: Record<string, string> = {
   grant_patron: 'a donné le rôle El Patron à',
   revoke_patron: 'a retiré le rôle El Patron à',
   set_registration_mode: 'a changé le mode d’inscription',
+  supervise_server: 'supervise le serveur',
+  end_supervision: 'a terminé la supervision de',
+  suspend_server: 'a suspendu le serveur',
+  unsuspend_server: 'a rétabli le serveur',
+  delete_server: 'a supprimé le serveur',
 }
 const STATUS: Record<Invite['status'], string> = { active: 'Active', used: 'Utilisée', expired: 'Expirée', revoked: 'Révoquée' }
 
@@ -78,18 +87,49 @@ function OverviewTab() {
   )
 }
 
-function ReasonModal({ user, onClose, onConfirm }: { user: AdminUser | null; onClose: () => void; onConfirm: (reason: string) => void }) {
-  const [reason, setReason] = useState('')
+/** Boîte de saisie (motif, mot de passe) : Alert.prompt n'existe pas sur Android. */
+function PromptModal({
+  visible,
+  title,
+  message,
+  label,
+  confirmLabel,
+  secure,
+  onClose,
+  onConfirm,
+}: {
+  visible: boolean
+  title: string
+  message: string
+  label: string
+  confirmLabel: string
+  secure?: boolean
+  onClose: () => void
+  onConfirm: (value: string) => void
+}) {
+  const [value, setValue] = useState('')
+  const close = () => {
+    setValue('')
+    onClose()
+  }
   return (
-    <Modal visible={!!user} transparent animationType="fade" onRequestClose={onClose}>
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={close}>
       <View style={styles.backdrop}>
         <View style={styles.dialog}>
-          <Text style={styles.dialogTitle}>Bannir {user?.username} ?</Text>
-          <Text style={styles.muted}>Le compte est déconnecté partout et ne peut plus se reconnecter. Motif (facultatif) :</Text>
-          <TextField label="Motif" value={reason} onChangeText={setReason} maxLength={300} />
+          <Text style={styles.dialogTitle}>{title}</Text>
+          <Text style={styles.muted}>{message}</Text>
+          <TextField label={label} value={value} onChangeText={setValue} maxLength={300} secureTextEntry={secure} autoCapitalize="none" autoCorrect={false} />
           <View style={{ flexDirection: 'row', gap: spacing.md }}>
-            <Button title="Annuler" variant="secondary" style={{ flex: 1 }} onPress={() => { setReason(''); onClose() }} />
-            <Button title="Bannir" variant="danger" style={{ flex: 1 }} onPress={() => { onConfirm(reason); setReason('') }} />
+            <Button title="Annuler" variant="secondary" style={{ flex: 1 }} onPress={close} />
+            <Button
+              title={confirmLabel}
+              variant="danger"
+              style={{ flex: 1 }}
+              onPress={() => {
+                onConfirm(value)
+                setValue('')
+              }}
+            />
           </View>
         </View>
       </View>
@@ -156,7 +196,115 @@ function UsersTab() {
           </Section>
         </>
       )}
-      <ReasonModal user={banTarget} onClose={() => setBanTarget(null)} onConfirm={(reason) => { if (banTarget) ban.mutate({ id: banTarget.id, reason }); setBanTarget(null) }} />
+      <PromptModal
+        visible={!!banTarget}
+        title={`Bannir ${banTarget?.username ?? ''} ?`}
+        message="Le compte est déconnecté partout et ne peut plus se reconnecter. Motif (facultatif) :"
+        label="Motif"
+        confirmLabel="Bannir"
+        onClose={() => setBanTarget(null)}
+        onConfirm={(reason) => {
+          if (banTarget) ban.mutate({ id: banTarget.id, reason })
+          setBanTarget(null)
+        }}
+      />
+    </View>
+  )
+}
+
+const SERVER_FILTERS: [ServerFilter, string][] = [
+  ['all', 'Tous'],
+  ['public', 'Publics'],
+  ['suspended', 'Suspendus'],
+  ['supervised', 'Supervisés'],
+]
+const sizeLabel = (n: number) => (n >= 1e9 ? `${(n / 1e9).toFixed(1)} Go` : n >= 1e6 ? `${(n / 1e6).toFixed(1)} Mo` : `${Math.round(n / 1e3)} Ko`)
+
+/** Modération de l'instance : supervision visible, suspension, suppression. */
+function ServersTab() {
+  const [q, setQ] = useState('')
+  const [filter, setFilter] = useState<ServerFilter>('all')
+  const [suspendTarget, setSuspendTarget] = useState<AdminServer | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<AdminServer | null>(null)
+  const list = useQuery({ queryKey: ['site-admin', 'servers', q, filter], queryFn: () => adminApi.servers(q, filter), placeholderData: (p) => p })
+  const done = () => {
+    refresh()
+    void queryClient.invalidateQueries({ queryKey: ['servers'] })
+  }
+  const supervise = useMutation({ mutationFn: adminApi.supervise, onSuccess: (_r, id) => { done(); router.push(`/server/${id}`) }, onError: fail })
+  const endSup = useMutation({ mutationFn: adminApi.endSupervision, onSuccess: done, onError: fail })
+  const suspend = useMutation({ mutationFn: ({ id, reason }: { id: string; reason: string }) => adminApi.suspend(id, reason), onSuccess: done, onError: fail })
+  const resume = useMutation({ mutationFn: adminApi.unsuspend, onSuccess: done, onError: fail })
+  const remove = useMutation({ mutationFn: ({ id, password }: { id: string; password: string }) => adminApi.deleteServer(id, password), onSuccess: done, onError: fail })
+
+  const actions = (s: AdminServer) => {
+    const buttons: { text: string; style?: 'destructive' | 'cancel'; onPress?: () => void }[] = []
+    if (s.joined && !s.supervising) buttons.push({ text: 'Ouvrir', onPress: () => router.push(`/server/${s.id}`) })
+    else buttons.push({ text: s.supervising ? 'Ouvrir (supervision)' : 'Superviser', onPress: () => (s.supervising ? router.push(`/server/${s.id}`) : supervise.mutate(s.id)) })
+    if (s.supervising) buttons.push({ text: 'Terminer la supervision', onPress: () => endSup.mutate(s.id) })
+    if (s.suspended_at) buttons.push({ text: 'Rétablir', onPress: () => resume.mutate(s.id) })
+    else buttons.push({ text: 'Suspendre…', onPress: () => setSuspendTarget(s) })
+    buttons.push({ text: 'Supprimer…', style: 'destructive', onPress: () => setDeleteTarget(s) })
+    buttons.push({ text: 'Fermer', style: 'cancel' })
+    Alert.alert(s.name, `${s.members} membre(s) · propriétaire ${s.owner ?? '—'}`, buttons)
+  }
+
+  return (
+    <View style={{ gap: spacing.md }}>
+      <Text style={styles.muted}>
+        La supervision vous ajoute comme membre visible du serveur (inscrite dans son journal d’audit). Les messages privés et les salons chiffrés de bout en bout restent illisibles.
+      </Text>
+      <TextField label="Rechercher" value={q} onChangeText={setQ} autoCapitalize="none" autoCorrect={false} placeholder="Nom, propriétaire ou identifiant" />
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: spacing.sm }}>
+        {SERVER_FILTERS.map(([id, label]) => (
+          <Pressable key={id} onPress={() => setFilter(id)} accessibilityRole="button" accessibilityState={{ selected: filter === id }} style={[styles.pill, filter === id && styles.pillOn]}>
+            <Text style={[styles.pillText, filter === id && { color: '#fff' }]}>{label}</Text>
+          </Pressable>
+        ))}
+      </ScrollView>
+      {list.isLoading ? <Loading /> : list.error ? <ErrorState message={errorMessage(list.error)} onRetry={() => void list.refetch()} /> : (
+        <>
+          <Text style={styles.muted}>{list.data?.total ?? 0} serveur(s)</Text>
+          <Section>
+            {list.data?.servers.map((s) => (
+              <Row
+                key={s.id}
+                icon={s.suspended_at ? 'pause-circle-outline' : s.supervising ? 'eye-outline' : 'server-outline'}
+                title={`${s.name}${s.is_public ? ' · PUBLIC' : ''}${s.suspended_at ? ' · SUSPENDU' : ''}${s.supervising ? ' · SUPERVISÉ' : ''}`}
+                subtitle={`Propriétaire : ${s.owner ?? '—'} · créé le ${fmt(s.created_at)}\n${s.members} membre(s) · ${s.channels} salon(s) · ${s.messages.toLocaleString('fr-FR')} message(s) · ${sizeLabel(s.storage_bytes)}${s.suspended_at ? `\nSuspendu le ${fmt(s.suspended_at)}${s.suspended_reason ? ` — ${s.suspended_reason}` : ''}` : ''}`}
+                danger={!!s.suspended_at}
+                onPress={() => actions(s)}
+                chevron
+              />
+            ))}
+          </Section>
+        </>
+      )}
+      <PromptModal
+        visible={!!suspendTarget}
+        title={`Suspendre ${suspendTarget?.name ?? ''} ?`}
+        message="Ses membres n’y ont plus accès jusqu’au rétablissement. Motif (facultatif) :"
+        label="Motif"
+        confirmLabel="Suspendre"
+        onClose={() => setSuspendTarget(null)}
+        onConfirm={(reason) => {
+          if (suspendTarget) suspend.mutate({ id: suspendTarget.id, reason })
+          setSuspendTarget(null)
+        }}
+      />
+      <PromptModal
+        visible={!!deleteTarget}
+        title={`Supprimer ${deleteTarget?.name ?? ''} ?`}
+        message="Suppression définitive : salons, messages et fichiers disparaissent. Confirmez avec votre mot de passe."
+        label="Votre mot de passe"
+        confirmLabel="Supprimer"
+        secure
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={(password) => {
+          if (deleteTarget && password) remove.mutate({ id: deleteTarget.id, password })
+          setDeleteTarget(null)
+        }}
+      />
     </View>
   )
 }
@@ -245,7 +393,7 @@ function AuditTab() {
         <Row
           key={e.id}
           icon="time-outline"
-          title={`${e.admin ?? 'Administrateur supprimé'} ${ACTIONS[e.action] ?? e.action}${e.target ? ` ${e.target}` : ''}`}
+          title={`${e.admin ?? 'Administrateur supprimé'} ${ACTIONS[e.action] ?? e.action}${e.target ? ` ${e.target}` : ''}${e.detail?.server ? ` ${e.detail.server}` : ''}`}
           subtitle={`${fmt(e.created_at)}${e.detail?.reason ? ` — ${e.detail.reason}` : ''}${e.detail?.mode ? ` → ${e.detail.mode}` : ''}`}
         />
       ))}
@@ -269,6 +417,7 @@ export default function AdminScreen() {
       </ScrollView>
       {tab === 'overview' && <OverviewTab />}
       {tab === 'users' && <UsersTab />}
+      {tab === 'servers' && <ServersTab />}
       {tab === 'invites' && <InvitesTab />}
       {tab === 'settings' && <SettingsTab />}
       {tab === 'audit' && <AuditTab />}

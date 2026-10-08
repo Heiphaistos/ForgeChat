@@ -40,6 +40,25 @@ describe('administration (rôle El Patron)', () => {
     expect(m.put).toHaveBeenCalledWith('/admin/settings', { registration_mode: 'closed' })
   })
 
+  it('supervision, suspension et suppression visent les routes /admin/servers', async () => {
+    m.post.mockResolvedValue(undefined)
+    m.delete.mockResolvedValue(undefined)
+    const id = '22222222-2222-2222-2222-222222222222'
+    await adminApi.supervise(id)
+    expect(m.post).toHaveBeenCalledWith(`/admin/servers/${id}/supervise`)
+    await adminApi.endSupervision(id)
+    expect(m.delete).toHaveBeenCalledWith(`/admin/servers/${id}/supervise`)
+    await adminApi.suspend(id, ' abus ')
+    expect(m.post).toHaveBeenLastCalledWith(`/admin/servers/${id}/suspend`, { reason: 'abus' })
+    await adminApi.unsuspend(id)
+    expect(m.delete).toHaveBeenLastCalledWith(`/admin/servers/${id}/suspend`)
+    await adminApi.deleteServer(id, 'secret')
+    expect(m.delete).toHaveBeenLastCalledWith(`/admin/servers/${id}`, { body: { password: 'secret' } })
+    m.get.mockResolvedValue({ total: 0, servers: [] })
+    await adminApi.servers(' jotun ', 'supervised')
+    expect(m.get).toHaveBeenLastCalledWith('/admin/servers', { query: { q: 'jotun', filter: 'supervised', limit: 100 } })
+  })
+
   it('la liste des comptes envoie filtre et recherche (vide = absent)', async () => {
     m.get.mockResolvedValue({ total: 0, users: [] })
     await adminApi.users('  léa ', 'banned')

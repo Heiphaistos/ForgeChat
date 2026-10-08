@@ -89,6 +89,27 @@ await h.check('input[type="checkbox"]'); await h.click('button[type="submit"]')
 await h.waitForSelector('text=Code d\'invitation invalide', { timeout: 8000 }).catch(() => {})
 ok(await h.locator('text=invalide, expiré ou déjà utilisé').count() >= 1, 'code déjà utilisé : message d’erreur affiché')
 
+// 5b) Supervision visible d'un serveur de tiers : il s'ouvre dans l'interface sans invitation
+const created = await g.request.post(BASE + '/api/servers', { data: { name: 'Serveur de Léa' } })
+const srvId = (await created.json()).id
+await p.click('role=tab[name="Serveurs"]')
+await p.fill('input[placeholder^="Nom du serveur"]', 'Serveur de Léa')
+await p.waitForSelector('text=Serveur de Léa')
+await p.screenshot({ path: (process.env.SHOTS ?? '/tmp') + '/5-servers.png' })
+await p.click('button:has-text("Superviser")')
+await p.waitForURL(new RegExp('/servers/' + srvId), { timeout: 15000 }).catch(() => {})
+ok(p.url().includes('/servers/' + srvId), 'supervision : le serveur d’un tiers s’ouvre sans invitation', p.url())
+await p.waitForTimeout(2500)
+ok(await p.locator('text=Serveur de Léa').count() >= 1, 'supervision : le nom du serveur est affiché')
+await p.screenshot({ path: (process.env.SHOTS ?? '/tmp') + '/6-supervised.png' })
+await p.click('button[aria-label="Administration de ForgeChat"]')
+await p.click('role=tab[name="Serveurs"]')
+await p.fill('input[placeholder^="Nom du serveur"]', 'Serveur de Léa')
+await p.waitForSelector('span:text-is("SUPERVISÉ")')
+await p.click('button:has-text("Terminer")')
+await p.waitForSelector('span:text-is("SUPERVISÉ")', { state: 'detached', timeout: 8000 }).catch(() => {})
+ok(await p.locator('span:text-is("SUPERVISÉ")').count() === 0, 'supervision terminée depuis le panneau')
+
 // 6) L'admin retrouve l'invitée dans Comptes et la bannit
 await p.click('role=tab[name="Comptes"]')
 await p.fill('input[placeholder^="Pseudo"]', guestName)

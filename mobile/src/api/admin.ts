@@ -51,12 +51,28 @@ export interface Invite {
 export interface AuditEntry {
   id: number
   action: string
-  detail: { reason?: string; mode?: string } | null
+  detail: { reason?: string; mode?: string; server?: string } | null
   created_at: string
   admin: string | null
   target: string | null
 }
 export type UserFilter = 'all' | 'online' | 'recent' | 'banned' | 'patrons'
+export type ServerFilter = 'all' | 'public' | 'suspended' | 'supervised'
+export interface AdminServer {
+  id: string
+  name: string
+  is_public: boolean
+  created_at: string
+  owner: string | null
+  members: number
+  channels: number
+  messages: number
+  storage_bytes: number
+  suspended_at: string | null
+  suspended_reason: string | null
+  joined: boolean
+  supervising: boolean
+}
 
 export const adminApi = {
   /** 403 = pas El Patron : l'écran reste invisible. */
@@ -75,6 +91,14 @@ export const adminApi = {
   unban: (id: string) => http.delete(path`/admin/users/${id}/ban`),
   forceLogout: (id: string) => http.post(path`/admin/users/${id}/logout`),
   setPatron: (id: string, patron: boolean) => http.put(path`/admin/users/${id}/patron`, { patron }),
+  servers: (q: string, filter: ServerFilter) =>
+    http.get<{ total: number; servers: AdminServer[] }>('/admin/servers', { query: { q: q.trim() || undefined, filter, limit: 100 } }),
+  /** Supervision VISIBLE (membre + journal d'audit du serveur) : ni messages privés, ni clés des salons chiffrés. */
+  supervise: (id: string) => http.post(path`/admin/servers/${id}/supervise`),
+  endSupervision: (id: string) => http.delete(path`/admin/servers/${id}/supervise`),
+  suspend: (id: string, reason: string) => http.post(path`/admin/servers/${id}/suspend`, { reason: reason.trim() || undefined }),
+  unsuspend: (id: string) => http.delete(path`/admin/servers/${id}/suspend`),
+  deleteServer: (id: string, password: string) => http.delete(path`/admin/servers/${id}`, { body: { password } }),
   invites: () => http.get<{ invites: Invite[] }>('/admin/invites'),
   createInvite: (note: string, maxUses: number, days: number) =>
     http.post<{ code: string }>('/admin/invites', {
