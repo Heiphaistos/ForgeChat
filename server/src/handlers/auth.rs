@@ -138,14 +138,13 @@ pub async fn register(
         _ => None,
     };
     let user = sqlx::query_as::<_, crate::models::user::User>(
-        "INSERT INTO users (username, discriminator, email, password_hash, is_verified, is_site_admin, invited_by, registration_invite_id)
-         VALUES ($1, $2, $3, $4, true, $5, $6, $7) RETURNING *",
+        "INSERT INTO users (username, discriminator, email, password_hash, is_verified, invited_by, registration_invite_id)
+         VALUES ($1, $2, $3, $4, true, $5, $6) RETURNING *",
     )
     .bind(&body.username)
     .bind(&discriminator)
     .bind(&email_lower)
     .bind(&password_hash)
-    .bind(first_user)
     .bind(invite.and_then(|(_, by)| by))
     .bind(invite.map(|(id, _)| id))
     .fetch_one(&mut *tx)

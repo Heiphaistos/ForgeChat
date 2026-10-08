@@ -528,7 +528,6 @@ fn protected_routes(state: AppState) -> Router<AppState> {
         .route("/admin/users/:user_id", get(handlers::site_admin::user_detail))
         .route("/admin/users/:user_id/ban", post(handlers::site_admin::ban_user).delete(handlers::site_admin::unban_user))
         .route("/admin/users/:user_id/logout", post(handlers::site_admin::force_logout))
-        .route("/admin/users/:user_id/admin", put(handlers::site_admin::set_admin))
         .route("/admin/invites", get(handlers::site_admin::list_invites).post(handlers::site_admin::create_invite))
         .route("/admin/invites/:invite_id", delete(handlers::site_admin::revoke_invite))
         .route("/admin/settings", get(handlers::site_admin::get_settings).put(handlers::site_admin::put_settings))

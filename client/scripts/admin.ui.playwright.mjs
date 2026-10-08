@@ -1,4 +1,4 @@
-// Parcours navigateur « cercle privé » : première inscription (= admin), invitation, inscription par lien,
+// Parcours navigateur « cercle privé » : première inscription (avec l'e-mail administrateur), invitation, inscription par lien,
 // refus d'un code déjà utilisé, bannissement depuis le panneau, expulsion en direct, connexion refusée.
 // À lancer sur une base NEUVE (instance locale), avec le client servi par `vite --config vite.e2e.config.ts` :
 //   BASE=http://localhost:5199 PW_MODULE=/chemin/vers/playwright/index.mjs CHROMIUM=/chemin/chrome node scripts/admin.ui.playwright.mjs
@@ -29,7 +29,7 @@ await p.goto(BASE + '/register')
 await p.waitForSelector('input[autocomplete="username"]')
 ok(await p.locator('input[placeholder="XXXX-XXXX-XXXX"]').count() === 0, 'base neuve : pas de champ code d’invitation')
 await p.fill('input[autocomplete="username"]', adminName)
-await p.fill('input[type="email"]', adminName + '@test.local')
+await p.fill('input[type="email"]', process.env.FORGECHAT_ADMIN_EMAIL ?? 'heiphaistos44@gmail.com')
 const pw = p.locator('input[autocomplete="new-password"]')
 await pw.nth(0).fill(PW); await pw.nth(1).fill(PW)
 await p.check('input[type="checkbox"]')

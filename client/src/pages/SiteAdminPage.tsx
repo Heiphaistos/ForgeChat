@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ChevronLeft, Copy, Ban, LogOut, ShieldCheck, ShieldOff, Trash2, Plus, Search } from 'lucide-react'
+import { ChevronLeft, Copy, Ban, LogOut, Trash2, Plus, Search } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api, { SERVER_URL } from '../api/client'
 import { useMobile } from '../contexts/MobileContext'
@@ -14,13 +14,13 @@ const TABS: [Tab, string][] = [['overview', 'Aperçu'], ['users', 'Comptes'], ['
 
 interface Overview {
   total_users: number; online_now: number; new_24h: number; new_7d: number; new_30d: number
-  banned: number; site_admins: number; servers: number; messages: number; active_invites: number
+  banned: number; servers: number; messages: number; active_invites: number
   active_24h: number; active_7d: number; registration_mode: Mode
 }
 type Mode = 'open' | 'invite' | 'closed'
 interface AdminUser {
   id: string; username: string; discriminator: string; email: string; created_at: string; is_bot: boolean
-  is_site_admin: boolean; env_admin: boolean; banned_at: string | null; ban_reason: string | null
+  is_site_admin: boolean; banned_at: string | null; ban_reason: string | null
   invited_by: string | null; invite_note: string | null; last_seen: string | null; online: boolean
   server_count: number; message_count: number
 }
@@ -35,8 +35,7 @@ const fmt = (iso: string | null) => (iso ? new Date(iso).toLocaleString('fr-FR',
 const MODES: Record<Mode, string> = { invite: 'Sur invitation (code obligatoire)', closed: 'Fermées (personne ne peut s’inscrire)', open: 'Ouvertes à tous (déconseillé)' }
 const ACTIONS: Record<string, string> = {
   ban: 'a banni', unban: 'a débanni', force_logout: 'a déconnecté', create_invite: 'a créé une invitation',
-  revoke_invite: 'a révoqué une invitation', grant_admin: 'a nommé administrateur', revoke_admin: 'a retiré les droits d’administrateur à',
-  set_registration_mode: 'a changé le mode d’inscription',
+  revoke_invite: 'a révoqué une invitation',   set_registration_mode: 'a changé le mode d’inscription',
 }
 const inviteLink = (code: string) => `${SERVER_URL || window.location.origin}/register?code=${code}`
 
@@ -64,7 +63,6 @@ function OverviewTab() {
       <Stat label="Actifs sur 24 h" value={data.active_24h} hint={`${data.active_7d} sur 7 jours`} />
       <Stat label="Nouveaux (7 jours)" value={data.new_7d} hint={`${data.new_24h} en 24 h · ${data.new_30d} en 30 j`} />
       <Stat label="Bannis" value={data.banned} />
-      <Stat label="Administrateurs" value={data.site_admins} />
       <Stat label="Serveurs" value={data.servers} />
       <Stat label="Messages" value={data.messages.toLocaleString('fr-FR')} />
       <Stat label="Invitations actives" value={data.active_invites} />
@@ -105,7 +103,6 @@ function UsersTab() {
   const ban = useMutation({ mutationFn: ({ id, reason }: { id: string; reason: string }) => api.post(`/admin/users/${id}/ban`, { reason }), onSuccess: () => { toast.success('Compte banni'); refresh() }, onError: fail })
   const unban = useMutation({ mutationFn: (id: string) => api.delete(`/admin/users/${id}/ban`), onSuccess: () => { toast.success('Compte débanni'); refresh() }, onError: fail })
   const logout = useMutation({ mutationFn: (id: string) => api.post(`/admin/users/${id}/logout`), onSuccess: () => { toast.success('Appareils déconnectés'); refresh() }, onError: fail })
-  const setAdmin = useMutation({ mutationFn: ({ id, admin }: { id: string; admin: boolean }) => api.put(`/admin/users/${id}/admin`, { admin }), onSuccess: () => { toast.success('Droits mis à jour'); refresh() }, onError: fail })
 
   return (
     <div className="space-y-3">
@@ -116,7 +113,7 @@ function UsersTab() {
         </div>
         <select value={filter} onChange={e => setFilter(e.target.value)} className="px-3 py-2 bg-fc-input rounded text-white text-sm outline-none">
           <option value="all">Tous</option><option value="online">Connectés</option><option value="recent">Récents (7 j)</option>
-          <option value="banned">Bannis</option><option value="admins">Administrateurs</option>
+          <option value="banned">Bannis</option>
         </select>
         <span className="text-sm text-fc-muted">{data?.total ?? 0} compte(s)</span>
       </div>
@@ -153,12 +150,6 @@ function UsersTab() {
                 {!u.is_bot && (
                   <button onClick={() => { if (window.confirm(`Déconnecter ${u.username} de tous ses appareils ?`)) logout.mutate(u.id) }}
                     className="p-1.5 rounded text-fc-muted hover:text-white hover:bg-fc-hover" title="Déconnecter partout" aria-label={`Déconnecter ${u.username}`}><LogOut size={15} /></button>
-                )}
-                {!u.is_bot && !u.env_admin && !u.banned_at && (
-                  <button onClick={() => { if (window.confirm(u.is_site_admin ? `Retirer les droits d’administrateur à ${u.username} ?` : `Nommer ${u.username} administrateur du site ?`)) setAdmin.mutate({ id: u.id, admin: !u.is_site_admin }) }}
-                    className="p-1.5 rounded text-fc-muted hover:text-white hover:bg-fc-hover" title={u.is_site_admin ? 'Retirer admin' : 'Nommer admin'} aria-label="Droits d’administrateur">
-                    {u.is_site_admin ? <ShieldOff size={15} /> : <ShieldCheck size={15} />}
-                  </button>
                 )}
               </div>
             </div>

@@ -1,8 +1,10 @@
 //! Administration du site : inscription sur invitation, liste des comptes, bannissement global,
 //! réglages et journal des actions.
 //!
-//! Un administrateur est soit un compte de `FORGECHAT_ADMIN_USER_IDS` (immuable, hors base),
-//! soit un compte dont `users.is_site_admin` est vrai (accordé depuis ce panneau).
+//! Un seul compte est administrateur : celui dont l'e-mail est `FORGECHAT_ADMIN_EMAIL`
+//! (`heiphaistos44@gmail.com` par défaut). Personne ne peut accorder ce droit à un autre compte :
+//! ni route, ni colonne, ni liste d'identifiants. Les e-mails sont uniques et la création d'un compte
+//! se fait sur invitation.
 use axum::{
     extract::{Path, Query, State},
     http::StatusCode,
@@ -34,18 +36,19 @@ const CODE_LEN: usize = 12;
 
 // ─── Droits ────────────────────────────────────────────────────────────────
 
-fn env_admin(user_id: Uuid) -> bool {
-    std::env::var("FORGECHAT_ADMIN_USER_IDS")
-        .map(|v| v.split(',').any(|s| s.trim().parse::<Uuid>().ok() == Some(user_id)))
-        .unwrap_or(false)
+/// E-mail du seul administrateur (minuscules).
+pub fn admin_email() -> String {
+    std::env::var("FORGECHAT_ADMIN_EMAIL")
+        .ok()
+        .map(|v| v.trim().to_lowercase())
+        .filter(|v| !v.is_empty())
+        .unwrap_or_else(|| "heiphaistos44@gmail.com".to_string())
 }
 
 pub async fn is_site_admin(state: &AppState, user_id: Uuid) -> bool {
-    if env_admin(user_id) {
-        return true;
-    }
-    sqlx::query_scalar::<_, bool>("SELECT is_site_admin FROM users WHERE id=$1")
+    sqlx::query_scalar::<_, bool>("SELECT lower(email) = $2 AND NOT is_bot FROM users WHERE id=$1")
         .bind(user_id)
+        .bind(admin_email())
         .fetch_optional(&state.db)
         .await
         .ok()
@@ -157,7 +160,7 @@ async fn cut_access(state: &AppState, user_id: Uuid, notify: &str) {
 
 pub async fn admin_me(State(state): State<AppState>, Extension(claims): Extension<Claims>) -> Result<Json<Value>> {
     require_site_admin(&state, &claims).await?;
-    Ok(Json(json!({ "admin": true, "env_admin": env_admin(claims.sub) })))
+    Ok(Json(json!({ "admin": true })))
 }
 
 pub async fn overview(State(state): State<AppState>, Extension(claims): Extension<Claims>) -> Result<Json<Value>> {
@@ -169,7 +172,6 @@ pub async fn overview(State(state): State<AppState>, Extension(claims): Extensio
            (SELECT COUNT(*) FROM users WHERE NOT is_bot AND email NOT LIKE '%@forgechat.invalid' AND created_at > NOW() - INTERVAL '7 days') AS new_7d,
            (SELECT COUNT(*) FROM users WHERE NOT is_bot AND email NOT LIKE '%@forgechat.invalid' AND created_at > NOW() - INTERVAL '30 days') AS new_30d,
            (SELECT COUNT(*) FROM users WHERE site_banned_at IS NOT NULL) AS banned,
-           (SELECT COUNT(*) FROM users WHERE is_site_admin) AS admins,
            (SELECT COUNT(*) FROM servers) AS servers,
            (SELECT COUNT(*) FROM messages) AS messages,
            (SELECT COUNT(*) FROM registration_invites
@@ -184,7 +186,7 @@ pub async fn overview(State(state): State<AppState>, Extension(claims): Extensio
     Ok(Json(json!({
         "total_users": g("total"), "online_now": online,
         "new_24h": g("new_1d"), "new_7d": g("new_7d"), "new_30d": g("new_30d"),
-        "banned": g("banned"), "site_admins": g("admins"),
+        "banned": g("banned"),
         "servers": g("servers"), "messages": g("messages"),
         "active_invites": g("active_invites"),
         "active_24h": g("active_24h"), "active_7d": g("active_7d"),
@@ -215,7 +217,7 @@ pub async fn list_users(
 
     let rows = sqlx::query(
         "SELECT u.id, u.username, u.discriminator, u.email, u.avatar, u.created_at, u.is_bot,
-                u.is_site_admin, u.site_banned_at, u.site_ban_reason,
+                (lower(u.email) = $6) AS is_admin, u.site_banned_at, u.site_ban_reason,
                 inv.username AS invited_by_name, ri.note AS invite_note,
                 (SELECT MAX(last_seen) FROM user_sessions s WHERE s.user_id = u.id) AS last_seen,
                 (SELECT COUNT(*) FROM server_members sm WHERE sm.user_id = u.id) AS server_count,
@@ -229,7 +231,7 @@ pub async fn list_users(
            AND (CASE $2
                   WHEN 'online'  THEN u.id = ANY($3)
                   WHEN 'banned'  THEN u.site_banned_at IS NOT NULL
-                  WHEN 'admins'  THEN u.is_site_admin
+                  WHEN 'admins'  THEN lower(u.email) = $6
                   WHEN 'recent'  THEN u.created_at > NOW() - INTERVAL '7 days'
                   ELSE TRUE END)
          ORDER BY u.created_at DESC
@@ -240,6 +242,7 @@ pub async fn list_users(
     .bind(&online_ids)
     .bind(limit)
     .bind(offset)
+    .bind(admin_email())
     .fetch_all(&state.db)
     .await?;
 
@@ -256,8 +259,7 @@ pub async fn list_users(
                 "avatar": r.get::<Option<String>, _>("avatar"),
                 "created_at": r.get::<DateTime<Utc>, _>("created_at"),
                 "is_bot": r.get::<bool, _>("is_bot"),
-                "is_site_admin": r.get::<bool, _>("is_site_admin") || env_admin(id),
-                "env_admin": env_admin(id),
+                "is_site_admin": r.get::<bool, _>("is_admin"),
                 "banned_at": r.get::<Option<DateTime<Utc>>, _>("site_banned_at"),
                 "ban_reason": r.get::<Option<String>, _>("site_ban_reason"),
                 "invited_by": r.get::<Option<String>, _>("invited_by_name"),
@@ -319,8 +321,8 @@ pub async fn ban_user(
     if user_id == claims.sub {
         return Err(AppError::BadRequest("Vous ne pouvez pas vous bannir vous-même".into()));
     }
-    if env_admin(user_id) || is_site_admin(&state, user_id).await {
-        return Err(AppError::ForbiddenMsg("Retirez d'abord les droits d'administrateur de ce compte".into()));
+    if is_site_admin(&state, user_id).await {
+        return Err(AppError::ForbiddenMsg("Le compte administrateur ne peut pas être banni".into()));
     }
     let reason = body.reason.map(|r| r.trim().chars().take(300).collect::<String>()).filter(|r| !r.is_empty());
     let done = sqlx::query("UPDATE users SET site_banned_at=NOW(), site_ban_reason=$2 WHERE id=$1 AND site_banned_at IS NULL")
@@ -365,32 +367,6 @@ pub async fn force_logout(
     require_site_admin(&state, &claims).await?;
     cut_access(&state, user_id, "FORCE_LOGOUT").await;
     audit(&state, claims.sub, "force_logout", Some(user_id), json!({})).await;
-    Ok(StatusCode::NO_CONTENT)
-}
-
-#[derive(Deserialize)]
-pub struct AdminBody {
-    pub admin: bool,
-}
-
-pub async fn set_admin(
-    State(state): State<AppState>,
-    Extension(claims): Extension<Claims>,
-    Path(user_id): Path<Uuid>,
-    Json(body): Json<AdminBody>,
-) -> Result<StatusCode> {
-    require_site_admin(&state, &claims).await?;
-    if user_id == claims.sub {
-        return Err(AppError::BadRequest("Vous ne pouvez pas modifier vos propres droits".into()));
-    }
-    if body.admin && is_banned(&state, user_id).await {
-        return Err(AppError::BadRequest("Ce compte est banni".into()));
-    }
-    let done = sqlx::query("UPDATE users SET is_site_admin=$2 WHERE id=$1 AND NOT is_bot").bind(user_id).bind(body.admin).execute(&state.db).await?;
-    if done.rows_affected() == 0 {
-        return Err(AppError::NotFound("Compte introuvable".into()));
-    }
-    audit(&state, claims.sub, if body.admin { "grant_admin" } else { "revoke_admin" }, Some(user_id), json!({})).await;
     Ok(StatusCode::NO_CONTENT)
 }
 

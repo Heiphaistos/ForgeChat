@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import api from '../api/client'
 
-/** Vrai pour un administrateur du site (FORGECHAT_ADMIN_USER_IDS ou droit accordé). Le serveur tranche : 403 sinon. */
+/** Vrai pour l'administrateur du site (le compte de FORGECHAT_ADMIN_EMAIL). Le serveur tranche : 403 sinon. */
 export function useSiteAdmin(): boolean {
   const { data } = useQuery<boolean>({
     queryKey: ['site-admin-me'],

@@ -1,7 +1,8 @@
 // Parcours réel « cercle privé » contre un serveur ForgeChat LOCAL (Postgres et Redis jetables) :
 // inscription sur invitation, panneau admin, bannissement, déconnexion forcée, journal.
 // Usage : FORGECHAT_API_URL=http://127.0.0.1:58080 FORGECHAT_ADMIN_TOKEN=<jeton d'un admin> node scripts/admin.api.mjs
-// Sans FORGECHAT_ADMIN_TOKEN, le script suppose une base VIDE : le premier compte devient admin.
+// Sans FORGECHAT_ADMIN_TOKEN, le script suppose une base VIDE et crée le compte administrateur
+// (e-mail FORGECHAT_ADMIN_EMAIL, heiphaistos44@gmail.com par défaut) : lui seul a accès à l'administration.
 const BASE = process.env.FORGECHAT_API_URL ?? 'http://127.0.0.1:58080'
 if (!['127.0.0.1', 'localhost', '::1'].includes(new URL(BASE).hostname)) throw new Error('serveur local uniquement')
 
@@ -26,9 +27,10 @@ const uniq = () => Math.random().toString(36).slice(2, 8)
 // La limite d'inscriptions par IP (5 / 15 min) est testée ailleurs : on la remet à zéro (Redis local).
 const REDIS_DB = process.env.FORGECHAT_REDIS_DB ?? '0'
 const resetRegisterLimit = () => { try { execSync(`redis-cli -n ${REDIS_DB} --scan --pattern 'register_attempts:*' | xargs -r redis-cli -n ${REDIS_DB} del`, { stdio: 'ignore' }) } catch { /* redis-cli absent */ } }
-async function register(name, invite_code) {
+const ADMIN_EMAIL = (process.env.FORGECHAT_ADMIN_EMAIL ?? 'heiphaistos44@gmail.com').toLowerCase()
+async function register(name, invite_code, email) {
   resetRegisterLimit()
-  const user = { username: `${name}${uniq()}`, email: `${name}${uniq()}@test.local`, password: PASSWORD }
+  const user = { username: `${name}${uniq()}`, email: email ?? `${name}${uniq()}@test.local`, password: PASSWORD }
   const r = await api('POST', '/api/auth/register', { body: invite_code === undefined ? user : { ...user, invite_code } })
   return { ...user, status: r.status, error: r.body?.error, token: r.body?.access_token, refresh: r.body?.refresh_token, id: r.body?.user?.id }
 }
@@ -38,11 +40,11 @@ let adminToken = process.env.FORGECHAT_ADMIN_TOKEN
 const info0 = (await api('GET', '/api/auth/registration-info')).body
 if (!adminToken) {
   ok(info0.first_user === true && info0.mode === 'open', 'base vide : première inscription libre', JSON.stringify(info0))
-  const first = await register('admin')
+  const first = await register('admin', undefined, ADMIN_EMAIL)
   ok(first.status === 200, 'premier compte créé sans code', first.error)
   adminToken = first.token
 }
-ok((await api('GET', '/api/admin/me', { token: adminToken })).status === 200, 'le premier compte est administrateur')
+ok((await api('GET', '/api/admin/me', { token: adminToken })).status === 200, 'le compte de l’e-mail administrateur a accès à l’administration')
 
 // ── Mode « invitation »
 await api('PUT', '/api/admin/settings', { token: adminToken, body: { registration_mode: 'invite' } })
@@ -114,12 +116,14 @@ const tok2 = loginAgain.body.access_token
 ok((await api('POST', `/api/admin/users/${nonAdmin.id}/logout`, { token: adminToken })).status === 204, 'déconnexion forcée')
 ok((await api('GET', '/api/users/me', { token: tok2 })).status === 401, 'jeton coupé après déconnexion forcée')
 
-// ── Droits d'admin et réglages
-ok((await api('PUT', `/api/admin/users/${nonAdmin.id}/admin`, { token: adminToken, body: { admin: true } })).status === 204, 'droits d’admin accordés')
-const relog = await api('POST', '/api/auth/login', { body: { email: nonAdmin.email, password: PASSWORD } })
-ok((await api('GET', '/api/admin/me', { token: relog.body.access_token })).status === 200, 'le nouvel admin accède au panneau')
-ok((await api('POST', `/api/admin/users/${nonAdmin.id}/ban`, { token: adminToken, body: {} })).status === 403, 'un admin ne peut pas être banni sans retrait préalable')
-await api('PUT', `/api/admin/users/${nonAdmin.id}/admin`, { token: adminToken, body: { admin: false } })
+// ── Un seul administrateur : personne ne peut en nommer un autre
+const grant = await api('PUT', `/api/admin/users/${nonAdmin.id}/admin`, { token: adminToken, body: { admin: true } })
+ok(grant.status === 404 || grant.status === 405, 'aucune route pour nommer un autre administrateur', `${grant.status}`)
+const lea = await api('POST', '/api/auth/login', { body: { email: nonAdmin.email, password: PASSWORD } })
+ok((await api('GET', '/api/admin/me', { token: lea.body.access_token })).status === 403, 'un autre compte reste sans accès à l’administration')
+ok((await api('GET', '/api/admin/audit', { token: lea.body.access_token })).status === 403, 'journal admin refusé à un autre compte')
+ok((await api('GET', '/api/admin/diagnostics', { token: lea.body.access_token })).status === 403, 'rapports d’erreurs refusés à un autre compte')
+ok((await api('GET', '/api/admin/dm-reports', { token: lea.body.access_token })).status === 403, 'signalements refusés à un autre compte')
 
 ok((await api('PUT', '/api/admin/settings', { token: adminToken, body: { registration_mode: 'closed' } })).status === 200, 'inscriptions fermées')
 const closed = await register('closed', (await api('POST', '/api/admin/invites', { token: adminToken, body: {} })).body.code)
@@ -128,7 +132,7 @@ await api('PUT', '/api/admin/settings', { token: adminToken, body: { registratio
 ok((await api('PUT', '/api/admin/settings', { token: adminToken, body: { registration_mode: 'nimporte' } })).status === 400, 'mode inconnu refusé')
 
 const audit = (await api('GET', '/api/admin/audit', { token: adminToken })).body.entries.map(e => e.action)
-ok(['ban', 'unban', 'force_logout', 'create_invite', 'revoke_invite', 'grant_admin', 'set_registration_mode'].every(a => audit.includes(a)), 'journal des actions complet', audit.join(','))
+ok(['ban', 'unban', 'force_logout', 'create_invite', 'revoke_invite', 'set_registration_mode'].every(a => audit.includes(a)), 'journal des actions complet', audit.join(','))
 
 const detail = (await api('GET', `/api/admin/users/${nonAdmin.id}`, { token: adminToken })).body
 ok(Array.isArray(detail.sessions) && Array.isArray(detail.servers) && Array.isArray(detail.invited), 'détail d’un compte (appareils, serveurs, invités)')

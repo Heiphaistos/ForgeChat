@@ -3,7 +3,7 @@
 //! `POST /api/diagnostics/report` est PUBLIC : une page blanche n'a pas de
 //! session. Garde-fous : corps borné (route), champs tronqués, limite Redis par
 //! IP, jetons retirés des textes, dédoublonnage par empreinte (même erreur =
-//! `count + 1`). La lecture est réservée aux comptes de `FORGECHAT_ADMIN_USER_IDS`.
+//! `count + 1`). La lecture est réservée au compte administrateur (`FORGECHAT_ADMIN_EMAIL`, voir site_admin.rs).
 
 use axum::{
     extract::{ConnectInfo, Path, Query, State},
@@ -228,7 +228,7 @@ pub async fn submit_report(
     Ok(StatusCode::NO_CONTENT)
 }
 
-/// Administrateurs du site : `FORGECHAT_ADMIN_USER_IDS` ou `users.is_site_admin` (voir site_admin.rs).
+/// Administrateur du site : le compte de `FORGECHAT_ADMIN_EMAIL` (voir site_admin.rs).
 pub(crate) async fn require_admin(state: &AppState, claims: &Claims) -> Result<()> {
     crate::handlers::site_admin::require_site_admin(state, claims).await
 }
