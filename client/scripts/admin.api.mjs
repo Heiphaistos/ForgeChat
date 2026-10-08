@@ -5,6 +5,8 @@
 const BASE = process.env.FORGECHAT_API_URL ?? 'http://127.0.0.1:58080'
 if (!['127.0.0.1', 'localhost', '::1'].includes(new URL(BASE).hostname)) throw new Error('serveur local uniquement')
 
+import { execSync } from 'node:child_process'
+
 let failed = 0
 const ok = (cond, label, extra = '') => {
   console.log(`${cond ? '  ✓' : '  ✗'} ${label}${cond || !extra ? '' : ` — ${extra}`}`)
@@ -21,7 +23,10 @@ async function api(method, path, { token, body } = {}) {
 }
 const PASSWORD = 'Mot de passe de test 42!'
 const uniq = () => Math.random().toString(36).slice(2, 8)
+// La limite d'inscriptions par IP (5 / 15 min) est testée ailleurs : on la remet à zéro (Redis local).
+const resetRegisterLimit = () => { try { execSync("redis-cli --scan --pattern 'register_attempts:*' | xargs -r redis-cli del", { stdio: 'ignore' }) } catch { /* redis-cli absent */ } }
 async function register(name, invite_code) {
+  resetRegisterLimit()
   const user = { username: `${name}${uniq()}`, email: `${name}${uniq()}@test.local`, password: PASSWORD }
   const r = await api('POST', '/api/auth/register', { body: invite_code === undefined ? user : { ...user, invite_code } })
   return { ...user, status: r.status, error: r.body?.error, token: r.body?.access_token, refresh: r.body?.refresh_token, id: r.body?.user?.id }
@@ -65,6 +70,7 @@ ok(reuse.status === 403, 'code à usage unique : deuxième inscription refusée'
 
 // Un pseudo déjà pris ne doit pas brûler le code
 const inv2 = (await api('POST', '/api/admin/invites', { token: adminToken, body: { max_uses: 2 } })).body
+resetRegisterLimit()
 const dup = await api('POST', '/api/auth/register', { body: { username: nonAdmin.username, email: `dup${uniq()}@test.local`, password: PASSWORD, invite_code: inv2.code } })
 ok(dup.status === 409, 'pseudo déjà pris → 409', `${dup.status}`)
 const afterDup = (await api('GET', '/api/admin/invites', { token: adminToken })).body.invites.find(i => i.id === inv2.id)

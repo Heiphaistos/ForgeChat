@@ -219,7 +219,7 @@ pub async fn list_users(
                 inv.username AS invited_by_name, ri.note AS invite_note,
                 (SELECT MAX(last_seen) FROM user_sessions s WHERE s.user_id = u.id) AS last_seen,
                 (SELECT COUNT(*) FROM server_members sm WHERE sm.user_id = u.id) AS server_count,
-                (SELECT COUNT(*) FROM messages m WHERE m.author_id = u.id) AS message_count,
+                (SELECT COUNT(*) FROM messages m WHERE m.user_id = u.id) AS message_count,
                 COUNT(*) OVER() AS total
          FROM users u
          LEFT JOIN users inv ON inv.id = u.invited_by
