@@ -104,6 +104,18 @@ pub async fn register(
         return Err(AppError::BadRequest("Email invalide".into()));
     }
 
+    // Cercle privé : inscription sur invitation. Tant qu'aucun compte n'existe, la première
+    // inscription est libre et donne les droits d'administrateur du site.
+    let first_user: bool = sqlx::query_scalar(crate::handlers::site_admin::NO_REAL_USERS_SQL).fetch_one(&state.db).await?;
+    let mode = if first_user { "open".to_string() } else { crate::handlers::site_admin::registration_mode(&state).await };
+    match mode.as_str() {
+        "closed" => return Err(AppError::ForbiddenMsg("Les inscriptions sont fermées".into())),
+        "invite" if body.invite_code.as_deref().map(str::trim).unwrap_or("").is_empty() => {
+            return Err(AppError::ForbiddenMsg("Un code d'invitation est nécessaire pour créer un compte".into()));
+        }
+        _ => {}
+    }
+
     let exists = sqlx::query_scalar::<_, bool>(
         "SELECT EXISTS(SELECT 1 FROM users WHERE email=$1)",
     )
@@ -119,16 +131,33 @@ pub async fn register(
     let password_hash = hash(&body.password, DEFAULT_COST)
         .map_err(|e| AppError::Internal(e.into()))?;
 
+    // Le code et le compte vivent dans la même transaction : un pseudo déjà pris ne brûle pas le code.
+    let mut tx = state.db.begin().await?;
+    let invite = match (mode.as_str(), body.invite_code.as_deref()) {
+        ("invite", Some(code)) => Some(crate::handlers::site_admin::consume_invite(&mut tx, code).await?),
+        _ => None,
+    };
     let user = sqlx::query_as::<_, crate::models::user::User>(
-        "INSERT INTO users (username, discriminator, email, password_hash, is_verified)
-         VALUES ($1, $2, $3, $4, true) RETURNING *",
+        "INSERT INTO users (username, discriminator, email, password_hash, is_verified, is_site_admin, invited_by, registration_invite_id)
+         VALUES ($1, $2, $3, $4, true, $5, $6, $7) RETURNING *",
     )
     .bind(&body.username)
     .bind(&discriminator)
     .bind(&email_lower)
     .bind(&password_hash)
-    .fetch_one(&state.db)
+    .bind(first_user)
+    .bind(invite.and_then(|(_, by)| by))
+    .bind(invite.map(|(id, _)| id))
+    .fetch_one(&mut *tx)
     .await?;
+    if let Some((invite_id, _)) = invite {
+        sqlx::query("INSERT INTO registration_invite_uses (invite_id, user_id) VALUES ($1, $2)")
+            .bind(invite_id)
+            .bind(user.id)
+            .execute(&mut *tx)
+            .await?;
+    }
+    tx.commit().await?;
 
     let access_token = create_token(user.id, None, &state.config.jwt_secret, &state.config.jwt_issuer)
         .map_err(|e| AppError::Internal(e))?;
@@ -247,6 +276,19 @@ pub async fn login(
 
     let user = user_opt.filter(|_| valid).ok_or(AppError::Unauthorized)?;
 
+    // Compte banni du site : le mot de passe est bon, l'accès est refusé avec le motif.
+    let (banned_at, ban_reason): (Option<chrono::DateTime<Utc>>, Option<String>) =
+        sqlx::query_as("SELECT site_banned_at, site_ban_reason FROM users WHERE id=$1")
+            .bind(user.id)
+            .fetch_one(&state.db)
+            .await?;
+    if banned_at.is_some() {
+        return Err(AppError::ForbiddenMsg(match ban_reason {
+            Some(r) => format!("Ce compte a été suspendu : {r}"),
+            None => "Ce compte a été suspendu".into(),
+        }));
+    }
+
     // Vérification 2FA si activée
     if user.totp_enabled {
         let totp_secret: Option<String> = sqlx::query_scalar(
@@ -334,23 +376,58 @@ pub async fn refresh(
 
 /// Rotation RTR d'un jeton de rafraîchissement : l'ancien est consommé, un nouveau et un
 /// jeton d'accès sont émis. Renvoie (compte, nouveau jeton de rafraîchissement, jeton d'accès).
+/// Un jeton de rafraîchissement déjà consommé reste accepté ce nombre de secondes : deux fenêtres
+/// de l'appli qui se rafraîchissent en même temps, ou une réponse perdue (réseau coupé, appli
+/// fermée au mauvais moment), ne doivent pas déconnecter l'utilisateur. Chacun repart avec son
+/// propre nouveau jeton : aucun secret n'est conservé, seulement « ce jeton vient de tourner ».
+const REFRESH_GRACE_SECS: u64 = 60;
+
 pub(crate) async fn rotate_refresh_token(state: &AppState, token: &str) -> Result<(Uuid, String, String)> {
     let token_hash = hash_token(token);
+    let grace_key = format!("rtgrace:{token_hash}");
     // RTR atomique : DELETE RETURNING garantit qu'un seul thread invalide le token
     let row = sqlx::query_as::<_, (Uuid, chrono::DateTime<Utc>)>(
         "DELETE FROM refresh_tokens WHERE token_hash=$1 RETURNING user_id, expires_at",
     )
     .bind(&token_hash)
     .fetch_optional(&state.db)
-    .await?
-    .ok_or(AppError::Unauthorized)?;
+    .await?;
 
-    if row.1 < Utc::now() {
+    let user_id = match row {
+        Some((user_id, expires_at)) => {
+            if expires_at < Utc::now() {
+                return Err(AppError::Unauthorized);
+            }
+            user_id
+        }
+        None => {
+            // Jeton déjà tourné il y a moins d'une minute ?
+            let recent: Option<String> = {
+                let mut redis = state.redis.lock().await;
+                redis.get(&grace_key).await.unwrap_or(None)
+            };
+            let user_id = recent.and_then(|v| v.parse::<Uuid>().ok()).ok_or(AppError::Unauthorized)?;
+            // Déconnexion, bannissement ou « déconnecter partout » entre-temps : plus aucun jeton, plus de tolérance.
+            let still_signed_in: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM refresh_tokens WHERE user_id=$1)")
+                .bind(user_id)
+                .fetch_one(&state.db)
+                .await?;
+            if !still_signed_in {
+                return Err(AppError::Unauthorized);
+            }
+            user_id
+        }
+    };
+    if crate::handlers::site_admin::is_banned(state, user_id).await {
         return Err(AppError::Unauthorized);
+    }
+    {
+        let mut redis = state.redis.lock().await;
+        let _: () = redis.set_ex(&grace_key, user_id.to_string(), REFRESH_GRACE_SECS).await.unwrap_or(());
     }
 
     let new_refresh_token = generate_refresh_token();
-    store_refresh_token(state, row.0, &new_refresh_token).await?;
+    store_refresh_token(state, user_id, &new_refresh_token).await?;
 
     // Garder user_sessions synchronisé avec la rotation RTR (sinon refresh_token_hash
     // devient obsolète dès ce premier refresh, et revoke_session ne retrouve plus
@@ -361,15 +438,15 @@ pub(crate) async fn rotate_refresh_token(state: &AppState, token: &str) -> Resul
     )
     .bind(&new_hash)
     .bind(&token_hash)
-    .bind(row.0)
+    .bind(user_id)
     .fetch_optional(&state.db)
     .await
     .ok()
     .flatten();
 
-    let access_token = create_token(row.0, sid, &state.config.jwt_secret, &state.config.jwt_issuer)
+    let access_token = create_token(user_id, sid, &state.config.jwt_secret, &state.config.jwt_issuer)
         .map_err(AppError::Internal)?;
-    Ok((row.0, new_refresh_token, access_token))
+    Ok((user_id, new_refresh_token, access_token))
 }
 
 pub async fn change_password(

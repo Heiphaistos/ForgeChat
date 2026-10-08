@@ -146,6 +146,9 @@ pub struct RegisterRequest {
     pub username: String,
     pub email: String,
     pub password: String,
+    /// Code d'invitation (obligatoire quand l'inscription est sur invitation).
+    #[serde(default)]
+    pub invite_code: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]

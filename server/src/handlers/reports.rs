@@ -267,7 +267,7 @@ pub async fn list_dm_reports(
     Extension(claims): Extension<Claims>,
     axum::extract::Query(q): axum::extract::Query<DmReportsQuery>,
 ) -> Result<Json<Vec<serde_json::Value>>> {
-    crate::handlers::diagnostics::require_admin(&claims)?;
+    crate::handlers::diagnostics::require_admin(&state, &claims).await?;
     let status = q
         .status
         .filter(|s| DM_REPORT_STATUSES.contains(&s.as_str()))
@@ -316,7 +316,7 @@ pub async fn update_dm_report(
     Path(id): Path<Uuid>,
     Json(body): Json<DmReportUpdate>,
 ) -> Result<Json<serde_json::Value>> {
-    crate::handlers::diagnostics::require_admin(&claims)?;
+    crate::handlers::diagnostics::require_admin(&state, &claims).await?;
     if !DM_REPORT_STATUSES.contains(&body.status.as_str()) {
         return Err(AppError::BadRequest("Statut invalide (open|resolved|dismissed)".into()));
     }

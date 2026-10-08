@@ -1,4 +1,5 @@
-import { Mic, MicOff, Headphones, VolumeX, Settings, X, Activity, BellOff, LayoutDashboard } from 'lucide-react'
+import { Mic, MicOff, Headphones, VolumeX, Settings, X, Activity, BellOff, LayoutDashboard, ShieldCheck } from 'lucide-react'
+import { useSiteAdmin } from '../../hooks/useSiteAdmin'
 import NotificationBell from '../notifications/NotificationBell'
 import { useNavigate } from 'react-router-dom'
 import { useState, useRef, useEffect } from 'react'
@@ -229,6 +230,7 @@ interface UserPanelProps {
 }
 
 export default function UserPanel({ onToggleActivity, activityOpen }: UserPanelProps) {
+  const isSiteAdmin = useSiteAdmin()
   const tr = useT()
   const { user, updateMe } = useAuth()
   const nav = useNavigate()
@@ -326,6 +328,16 @@ export default function UserPanel({ onToggleActivity, activityOpen }: UserPanelP
             aria-pressed={activityOpen}
           >
             <Activity size={16} />
+          </button>
+        )}
+        {isSiteAdmin && (
+          <button
+            onClick={() => nav('/admin/site')}
+            className="min-w-[44px] min-h-[44px] md:min-w-0 md:min-h-0 p-1.5 md:p-1 rounded hover:bg-fc-hover text-fc-accent hover:text-white transition flex items-center justify-center"
+            title="Administration de ForgeChat (comptes, invitations)"
+            aria-label="Administration de ForgeChat"
+          >
+            <ShieldCheck size={16} />
           </button>
         )}
         <button

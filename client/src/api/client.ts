@@ -71,7 +71,15 @@ api.interceptors.response.use(
         }
         err.config._retried = true
         return api(err.config)
-      } catch {
+      } catch (refreshErr: any) {
+        // Seul un refus explicite du serveur (jeton périmé, révoqué, compte suspendu) met fin à la session.
+        // Réseau coupé, serveur qui redémarre, délai dépassé : on garde les jetons et on laisse l'erreur
+        // remonter, sinon une micro-coupure au lancement obligeait à retaper e-mail et mot de passe.
+        const status = refreshErr?.response?.status
+        if (!(status === 400 || status === 401 || status === 403)) {
+          err.sessionKept = true // lu par fetchMe : ce 401 d'origine n'est pas un refus définitif
+          return Promise.reject(err)
+        }
         if (isTauri) clearLocalSession()
         // Relu ici (et non avant le refresh) : AuthGuard a pu entre-temps aller sur
         // /login?redirect=… ; un rechargement vers /login nu perdait la destination

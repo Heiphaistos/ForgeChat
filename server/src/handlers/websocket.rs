@@ -66,7 +66,7 @@ async fn handle_socket(
             let mut redis = state.redis.lock().await;
             redis.get(&key).await.unwrap_or(None)
         };
-        if blocked.is_some() || crate::middleware::auth::is_revoked(&state, &c).await {
+        if blocked.is_some() || crate::middleware::auth::is_revoked(&state, &c).await || crate::handlers::site_admin::is_banned(&state, c.sub).await {
             tracing::warn!("WebSocket: token révoqué");
             return;
         }
@@ -185,7 +185,9 @@ async fn handle_socket(
         loop {
             match rx.recv().await {
                 Ok(msg) => {
-                    if sender.send(Message::Text(msg)).await.is_err() {
+                    // Compte banni ou déconnecté de force : le client est prévenu, puis la socket se ferme.
+                    let terminal = msg.starts_with(r#"{"type":"ACCOUNT_BANNED""#) || msg.starts_with(r#"{"type":"FORCE_LOGOUT""#);
+                    if sender.send(Message::Text(msg)).await.is_err() || terminal {
                         break;
                     }
                 }

@@ -228,16 +228,9 @@ pub async fn submit_report(
     Ok(StatusCode::NO_CONTENT)
 }
 
-/// Comptes autorisés : `FORGECHAT_ADMIN_USER_IDS` (UUID séparés par des
-/// virgules). Absente ou vide = personne.
-fn is_admin(user_id: Uuid) -> bool {
-    std::env::var("FORGECHAT_ADMIN_USER_IDS")
-        .map(|v| v.split(',').any(|s| s.trim().parse::<Uuid>().ok() == Some(user_id)))
-        .unwrap_or(false)
-}
-
-pub(crate) fn require_admin(claims: &Claims) -> Result<()> {
-    if is_admin(claims.sub) { Ok(()) } else { Err(AppError::Forbidden) }
+/// Administrateurs du site : `FORGECHAT_ADMIN_USER_IDS` ou `users.is_site_admin` (voir site_admin.rs).
+pub(crate) async fn require_admin(state: &AppState, claims: &Claims) -> Result<()> {
+    crate::handlers::site_admin::require_site_admin(state, claims).await
 }
 
 #[derive(Deserialize)]
@@ -283,7 +276,7 @@ pub async fn list_reports(
     Extension(claims): Extension<Claims>,
     Query(q): Query<ListQuery>,
 ) -> Result<Json<serde_json::Value>> {
-    require_admin(&claims)?;
+    require_admin(&state, &claims).await?;
     let limit = q.limit.unwrap_or(50).clamp(1, 200);
     let offset = q.offset.unwrap_or(0).max(0);
     let platform = q.platform.filter(|s| !s.is_empty());
@@ -319,7 +312,7 @@ pub async fn get_report(
     Extension(claims): Extension<Claims>,
     Path(id): Path<Uuid>,
 ) -> Result<Json<ReportDetail>> {
-    require_admin(&claims)?;
+    require_admin(&state, &claims).await?;
     let report: Option<ReportDetail> = sqlx::query_as(
         "SELECT id, created_at, last_seen, platform, app_version,
                 kind, message, stack, log, user_agent, url, count
@@ -338,7 +331,7 @@ pub async fn delete_report(
     Extension(claims): Extension<Claims>,
     Path(id): Path<Uuid>,
 ) -> Result<StatusCode> {
-    require_admin(&claims)?;
+    require_admin(&state, &claims).await?;
     let res = sqlx::query("DELETE FROM client_reports WHERE id = $1")
         .bind(id)
         .execute(&state.db)

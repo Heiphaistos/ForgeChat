@@ -1,6 +1,7 @@
-import { useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { useEffect, useState } from 'react'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { Eye, EyeOff } from 'lucide-react'
+import api from '../api/client'
 import { useAuth } from '../store/auth'
 import toast from 'react-hot-toast'
 import Logo3D from '../components/Logo3D'
@@ -28,9 +29,17 @@ export default function RegisterPage() {
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
   const [acceptedTerms, setAcceptedTerms] = useState(false)
+  const [params] = useSearchParams()
+  const [inviteCode, setInviteCode] = useState(params.get('code') ?? '')
+  // Mode d'inscription du site : « invite » (code obligatoire), « closed » ou « open ».
+  const [mode, setMode] = useState<'open' | 'invite' | 'closed'>('invite')
   const { register } = useAuth()
   const nav = useNavigate()
   const t = useT()
+
+  useEffect(() => {
+    api.get('/auth/registration-info').then(r => setMode(r.data.mode)).catch(() => { /* serveur injoignable : on laisse le champ affiché */ })
+  }, [])
 
   const strength = getPasswordStrength(password)
   const passwordMismatch = confirmPassword.length > 0 && password !== confirmPassword
@@ -47,7 +56,7 @@ export default function RegisterPage() {
     }
     setLoading(true)
     try {
-      await register(username, email, password)
+      await register(username, email, password, inviteCode)
       nav('/friends')
     } catch (err: any) {
       toast.error(err.response?.data?.error ?? t('auth.register.error'))
@@ -65,7 +74,31 @@ export default function RegisterPage() {
         <h1 className="text-2xl font-bold text-white text-center mb-2">{t('auth.register.title')}</h1>
         <p className="text-fc-muted text-center mb-6">{t('auth.register.subtitle')}</p>
 
+        {mode === 'closed' && (
+          <p role="alert" className="mb-4 rounded bg-red-500/10 border border-red-500/40 text-red-300 text-sm px-3 py-2">
+            Les inscriptions sont fermées pour le moment.
+          </p>
+        )}
+
         <form onSubmit={submit} className="space-y-4">
+          {mode === 'invite' && (
+            <div>
+              <label className="block text-xs font-semibold text-fc-muted uppercase mb-1">Code d’invitation</label>
+              <input
+                value={inviteCode}
+                onChange={e => setInviteCode(e.target.value)}
+                required
+                type="text"
+                autoComplete="off"
+                autoCapitalize="characters"
+                autoCorrect="off"
+                spellCheck={false}
+                placeholder="XXXX-XXXX-XXXX"
+                className="w-full px-3 py-2 bg-fc-input rounded text-white text-base font-mono tracking-widest outline-none focus:ring-2 focus:ring-fc-accent"
+              />
+              <p className="text-xs text-fc-muted mt-1">ForgeChat est un cercle privé : demande ton code à la personne qui t’invite.</p>
+            </div>
+          )}
           <div>
             <label className="block text-xs font-semibold text-fc-muted uppercase mb-1">{t('auth.register.username')}</label>
             <input
@@ -75,7 +108,7 @@ export default function RegisterPage() {
               minLength={2}
               maxLength={32}
               type="text"
-              autoFocus
+              autoFocus={mode !== 'invite'}
               autoComplete="username"
               placeholder={t('auth.register.usernamePlaceholder')}
               enterKeyHint="next"
@@ -182,7 +215,7 @@ export default function RegisterPage() {
 
           <button
             type="submit"
-            disabled={loading || passwordMismatch || !acceptedTerms}
+            disabled={loading || passwordMismatch || !acceptedTerms || mode === 'closed'}
             className="w-full py-2.5 bg-fc-accent hover:bg-indigo-500 text-white font-medium rounded transition disabled:opacity-50"
           >
             {loading ? t('auth.register.submitting') : t('auth.register.title')}

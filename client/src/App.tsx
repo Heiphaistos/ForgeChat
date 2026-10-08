@@ -80,6 +80,7 @@ const ServerAdminPage = lazy(() => import('./pages/ServerAdminPage'))
 const AdminPage = lazy(() => import('./pages/AdminPage'))
 const DiagnosticsAdminPage = lazy(() => import('./pages/DiagnosticsAdminPage'))
 const DmReportsAdminPage = lazy(() => import('./pages/DmReportsAdminPage'))
+const SiteAdminPage = lazy(() => import('./pages/SiteAdminPage'))
 const ImportDiscordPage = lazy(() => import('./pages/ImportDiscordPage'))
 const KeyboardShortcutsModal = lazy(() => import('./components/KeyboardShortcutsModal'))
 
@@ -150,6 +151,16 @@ function AppInner() {
   const { playJoin, playLeave, playMessage, playMention, playRing } = useAudioNotifications()
   const { requestPermission } = usePushNotifications()
   useThreadNotifications()
+  // Compte suspendu ou déconnecté de force par un administrateur : retour à l'écran de connexion.
+  useEffect(() => {
+    const end = (message: string) => () => {
+      toast.error(message)
+      void useAuth.getState().logout().finally(() => { window.location.href = '/login' })
+    }
+    const offBan = on('ACCOUNT_BANNED', end('Ton compte a été suspendu.'))
+    const offOut = on('FORCE_LOGOUT', end('Tu as été déconnecté par un administrateur.'))
+    return () => { offBan(); offOut() }
+  }, [on])
   const qcHook = useQueryClient()
   // Peuple le cache ['user-settings'] dès le montage (pas seulement quand l'utilisateur
   // ouvre Paramètres) -- nécessaire pour que sendNativeNotification puisse lire
@@ -1061,6 +1072,7 @@ function AppInner() {
             <Route path="admin" element={<AdminPage />} />
             <Route path="admin/diagnostics" element={<DiagnosticsAdminPage />} />
             <Route path="admin/signalements" element={<DmReportsAdminPage />} />
+            <Route path="admin/site" element={<SiteAdminPage />} />
             <Route path="import-discord" element={<ImportDiscordPage />} />
           </Route>
           {/* Adresse inconnue : accueil plutôt qu'un écran noir. */}

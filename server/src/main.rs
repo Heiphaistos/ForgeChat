@@ -67,6 +67,7 @@ async fn main() -> anyhow::Result<()> {
 
     let state = AppState::new(db, redis_conn, config.clone()).await;
     handlers::discord_import::recover_interrupted(&state).await;
+    handlers::site_admin::sync_banned_set(&state).await;
     // P1-3 — aucune session WebSocket n'existe au démarrage : un arrêt brutal
     // laissait des utilisateurs « en ligne » jusqu'à leur prochaine connexion.
     if let Err(e) = sqlx::query("UPDATE users SET status='offline' WHERE status <> 'offline'")
@@ -220,6 +221,7 @@ async fn main() -> anyhow::Result<()> {
         // Auth publique
         // Corps limité à 64 Ko : routes sans compte, quelques champs texte seulement.
         .route("/api/auth/register", post(handlers::auth::register).layer(DefaultBodyLimit::max(SMALL_JSON_LIMIT)))
+        .route("/api/auth/registration-info", get(handlers::site_admin::registration_info))
         .route("/api/auth/verify-email", post(handlers::auth::verify_email).layer(DefaultBodyLimit::max(SMALL_JSON_LIMIT)))
         .route("/api/auth/login", post(handlers::auth::login).layer(DefaultBodyLimit::max(SMALL_JSON_LIMIT)))
         .route("/api/auth/refresh", post(handlers::auth::refresh).layer(DefaultBodyLimit::max(SMALL_JSON_LIMIT)))
@@ -520,6 +522,17 @@ fn protected_routes(state: AppState) -> Router<AppState> {
         .route("/servers/:server_id/icon", post(handlers::servers::upload_server_icon))
         .route("/servers/:server_id/banner", post(handlers::servers::upload_server_banner))
         .route("/admin/stats", get(handlers::servers::get_admin_stats))
+        .route("/admin/me", get(handlers::site_admin::admin_me))
+        .route("/admin/overview", get(handlers::site_admin::overview))
+        .route("/admin/users", get(handlers::site_admin::list_users))
+        .route("/admin/users/:user_id", get(handlers::site_admin::user_detail))
+        .route("/admin/users/:user_id/ban", post(handlers::site_admin::ban_user).delete(handlers::site_admin::unban_user))
+        .route("/admin/users/:user_id/logout", post(handlers::site_admin::force_logout))
+        .route("/admin/users/:user_id/admin", put(handlers::site_admin::set_admin))
+        .route("/admin/invites", get(handlers::site_admin::list_invites).post(handlers::site_admin::create_invite))
+        .route("/admin/invites/:invite_id", delete(handlers::site_admin::revoke_invite))
+        .route("/admin/settings", get(handlers::site_admin::get_settings).put(handlers::site_admin::put_settings))
+        .route("/admin/audit", get(handlers::site_admin::audit_log))
         .route("/admin/diagnostics", get(handlers::diagnostics::list_reports))
         .route("/admin/dm-reports", get(handlers::reports::list_dm_reports))
         .route("/admin/dm-reports/:id", patch(handlers::reports::update_dm_report))

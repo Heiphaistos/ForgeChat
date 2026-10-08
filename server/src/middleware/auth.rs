@@ -106,7 +106,7 @@ pub async fn require_auth(
             return Err(AppError::Unauthorized);
         }
     }
-    if is_revoked(&state, &claims).await {
+    if is_revoked(&state, &claims).await || crate::handlers::site_admin::is_banned(&state, claims.sub).await {
         return Err(AppError::Unauthorized);
     }
 

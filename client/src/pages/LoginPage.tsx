@@ -12,7 +12,8 @@ import { SavedAccountsLogin } from '../components/AccountSwitcher'
 const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
 
 export default function LoginPage() {
-  const [email, setEmail] = useState('')
+  // Dernière adresse utilisée : seul le mot de passe reste à saisir (ou à coller depuis le gestionnaire).
+  const [email, setEmail] = useState(() => { try { return localStorage.getItem('fc_last_email') ?? '' } catch { return '' } })
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [totpCode, setTotpCode] = useState('')
@@ -28,6 +29,7 @@ export default function LoginPage() {
     setLoading(true)
     try {
       await login(email, password, needTotp ? totpCode : undefined)
+      try { localStorage.setItem('fc_last_email', email.trim()) } catch { /* stockage indisponible */ }
       const redirect = searchParams.get('redirect')
       nav(redirect && redirect.startsWith('/') && !redirect.startsWith('//') ? redirect : '/friends')
     } catch (err: any) {
@@ -64,8 +66,8 @@ export default function LoginPage() {
                   value={email}
                   onChange={e => setEmail(e.target.value)}
                   required
-                  autoFocus
-                  autoComplete="email"
+                  autoFocus={!email}
+                  autoComplete="username"
                   placeholder={t('auth.emailPlaceholder')}
                   enterKeyHint="next"
                   inputMode="email"
@@ -81,6 +83,7 @@ export default function LoginPage() {
                     onChange={e => setPassword(e.target.value)}
                     required
                     autoComplete="current-password"
+                    autoFocus={!!email}
                     placeholder="••••••••"
                     enterKeyHint="done"
                     className="w-full px-3 py-2 pr-10 bg-fc-input rounded text-white text-base outline-none focus:ring-2 focus:ring-fc-accent"
