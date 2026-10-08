@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { ShieldAlert } from 'lucide-react'
+import { useT } from '../../i18n'
 
 const KEY = 'fc_nsfw_ok'
 
@@ -27,17 +28,18 @@ export function useNsfwOk(channelId: string | undefined): [boolean, () => void] 
 
 /** Écran de confirmation avant d'entrer dans un salon réservé aux adultes (comme Discord). */
 export default function NsfwGate({ name, onConfirm, onBack }: { name: string; onConfirm: () => void; onBack: () => void }) {
+  const t = useT()
   return (
     <div className="flex h-full items-center justify-center bg-fc-chat p-6">
       <div role="alertdialog" aria-labelledby="nsfw-titre" className="max-w-md text-center space-y-4">
         <ShieldAlert size={48} className="mx-auto text-fc-red" aria-hidden />
-        <h2 id="nsfw-titre" className="text-xl font-bold text-white">Salon réservé aux adultes</h2>
+        <h2 id="nsfw-titre" className="text-xl font-bold text-white">{t('nsfw.title')}</h2>
         <p className="text-sm text-fc-muted">
-          « {name} » peut contenir du contenu réservé aux plus de 18 ans. Confirme que tu es majeur et que tu acceptes de voir ce contenu.
+          {t('nsfw.body', { name })}
         </p>
         <div className="flex justify-center gap-3">
-          <button onClick={onBack} className="px-4 py-2 rounded bg-fc-hover text-white text-sm">Non, retour</button>
-          <button onClick={onConfirm} className="px-4 py-2 rounded bg-fc-red text-white text-sm font-medium">J’ai plus de 18 ans, continuer</button>
+          <button onClick={onBack} className="px-4 py-2 rounded bg-fc-hover text-white text-sm">{t('nsfw.back')}</button>
+          <button onClick={onConfirm} className="px-4 py-2 rounded bg-fc-red text-white text-sm font-medium">{t('nsfw.confirm')}</button>
         </div>
       </div>
     </div>

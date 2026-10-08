@@ -2,6 +2,7 @@
 // en.ts peut l'omettre, la traduction retombe alors sur le français.
 import { communityFr } from './community.ts'
 import * as messaging from './parts/messaging.ts'
+import * as chrome from './parts/chrome.ts'
 import * as ai from './parts/ai.ts'
 import { profileFr } from './profileFr.ts'
 import { socialFr } from './socialFr.ts'
@@ -15,6 +16,7 @@ export const fr = {
   ...comfortFr,
   ...voiceLotFr,
   ...messaging.fr,
+  ...chrome.fr,
   ...remoteSupportFr,
   ...ai.fr,
   // --- Connexion, inscription, mot de passe oublié ---

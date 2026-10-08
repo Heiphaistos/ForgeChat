@@ -8,6 +8,7 @@ import { useNavigate } from 'react-router-dom'
 import api, { mediaUrl } from '../../api/client'
 import { channelPreview } from '../../e2e/channels'
 import type { EncPayload } from '../../e2e/crypto'
+import { useT, t as tr } from '../../i18n'
 
 interface MentionItem {
   message_id: string
@@ -27,10 +28,10 @@ interface MentionItem {
 
 function timeAgo(iso: string): string {
   const diff = (Date.now() - new Date(iso).getTime()) / 1000
-  if (diff < 60) return 'à l\'instant'
-  if (diff < 3600) return `il y a ${Math.floor(diff / 60)}min`
-  if (diff < 86400) return `il y a ${Math.floor(diff / 3600)}h`
-  return `il y a ${Math.floor(diff / 86400)}j`
+  if (diff < 60) return tr('time.now')
+  if (diff < 3600) return tr('time.minAgo', { n: Math.floor(diff / 60) })
+  if (diff < 86400) return tr('time.hourAgo', { n: Math.floor(diff / 3600) })
+  return tr('time.dayAgo', { n: Math.floor(diff / 86400) })
 }
 
 function truncate(text: string, max = 80): string {
@@ -38,6 +39,7 @@ function truncate(text: string, max = 80): string {
 }
 
 export default function NotificationBell() {
+  const t = useT()
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
   const nav = useNavigate()
@@ -78,8 +80,8 @@ export default function NotificationBell() {
         className={`min-w-[44px] min-h-[44px] md:min-w-0 md:min-h-0 flex items-center justify-center p-1.5 rounded hover:bg-fc-hover transition relative ${
           open ? 'text-white bg-fc-hover' : 'text-fc-muted hover:text-white'
         }`}
-        title={`Mentions (${count})`}
-        aria-label={count > 0 ? `Mentions — ${count} non lu${count > 1 ? 'es' : 'e'}` : 'Mentions'}
+        title={t('mentions.titleCount', { n: count })}
+        aria-label={count > 0 ? t(count > 1 ? 'mentions.unread.many' : 'mentions.unread.one', { n: count }) : t('mentions.title')}
         aria-expanded={open}
         aria-haspopup="dialog"
       >
@@ -99,23 +101,23 @@ export default function NotificationBell() {
           <div className="flex items-center justify-between px-4 py-3 border-b border-white/10">
             <div className="flex items-center gap-2">
               <AtSign size={14} className="text-fc-accent" aria-hidden />
-              <span className="text-sm font-semibold text-white">Mentions récentes</span>
+              <span className="text-sm font-semibold text-white">{t('mentions.recent')}</span>
             </div>
             <div className="flex items-center gap-1">
               <button
                 onClick={() => {
                   useUnread.getState().markAllRead()
                   qc.invalidateQueries({ queryKey: ['user_mentions'] })
-                  toast.success('Tout marqué comme lu')
+                  toast.success(t('mentions.markedAll'))
                   setOpen(false)
                 }}
-                aria-label="Tout marquer comme lu"
-                title="Tout marquer comme lu (serveurs, DMs, mentions)"
+                aria-label={t('mentions.markAll')}
+                title={t('mentions.markAllHint')}
                 className="p-1 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition"
               >
                 <CheckCheck size={14} />
               </button>
-              <button onClick={() => setOpen(false)} aria-label="Fermer les mentions" className="p-0.5 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition">
+              <button onClick={() => setOpen(false)} aria-label={t('mentions.close')} className="p-0.5 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition">
                 <X size={14} />
               </button>
             </div>
@@ -125,7 +127,7 @@ export default function NotificationBell() {
             {mentions.length === 0 ? (
               <div className="px-4 py-8 text-center">
                 <Bell size={28} className="text-fc-muted mx-auto mb-2 opacity-50" />
-                <p className="text-fc-muted text-sm">Aucune mention récente</p>
+                <p className="text-fc-muted text-sm">{t('mentions.empty')}</p>
               </div>
             ) : (
               <div className="divide-y divide-white/5">
@@ -149,7 +151,7 @@ export default function NotificationBell() {
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-1.5 mb-0.5">
                           <span className="text-xs font-semibold text-white">{m.author_username}</span>
-                          <span className="text-[10px] text-fc-muted">dans</span>
+                          <span className="text-[10px] text-fc-muted">{t('mentions.in')}</span>
                           <span className="flex items-center gap-0.5 text-[10px] text-fc-muted">
                             <Hash size={9} />
                             {m.channel_name}

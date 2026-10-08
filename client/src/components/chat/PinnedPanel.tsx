@@ -8,6 +8,7 @@ import { useFormatDate } from '../../hooks/useFormatDate'
 import { renderMarkdown } from '../../utils/markdown'
 import toast from 'react-hot-toast'
 import { openMessages } from '../../e2e/conversations'
+import { useT } from '../../i18n'
 
 interface Props {
   serverId: string
@@ -18,6 +19,7 @@ interface Props {
 
 export default function PinnedPanel({ serverId, channelId, channelName, onClose }: Props) {
   useEscapePanel(onClose)
+  const t = useT()
   const qc = useQueryClient()
   const nav = useNavigate()
   const { formatShortDate } = useFormatDate()
@@ -38,26 +40,26 @@ export default function PinnedPanel({ serverId, channelId, channelName, onClose 
       api.delete(`/servers/${serverId}/channels/${channelId}/messages/${msgId}/pin`),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['pinned', channelId] })
-      toast.success('Message désépinglé')
+      toast.success(t('pinned.unpinned'))
     },
-    onError: () => toast.error('Impossible de désépingler'),
+    onError: () => toast.error(t('pinned.unpinFailed')),
   })
 
   return (
     <div
       {...useSwipeRightToClose(onClose)}
       role="complementary"
-      aria-label={`Messages épinglés — #${channelName}`}
+      aria-label={t('pinned.aria', { channel: channelName })}
       className="absolute inset-0 z-10 md:relative md:inset-auto md:z-auto md:w-64 bg-fc-channel border-l border-fc-bg flex flex-col flex-shrink-0 panel-slide-right"
     >
       <div className="flex items-center justify-between px-4 py-3 border-b border-fc-bg">
         <div className="flex items-center gap-2">
           <Pin size={16} className="text-fc-accent" aria-hidden />
-          <span className="font-semibold text-white text-sm">Messages épinglés</span>
+          <span className="font-semibold text-white text-sm">{t('pinned.title')}</span>
         </div>
         <button
           onClick={onClose}
-          aria-label="Fermer les messages épinglés"
+          aria-label={t('pinned.close')}
           className="p-1 text-fc-muted hover:text-white rounded hover:bg-fc-hover transition"
         >
           <X size={16} aria-hidden />
@@ -66,15 +68,15 @@ export default function PinnedPanel({ serverId, channelId, channelName, onClose 
 
       <div className="flex-1 overflow-y-auto overscroll-contain p-3 space-y-3">
         {isLoading && (
-          <div className="text-center text-fc-muted text-sm py-6">Chargement...</div>
+          <div className="text-center text-fc-muted text-sm py-6">{t('pinned.loading')}</div>
         )}
 
         {!isLoading && pinned.length === 0 && (
           <div className="text-center py-8">
             <Pin size={32} className="mx-auto mb-2 text-fc-muted opacity-40" aria-hidden />
-            <p className="text-sm text-fc-muted">Aucun message épinglé</p>
+            <p className="text-sm text-fc-muted">{t('pinned.empty')}</p>
             <p className="text-xs text-fc-muted mt-1 opacity-70">
-              Survole un message → bouton pin
+              {t('pinned.emptyHint')}
             </p>
           </div>
         )}
@@ -83,7 +85,7 @@ export default function PinnedPanel({ serverId, channelId, channelName, onClose 
           <div
             key={msg.id}
             role="article"
-            aria-label={`Message de ${msg.author_username}`}
+            aria-label={t('pinned.messageOf', { user: msg.author_username })}
             onClick={() => jumpToMessage(msg.id)}
             className="bg-fc-bg rounded-lg p-3 border border-fc-hover group relative cursor-pointer hover:border-fc-accent/50 transition-colors"
           >
@@ -103,7 +105,7 @@ export default function PinnedPanel({ serverId, channelId, channelName, onClose 
 
             <button
               onClick={e => { e.stopPropagation(); unpin.mutate(msg.id) }}
-              aria-label={`Désépingler le message de ${msg.author_username}`}
+              aria-label={t('pinned.unpinOf', { user: msg.author_username })}
               className="absolute top-2 right-2 p-1 text-fc-muted hover:text-fc-red rounded opacity-100 md:opacity-0 md:group-hover:opacity-100 transition hover:bg-fc-hover"
             >
               <Trash2 size={12} aria-hidden />

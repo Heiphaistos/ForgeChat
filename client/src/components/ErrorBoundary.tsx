@@ -1,5 +1,6 @@
 import { Component, ReactNode } from 'react'
 import { reportReactCrash } from '../lib/errorReporter'
+import { t } from '../i18n'
 
 interface Props {
   children: ReactNode
@@ -38,14 +39,14 @@ export default class ErrorBoundary extends Component<Props, State> {
           className="flex flex-col items-center justify-center min-h-screen w-full gap-4 bg-fc-bg text-fc-text px-6 text-center"
         >
           <div className="text-5xl mb-2" aria-hidden>⚠️</div>
-          <h2 id="error-boundary-title" className="text-white text-xl font-semibold">Quelque chose a planté</h2>
+          <h2 id="error-boundary-title" className="text-white text-xl font-semibold">{t('crash.title')}</h2>
           <p className="text-fc-muted text-sm max-w-md">
-            Une erreur inattendue s'est produite. Vous pouvez essayer de réessayer ou recharger la page.
+            {t('crash.body')}
           </p>
           {process.env.NODE_ENV === 'development' && (
             <pre
               tabIndex={0}
-              aria-label="Message d'erreur technique"
+              aria-label={t('crash.technical')}
               className="text-xs text-red-400 bg-red-900/20 rounded-lg p-3 max-w-lg overflow-auto text-left max-h-48"
             >
               {this.state.error.message}
@@ -56,13 +57,13 @@ export default class ErrorBoundary extends Component<Props, State> {
               onClick={() => this.setState({ error: null })}
               className="px-4 py-2 rounded-lg border border-fc-hover text-fc-muted hover:text-white hover:border-fc-text transition text-sm"
             >
-              Réessayer
+              {t('crash.retry')}
             </button>
             <button
               onClick={() => window.location.reload()}
               className="px-4 py-2 rounded-lg bg-fc-accent hover:bg-indigo-500 text-white font-medium transition text-sm"
             >
-              Recharger la page
+              {t('crash.reload')}
             </button>
           </div>
         </div>
