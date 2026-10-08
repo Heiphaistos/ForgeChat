@@ -1,13 +1,19 @@
 import { useQuery } from '@tanstack/react-query'
 import api from '../api/client'
 
-/** Vrai pour l'administrateur du site (le compte de FORGECHAT_ADMIN_EMAIL). Le serveur tranche : 403 sinon. */
-export function useSiteAdmin(): boolean {
-  const { data } = useQuery<boolean>({
+interface SiteAdminInfo { admin: boolean; owner: boolean }
+
+/** Accès à l'administration : rôle « L-Patron » (le propriétaire du site l'a d'office). Le serveur tranche : 403 sinon. */
+export function useSiteAdminInfo(): SiteAdminInfo {
+  const { data } = useQuery<SiteAdminInfo>({
     queryKey: ['site-admin-me'],
-    queryFn: () => api.get('/admin/me').then(() => true, () => false),
+    queryFn: () => api.get('/admin/me').then(r => ({ admin: true, owner: !!r.data?.owner }), () => ({ admin: false, owner: false })),
     staleTime: 5 * 60_000,
     retry: false,
   })
-  return !!data
+  return data ?? { admin: false, owner: false }
+}
+
+export function useSiteAdmin(): boolean {
+  return useSiteAdminInfo().admin
 }

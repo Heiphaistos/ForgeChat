@@ -7,7 +7,7 @@ import api from '../api/client'
 import { useMobile } from '../contexts/MobileContext'
 import { intlLocale } from '../i18n'
 
-/** Signalements de messages privés (réservé au compte administrateur, FORGECHAT_ADMIN_EMAIL). */
+/** Signalements de messages privés (réservé au rôle L-Patron). */
 
 interface DmReport {
   id: string

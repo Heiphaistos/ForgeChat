@@ -1,11 +1,11 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ChevronLeft, Copy, Ban, LogOut, Trash2, Plus, Search } from 'lucide-react'
+import { ChevronLeft, Copy, Ban, LogOut, Trash2, Plus, Search, Crown } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api, { SERVER_URL } from '../api/client'
 import { useMobile } from '../contexts/MobileContext'
-import { useSiteAdmin } from '../hooks/useSiteAdmin'
+import { useSiteAdmin, useSiteAdminInfo } from '../hooks/useSiteAdmin'
 
 /** Administration du site : comptes, invitations, bannissements, réglages, journal. */
 
@@ -14,13 +14,13 @@ const TABS: [Tab, string][] = [['overview', 'Aperçu'], ['users', 'Comptes'], ['
 
 interface Overview {
   total_users: number; online_now: number; new_24h: number; new_7d: number; new_30d: number
-  banned: number; servers: number; messages: number; active_invites: number
+  banned: number; patrons: number; servers: number; messages: number; active_invites: number
   active_24h: number; active_7d: number; registration_mode: Mode
 }
 type Mode = 'open' | 'invite' | 'closed'
 interface AdminUser {
   id: string; username: string; discriminator: string; email: string; created_at: string; is_bot: boolean
-  is_site_admin: boolean; banned_at: string | null; ban_reason: string | null
+  is_owner: boolean; is_patron: boolean; banned_at: string | null; ban_reason: string | null
   invited_by: string | null; invite_note: string | null; last_seen: string | null; online: boolean
   server_count: number; message_count: number
 }
@@ -34,6 +34,7 @@ interface AuditEntry { id: number; action: string; detail: Record<string, unknow
 const fmt = (iso: string | null) => (iso ? new Date(iso).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' }) : '—')
 const MODES: Record<Mode, string> = { invite: 'Sur invitation (code obligatoire)', closed: 'Fermées (personne ne peut s’inscrire)', open: 'Ouvertes à tous (déconseillé)' }
 const ACTIONS: Record<string, string> = {
+  grant_patron: 'a donné le rôle L-Patron à', revoke_patron: 'a retiré le rôle L-Patron à',
   ban: 'a banni', unban: 'a débanni', force_logout: 'a déconnecté', create_invite: 'a créé une invitation',
   revoke_invite: 'a révoqué une invitation',   set_registration_mode: 'a changé le mode d’inscription',
 }
@@ -63,6 +64,7 @@ function OverviewTab() {
       <Stat label="Actifs sur 24 h" value={data.active_24h} hint={`${data.active_7d} sur 7 jours`} />
       <Stat label="Nouveaux (7 jours)" value={data.new_7d} hint={`${data.new_24h} en 24 h · ${data.new_30d} en 30 j`} />
       <Stat label="Bannis" value={data.banned} />
+      <Stat label="L-Patrons" value={data.patrons + 1} hint="propriétaire inclus" />
       <Stat label="Serveurs" value={data.servers} />
       <Stat label="Messages" value={data.messages.toLocaleString('fr-FR')} />
       <Stat label="Invitations actives" value={data.active_invites} />
@@ -89,6 +91,7 @@ function UserDetail({ id }: { id: string }) {
 }
 
 function UsersTab() {
+  const { owner } = useSiteAdminInfo()
   const qc = useQueryClient()
   const [q, setQ] = useState('')
   const [filter, setFilter] = useState('all')
@@ -102,6 +105,7 @@ function UsersTab() {
   const fail = (e: any) => toast.error(e?.response?.data?.error ?? 'Action impossible')
   const ban = useMutation({ mutationFn: ({ id, reason }: { id: string; reason: string }) => api.post(`/admin/users/${id}/ban`, { reason }), onSuccess: () => { toast.success('Compte banni'); refresh() }, onError: fail })
   const unban = useMutation({ mutationFn: (id: string) => api.delete(`/admin/users/${id}/ban`), onSuccess: () => { toast.success('Compte débanni'); refresh() }, onError: fail })
+  const setPatron = useMutation({ mutationFn: ({ id, patron }: { id: string; patron: boolean }) => api.put(`/admin/users/${id}/patron`, { patron }), onSuccess: () => { toast.success('Rôle mis à jour'); refresh() }, onError: fail })
   const logout = useMutation({ mutationFn: (id: string) => api.post(`/admin/users/${id}/logout`), onSuccess: () => { toast.success('Appareils déconnectés'); refresh() }, onError: fail })
 
   return (
@@ -113,7 +117,7 @@ function UsersTab() {
         </div>
         <select value={filter} onChange={e => setFilter(e.target.value)} className="px-3 py-2 bg-fc-input rounded text-white text-sm outline-none">
           <option value="all">Tous</option><option value="online">Connectés</option><option value="recent">Récents (7 j)</option>
-          <option value="banned">Bannis</option>
+          <option value="banned">Bannis</option><option value="patrons">L-Patrons</option>
         </select>
         <span className="text-sm text-fc-muted">{data?.total ?? 0} compte(s)</span>
       </div>
@@ -126,7 +130,8 @@ function UsersTab() {
               <div className="min-w-0 flex-1 basis-48">
                 <div className="text-white text-sm font-medium truncate">
                   {u.username}
-                  {u.is_site_admin && <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded bg-fc-accent/20 text-fc-accent">ADMIN</span>}
+                  {u.is_owner ? <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded bg-yellow-500/20 text-yellow-400">PROPRIÉTAIRE</span>
+                    : u.is_patron && <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded bg-fc-accent/20 text-fc-accent">L-PATRON</span>}
                   {u.banned_at && <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded bg-red-500/20 text-red-400">BANNI</span>}
                   {u.is_bot && <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded bg-fc-hover text-fc-muted">BOT</span>}
                 </div>
@@ -143,13 +148,17 @@ function UsersTab() {
               <div className="flex gap-1" onClick={e => e.stopPropagation()}>
                 {u.banned_at ? (
                   <button onClick={() => unban.mutate(u.id)} className="px-2 py-1 text-xs rounded bg-green-600/20 text-green-400 hover:bg-green-600/30">Débannir</button>
-                ) : !u.is_site_admin && (
+                ) : !u.is_patron && (
                   <button onClick={() => { const reason = window.prompt(`Bannir ${u.username} ? Motif (facultatif) :`); if (reason !== null) ban.mutate({ id: u.id, reason }) }}
                     className="p-1.5 rounded text-red-400 hover:bg-red-500/20" title="Bannir" aria-label={`Bannir ${u.username}`}><Ban size={15} /></button>
                 )}
                 {!u.is_bot && (
                   <button onClick={() => { if (window.confirm(`Déconnecter ${u.username} de tous ses appareils ?`)) logout.mutate(u.id) }}
                     className="p-1.5 rounded text-fc-muted hover:text-white hover:bg-fc-hover" title="Déconnecter partout" aria-label={`Déconnecter ${u.username}`}><LogOut size={15} /></button>
+                )}
+                {owner && !u.is_owner && !u.is_bot && !u.banned_at && (
+                  <button onClick={() => { if (window.confirm(u.is_patron ? `Retirer le rôle L-Patron à ${u.username} ?` : `Donner le rôle L-Patron à ${u.username} ? Il aura accès à toute l’administration.`)) setPatron.mutate({ id: u.id, patron: !u.is_patron }) }}
+                    className={`p-1.5 rounded hover:bg-fc-hover ${u.is_patron ? 'text-yellow-400' : 'text-fc-muted hover:text-white'}`} title={u.is_patron ? 'Retirer le rôle L-Patron' : 'Donner le rôle L-Patron'} aria-label="Rôle L-Patron"><Crown size={15} /></button>
                 )}
               </div>
             </div>

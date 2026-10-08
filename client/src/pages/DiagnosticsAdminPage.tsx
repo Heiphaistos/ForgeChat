@@ -7,7 +7,7 @@ import api from '../api/client'
 import { useMobile } from '../contexts/MobileContext'
 import { intlLocale } from '../i18n'
 
-/** Rapports d'erreurs des applis (réservé au compte administrateur, FORGECHAT_ADMIN_EMAIL). */
+/** Rapports d'erreurs des applis (réservé au rôle L-Patron). */
 
 interface ReportSummary {
   id: string
