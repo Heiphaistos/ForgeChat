@@ -54,6 +54,15 @@ describe('manifeste du serveur', () => {
     expect(parseManifest(null, MANIFEST)).toBeNull()
   })
 
+  it('iOS : lit l’IPA du manifeste, jamais l’APK', () => {
+    const ipa = 'https://chat.exemple.org/desktop/ForgeChat-1.2.0.ipa'
+    const both = { version: '1.2.0', platforms: { android: { url: APK, sha256: SHA }, ios: { url: ipa, sha256: SHA } } }
+    expect(parseManifest(both, MANIFEST, 'ios')).toEqual({ version: '1.2.0', url: ipa, sha256: SHA })
+    expect(parseManifest(both, MANIFEST)).toEqual({ version: '1.2.0', url: APK, sha256: SHA })
+    expect(parseManifest({ ...both, platforms: { ios: { url: APK, sha256: SHA } } }, MANIFEST, 'ios')).toBeNull()
+    expect(parseManifest({ ...both, platforms: { android: both.platforms.android } }, MANIFEST, 'ios')).toBeNull()
+  })
+
   it('au plus toutes les 3 h (le processus reste vivant des jours : pas d’attente d’un démarrage à froid)', () => {
     expect(CHECK_INTERVAL_MS).toBe(3 * 3600_000)
     const now = 1_800_000_000_000

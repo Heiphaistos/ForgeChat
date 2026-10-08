@@ -301,6 +301,7 @@ export const fr = {
   'conv.channelFallback': 'salon',
   'conv.follow': 'Suivre ce salon d’annonces',
   'conv.pins': 'Messages épinglés',
+  'conv.more': "Plus d'actions",
   'conv.search': 'Rechercher dans la conversation',
   'conv.members': 'Membres',
   'conv.channelPlaceholder': 'Envoyer un message dans #{name}',

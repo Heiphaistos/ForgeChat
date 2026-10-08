@@ -46,26 +46,29 @@ export function compareVersions(a: string, b: string): number {
  * Lit le manifeste `{ version, platforms: { android: { url, sha256 } } }`. N'accepte qu'un numéro
  * X.Y.Z et un APK servi en HTTPS par le même serveur, dans son dossier /desktop/.
  */
-export function parseManifest(json: unknown, manifestUrl: string): AvailableUpdate | null {
+export type UpdatePlatform = 'android' | 'ios'
+
+export function parseManifest(json: unknown, manifestUrl: string, platform: UpdatePlatform = 'android'): AvailableUpdate | null {
   if (!json || typeof json !== 'object') return null
   const r = json as Record<string, unknown>
   if (typeof r.version !== 'string') return null
   const parsed = parseVersion(r.version)
   if (!parsed) return null
-  const android = (r.platforms as Record<string, unknown> | undefined)?.android as Record<string, unknown> | undefined
-  if (!android || typeof android.url !== 'string' || typeof android.sha256 !== 'string') return null
-  if (!/^[0-9a-f]{64}$/i.test(android.sha256)) return null
+  // iOS : l'IPA du même manifeste (installée par AltStore / SideStore, installer.ts).
+  const entry = (r.platforms as Record<string, unknown> | undefined)?.[platform] as Record<string, unknown> | undefined
+  if (!entry || typeof entry.url !== 'string' || typeof entry.sha256 !== 'string') return null
+  if (!/^[0-9a-f]{64}$/i.test(entry.sha256)) return null
   let url: URL
   try {
-    url = new URL(android.url, manifestUrl)
+    url = new URL(entry.url, manifestUrl)
   } catch {
     return null
   }
   const base = new URL(manifestUrl)
-  if (url.protocol !== 'https:' || url.host !== base.host || !url.pathname.startsWith('/desktop/') || !url.pathname.endsWith('.apk')) {
+  if (url.protocol !== 'https:' || url.host !== base.host || !url.pathname.startsWith('/desktop/') || !url.pathname.endsWith(platform === 'ios' ? '.ipa' : '.apk')) {
     return null
   }
-  return { version: parsed.join('.'), url: url.href, sha256: android.sha256.toLowerCase() }
+  return { version: parsed.join('.'), url: url.href, sha256: entry.sha256.toLowerCase() }
 }
 
 export function isDue(lastCheckAt: number, now: number): boolean {
@@ -80,6 +83,7 @@ export async function fetchAvailableUpdate(
   manifestUrl: string,
   currentVersion: string,
   fetchImpl: typeof fetch = fetch,
+  platform: UpdatePlatform = 'android',
 ): Promise<AvailableUpdate | null> {
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS)
@@ -93,7 +97,7 @@ export async function fetchAvailableUpdate(
     // 404 : aucune version publiée pour l'instant.
     if (res.status === 404) return null
     if (!res.ok) throw new Error(`le serveur a répondu ${res.status}`)
-    const update = parseManifest(await res.json(), manifestUrl)
+    const update = parseManifest(await res.json(), manifestUrl, platform)
     return update && compareVersions(update.version, currentVersion) > 0 ? update : null
   } finally {
     clearTimeout(timer)

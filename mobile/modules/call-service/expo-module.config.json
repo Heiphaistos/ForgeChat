@@ -1,6 +1,9 @@
 {
-  "platforms": ["android"],
+  "platforms": ["android", "apple"],
   "android": {
     "modules": ["com.forgechat.callservice.CallServiceModule"]
+  },
+  "apple": {
+    "modules": ["ForgeCallServiceModule"]
   }
 }

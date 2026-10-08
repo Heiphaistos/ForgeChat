@@ -300,6 +300,7 @@ export const en: Partial<Record<Key, string>> = {
   'conv.channelFallback': 'channel',
   'conv.follow': 'Follow this announcement channel',
   'conv.pins': 'Pinned messages',
+  'conv.more': 'More actions',
   'conv.search': 'Search in conversation',
   'conv.members': 'Members',
   'conv.channelPlaceholder': 'Message #{name}',

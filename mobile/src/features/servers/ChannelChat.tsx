@@ -6,7 +6,7 @@ import { serversApi } from '@/api/servers'
 import { IconButton } from '@/components/ui'
 import { ChannelLock } from '@/e2e/ChannelLock'
 import { ChatView } from '@/features/chat/ChatView'
-import { DisappearingButton } from '@/features/chat/DisappearingButton'
+import { HeaderMenu } from '@/features/chat/HeaderMenu'
 import { pinsParams } from '@/features/chat/pins'
 import { useT } from '@/i18n'
 import { qk } from '@/lib/queryClient'
@@ -55,17 +55,18 @@ export function ChannelActions({ serverId, channelId, name, isAnnouncement }: { 
   return (
     <View style={{ flexDirection: 'row' }}>
       <ChannelLock serverId={serverId} channelId={channelId} />
-      <DisappearingButton kind="channel" id={channelId} serverId={serverId} />
-      {isAnnouncement ? (
-        <IconButton
-          icon="megaphone-outline"
-          label={t('conv.follow')}
-          onPress={() => router.push({ pathname: '/server/[serverId]/follow', params: { serverId, channelId, name } })}
-        />
-      ) : null}
-      <IconButton icon="pin-outline" label={t('conv.pins')} onPress={() => router.push({ pathname: '/pins', params: ref })} />
-      <IconButton icon="search-outline" label={t('conv.search')} onPress={() => router.push({ pathname: '/search', params: ref })} />
       <IconButton icon="people-outline" label={t('conv.members')} onPress={() => router.push(`/server/${serverId}/members`)} />
+      <HeaderMenu
+        title={`# ${name}`}
+        disappearing={{ kind: 'channel', id: channelId, serverId }}
+        actions={[
+          { label: t('conv.search'), icon: 'search-outline', onPress: () => router.push({ pathname: '/search', params: ref }) },
+          { label: t('conv.pins'), icon: 'pin-outline', onPress: () => router.push({ pathname: '/pins', params: ref }) },
+          ...(isAnnouncement
+            ? [{ label: t('conv.follow'), icon: 'megaphone-outline' as const, onPress: () => router.push({ pathname: '/server/[serverId]/follow', params: { serverId, channelId, name } }) }]
+            : []),
+        ]}
+      />
     </View>
   )
 }

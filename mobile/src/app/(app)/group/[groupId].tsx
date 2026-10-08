@@ -7,7 +7,7 @@ import { ErrorState, IconButton } from '@/components/ui'
 import { ChatView } from '@/features/chat/ChatView'
 import { pinsParams } from '@/features/chat/pins'
 import { E2EBadge } from '@/e2e/E2EBadge'
-import { DisappearingButton } from '@/features/chat/DisappearingButton'
+import { HeaderMenu } from '@/features/chat/HeaderMenu'
 import { rememberConvName } from '@/e2e/searchIndex'
 import { useT } from '@/i18n'
 import { errorMessage } from '@/lib/http'
@@ -51,12 +51,12 @@ export default function GroupScreen() {
       <Stack.Screen
         options={{
           headerTitle: () => (
-            <View>
+            <View style={{ flexShrink: 1 }}>
               <Text style={{ color: colors.text, fontWeight: '700', fontSize: font.md }} numberOfLines={1}>
                 {name}
               </Text>
               {inCall ? (
-                <Text style={{ color: colors.success, fontSize: font.xs }}>{t(inCall > 1 ? 'conv.groupInCallMany' : 'conv.groupInCall', { n: inCall })}</Text>
+                <Text style={{ color: colors.success, fontSize: font.xs }} numberOfLines={1}>{t(inCall > 1 ? 'conv.groupInCallMany' : 'conv.groupInCall', { n: inCall })}</Text>
               ) : group.data ? (
                 <Text style={{ color: colors.textMuted, fontSize: font.xs }}>{t('conv.groupMembers', { n: group.data.members.length })}</Text>
               ) : null}
@@ -65,19 +65,16 @@ export default function GroupScreen() {
           headerRight: () => (
             <View style={{ flexDirection: 'row' }}>
               <E2EBadge kind="group" id={ids.groupId} />
-              <DisappearingButton kind="group" id={ids.groupId} />
-              <IconButton
-                icon="pin-outline"
-                label={t('conv.pins')}
-                onPress={() => router.push({ pathname: '/pins', params: pinsParams({ kind: 'group', groupId: ids.groupId }) })}
-              />
-              <IconButton icon="search-outline" label={t('conv.search')} onPress={() => router.push({ pathname: '/search', params: pinsParams({ kind: 'group', groupId: ids.groupId }) })} />
               <IconButton icon="call-outline" label={t(inCall ? 'conv.joinGroupCall' : 'conv.groupVoiceCall')} onPress={() => void call('voice')} />
               <IconButton icon="videocam-outline" label={t(inCall ? 'conv.joinWithCamera' : 'conv.groupVideoCall')} onPress={() => void call('video')} />
-              <IconButton
-                icon="people-outline"
-                label={t('conv.manageGroup')}
-                onPress={() => router.push({ pathname: '/group/manage/[groupId]', params: { groupId: ids.groupId } })}
+              <HeaderMenu
+                title={name}
+                disappearing={{ kind: 'group', id: ids.groupId }}
+                actions={[
+                  { label: t('conv.search'), icon: 'search-outline', onPress: () => router.push({ pathname: '/search', params: pinsParams({ kind: 'group', groupId: ids.groupId }) }) },
+                  { label: t('conv.pins'), icon: 'pin-outline', onPress: () => router.push({ pathname: '/pins', params: pinsParams({ kind: 'group', groupId: ids.groupId }) }) },
+                  { label: t('conv.manageGroup'), icon: 'people-outline', onPress: () => router.push({ pathname: '/group/manage/[groupId]', params: { groupId: ids.groupId } }) },
+                ]}
               />
             </View>
           ),

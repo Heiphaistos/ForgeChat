@@ -11,7 +11,7 @@ import { promptSupport } from '@/features/chat/SupportCard'
 import { pinsParams } from '@/features/chat/pins'
 import { E2EBadge } from '@/e2e/E2EBadge'
 import { rememberConvName } from '@/e2e/searchIndex'
-import { DisappearingButton } from '@/features/chat/DisappearingButton'
+import { HeaderMenu } from '@/features/chat/HeaderMenu'
 import { useT, type Key } from '@/i18n'
 import { errorMessage } from '@/lib/http'
 import { isUuid, useRouteParams } from '@/lib/params'
@@ -72,12 +72,12 @@ export default function DmScreen() {
       <Stack.Screen
         options={{
           headerTitle: () => (
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexShrink: 1 }}>
               <Avatar uri={summary && !summary.is_group ? summary.avatar : null} name={name} size={28} userId={otherId} showStatus={!!otherId} status={status} />
-              <View>
-                <UserName userId={otherId} name={name} style={{ color: colors.text, fontWeight: '700', fontSize: font.md }} />
+              <View style={{ flexShrink: 1 }}>
+                <UserName userId={otherId} name={name} numberOfLines={1} style={{ color: colors.text, fontWeight: '700', fontSize: font.md }} />
                 {richText(activity, t) ? (
-                  <RichStatusText activity={activity} style={{ fontSize: font.xs, maxWidth: 180 }} />
+                  <RichStatusText activity={activity} style={{ fontSize: font.xs }} />
                 ) : STATUS_LABEL[status] ? (
                   <Text style={{ color: colors.textMuted, fontSize: font.xs }}>{t(STATUS_LABEL[status])}</Text>
                 ) : null}
@@ -87,20 +87,21 @@ export default function DmScreen() {
           headerRight: () => (
             <View style={{ flexDirection: 'row' }}>
               <E2EBadge kind="dm" id={ids.dmId} />
-              <DisappearingButton kind="dm" id={ids.dmId} />
-              <IconButton
-                icon="pin-outline"
-                label={t('conv.pins')}
-                onPress={() => router.push({ pathname: '/pins', params: pinsParams({ kind: 'dm', dmId: ids.dmId }) })}
-              />
-              <IconButton icon="help-buoy-outline" label={t('rs.button')} onPress={support} />
-              <IconButton icon="search-outline" label={t('conv.search')} onPress={() => router.push({ pathname: '/search', params: pinsParams({ kind: 'dm', dmId: ids.dmId }) })} />
               {otherId ? (
                 <>
                   <IconButton icon="call-outline" label={t('conv.voiceCall')} onPress={() => void call('voice')} />
                   <IconButton icon="videocam-outline" label={t('conv.videoCall')} onPress={() => void call('video')} />
                 </>
               ) : null}
+              <HeaderMenu
+                title={name}
+                disappearing={{ kind: 'dm', id: ids.dmId }}
+                actions={[
+                  { label: t('conv.search'), icon: 'search-outline', onPress: () => router.push({ pathname: '/search', params: pinsParams({ kind: 'dm', dmId: ids.dmId }) }) },
+                  { label: t('conv.pins'), icon: 'pin-outline', onPress: () => router.push({ pathname: '/pins', params: pinsParams({ kind: 'dm', dmId: ids.dmId }) }) },
+                  { label: t('rs.button'), icon: 'help-buoy-outline', onPress: support },
+                ]}
+              />
             </View>
           ),
         }}

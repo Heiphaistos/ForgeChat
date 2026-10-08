@@ -18,6 +18,17 @@ const mod = Platform.OS === 'android' ? requireOptionalNativeModule<UpdateNative
 /** null : iOS, ou build sans le module natif à jour (repli : téléchargement par le navigateur). */
 export const updateNative: UpdateNative | null = mod && typeof mod.downloadUpdate === 'function' ? mod : null
 
+/** iOS : AltStore puis SideStore installent l'IPA (même signature personnelle) ; sinon, page de l'IPA. */
+async function openIpa(url: string) {
+  const q = encodeURIComponent(url)
+  for (const link of [`altstore://install?url=${q}`, `sidestore://install?url=${q}`, url]) {
+    try {
+      await Linking.openURL(link)
+      return
+    } catch { /* appli absente : lien suivant */ }
+  }
+}
+
 /**
  * Remet l'APK vérifié dans Téléchargements ; l'utilisateur l'installe d'un appui depuis le gestionnaire
  * de fichiers (pas de permission REQUEST_INSTALL_PACKAGES : HyperOS 3 refuse alors l'installation).
@@ -40,6 +51,7 @@ export async function startUpdate(native: UpdateNative | null = updateNative): P
   const { update, phase } = useUpdate.getState()
   if (!update || phase === 'downloading') return
   if (!native) {
+    if (Platform.OS === 'ios') return void openIpa(update.url)
     void Linking.openURL(update.url).catch(() => undefined)
     return
   }

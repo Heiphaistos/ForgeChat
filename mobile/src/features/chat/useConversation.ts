@@ -25,6 +25,7 @@ import {
 } from './cache'
 import { AttachmentUploadError } from './sendErrors'
 import { e2eErrorText } from '@/e2e/conversations'
+import { useAccountKey } from '@/e2e/accountKey'
 
 /** Erreur de chiffrement (clé en attente, verrouillée, appli à mettre à jour) en texte lisible. */
 const withE2EMessage = (e: unknown) => {
@@ -79,7 +80,28 @@ export function useConversation(ref: ConversationRef) {
     queryFn: ({ pageParam, signal }) => messagesApi.list(stableRef, pageParam, signal),
     getNextPageParam: (last) => (last.length < LIMITS.pageSize ? undefined : last[0]?.id),
     staleTime: Infinity, // le WebSocket maintient le cache ; invalidé à la reconnexion
+    // Réseau qui revient lentement (sortie de veille, changement wifi/4G) : 4 essais espacés
+    // (1, 2, 4, 8 s) au lieu de 2 en 3 s, sinon l'écran restait sur une erreur jusqu'au retour.
+    retry: (n, e) => !(e instanceof ApiError && e.status >= 400 && e.status < 500) && n < 4,
   })
+
+  // Messages restés « clé en attente » alors que la clé de compte est prête : clés pas encore
+  // reçues, ou lecture des clés coupée par le réseau. On relit quelques fois (4, 8, 12 s) au lieu
+  // d'attendre que l'utilisateur quitte et rouvre la conversation.
+  const keyReady = useAccountKey((s) => s.status === 'ready')
+  const locked = useMemo(() => !!query.data?.pages.some((p) => p.some((m) => m.e2e === 'locked')), [query.data])
+  const heal = useRef({ id, tries: 0 })
+  const { isFetching, refetch } = query
+  useEffect(() => {
+    if (heal.current.id !== id) heal.current = { id, tries: 0 }
+    const h = heal.current
+    if (!locked || !keyReady || isFetching || h.tries >= 3) return
+    const timer = setTimeout(() => {
+      h.tries++
+      void refetch()
+    }, 4000 * (h.tries + 1))
+    return () => clearTimeout(timer)
+  }, [id, locked, keyReady, isFetching, refetch])
 
   const all = useMemo(() => flattenNewestFirst(query.data), [query.data])
   // Messages éphémères : masqués dès leur expiration, sans attendre la purge du serveur (chaque
