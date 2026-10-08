@@ -428,13 +428,14 @@ pub async fn join_server(
 
     // Vérifier que l'utilisateur n'est pas banni du serveur
     let is_banned = sqlx::query_scalar::<_, bool>(
-        "SELECT EXISTS(SELECT 1 FROM bans WHERE user_id=$1 AND server_id=$2)"
+        "SELECT EXISTS(SELECT 1 FROM bans WHERE user_id=$1 AND server_id=$2) AND NOT fc_is_god($1)"
     )
     .bind(claims.sub)
     .bind(server_id)
     .fetch_one(&state.db)
     .await?;
 
+    // El Patron n'est jamais banni d'un serveur (un ancien bannissement ne le retient pas).
     if is_banned {
         return Err(AppError::Forbidden);
     }

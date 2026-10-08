@@ -78,9 +78,10 @@ pub async fn sync_owner_email(state: &AppState) {
     lift_sanctions(state).await;
 }
 
-/// Un compte tout-puissant ne reste ni en timeout ni muet / sourd imposé (sanctions antérieures au rôle).
+/// Un compte tout-puissant ne reste ni banni d'un serveur, ni en timeout, ni muet / sourd imposé (sanctions antérieures au rôle).
 async fn lift_sanctions(state: &AppState) {
     let _ = sqlx::query("DELETE FROM user_timeouts WHERE fc_is_god(user_id)").execute(&state.db).await;
+    let _ = sqlx::query("DELETE FROM bans WHERE fc_is_god(user_id)").execute(&state.db).await;
     let _ = sqlx::query("UPDATE server_members SET voice_muted=false, voice_deafened=false WHERE (voice_muted OR voice_deafened) AND fc_is_god(user_id)")
         .execute(&state.db)
         .await;
