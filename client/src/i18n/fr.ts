@@ -1662,6 +1662,7 @@ export const fr = {
   'explore.members.other': '{n} membres',
   'explore.joinName': 'Rejoindre {name}',
   'explore.joining': 'Rejoindre...',
+  'explore.open': 'Ouvrir',
   'explore.join': 'Rejoindre',
   // --- Profil utilisateur ---
   'profile.collapse': 'Réduire',

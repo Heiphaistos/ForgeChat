@@ -191,7 +191,7 @@ export default function MainLayout() {
           <nav
             aria-label="Navigation"
             className={[
-              'flex h-full flex-shrink-0',
+              'flex flex-col h-full flex-shrink-0',
               'fixed inset-y-0 left-0 z-50',
               'md:static md:inset-auto md:z-auto',
               'transition-transform duration-300 ease-in-out will-change-transform',
@@ -204,17 +204,20 @@ export default function MainLayout() {
               navSwipeX.current = null
             }}
           >
-            <ServerSidebar />
-            <div
-              className="flex flex-col bg-fc-channel flex-shrink-0 h-full"
-              style={{ width: isMobile ? 'calc(100vw - 72px)' : `${sidebarWidth}px` }}
-            >
-              <div className="flex-1 overflow-hidden flex flex-col min-h-0">
-                <ChannelSidebar />
+            <div className="flex flex-1 min-h-0">
+              <ServerSidebar />
+              <div
+                className="flex flex-col bg-fc-channel flex-shrink-0 h-full"
+                style={{ width: isMobile ? 'calc(100vw - 72px)' : `${sidebarWidth}px` }}
+              >
+                <div className="flex-1 overflow-hidden flex flex-col min-h-0">
+                  <ChannelSidebar />
+                </div>
+                <VoiceBar />
               </div>
-              <VoiceBar />
-              <UserPanel onToggleActivity={toggleActivity} activityOpen={activityOpen} />
             </div>
+            {/* Profil sur toute la largeur (sous le rail des serveurs aussi) : pseudo et statut lisibles. */}
+            <UserPanel onToggleActivity={toggleActivity} activityOpen={activityOpen} />
           </nav>
 
           {/* Handle de redimensionnement sidebar — desktop uniquement */}

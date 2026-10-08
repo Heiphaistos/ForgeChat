@@ -1663,6 +1663,7 @@ export const en: Partial<Record<Key, string>> = {
   'explore.members.other': '{n} members',
   'explore.joinName': 'Join {name}',
   'explore.joining': 'Joining...',
+  'explore.open': 'Open',
   'explore.join': 'Join',
   // --- Profil utilisateur ---
   'profile.collapse': 'Show less',

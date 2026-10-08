@@ -30,6 +30,10 @@ export default function ExplorePage() {
     queryFn: () => api.get('/explore').then(r => r.data),
   })
 
+  // Serveurs dont je suis déjà membre : « Ouvrir » au lieu de « Rejoindre » (même cache que le rail).
+  const { data: mine = [] } = useQuery<{ id: string }[]>({ queryKey: ['servers'], queryFn: () => api.get('/servers').then(r => r.data) })
+  const memberOf = new Set(mine.map(m => m.id))
+
   const join = useMutation({
     mutationFn: (inviteCode: string) => api.post(`/servers/join/${inviteCode}`).then(r => r.data),
     onSuccess: (data) => {
@@ -102,7 +106,8 @@ export default function ExplorePage() {
               <ServerCard
                 key={s.id}
                 server={s}
-                onJoin={() => join.mutate(s.invite_code)}
+                onJoin={() => (memberOf.has(s.id) ? nav(`/servers/${s.id}`) : join.mutate(s.invite_code))}
+                isMember={memberOf.has(s.id)}
                 isJoining={join.isPending && join.variables === s.invite_code}
               />
             ))}
@@ -117,10 +122,12 @@ function ServerCard({
   server,
   onJoin,
   isJoining,
+  isMember,
 }: {
   server: PublicServer
   onJoin: () => void
   isJoining: boolean
+  isMember: boolean
 }) {
   const t = useT()
   return (
@@ -151,11 +158,11 @@ function ServerCard({
           <button
             onClick={onJoin}
             disabled={isJoining}
-            aria-label={t('explore.joinName', { name: server.name })}
+            aria-label={isMember ? `${t('explore.open')} ${server.name}` : t('explore.joinName', { name: server.name })}
             aria-busy={isJoining}
             className="px-3 py-1.5 bg-fc-accent hover:bg-indigo-500 text-white rounded-lg text-xs font-semibold transition disabled:opacity-50"
           >
-            {isJoining ? t('explore.joining') : t('explore.join')}
+            {isJoining ? t('explore.joining') : isMember ? t('explore.open') : t('explore.join')}
           </button>
         </div>
       </div>
