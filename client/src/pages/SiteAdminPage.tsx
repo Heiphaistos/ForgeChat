@@ -34,7 +34,7 @@ interface AuditEntry { id: number; action: string; detail: Record<string, unknow
 const fmt = (iso: string | null) => (iso ? new Date(iso).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' }) : '—')
 const MODES: Record<Mode, string> = { invite: 'Sur invitation (code obligatoire)', closed: 'Fermées (personne ne peut s’inscrire)', open: 'Ouvertes à tous (déconseillé)' }
 const ACTIONS: Record<string, string> = {
-  grant_patron: 'a donné le rôle L-Patron à', revoke_patron: 'a retiré le rôle L-Patron à',
+  grant_patron: 'a donné le rôle El Patron à', revoke_patron: 'a retiré le rôle El Patron à',
   ban: 'a banni', unban: 'a débanni', force_logout: 'a déconnecté', create_invite: 'a créé une invitation',
   revoke_invite: 'a révoqué une invitation',   set_registration_mode: 'a changé le mode d’inscription',
 }
@@ -64,7 +64,7 @@ function OverviewTab() {
       <Stat label="Actifs sur 24 h" value={data.active_24h} hint={`${data.active_7d} sur 7 jours`} />
       <Stat label="Nouveaux (7 jours)" value={data.new_7d} hint={`${data.new_24h} en 24 h · ${data.new_30d} en 30 j`} />
       <Stat label="Bannis" value={data.banned} />
-      <Stat label="L-Patrons" value={data.patrons + 1} hint="propriétaire inclus" />
+      <Stat label="El Patron" value={data.patrons + 1} hint="propriétaire inclus" />
       <Stat label="Serveurs" value={data.servers} />
       <Stat label="Messages" value={data.messages.toLocaleString('fr-FR')} />
       <Stat label="Invitations actives" value={data.active_invites} />
@@ -117,7 +117,7 @@ function UsersTab() {
         </div>
         <select value={filter} onChange={e => setFilter(e.target.value)} className="px-3 py-2 bg-fc-input rounded text-white text-sm outline-none">
           <option value="all">Tous</option><option value="online">Connectés</option><option value="recent">Récents (7 j)</option>
-          <option value="banned">Bannis</option><option value="patrons">L-Patrons</option>
+          <option value="banned">Bannis</option><option value="patrons">El Patron</option>
         </select>
         <span className="text-sm text-fc-muted">{data?.total ?? 0} compte(s)</span>
       </div>
@@ -131,7 +131,7 @@ function UsersTab() {
                 <div className="text-white text-sm font-medium truncate">
                   {u.username}
                   {u.is_owner ? <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded bg-yellow-500/20 text-yellow-400">PROPRIÉTAIRE</span>
-                    : u.is_patron && <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded bg-fc-accent/20 text-fc-accent">L-PATRON</span>}
+                    : u.is_patron && <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded bg-fc-accent/20 text-fc-accent">EL PATRON</span>}
                   {u.banned_at && <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded bg-red-500/20 text-red-400">BANNI</span>}
                   {u.is_bot && <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded bg-fc-hover text-fc-muted">BOT</span>}
                 </div>
@@ -157,8 +157,8 @@ function UsersTab() {
                     className="p-1.5 rounded text-fc-muted hover:text-white hover:bg-fc-hover" title="Déconnecter partout" aria-label={`Déconnecter ${u.username}`}><LogOut size={15} /></button>
                 )}
                 {owner && !u.is_owner && !u.is_bot && !u.banned_at && (
-                  <button onClick={() => { if (window.confirm(u.is_patron ? `Retirer le rôle L-Patron à ${u.username} ?` : `Donner le rôle L-Patron à ${u.username} ? Il aura accès à toute l’administration.`)) setPatron.mutate({ id: u.id, patron: !u.is_patron }) }}
-                    className={`p-1.5 rounded hover:bg-fc-hover ${u.is_patron ? 'text-yellow-400' : 'text-fc-muted hover:text-white'}`} title={u.is_patron ? 'Retirer le rôle L-Patron' : 'Donner le rôle L-Patron'} aria-label="Rôle L-Patron"><Crown size={15} /></button>
+                  <button onClick={() => { if (window.confirm(u.is_patron ? `Retirer le rôle El Patron à ${u.username} ?` : `Donner le rôle El Patron à ${u.username} ? Il aura accès à toute l’administration.`)) setPatron.mutate({ id: u.id, patron: !u.is_patron }) }}
+                    className={`p-1.5 rounded hover:bg-fc-hover ${u.is_patron ? 'text-yellow-400' : 'text-fc-muted hover:text-white'}`} title={u.is_patron ? 'Retirer le rôle El Patron' : 'Donner le rôle El Patron'} aria-label="Rôle El Patron"><Crown size={15} /></button>
                 )}
               </div>
             </div>

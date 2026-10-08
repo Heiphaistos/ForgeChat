@@ -113,7 +113,7 @@ pub async fn get_server(
     let base_perms = roles.iter()
         .filter(|r| r.is_everyone || my_roles.contains(&r.id))
         .fold(0i64, |acc, r| acc | r.permissions);
-    let is_owner = server.owner_id == claims.sub;
+    let is_owner = server.owner_id == claims.sub || crate::handlers::site_admin::is_site_admin(&state, claims.sub).await;
     let lockdown = crate::handlers::automod::is_locked(&state, server_id).await?;
 
     let channels_json: Vec<serde_json::Value> = channels.iter().filter(|c| !forbidden.contains(&c.id)).map(|c| {
@@ -692,7 +692,8 @@ pub async fn kick_member(
         .bind(server_id)
         .fetch_one(&state.db)
         .await?;
-    if user_id == owner_id {
+    // Le propriétaire est intouchable, sauf pour El Patron (qui est lui-même intouchable : voir require_outranks).
+    if user_id == owner_id && !crate::handlers::site_admin::is_site_admin(&state, claims.sub).await {
         return Err(AppError::Forbidden);
     }
     require_outranks(&state, claims.sub, user_id, server_id).await?;
@@ -774,7 +775,8 @@ pub async fn ban_member(
         .bind(server_id)
         .fetch_one(&state.db)
         .await?;
-    if user_id == owner_id {
+    // Le propriétaire est intouchable, sauf pour El Patron (qui est lui-même intouchable : voir require_outranks).
+    if user_id == owner_id && !crate::handlers::site_admin::is_site_admin(&state, claims.sub).await {
         return Err(AppError::Forbidden);
     }
     require_outranks(&state, claims.sub, user_id, server_id).await?;
@@ -1119,6 +1121,14 @@ async fn is_server_owner(state: &AppState, user_id: Uuid, server_id: Uuid) -> Re
 /// timeout, changer ses rôles). Avant : un modérateur pouvait bannir les
 /// administrateurs. Le propriétaire n'est jamais une cible et passe partout.
 pub async fn require_outranks(state: &AppState, actor: Uuid, target: Uuid, server_id: Uuid) -> Result<()> {
+    // El Patron : jamais une cible (ni expulsion, ni bannissement, ni timeout, ni muet, ni déplacement) ;
+    // comme acteur, il passe au-dessus de tout le monde, propriétaire du serveur compris.
+    if crate::handlers::site_admin::is_site_admin(state, target).await {
+        return Err(AppError::Forbidden);
+    }
+    if crate::handlers::site_admin::is_site_admin(state, actor).await {
+        return Ok(());
+    }
     if is_server_owner(state, target, server_id).await? {
         return Err(AppError::Forbidden);
     }
@@ -1135,7 +1145,7 @@ pub async fn require_outranks(state: &AppState, actor: Uuid, target: Uuid, serve
 /// Un rôle ne peut être modifié, supprimé, donné ou retiré que s'il est
 /// strictement sous le rôle le plus haut de l'acteur.
 pub async fn require_role_below(state: &AppState, actor: Uuid, role_id: Uuid, server_id: Uuid) -> Result<()> {
-    if is_server_owner(state, actor, server_id).await? {
+    if is_server_owner(state, actor, server_id).await? || crate::handlers::site_admin::is_site_admin(state, actor).await {
         return Ok(());
     }
     let pos: Option<i32> = sqlx::query_scalar("SELECT position FROM roles WHERE id=$1 AND server_id=$2")
@@ -1234,7 +1244,7 @@ pub async fn require_owner(
     state: &AppState, user_id: Uuid, server_id: Uuid,
 ) -> Result<()> {
     let ok = sqlx::query_scalar::<_, bool>(
-        "SELECT EXISTS(SELECT 1 FROM server_members WHERE user_id=$1 AND server_id=$2 AND is_owner=true)"
+        "SELECT EXISTS(SELECT 1 FROM server_members WHERE user_id=$1 AND server_id=$2 AND (is_owner=true OR fc_is_god(user_id)))"
     )
     .bind(user_id)
     .bind(server_id)
@@ -1249,7 +1259,7 @@ pub async fn require_permission(
 ) -> Result<()> {
     use sqlx::Row;
     let row = sqlx::query(
-        "SELECT sm.is_owner,
+        "SELECT (sm.is_owner OR fc_is_god(sm.user_id)) AS is_owner,
                 COALESCE(BIT_OR(r.permissions), 0)
                 | COALESCE((SELECT permissions FROM roles WHERE server_id=$2 AND is_everyone=true), 0)
                 AS combined_perms
@@ -1257,7 +1267,7 @@ pub async fn require_permission(
          LEFT JOIN member_roles mr ON mr.user_id = sm.user_id AND mr.server_id = sm.server_id
          LEFT JOIN roles r ON r.id = mr.role_id
          WHERE sm.user_id = $1 AND sm.server_id = $2
-         GROUP BY sm.is_owner"
+         GROUP BY sm.is_owner, sm.user_id"
     )
     .bind(user_id)
     .bind(server_id)
@@ -1286,7 +1296,7 @@ pub async fn require_permission(
 pub async fn effective_permissions(state: &AppState, user_id: Uuid, server_id: Uuid) -> Result<i64> {
     use sqlx::Row;
     let row = sqlx::query(
-        "SELECT sm.is_owner,
+        "SELECT (sm.is_owner OR fc_is_god(sm.user_id)) AS is_owner,
                 COALESCE(BIT_OR(r.permissions), 0)
                 | COALESCE((SELECT permissions FROM roles WHERE server_id=$2 AND is_everyone=true), 0)
                 AS combined_perms
@@ -1294,7 +1304,7 @@ pub async fn effective_permissions(state: &AppState, user_id: Uuid, server_id: U
          LEFT JOIN member_roles mr ON mr.user_id = sm.user_id AND mr.server_id = sm.server_id
          LEFT JOIN roles r ON r.id = mr.role_id
          WHERE sm.user_id = $1 AND sm.server_id = $2
-         GROUP BY sm.is_owner"
+         GROUP BY sm.is_owner, sm.user_id"
     )
     .bind(user_id)
     .bind(server_id)

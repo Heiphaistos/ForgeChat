@@ -116,7 +116,7 @@ const tok2 = loginAgain.body.access_token
 ok((await api('POST', `/api/admin/users/${nonAdmin.id}/logout`, { token: adminToken })).status === 204, 'déconnexion forcée')
 ok((await api('GET', '/api/users/me', { token: tok2 })).status === 401, 'jeton coupé après déconnexion forcée')
 
-// ── Rôle « L-Patron » : seul le propriétaire l'attribue
+// ── Rôle « El Patron » : seul le propriétaire l'attribue
 const asLea = async () => (await api('POST', '/api/auth/login', { body: { email: nonAdmin.email, password: PASSWORD } })).body.access_token
 let leaTok = await asLea()
 ok((await api('GET', '/api/admin/me', { token: leaTok })).status === 403, 'sans le rôle, aucun accès à l’administration')
@@ -126,20 +126,41 @@ ok((await api('GET', '/api/admin/dm-reports', { token: leaTok })).status === 403
 ok((await api('PUT', `/api/admin/users/${nonAdmin.id}/patron`, { token: leaTok, body: { patron: true } })).status === 403, 'on ne peut pas se donner le rôle soi-même')
 const meOwner = (await api('GET', '/api/admin/me', { token: adminToken })).body
 ok(meOwner.owner === true, 'le propriétaire est reconnu comme tel')
-ok((await api('PUT', `/api/admin/users/${nonAdmin.id}/patron`, { token: adminToken, body: { patron: true } })).status === 204, 'le propriétaire donne le rôle L-Patron')
+ok((await api('PUT', `/api/admin/users/${nonAdmin.id}/patron`, { token: adminToken, body: { patron: true } })).status === 204, 'le propriétaire donne le rôle El Patron')
 const meLea = await api('GET', '/api/admin/me', { token: leaTok })
-ok(meLea.status === 200 && meLea.body.owner === false, 'le L-Patron accède à l’administration (sans être propriétaire)', JSON.stringify(meLea.body))
-ok((await api('GET', '/api/admin/users', { token: leaTok })).status === 200, 'le L-Patron liste les comptes')
+ok(meLea.status === 200 && meLea.body.owner === false, 'le El Patron accède à l’administration (sans être propriétaire)', JSON.stringify(meLea.body))
+ok((await api('GET', '/api/admin/users', { token: leaTok })).status === 200, 'le El Patron liste les comptes')
 const owner = (await api('GET', '/api/admin/users?filter=patrons', { token: adminToken })).body.users
 const ownerId = owner.find(u => u.is_owner)?.id
-ok(!!ownerId && owner.some(u => u.id === nonAdmin.id && u.is_patron && !u.is_owner), 'filtre « L-Patrons » : propriétaire et L-Patron listés')
+ok(!!ownerId && owner.some(u => u.id === nonAdmin.id && u.is_patron && !u.is_owner), 'filtre « El Patron » : propriétaire et El Patron listés')
 const other = await register('autre', (await api('POST', '/api/admin/invites', { token: adminToken, body: {} })).body.code)
-ok((await api('PUT', `/api/admin/users/${other.id}/patron`, { token: leaTok, body: { patron: true } })).status === 403, 'un L-Patron ne peut pas en nommer un autre')
-ok((await api('POST', `/api/admin/users/${ownerId}/ban`, { token: leaTok, body: {} })).status === 403, 'un L-Patron ne peut pas bannir le propriétaire')
-ok((await api('POST', `/api/admin/users/${nonAdmin.id}/ban`, { token: adminToken, body: {} })).status === 403, 'un L-Patron ne se bannit pas sans retrait préalable du rôle')
+ok((await api('PUT', `/api/admin/users/${other.id}/patron`, { token: leaTok, body: { patron: true } })).status === 403, 'un El Patron ne peut pas en nommer un autre')
+ok((await api('POST', `/api/admin/users/${ownerId}/ban`, { token: leaTok, body: {} })).status === 403, 'un El Patron ne peut pas bannir le propriétaire')
+ok((await api('POST', `/api/admin/users/${nonAdmin.id}/ban`, { token: adminToken, body: {} })).status === 403, 'un El Patron ne se bannit pas sans retrait préalable du rôle')
 ok((await api('PUT', `/api/admin/users/${ownerId}/patron`, { token: adminToken, body: { patron: false } })).status === 400, 'le rôle du propriétaire ne se retire pas')
+// ── Pleins pouvoirs : intouchables et tout-puissants sur un serveur de tiers dont ils ne sont que membres
+const invite = async () => (await api('POST', '/api/admin/invites', { token: adminToken, body: {} })).body.code
+const host = await register('hote', await invite())
+const plain = await register('simple', await invite())
+const srv = (await api('POST', '/api/servers', { token: host.token, body: { name: 'Jotunheim test' } })).body
+ok(!!srv?.id && !!srv.invite_code, 'serveur d’un tiers créé', JSON.stringify(srv))
+for (const tok of [adminToken, leaTok, plain.token]) await api('POST', `/api/servers/join/${srv.invite_code}`, { token: tok })
+const S = `/api/servers/${srv.id}`
+for (const [label, id] of [['propriétaire du site', ownerId], ['El Patron', nonAdmin.id]]) {
+  ok((await api('POST', `${S}/members/${id}/kick`, { token: host.token })).status === 403, `${label} : impossible à expulser`)
+  ok((await api('POST', `${S}/members/${id}/ban`, { token: host.token, body: {} })).status === 403, `${label} : impossible à bannir du serveur`)
+  ok((await api('POST', `${S}/members/${id}/timeout`, { token: host.token, body: { duration_minutes: 10 } })).status === 403, `${label} : impossible à mettre en timeout`)
+  ok((await api('PATCH', `${S}/members/${id}/voice`, { token: host.token, body: { mute: true } })).status === 403, `${label} : impossible à rendre muet`)
+  ok((await api('PATCH', `${S}/members/${id}/voice`, { token: host.token, body: { deafen: true } })).status === 403, `${label} : impossible à rendre sourd`)
+}
+ok((await api('PATCH', S, { token: leaTok, body: { name: 'Renommé par El Patron' } })).status === 200, 'El Patron (simple membre) renomme le serveur d’un tiers')
+ok((await api('POST', `${S}/members/${plain.id}/kick`, { token: adminToken })).status === 200, 'le propriétaire du site (simple membre) expulse un membre')
+ok((await api('POST', `${S}/members/${host.id}/timeout`, { token: leaTok, body: { duration_minutes: 5 } })).status === 200, 'El Patron peut mettre en timeout même le propriétaire du serveur')
+ok((await api('DELETE', `${S}/members/${host.id}/timeout`, { token: leaTok })).status === 200, '… et lever le timeout')
+
 ok((await api('PUT', `/api/admin/users/${nonAdmin.id}/patron`, { token: adminToken, body: { patron: false } })).status === 204, 'le propriétaire retire le rôle')
 ok((await api('GET', '/api/admin/me', { token: leaTok })).status === 403, 'rôle retiré : accès coupé aussitôt')
+ok((await api('POST', `${S}/members/${nonAdmin.id}/kick`, { token: host.token })).status === 200, 'rôle retiré : le compte redevient un simple membre (expulsable)')
 ok((await api('GET', '/api/admin/diagnostics', { token: leaTok })).status === 403, 'rôle retiré : rapports d’erreurs refusés')
 
 ok((await api('PUT', '/api/admin/settings', { token: adminToken, body: { registration_mode: 'closed' } })).status === 200, 'inscriptions fermées')

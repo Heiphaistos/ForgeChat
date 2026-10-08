@@ -142,7 +142,7 @@ pub async fn update_role(
     // haut, et on ne peut pas le hisser à son niveau ou au-dessus.
     crate::handlers::servers::require_role_below(&state, claims.sub, role_id, server_id).await?;
     if let Some(pos) = body.position {
-        let is_owner: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM servers WHERE id=$1 AND owner_id=$2)")
+        let is_owner: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM servers WHERE id=$1 AND owner_id=$2) OR fc_is_god($2)")
             .bind(server_id).bind(claims.sub).fetch_one(&state.db).await?;
         let top = crate::handlers::servers::top_role_position(&state, claims.sub, server_id).await?;
         if pos < 1 || (!is_owner && pos >= top) {
@@ -452,7 +452,7 @@ pub async fn reorder_roles(
         return Err(AppError::BadRequest("La liste doit contenir chaque rôle du serveur une fois".into()));
     }
 
-    let is_owner: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM servers WHERE id=$1 AND owner_id=$2)")
+    let is_owner: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM servers WHERE id=$1 AND owner_id=$2) OR fc_is_god($2)")
         .bind(server_id).bind(claims.sub).fetch_one(&state.db).await?;
     let top = if is_owner { i32::MAX } else {
         crate::handlers::servers::top_role_position(&state, claims.sub, server_id).await?

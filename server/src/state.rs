@@ -331,7 +331,7 @@ impl AppState {
         use sqlx::Row;
         let server_id = self.channel_server_id(channel_id).await?;
         let row = sqlx::query(
-            "SELECT sm.is_owner,
+            "SELECT (sm.is_owner OR fc_is_god(sm.user_id)) AS is_owner,
                     COALESCE(BIT_OR(r.permissions), 0)
                     | COALESCE((SELECT permissions FROM roles WHERE server_id=$2 AND is_everyone=true), 0)
                     AS combined_perms
@@ -339,7 +339,7 @@ impl AppState {
              LEFT JOIN member_roles mr ON mr.user_id = sm.user_id AND mr.server_id = sm.server_id
              LEFT JOIN roles r ON r.id = mr.role_id
              WHERE sm.user_id = $1 AND sm.server_id = $2
-             GROUP BY sm.is_owner"
+             GROUP BY sm.is_owner, sm.user_id"
         )
         .bind(user_id)
         .bind(server_id)
@@ -569,7 +569,7 @@ pub async fn channel_audience_among(db: &PgPool, channel_id: Uuid, candidates: &
 
     // Base : appartenance + permissions combinées (rôles + @everyone)
     let rows = sqlx::query(
-        "SELECT sm.user_id, sm.is_owner,
+        "SELECT sm.user_id, (sm.is_owner OR fc_is_god(sm.user_id)) AS is_owner,
                 COALESCE(BIT_OR(r.permissions), 0)
                 | COALESCE((SELECT permissions FROM roles WHERE server_id=$1 AND is_everyone=true), 0)
                 AS combined_perms
@@ -682,7 +682,7 @@ pub async fn hidden_channels(
 
     for (sid, channels) in by_server {
         let base = sqlx::query(
-            "SELECT sm.is_owner,
+            "SELECT (sm.is_owner OR fc_is_god(sm.user_id)) AS is_owner,
                     COALESCE(BIT_OR(r.permissions), 0)
                     | COALESCE((SELECT permissions FROM roles WHERE server_id=$2 AND is_everyone=true), 0)
                     AS combined_perms
@@ -690,7 +690,7 @@ pub async fn hidden_channels(
              LEFT JOIN member_roles mr ON mr.user_id = sm.user_id AND mr.server_id = sm.server_id
              LEFT JOIN roles r ON r.id = mr.role_id
              WHERE sm.user_id = $1 AND sm.server_id = $2
-             GROUP BY sm.is_owner"
+             GROUP BY sm.is_owner, sm.user_id"
         )
         .bind(user_id)
         .bind(sid)

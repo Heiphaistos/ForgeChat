@@ -7,7 +7,7 @@ import api from '../api/client'
 import { useMobile } from '../contexts/MobileContext'
 import { intlLocale } from '../i18n'
 
-/** Rapports d'erreurs des applis (réservé au rôle L-Patron). */
+/** Rapports d'erreurs des applis (réservé au rôle El Patron). */
 
 interface ReportSummary {
   id: string

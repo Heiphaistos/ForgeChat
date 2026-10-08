@@ -185,7 +185,8 @@ pub async fn create_timeout(
     if !is_member {
         return Err(AppError::BadRequest("Utilisateur non membre du serveur".into()));
     }
-    if is_owner {
+    // Le propriétaire d'un serveur est intouchable, sauf pour El Patron (require_outranks protège El Patron lui-même).
+    if is_owner && !crate::handlers::site_admin::is_site_admin(&state, claims.sub).await {
         return Err(AppError::Forbidden);
     }
     crate::handlers::servers::require_outranks(&state, claims.sub, user_id, server_id).await?;

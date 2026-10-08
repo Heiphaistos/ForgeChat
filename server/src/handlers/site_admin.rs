@@ -1,11 +1,11 @@
 //! Administration du site : inscription sur invitation, liste des comptes, bannissement global,
 //! réglages et journal des actions.
 //!
-//! L'administration est réservée au rôle de site « L-Patron ». Y accèdent :
+//! L'administration est réservée au rôle de site « El Patron ». Y accèdent :
 //! - le propriétaire du site, dont l'e-mail est `FORGECHAT_ADMIN_EMAIL` (`heiphaistos44@gmail.com` par
 //!   défaut), qui détient le rôle d'office ;
 //! - les comptes à qui le propriétaire a attribué le rôle (table `site_role_members`).
-//! Seul le propriétaire attribue ou retire le rôle : aucun L-Patron ne peut en nommer un autre.
+//! Seul le propriétaire attribue ou retire le rôle : aucun El Patron ne peut en nommer un autre.
 //! Les e-mails sont uniques et la création d'un compte se fait sur invitation.
 use axum::{
     extract::{Path, Query, State},
@@ -59,27 +59,38 @@ pub async fn is_owner(state: &AppState, user_id: Uuid) -> bool {
         .unwrap_or(false)
 }
 
-/// Détient le rôle « L-Patron » (le propriétaire l'a d'office) : accès à l'administration.
+/// Détient le rôle « El Patron » (le propriétaire l'a d'office) : accès à l'administration et pleins
+/// pouvoirs sur chaque serveur dont il est membre. Même fonction SQL que les calculs de permissions.
 pub async fn is_site_admin(state: &AppState, user_id: Uuid) -> bool {
-    sqlx::query_scalar::<_, bool>(
-        "SELECT NOT is_bot AND (lower(email) = $2
-                OR EXISTS(SELECT 1 FROM site_role_members r WHERE r.user_id = users.id AND r.role = 'l-patron'))
-         FROM users WHERE id=$1",
-    )
-    .bind(user_id)
-    .bind(admin_email())
-    .fetch_optional(&state.db)
-    .await
-    .ok()
-    .flatten()
-    .unwrap_or(false)
+    sqlx::query_scalar::<_, bool>("SELECT fc_is_god($1)")
+        .bind(user_id)
+        .fetch_one(&state.db)
+        .await
+        .unwrap_or(false)
+}
+
+/// Écrit l'e-mail du propriétaire là où la fonction SQL `fc_is_god` le lit (au démarrage).
+pub async fn sync_owner_email(state: &AppState) {
+    let _ = sqlx::query("INSERT INTO site_settings (key, value) VALUES ('owner_email', $1) ON CONFLICT (key) DO UPDATE SET value = $1")
+        .bind(admin_email())
+        .execute(&state.db)
+        .await;
+    lift_sanctions(state).await;
+}
+
+/// Un compte tout-puissant ne reste ni en timeout ni muet / sourd imposé (sanctions antérieures au rôle).
+async fn lift_sanctions(state: &AppState) {
+    let _ = sqlx::query("DELETE FROM user_timeouts WHERE fc_is_god(user_id)").execute(&state.db).await;
+    let _ = sqlx::query("UPDATE server_members SET voice_muted=false, voice_deafened=false WHERE (voice_muted OR voice_deafened) AND fc_is_god(user_id)")
+        .execute(&state.db)
+        .await;
 }
 
 pub async fn require_site_admin(state: &AppState, claims: &Claims) -> Result<()> {
     if is_site_admin(state, claims.sub).await { Ok(()) } else { Err(AppError::Forbidden) }
 }
 
-/// Réservé au propriétaire : attribution du rôle L-Patron.
+/// Réservé au propriétaire : attribution du rôle El Patron.
 async fn require_owner(state: &AppState, claims: &Claims) -> Result<()> {
     if is_owner(state, claims.sub).await { Ok(()) } else { Err(AppError::Forbidden) }
 }
@@ -196,7 +207,7 @@ pub async fn overview(State(state): State<AppState>, Extension(claims): Extensio
            (SELECT COUNT(*) FROM users WHERE NOT is_bot AND email NOT LIKE '%@forgechat.invalid' AND created_at > NOW() - INTERVAL '7 days') AS new_7d,
            (SELECT COUNT(*) FROM users WHERE NOT is_bot AND email NOT LIKE '%@forgechat.invalid' AND created_at > NOW() - INTERVAL '30 days') AS new_30d,
            (SELECT COUNT(*) FROM users WHERE site_banned_at IS NOT NULL) AS banned,
-           (SELECT COUNT(*) FROM site_role_members WHERE role = 'l-patron') AS patrons,
+           (SELECT COUNT(*) FROM site_role_members WHERE role = 'el-patron') AS patrons,
            (SELECT COUNT(*) FROM servers) AS servers,
            (SELECT COUNT(*) FROM messages) AS messages,
            (SELECT COUNT(*) FROM registration_invites
@@ -243,7 +254,7 @@ pub async fn list_users(
     let rows = sqlx::query(
         "SELECT u.id, u.username, u.discriminator, u.email, u.avatar, u.created_at, u.is_bot,
                 (lower(u.email) = $6) AS is_owner,
-                EXISTS(SELECT 1 FROM site_role_members r WHERE r.user_id = u.id AND r.role = 'l-patron') AS is_patron,
+                EXISTS(SELECT 1 FROM site_role_members r WHERE r.user_id = u.id AND r.role = 'el-patron') AS is_patron,
                 u.site_banned_at, u.site_ban_reason,
                 inv.username AS invited_by_name, ri.note AS invite_note,
                 (SELECT MAX(last_seen) FROM user_sessions s WHERE s.user_id = u.id) AS last_seen,
@@ -259,7 +270,7 @@ pub async fn list_users(
                   WHEN 'online'  THEN u.id = ANY($3)
                   WHEN 'banned'  THEN u.site_banned_at IS NOT NULL
                   WHEN 'patrons' THEN lower(u.email) = $6
-                                      OR EXISTS(SELECT 1 FROM site_role_members r WHERE r.user_id = u.id AND r.role = 'l-patron')
+                                      OR EXISTS(SELECT 1 FROM site_role_members r WHERE r.user_id = u.id AND r.role = 'el-patron')
                   WHEN 'recent'  THEN u.created_at > NOW() - INTERVAL '7 days'
                   ELSE TRUE END)
          ORDER BY u.created_at DESC
@@ -351,7 +362,7 @@ pub async fn ban_user(
         return Err(AppError::BadRequest("Vous ne pouvez pas vous bannir vous-même".into()));
     }
     if is_site_admin(&state, user_id).await {
-        return Err(AppError::ForbiddenMsg("Un L-Patron ne peut pas être banni : le propriétaire doit d'abord lui retirer le rôle".into()));
+        return Err(AppError::ForbiddenMsg("Un El Patron ne peut pas être banni : le propriétaire doit d'abord lui retirer le rôle".into()));
     }
     let reason = body.reason.map(|r| r.trim().chars().take(300).collect::<String>()).filter(|r| !r.is_empty());
     let done = sqlx::query("UPDATE users SET site_banned_at=NOW(), site_ban_reason=$2 WHERE id=$1 AND site_banned_at IS NULL")
@@ -404,7 +415,7 @@ pub struct PatronBody {
     pub patron: bool,
 }
 
-/// Attribue ou retire le rôle « L-Patron ». Réservé au propriétaire du site.
+/// Attribue ou retire le rôle « El Patron ». Réservé au propriétaire du site.
 pub async fn set_patron(
     State(state): State<AppState>,
     Extension(claims): Extension<Claims>,
@@ -428,13 +439,16 @@ pub async fn set_patron(
         if !eligible {
             return Err(AppError::NotFound("Compte introuvable".into()));
         }
-        sqlx::query("INSERT INTO site_role_members (role, user_id, granted_by) VALUES ('l-patron', $1, $2) ON CONFLICT DO NOTHING")
+        sqlx::query("INSERT INTO site_role_members (role, user_id, granted_by) VALUES ('el-patron', $1, $2) ON CONFLICT DO NOTHING")
             .bind(user_id)
             .bind(claims.sub)
             .execute(&state.db)
             .await?;
     } else {
-        sqlx::query("DELETE FROM site_role_members WHERE role='l-patron' AND user_id=$1").bind(user_id).execute(&state.db).await?;
+        sqlx::query("DELETE FROM site_role_members WHERE role='el-patron' AND user_id=$1").bind(user_id).execute(&state.db).await?;
+    }
+    if body.patron {
+        lift_sanctions(&state).await;
     }
     audit(&state, claims.sub, if body.patron { "grant_patron" } else { "revoke_patron" }, Some(user_id), json!({})).await;
     Ok(StatusCode::NO_CONTENT)

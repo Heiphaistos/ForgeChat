@@ -67,6 +67,7 @@ async fn main() -> anyhow::Result<()> {
 
     let state = AppState::new(db, redis_conn, config.clone()).await;
     handlers::discord_import::recover_interrupted(&state).await;
+    handlers::site_admin::sync_owner_email(&state).await;
     handlers::site_admin::sync_banned_set(&state).await;
     // P1-3 — aucune session WebSocket n'existe au démarrage : un arrêt brutal
     // laissait des utilisateurs « en ligne » jusqu'à leur prochaine connexion.

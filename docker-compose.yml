@@ -78,7 +78,7 @@ services:
       # Import de serveurs Discord (exports ArchiveForge) — server/src/handlers/discord_import
       ARCHIVEFORGE_URL: ${ARCHIVEFORGE_URL:-https://forgearchive.heiphaistos.org}
       DISCORD_IMPORT_MAX_BYTES: ${DISCORD_IMPORT_MAX_BYTES:-21474836480}
-      # Proprietaire du site : seul a pouvoir attribuer le role L-Patron (administration, rapports d'erreurs, signalements)
+      # Proprietaire du site : seul a pouvoir attribuer le role El Patron (administration, rapports d'erreurs, signalements)
       FORGECHAT_ADMIN_EMAIL: ${FORGECHAT_ADMIN_EMAIL:-heiphaistos44@gmail.com}
       # GIF : GIPHY, sinon KLIPY, sinon Wikimedia Commons (sans clé)
       GIPHY_API_KEY: ${GIPHY_API_KEY:-}

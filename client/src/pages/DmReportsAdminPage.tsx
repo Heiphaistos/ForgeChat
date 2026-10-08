@@ -7,7 +7,7 @@ import api from '../api/client'
 import { useMobile } from '../contexts/MobileContext'
 import { intlLocale } from '../i18n'
 
-/** Signalements de messages privés (réservé au rôle L-Patron). */
+/** Signalements de messages privés (réservé au rôle El Patron). */
 
 interface DmReport {
   id: string
