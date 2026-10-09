@@ -31,7 +31,7 @@ interface SettingsState {
   updateSkippedVersion: string | null
   /** Animer les avatars et bannières GIF/WebP (toujours forcé à non si « réduire les animations »). */
   animateAvatars: boolean
-  /** Page Actualités : ordre des rubriques choisi (clés de newsCategoryKey). */
+  /** Ancien ordre local des rubriques (clés de newsCategoryKey), repris une fois dans les préférences synchronisées (features/news/prefs). */
   newsOrder: string[]
   hydrated: boolean
   set: (patch: Partial<Omit<SettingsState, 'set' | 'hydrated'>>) => void
