@@ -17,6 +17,39 @@ use crate::{
     state::AppState,
 };
 
+/// Fournisseurs d'e-mail acceptés à l'inscription (choix de Momo, 2026-10-09) : de vraies boîtes,
+/// pas d'adresses jetables ni de mail.ru. FORGECHAT_EMAIL_DOMAINS remplace la liste
+/// (domaines séparés par des virgules ; « * » accepte tout, pour les serveurs de test).
+const EMAIL_DOMAINS: &[&str] = &[
+    "gmail.com", "googlemail.com",
+    "outlook.fr", "outlook.com", "hotmail.fr", "hotmail.com", "live.fr", "live.com", "msn.com",
+    "proton.me", "protonmail.com", "pm.me",
+    "orange.fr", "wanadoo.fr", "free.fr", "sfr.fr", "neuf.fr", "bbox.fr",
+];
+
+fn email_domain_allowed(email: &str) -> bool {
+    let domain = email.rsplit_once('@').map(|(_, d)| d).unwrap_or("");
+    match std::env::var("FORGECHAT_EMAIL_DOMAINS") {
+        Ok(v) if v.trim() == "*" => true,
+        Ok(v) => v.split(',').any(|d| d.trim().eq_ignore_ascii_case(domain)),
+        Err(_) => EMAIL_DOMAINS.contains(&domain),
+    }
+}
+
+#[cfg(test)]
+mod email_domain_tests {
+    #[test]
+    fn real_providers_only() {
+        if std::env::var("FORGECHAT_EMAIL_DOMAINS").is_ok() { return }
+        for ok in ["a@gmail.com", "loan.89@live.fr", "x@proton.me", "y@orange.fr", "z@bbox.fr", "w@outlook.fr"] {
+            assert!(super::email_domain_allowed(ok), "{ok}");
+        }
+        for ko in ["stvor@ro.ru", "beata@mail.ru", "a@yopmail.com", "t@test.local", "x@gmail.com.ru", "x@evilgmail.com"] {
+            assert!(!super::email_domain_allowed(ko), "{ko}");
+        }
+    }
+}
+
 /// Vérifie et incrémente le compteur de tentatives de login par IP.
 async fn check_login_rate_limit(state: &AppState, ip: &str) -> Result<()> {
     let key = format!("login_attempts:{}", ip);
@@ -102,6 +135,11 @@ pub async fn register(
     let email_lower = body.email.to_lowercase();
     if !email_lower.contains('@') || !email_lower.contains('.') {
         return Err(AppError::BadRequest("Email invalide".into()));
+    }
+    if !email_domain_allowed(&email_lower) {
+        return Err(AppError::BadRequest(
+            "Adresse refusée : inscris-toi avec une vraie boîte mail (Gmail, Outlook/Hotmail/Live, Proton, Orange, Free, SFR ou Bouygues)".into(),
+        ));
     }
 
     // Cercle privé : inscription sur invitation. Tant qu'aucun compte n'existe, la première

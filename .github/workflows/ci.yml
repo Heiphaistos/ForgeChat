@@ -70,6 +70,8 @@ jobs:
       UPLOAD_DIR: /tmp/uploads
       FRONTEND_URL: http://localhost:5173
       FORGECHAT_API_URL: http://127.0.0.1:58080
+      # Comptes de test en @test.local : le filtre des fournisseurs d'e-mail est coupé ici.
+      FORGECHAT_EMAIL_DOMAINS: '*'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Construire et démarrer le serveur

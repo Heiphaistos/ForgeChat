@@ -25,6 +25,9 @@ export default function AddFriendScreen() {
   const [inviting, setInviting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const suggestions = useQuery({ queryKey: ['friend-suggestions'], queryFn: friendsApi.suggestions })
+  // Tout l'annuaire de l'instance, filtré pendant la frappe : le #tag n'est pas nécessaire.
+  const query = name.trim().toLowerCase().split('#')[0] ?? ''
+  const shown = (suggestions.data ?? []).filter((s) => !query || s.username.toLowerCase().includes(query))
 
   const submit = async () => {
     const n = name.trim()
@@ -35,9 +38,9 @@ export default function AddFriendScreen() {
     setLoading(true)
     setError(null)
     try {
-      await friendsApi.addByName(n, message)
+      const r = await friendsApi.addByName(n, message)
       void queryClient.invalidateQueries({ queryKey: qk.friendsAll })
-      Alert.alert(t('friends.sent'), t('social.addFriend.sentTo', { name: n }))
+      Alert.alert(t('friends.sent'), t(r?.outcome === 'accepted' ? 'social.addFriend.nowFriends' : 'social.addFriend.sentTo', { name: n }))
       router.back()
     } catch (e) {
       setError(errorMessage(e))
@@ -60,10 +63,10 @@ export default function AddFriendScreen() {
 
   const addSuggested = async (s: FriendSuggestion) => {
     try {
-      await friendsApi.addByName(`${s.username}#${s.discriminator}`)
+      const r = await friendsApi.addByName(`${s.username}#${s.discriminator}`)
       void queryClient.invalidateQueries({ queryKey: qk.friendsAll })
       void suggestions.refetch()
-      Alert.alert(t('friends.sent'), t('social.addFriend.sentTo', { name: s.username }))
+      Alert.alert(t('friends.sent'), t(r?.outcome === 'accepted' ? 'social.addFriend.nowFriends' : 'social.addFriend.sentTo', { name: s.username }))
     } catch (e) {
       Alert.alert(t('social.addFriend.failed'), errorMessage(e))
     }
@@ -76,15 +79,10 @@ export default function AddFriendScreen() {
       <TextField label={t('social.addFriend.message')} value={message} onChangeText={setMessage} maxLength={200} />
       <Button title={t('social.addFriend.send')} onPress={submit} loading={loading} />
 
-      <Section title={t('social.addFriend.inviteLink')} footer={t('social.addFriend.inviteFooter')}>
-        <View style={{ padding: spacing.md }}>
-          <Button title={t('social.addFriend.shareLink')} variant="secondary" icon="share-outline" onPress={() => void shareInvite()} loading={inviting} />
-        </View>
-      </Section>
-
-      {suggestions.data?.length ? (
-        <Section title={t('composer.suggestions')}>
-          {suggestions.data.map((s) => (
+      {shown.length || query ? (
+        <Section title={t('social.addFriend.members')}>
+          {!shown.length ? <T variant="muted" style={{ padding: spacing.md }}>{t('social.addFriend.noMatch')}</T> : null}
+          {shown.map((s) => (
             <Row
               key={s.id}
               title={s.username}
@@ -100,6 +98,13 @@ export default function AddFriendScreen() {
           ))}
         </Section>
       ) : null}
+
+      <Section title={t('social.addFriend.inviteLink')} footer={t('social.addFriend.inviteFooter')}>
+        <View style={{ padding: spacing.md }}>
+          <Button title={t('social.addFriend.shareLink')} variant="secondary" icon="share-outline" onPress={() => void shareInvite()} loading={inviting} />
+        </View>
+      </Section>
+
     </ScrollView>
   )
 }

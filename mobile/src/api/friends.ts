@@ -7,7 +7,7 @@ export const friendsApi = {
   list: (filter: FriendFilter = 'all') => http.get<FriendsResponse>('/friends/v2', { query: { filter } }),
   /** name : "pseudo" ou "pseudo#1234" */
   addByName: (name: string, message?: string) =>
-    http.post('/friends/by-name', { name: name.trim(), message: message?.trim() || undefined }),
+    http.post<{ outcome?: 'sent' | 'accepted' }>('/friends/by-name', { name: name.trim(), message: message?.trim() || undefined }),
   accept: (friendshipId: string) => http.post(path`/friends/${friendshipId}/accept`),
   decline: (friendshipId: string) => http.post(path`/friends/${friendshipId}/decline`),
   cancel: (friendshipId: string) => http.delete(path`/friends/${friendshipId}/cancel`),

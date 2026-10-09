@@ -202,6 +202,10 @@ export default function FriendsPage() {
     )
   }, [tab, online, accepted, search])
 
+  // Tout l'annuaire de l'instance, filtré pendant la frappe (le #tag n'est pas nécessaire).
+  const addQuery = addTag.trim().toLowerCase().split('#')[0]
+  const shownSuggestions = addQuery ? suggestions.filter(s => s.username.toLowerCase().includes(addQuery)) : suggestions
+
   // ── Mutations ──────────────────────────────────────────────────────────────
   const createInvite = useMutation({
     mutationFn: () => api.post('/friends/invite').then(r => r.data),
@@ -210,12 +214,12 @@ export default function FriendsPage() {
   })
 
   const sendRequest = useMutation({
-    mutationFn: (tag: string) => api.post('/friends/by-name', { name: tag }),
-    onSuccess: () => {
+    mutationFn: (tag: string) => api.post('/friends/by-name', { name: tag }).then(r => r.data as { outcome?: string }),
+    onSuccess: (data) => {
       qc.invalidateQueries({ queryKey: ['friends'] })
       qc.invalidateQueries({ queryKey: ['friend_suggestions'] })
       setAddTag('')
-      toast.success(t('friends.requestSent'))
+      toast.success(t(data?.outcome === 'accepted' ? 'friends.nowFriends' : 'friends.requestSent'))
     },
     onError: (e: unknown) => {
       const err = e as { response?: { data?: { error?: string } } }
@@ -451,15 +455,15 @@ export default function FriendsPage() {
               <input
                 value={addTag}
                 onChange={e => setAddTag(e.target.value)}
-                placeholder="username#0000"
+                placeholder="pseudo  ·  pseudo#0000"
                 aria-label={t('friends.add')}
                 enterKeyHint="send" autoCapitalize="none" autoCorrect="off"
                 className="flex-1 px-3 py-2 bg-fc-input rounded text-white outline-none focus:ring-2 focus:ring-fc-accent text-sm font-mono"
-                onKeyDown={e => e.key === 'Enter' && addTag.includes('#') && sendRequest.mutate(addTag)}
+                onKeyDown={e => e.key === 'Enter' && addTag.trim() && sendRequest.mutate(addTag.trim())}
               />
               <button
-                onClick={() => addTag.includes('#') && sendRequest.mutate(addTag)}
-                disabled={!addTag.includes('#') || sendRequest.isPending}
+                onClick={() => addTag.trim() && sendRequest.mutate(addTag.trim())}
+                disabled={!addTag.trim() || sendRequest.isPending}
                 className="px-4 py-2 bg-fc-accent hover:bg-indigo-500 text-white rounded text-sm font-medium transition disabled:opacity-40"
               >
                 {sendRequest.isPending ? '…' : t('friends.send')}
@@ -497,14 +501,15 @@ export default function FriendsPage() {
             </div>
 
             {/* Suggestions — amis d'amis et serveurs en commun */}
-            {suggestions.length > 0 && (
+            {(suggestions.length > 0 || addTag.trim() !== '') && (
               <div className="mt-4 pt-4 border-t border-fc-hover">
                 <p className="text-xs text-fc-muted mb-2 flex items-center gap-1.5">
                   <UserPlus size={12} className="text-fc-accent" />
                   {t('friends.suggestions')}
                 </p>
-                <div className="space-y-1">
-                  {suggestions.slice(0, 6).map(s => (
+                <div className="space-y-1 max-h-80 overflow-y-auto">
+                  {shownSuggestions.length === 0 && <p className="text-xs text-fc-muted px-2">{t('friends.noMatch')}</p>}
+                  {shownSuggestions.map(s => (
                     <div key={s.id} className="flex items-center gap-2.5 px-2 py-1.5 rounded-lg hover:bg-fc-hover transition group">
                       <div className="w-8 h-8 rounded-full bg-fc-accent flex items-center justify-center text-xs font-bold text-white overflow-hidden flex-shrink-0">
                         {s.avatar
@@ -525,7 +530,7 @@ export default function FriendsPage() {
                       <button
                         onClick={() => sendRequest.mutate(`${s.username}#${s.discriminator}`)}
                         disabled={sendRequest.isPending}
-                        className="flex-shrink-0 px-2.5 py-1 text-xs bg-fc-accent hover:bg-indigo-500 text-white rounded transition disabled:opacity-40 opacity-100 md:opacity-0 md:group-hover:opacity-100"
+                        className="flex-shrink-0 px-2.5 py-1 text-xs bg-fc-accent hover:bg-indigo-500 text-white rounded transition disabled:opacity-40"
                       >
                         {t('chset.add')}
                       </button>

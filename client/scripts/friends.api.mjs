@@ -65,5 +65,12 @@ ok(r.status === 200 && r.body?.outcome === 'sent', 'par pseudo : demande envoyé
 r = await api('POST', '/api/friends/by-name', { token: a.token, body: { name: `vlad${sfx}` } })
 ok(r.status === 200 && r.body?.outcome === 'accepted', 'par pseudo, demande croisée : acceptée', j(r))
 
+// 4. Suggestions : tout membre de l'instance (sans relation commune), sauf les amis.
+const solo = await account(`solo${sfx}`)
+const sugg = (await api('GET', '/api/friends/suggestions', { token: solo.token })).body ?? []
+ok(sugg.some(s => s.id === momo.id) && sugg.some(s => s.id === vlad.id), 'suggestions : membres sans ami ni serveur commun proposés', j(sugg.length))
+const sMomo = (await api('GET', '/api/friends/suggestions', { token: momo.token })).body ?? []
+ok(!sMomo.some(s => s.id === vlad.id) && sMomo.some(s => s.id === solo.id), 'suggestions : un ami n’est plus proposé', j(sMomo.map(s => s.username)))
+
 console.log(failed ? `\n${failed} échec(s)` : '\nTout est vert')
 process.exit(failed ? 1 : 0)
