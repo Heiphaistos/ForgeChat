@@ -293,6 +293,47 @@ pub async fn list_latest(
     Ok(Json(serde_json::json!({ "articles": articles })))
 }
 
+// ─── Préférences de la page Actualités (synchronisées entre appareils) ──────
+// Même principe que la disposition des serveurs (user_settings::put_server_layout) : forme libre
+// côté client ({ theme, pins, order, muted, folded }), objet JSON borné à 16 Ko, jamais interprété ici.
+
+const MAX_NEWS_PREFS_BYTES: usize = 16 * 1024;
+
+fn valid_news_prefs(v: &serde_json::Value) -> bool {
+    v.is_object() && v.to_string().len() <= MAX_NEWS_PREFS_BYTES
+}
+
+pub async fn get_news_prefs(
+    Extension(claims): Extension<Claims>,
+    State(state): State<AppState>,
+) -> Result<Json<serde_json::Value>> {
+    let prefs: Option<serde_json::Value> =
+        sqlx::query_scalar("SELECT prefs FROM user_news_prefs WHERE user_id = $1")
+            .bind(claims.sub)
+            .fetch_optional(&state.db)
+            .await?;
+    Ok(Json(prefs.unwrap_or(serde_json::Value::Null)))
+}
+
+pub async fn put_news_prefs(
+    Extension(claims): Extension<Claims>,
+    State(state): State<AppState>,
+    Json(body): Json<serde_json::Value>,
+) -> Result<Json<serde_json::Value>> {
+    if !valid_news_prefs(&body) {
+        return Err(AppError::BadRequest("Préférences invalides ou trop grandes".into()));
+    }
+    sqlx::query(
+        "INSERT INTO user_news_prefs (user_id, prefs) VALUES ($1, $2)
+         ON CONFLICT (user_id) DO UPDATE SET prefs = EXCLUDED.prefs, updated_at = NOW()",
+    )
+    .bind(claims.sub)
+    .bind(&body)
+    .execute(&state.db)
+    .await?;
+    Ok(Json(serde_json::json!({ "ok": true })))
+}
+
 #[cfg(test)]
 mod tests {
     #[test]
@@ -313,5 +354,15 @@ mod tests {
         assert_eq!(super::youtube_thumb("https://www.youtube.com/shorts/0oudvTK55rA").as_deref(), Some("https://i.ytimg.com/vi/0oudvTK55rA/hqdefault.jpg"));
         assert_eq!(super::youtube_thumb("https://www.youtube.com/watch?v=fICk_d6lnKU&t=3").as_deref(), Some("https://i.ytimg.com/vi/fICk_d6lnKU/hqdefault.jpg"));
         assert!(super::youtube_thumb("https://www.numerama.com/x").is_none());
+    }
+
+    #[test]
+    fn news_prefs_bounds() {
+        use serde_json::json;
+        assert!(super::valid_news_prefs(&json!({ "theme": 6, "pins": ["c:securite"], "muted": [], "folded": { "g:tech": true } })));
+        assert!(!super::valid_news_prefs(&json!([1, 2])));
+        assert!(!super::valid_news_prefs(&json!("x")));
+        assert!(!super::valid_news_prefs(&serde_json::Value::Null));
+        assert!(!super::valid_news_prefs(&json!({ "order": vec!["x".repeat(100); 200] })));
     }
 }
