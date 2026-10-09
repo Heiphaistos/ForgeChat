@@ -45,11 +45,12 @@ async function pipe(id: PackId): Promise<Pipe> {
   await setup()
   let p = loaded.get(id)
   if (!p) {
-    const task = id === 'whisper' ? 'automatic-speech-recognition' : 'translation'
+    // Transcription : whisper (base) et whisper-small ; tout le reste traduit.
+    const task = id.startsWith('whisper') ? 'automatic-speech-recognition' : 'translation'
     p = pipeline(task, PACKS[id].repo!, { dtype: 'q8', device: 'wasm' })
     p.catch(() => loaded.delete(id))
     loaded.set(id, p)
-    const translators = [...loaded.keys()].filter(k => k !== 'whisper')
+    const translators = [...loaded.keys()].filter(k => !k.startsWith('whisper'))
     if (translators.length > 2) {
       const old = translators[0]
       const o = loaded.get(old)
