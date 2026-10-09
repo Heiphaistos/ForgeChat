@@ -561,7 +561,7 @@ pub async fn og_preview(
         return Err(AppError::BadRequest("URL invalide ou non autorisée".into()));
     }
 
-    // Whitelist de domaines autorisés
+    // Domaines autorisés : liste fixe + sites d'actualité relayés par un bot (page Actualités).
     const ALLOWED_DOMAINS: &[&str] = &[
         "github.com", "youtube.com", "youtu.be", "twitter.com", "x.com",
         "reddit.com", "stackoverflow.com", "wikipedia.org", "medium.com",
@@ -569,78 +569,132 @@ pub async fn og_preview(
     ];
     let parsed_url = q.url.parse::<reqwest::Url>()
         .map_err(|_| AppError::BadRequest("URL invalide".into()))?;
-    let host = parsed_url.host_str().unwrap_or("");
-    if !ALLOWED_DOMAINS.iter().any(|d| host == *d || host.ends_with(&format!(".{}", d))) {
+    let host = parsed_url.host_str().unwrap_or("").to_ascii_lowercase();
+    let listed = ALLOWED_DOMAINS.iter().any(|d| host == *d || host.ends_with(&format!(".{}", d)));
+    let news_site = !listed && sqlx::query_scalar::<_, bool>(
+        "SELECT EXISTS(SELECT 1 FROM news_articles WHERE lower(split_part(link, '/', 3)) = $1)",
+    ).bind(&host).fetch_one(&state.db).await.unwrap_or(false);
+    if !listed && !news_site {
         return Err(AppError::BadRequest("Domaine non autorisé pour l'aperçu".into()));
     }
+    let meta = fetch_og(&state, &q.url).await.ok_or_else(|| AppError::NotFound("Aucune métadonnée".into()))?;
+    Ok(Json(meta))
+}
 
-    let resp = state.public_http
-        .get(&q.url)
-        .timeout(std::time::Duration::from_secs(5))
-        .send()
-        .await
-        .map_err(|_| AppError::NotFound("URL inaccessible".into()))?;
-
-    // Vérifier que la réponse finale ne redirige pas vers une IP privée
-    let final_url = resp.url().to_string();
-    if !is_ssrf_safe_url(&final_url) {
-        return Err(AppError::BadRequest("Redirection vers URL non autorisée".into()));
+/// Attributs d'une balise (`name="v"`, `name='v'` ou `name=v`), noms en minuscules.
+fn tag_attrs(tag: &str) -> Vec<(String, String)> {
+    let b = tag.as_bytes();
+    let mut out = Vec::new();
+    let mut i = tag.find(char::is_whitespace).unwrap_or(tag.len());
+    while i < b.len() {
+        while i < b.len() && (b[i].is_ascii_whitespace() || b[i] == b'/') { i += 1 }
+        let ns = i;
+        while i < b.len() && !b[i].is_ascii_whitespace() && b[i] != b'=' && b[i] != b'/' { i += 1 }
+        let name = tag[ns..i].to_ascii_lowercase();
+        while i < b.len() && b[i].is_ascii_whitespace() { i += 1 }
+        if i < b.len() && b[i] == b'=' {
+            i += 1;
+            while i < b.len() && b[i].is_ascii_whitespace() { i += 1 }
+            let (vs, ve);
+            if i < b.len() && (b[i] == b'"' || b[i] == b'\'') {
+                let q = b[i];
+                vs = i + 1;
+                let mut j = vs;
+                while j < b.len() && b[j] != q { j += 1 }
+                ve = j;
+                i = (j + 1).min(b.len());
+            } else {
+                vs = i;
+                while i < b.len() && !b[i].is_ascii_whitespace() { i += 1 }
+                ve = i;
+            }
+            if !name.is_empty() { out.push((name, tag[vs..ve].to_string())) }
+        } else if name.is_empty() {
+            i += 1;
+        }
     }
+    out
+}
 
-    // Vérifier le content-type — on n'accepte que du HTML
-    let ct = resp.headers()
-        .get("content-type")
-        .and_then(|v| v.to_str().ok())
-        .unwrap_or("");
-    if !ct.contains("text/html") && !ct.contains("text/plain") {
-        return Err(AppError::BadRequest("Type de contenu non supporté pour preview".into()));
+fn decode_entities(s: &str) -> String {
+    s.replace("&quot;", "\"").replace("&#39;", "'").replace("&#039;", "'").replace("&apos;", "'")
+        .replace("&lt;", "<").replace("&gt;", ">").replace("&nbsp;", " ").replace("&amp;", "&")
+}
+
+/// Balises <meta> d'une page : property ou name (en minuscules) -> content.
+pub(crate) fn meta_tags(html: &str) -> std::collections::HashMap<String, String> {
+    let lower = html.to_ascii_lowercase();
+    let mut out = std::collections::HashMap::new();
+    let mut i = 0;
+    while let Some(p) = lower[i..].find("<meta") {
+        let start = i + p;
+        let Some(e) = lower[start..].find('>') else { break };
+        let end = start + e;
+        let (mut key, mut content) = (None, None);
+        for (k, v) in tag_attrs(&html[start..end]) {
+            match k.as_str() {
+                "property" | "name" | "itemprop" if key.is_none() => key = Some(v.to_ascii_lowercase()),
+                "content" => content = Some(v),
+                _ => {}
+            }
+        }
+        if let (Some(k), Some(c)) = (key, content) {
+            let c = decode_entities(c.trim());
+            if !c.is_empty() { out.entry(k).or_insert(c); }
+        }
+        i = end;
+        if out.len() > 300 { break }
     }
+    out
+}
 
-    // Limiter la taille de réponse à 512KB pour éviter un DOS
-    const MAX_HTML_SIZE: usize = 512 * 1024;
-    let bytes = resp.bytes().await.map_err(|e| AppError::Internal(anyhow::anyhow!(e)))?;
-    if bytes.len() > MAX_HTML_SIZE {
-        return Err(AppError::BadRequest("Page trop volumineuse".into()));
-    }
-    let html = String::from_utf8_lossy(&bytes).into_owned();
-
-    // Parse OG tags avec regex simple
-    fn extract_meta(html: &str, property: &str) -> Option<String> {
-        let needle = format!("property=\"{}\"", property);
-        let pos = html.find(&needle)?;
-        let after = &html[pos..];
-        let content_pos = after.find("content=\"")?;
-        let start = content_pos + 9;
-        let slice = &after[start..];
-        let end = slice.find('"')?;
-        let val = slice[..end].trim().to_string();
-        if val.is_empty() { None } else { Some(val) }
-    }
-
-    fn extract_title(html: &str) -> Option<String> {
+/// Métadonnées d'une page (titre, description, image absolue en https), lues en français.
+pub(crate) async fn fetch_og(state: &AppState, url: &str) -> Option<OgMeta> {
+    if !is_ssrf_safe_url(url) { return None }
+    let resp = state.public_http.get(url)
+        .header("Accept-Language", "fr-FR,fr;q=0.9,en;q=0.5")
+        .timeout(std::time::Duration::from_secs(6))
+        .send().await.ok()?;
+    let final_url = resp.url().clone();
+    if !is_ssrf_safe_url(final_url.as_str()) { return None }
+    let ct = resp.headers().get("content-type").and_then(|v| v.to_str().ok()).unwrap_or("").to_string();
+    if !ct.contains("text/html") && !ct.contains("text/plain") { return None }
+    // Limiter la taille de réponse pour éviter un DOS
+    const MAX_HTML_SIZE: usize = 1024 * 1024;
+    let bytes = resp.bytes().await.ok()?;
+    if bytes.len() > MAX_HTML_SIZE { return None }
+    let html = String::from_utf8_lossy(&bytes);
+    let m = meta_tags(&html);
+    let pick = |keys: &[&str]| keys.iter().find_map(|k| m.get(*k).cloned());
+    let title = pick(&["og:title", "twitter:title"]).or_else(|| {
         let start = html.find("<title")?;
         let after = &html[start..];
-        let content_start = after.find('>')?;
-        let slice = &after[content_start + 1..];
-        let end = slice.find("</title")?;
-        let val = slice[..end].trim().to_string();
-        if val.is_empty() { None } else { Some(val) }
+        let s = &after[after.find('>')? + 1..];
+        let t = decode_entities(s[..s.find("</title")?].trim());
+        (!t.is_empty()).then_some(t)
+    });
+    let description = pick(&["og:description", "twitter:description", "description"]);
+    let image = pick(&["og:image:secure_url", "og:image", "og:image:url", "twitter:image", "twitter:image:src", "image"])
+        .and_then(|raw| final_url.join(&raw).ok())
+        .filter(|u| u.scheme() == "https")
+        .map(|u| u.to_string());
+    let site_name = pick(&["og:site_name", "application-name"]);
+    if title.is_none() && description.is_none() && image.is_none() { return None }
+    Some(OgMeta { title, description, image, site_name, url: url.to_string() })
+}
+
+#[cfg(test)]
+mod og_tests {
+    #[test]
+    fn meta_parsing_any_style() {
+        let html = r#"<head><meta content="Titre &amp; co" property="og:title"><META NAME='description' CONTENT='Résumé'>
+            <meta property=og:image content=https://a.fr/i.jpg /><meta name="twitter:image" content="/rel.png"></head>"#;
+        let m = super::meta_tags(html);
+        assert_eq!(m.get("og:title").map(String::as_str), Some("Titre & co"));
+        assert_eq!(m.get("description").map(String::as_str), Some("Résumé"));
+        assert_eq!(m.get("og:image").map(String::as_str), Some("https://a.fr/i.jpg"));
+        assert_eq!(m.get("twitter:image").map(String::as_str), Some("/rel.png"));
     }
-
-    let title = extract_meta(&html, "og:title")
-        .or_else(|| extract_meta(&html, "twitter:title"))
-        .or_else(|| extract_title(&html));
-    let description = extract_meta(&html, "og:description")
-        .or_else(|| extract_meta(&html, "twitter:description"));
-    let image = extract_meta(&html, "og:image")
-        .or_else(|| extract_meta(&html, "twitter:image"));
-    let site_name = extract_meta(&html, "og:site_name");
-
-    if title.is_none() && description.is_none() {
-        return Err(AppError::NotFound("Aucune métadonnée".into()));
-    }
-
-    Ok(Json(OgMeta { title, description, image, site_name, url: q.url }))
 }
 
 async fn _check_manage(user_id: Uuid, server_id: Uuid, state: &AppState) -> Result<(), AppError> {

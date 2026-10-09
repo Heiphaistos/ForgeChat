@@ -207,6 +207,49 @@ pub async fn list_articles(
     Ok(Json(serde_json::json!({ "articles": articles })))
 }
 
+#[derive(Deserialize)]
+pub struct LatestQuery {
+    /// Rubrique exacte (nom du forum) ; absente = toutes.
+    pub category: Option<String>,
+    /// Recherche dans le titre et le résumé.
+    pub q: Option<String>,
+    pub before: Option<chrono::DateTime<chrono::Utc>>,
+}
+
+/// GET /api/news/latest : « À la une » — derniers articles de tous les sites publics (40 par page).
+pub async fn list_latest(
+    State(state): State<AppState>,
+    Extension(_c): Extension<Claims>,
+    Query(q): Query<LatestQuery>,
+) -> Result<Json<serde_json::Value>> {
+    use sqlx::Row;
+    let pattern = q.q.as_deref().map(str::trim).filter(|s| !s.is_empty()).map(|s| {
+        let esc: String = s.chars().take(80).flat_map(|c| match c { '%' | '_' | '\\' => vec!['\\', c], c => vec![c] }).collect();
+        format!("%{esc}%")
+    });
+    let rows = sqlx::query(
+        "SELECT a.id, a.title, a.link, a.summary, a.image, a.published_at, s.id AS site_id, s.name AS site, s.category
+         FROM news_articles a JOIN news_sites s ON s.id = a.site_id
+         WHERE s.public
+           AND ($1::text IS NULL OR s.category = $1)
+           AND ($2::text IS NULL OR a.title ILIKE $2 OR a.summary ILIKE $2)
+           AND ($3::timestamptz IS NULL OR a.published_at < $3)
+         ORDER BY a.published_at DESC LIMIT 40",
+    ).bind(q.category.as_deref()).bind(pattern).bind(q.before).fetch_all(&state.db).await?;
+    let articles: Vec<_> = rows.iter().map(|r| serde_json::json!({
+        "id": r.get::<Uuid, _>("id"),
+        "title": r.get::<String, _>("title"),
+        "link": r.get::<String, _>("link"),
+        "summary": r.get::<Option<String>, _>("summary"),
+        "image": r.get::<Option<String>, _>("image"),
+        "published_at": r.get::<chrono::DateTime<chrono::Utc>, _>("published_at"),
+        "site_id": r.get::<Uuid, _>("site_id"),
+        "site": r.get::<String, _>("site"),
+        "category": r.get::<String, _>("category"),
+    })).collect();
+    Ok(Json(serde_json::json!({ "articles": articles })))
+}
+
 #[cfg(test)]
 mod tests {
     #[test]

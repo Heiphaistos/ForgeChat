@@ -92,6 +92,16 @@ async fn main() -> anyhow::Result<()> {
         }
     });
 
+    // Actualités : image et résumé manquants complétés depuis la page de l'article (chaque minute).
+    let news_state = state.clone();
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(Duration::from_secs(60));
+        loop {
+            interval.tick().await;
+            handlers::news::enrich_batch(&news_state).await;
+        }
+    });
+
     // Tâche de polling RSS (toutes les 5 minutes)
     let feed_state = state.clone();
     tokio::spawn(async move {
@@ -714,6 +724,7 @@ fn protected_routes(state: AppState) -> Router<AppState> {
         .route("/friends/by-name", post(handlers::friends::send_friend_by_name))
         .route("/friends/suggestions", get(handlers::friends::get_friend_suggestions))
         .route("/news", get(handlers::news::list_sites))
+        .route("/news/latest", get(handlers::news::list_latest))
         .route("/news/sites/:site_id/articles", get(handlers::news::list_articles))
         .route("/friends/calls", get(handlers::friends::get_call_history))
         .route("/friends/groups", get(handlers::friends::list_friend_groups))

@@ -6,6 +6,11 @@ export interface NewsArticle { id: string; title: string; link: string; summary:
 
 export const newsApi = {
   sites: () => http.get<{ sites: NewsSite[] }>('/news').then((r) => r.sites),
+  /** « À la une » : derniers articles de tous les sites publics, filtrables par rubrique et par texte. */
+  latest: (o: { category?: string; q?: string; before?: string } = {}) => {
+    const qs = Object.entries(o).filter(([, v]) => v).map(([k, v]) => `${k}=${encodeURIComponent(v as string)}`).join('&')
+    return http.get<{ articles: (NewsArticle & { site: string; site_id: string; category: string })[] }>('/news/latest' + (qs ? `?${qs}` : '')).then((r) => r.articles)
+  },
   articles: (siteId: string, before?: string) =>
     http.get<{ articles: NewsArticle[] }>(path`/news/sites/${siteId}/articles` + (before ? `?before=${encodeURIComponent(before)}` : '')).then((r) => r.articles),
 }
