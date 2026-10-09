@@ -117,6 +117,9 @@ ok((await api('POST', `/api/admin/users/${nonAdmin.id}/logout`, { token: adminTo
 ok((await api('GET', '/api/users/me', { token: tok2 })).status === 401, 'jeton coupé après déconnexion forcée')
 
 // ── Rôle « El Patron » : seul le propriétaire l'attribue
+// La déconnexion forcée révoque aussi les jetons émis dans la seconde qui suit (revoke_all_tokens_strict) :
+// se reconnecter tout de suite donnait un jeton déjà mort une fois sur deux.
+await new Promise(r => setTimeout(r, 1200))
 const asLea = async () => (await api('POST', '/api/auth/login', { body: { email: nonAdmin.email, password: PASSWORD } })).body.access_token
 let leaTok = await asLea()
 ok((await api('GET', '/api/admin/me', { token: leaTok })).status === 403, 'sans le rôle, aucun accès à l’administration')
