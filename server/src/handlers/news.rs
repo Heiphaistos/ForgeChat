@@ -100,7 +100,7 @@ pub async fn bot_post_news(
 
     let site = clip(&b.site, 80);
     let category = clip(&b.category, 60);
-    let title = clip(&b.title, 300);
+    let title = clip(&crate::handlers::audit::decode_entities(&b.title), 300);
     let link = web_url(&b.link).ok_or_else(|| AppError::BadRequest("Lien d'article invalide".into()))?;
     if site.is_empty() || category.is_empty() || title.is_empty() {
         return Err(AppError::BadRequest("Site, rubrique et titre requis".into()));

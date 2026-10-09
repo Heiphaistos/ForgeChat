@@ -616,9 +616,52 @@ pub(crate) fn tag_attrs(tag: &str) -> Vec<(String, String)> {
     out
 }
 
+/// Entités HTML en une seule passe (jamais de double décodage : « &amp;#38; » donne « &#38; ») :
+/// numériques (&#8217; &#x2019;) et noms courants des flux RSS. Inconnue ou invalide : laissée telle quelle.
 pub(crate) fn decode_entities(s: &str) -> String {
-    s.replace("&quot;", "\"").replace("&#39;", "'").replace("&#039;", "'").replace("&apos;", "'")
-        .replace("&lt;", "<").replace("&gt;", ">").replace("&nbsp;", " ").replace("&amp;", "&")
+    let mut out = String::with_capacity(s.len());
+    let mut rest = s;
+    while let Some(i) = rest.find('&') {
+        out.push_str(&rest[..i]);
+        let tail = &rest[i..];
+        let decoded = tail[1..].find(';').filter(|e| (1..=10).contains(e)).and_then(|e| {
+            let name = &tail[1..=e];
+            let c = if let Some(num) = name.strip_prefix('#') {
+                let n = match num.strip_prefix('x').or_else(|| num.strip_prefix('X')) {
+                    Some(h) => u32::from_str_radix(h, 16).ok(),
+                    None => num.parse::<u32>().ok(),
+                };
+                n.and_then(char::from_u32).filter(|c| *c != '\0')
+            } else {
+                named_entity(name)
+            };
+            c.map(|c| (c, e + 2))
+        });
+        match decoded {
+            Some((c, len)) => {
+                out.push(if c == '\u{a0}' { ' ' } else { c });
+                rest = &tail[len..];
+            }
+            None => {
+                out.push('&');
+                rest = &tail[1..];
+            }
+        }
+    }
+    out.push_str(rest);
+    out
+}
+
+fn named_entity(name: &str) -> Option<char> {
+    Some(match name {
+        "amp" => '&', "lt" => '<', "gt" => '>', "quot" => '"', "apos" => '\'', "nbsp" => ' ',
+        "rsquo" => '’', "lsquo" => '‘', "rdquo" => '”', "ldquo" => '“', "laquo" => '«', "raquo" => '»',
+        "hellip" => '…', "ndash" => '–', "mdash" => '—', "euro" => '€', "copy" => '©', "reg" => '®', "deg" => '°',
+        "eacute" => 'é', "egrave" => 'è', "ecirc" => 'ê', "euml" => 'ë', "agrave" => 'à', "acirc" => 'â',
+        "ccedil" => 'ç', "icirc" => 'î', "iuml" => 'ï', "ocirc" => 'ô', "ugrave" => 'ù', "ucirc" => 'û',
+        "Eacute" => 'É', "Egrave" => 'È', "Agrave" => 'À', "Ccedil" => 'Ç', "oelig" => 'œ',
+        _ => return None,
+    })
 }
 
 /// Balises <meta> d'une page : property ou name (en minuscules) -> content.
@@ -685,6 +728,15 @@ pub(crate) async fn fetch_og(state: &AppState, url: &str) -> Option<OgMeta> {
 
 #[cfg(test)]
 mod og_tests {
+    #[test]
+    fn entities_decoded_once() {
+        use super::decode_entities as d;
+        assert_eq!(d("I&#8217;ve &amp; didn&#x2019;t"), "I’ve & didn’t");
+        assert_eq!(d("&amp;#38; &lt;b&gt; &eacute;t&eacute;&hellip;"), "&#38; <b> été…");
+        assert_eq!(d("AT&T &#0; &#xZZ; &inconnu; &; & fin&"), "AT&T &#0; &#xZZ; &inconnu; &; & fin&");
+        assert_eq!(d("a&nbsp;b&#160;c"), "a b c");
+    }
+
     #[test]
     fn meta_parsing_any_style() {
         let html = r#"<head><meta content="Titre &amp; co" property="og:title"><META NAME='description' CONTENT='Résumé'>
