@@ -5,6 +5,7 @@ const mockPut = jest.fn()
 jest.mock('@/lib/http', () => ({
   http: { get: (...a: unknown[]) => mockGet(...a), put: (...a: unknown[]) => mockPut(...a) },
   errorMessage: (e: unknown) => String(e),
+  onSessionExpired: () => undefined,
 }))
 jest.mock('@/lib/logger', () => ({ logger: { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() } }))
 jest.mock('@/lib/secureStorage', () => {
@@ -18,6 +19,7 @@ jest.mock('@/lib/secureStorage', () => {
   }
 })
 
+import { useAuth } from '@/stores/auth'
 import { newsCategoryKey, type NewsSite } from '@/api/news'
 import {
   buildNews, byLetter, families, genreOfView, genreView, groupOf, longName, mergePages, moveItem, moveWithin,
@@ -119,7 +121,7 @@ describe('synchronisation des préférences', () => {
   beforeEach(() => {
     jest.useFakeTimers()
     resetNewsPrefsSync()
-    useNewsPrefs.setState({ prefs: sanitizePrefs({}), migrated: false })
+    useNewsPrefs.setState({ prefs: sanitizePrefs({}), migrated: false, owner: null })
     useSettings.setState({ newsOrder: [] })
     mockGet.mockReset()
     mockPut.mockReset().mockResolvedValue({ ok: true })
@@ -165,5 +167,18 @@ describe('synchronisation des préférences', () => {
     jest.advanceTimersByTime(2000)
     expect(mockPut).not.toHaveBeenCalled()
     expect(useNewsPrefs.getState().prefs.theme).toBe(3)
+  })
+
+  it('autre compte : réglages remis à zéro, rien envoyé avant d’avoir lu ceux du nouveau compte', async () => {
+    useAuth.setState({ user: { id: 'a' } as never })
+    mockGet.mockResolvedValue({ theme: 3, pins: ['c:ia'], order: [], muted: ['s9'], folded: {} })
+    await loadNewsPrefs()
+    expect(useNewsPrefs.getState().owner).toBe('a')
+    useAuth.setState({ user: { id: 'b' } as never })
+    expect(useNewsPrefs.getState().prefs).toEqual(sanitizePrefs({}))
+    useNewsPrefs.getState().update({ theme: 2 })
+    jest.advanceTimersByTime(2000)
+    expect(mockPut).not.toHaveBeenCalled()
+    useAuth.setState({ user: null })
   })
 })

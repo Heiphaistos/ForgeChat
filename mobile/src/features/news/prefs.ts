@@ -6,6 +6,7 @@ import { createJSONStorage, persist } from 'zustand/middleware'
 import { http, errorMessage } from '@/lib/http'
 import { logger } from '@/lib/logger'
 import { secureStateStorage } from '@/lib/secureStorage'
+import { useAuth } from '@/stores/auth'
 import { useSettings } from '@/stores/settings'
 import { sanitizePrefs, type NewsPrefs } from './logic'
 
@@ -16,6 +17,8 @@ interface NewsPrefsState {
   prefs: NewsPrefs
   /** Ancien ordre local (settings.newsOrder) déjà repris. */
   migrated: boolean
+  /** Compte à qui appartiennent ces préférences (un autre compte repart des valeurs par défaut). */
+  owner: string | null
   update: (patch: Partial<NewsPrefs>) => void
 }
 
@@ -24,15 +27,18 @@ export const useNewsPrefs = create<NewsPrefsState>()(
     (set) => ({
       prefs: sanitizePrefs({}),
       migrated: false,
+      owner: null,
       update: (patch) => set((s) => ({ prefs: sanitizePrefs({ ...s.prefs, ...patch }) })),
     }),
     {
       name: 'fc.newsPrefs.v1',
       storage: createJSONStorage(() => secureStateStorage),
-      partialize: ({ prefs, migrated }) => ({ prefs, migrated }),
+      // SecureStore plafonne vers 2 Ko : seul le thème est gardé ici (affichage immédiat), le reste
+      // (épinglées, sources coupées…) vient du serveur, qui fait foi.
+      partialize: ({ prefs, migrated, owner }) => ({ theme: prefs.theme, migrated, owner }),
       merge: (saved, cur) => {
-        const s = (saved ?? {}) as Partial<NewsPrefsState>
-        return { ...cur, prefs: sanitizePrefs(s.prefs), migrated: s.migrated === true }
+        const s = (saved ?? {}) as { theme?: unknown; migrated?: unknown; owner?: unknown }
+        return { ...cur, prefs: sanitizePrefs({ theme: s.theme }), migrated: s.migrated === true, owner: typeof s.owner === 'string' ? s.owner : null }
       },
     },
   ),
@@ -75,6 +81,7 @@ function migrateOldOrder() {
 /** Lit les préférences du compte (à l'ouverture des Actualités) ; rien en ligne : celles de l'appareil deviennent la référence. */
 export async function loadNewsPrefs(): Promise<void> {
   await Promise.all([hydrated(useNewsPrefs), hydrated(useSettings)])
+  forOwner(useAuth.getState().user?.id ?? null)
   migrateOldOrder()
   let data: unknown
   try {
@@ -93,6 +100,16 @@ export async function loadNewsPrefs(): Promise<void> {
     await put(useNewsPrefs.getState().prefs)
   }
 }
+
+/** Préférences d'un autre compte : on repart de zéro et rien n'est envoyé avant d'avoir lu celles du compte. */
+function forOwner(uid: string | null) {
+  if (useNewsPrefs.getState().owner === uid) return
+  resetNewsPrefsSync()
+  useNewsPrefs.setState({ prefs: sanitizePrefs({}), owner: uid })
+}
+useAuth.subscribe((s, prev) => {
+  if (s.user?.id !== prev.user?.id && useNewsPrefs.getState().owner !== null) forOwner(s.user?.id ?? null)
+})
 
 useNewsPrefs.subscribe((s, prev) => {
   if (s.prefs === prev.prefs || !loaded) return
