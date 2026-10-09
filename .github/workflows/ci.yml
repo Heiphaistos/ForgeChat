@@ -83,7 +83,7 @@ jobs:
       - run: npm ci --no-audit --no-fund
         working-directory: client
       # Les tests remettent à zéro la limite d'inscriptions par IP avec redis-cli (absent du runner).
-      - run: sudo apt-get install -y --no-install-recommends redis-tools
+      - run: sudo apt-get update -qq && sudo apt-get install -y --no-install-recommends redis-tools
       - name: Le premier compte devient administrateur, puis les inscriptions passent sur invitation
         working-directory: client
         run: |
