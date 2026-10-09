@@ -206,8 +206,10 @@ export default function MainLayout() {
           >
             <div className="flex flex-1 min-h-0">
               <ServerSidebar />
+              {/* Actualités : la page a sa propre colonne de rubriques ; la liste des MP ne ferait que
+                  manger de la place (sur téléphone, le tiroir reste là pour naviguer). */}
               <div
-                className="flex flex-col bg-fc-channel flex-shrink-0 h-full"
+                className={`flex flex-col bg-fc-channel flex-shrink-0 h-full ${location.pathname.startsWith('/news') ? 'md:hidden' : ''}`}
                 style={{ width: isMobile ? 'calc(100vw - 72px)' : `${sidebarWidth}px` }}
               >
                 <div className="flex-1 overflow-hidden flex flex-col min-h-0">
