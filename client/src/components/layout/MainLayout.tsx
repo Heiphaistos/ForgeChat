@@ -219,7 +219,7 @@ export default function MainLayout() {
               </div>
             </div>
             {/* Profil sur toute la largeur (sous le rail des serveurs aussi) : pseudo et statut lisibles. */}
-            <UserPanel onToggleActivity={toggleActivity} activityOpen={activityOpen} />
+            <UserPanel onToggleActivity={toggleActivity} activityOpen={activityOpen} compact={location.pathname.startsWith('/news')} />
           </nav>
 
           {/* Handle de redimensionnement sidebar — desktop uniquement */}

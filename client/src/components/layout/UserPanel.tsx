@@ -227,9 +227,12 @@ function QuickStatusPopup({ onClose }: { onClose: () => void }) {
 interface UserPanelProps {
   onToggleActivity?: () => void
   activityOpen?: boolean
+  /** PC, page Actualités : seulement l'avatar et les paramètres, à la largeur du rail des serveurs. */
+  compact?: boolean
 }
 
-export default function UserPanel({ onToggleActivity, activityOpen }: UserPanelProps) {
+export default function UserPanel({ onToggleActivity, activityOpen, compact = false }: UserPanelProps) {
+  const hideOnPc = compact ? 'md:hidden' : ''
   const isSiteAdmin = useSiteAdmin()
   const tr = useT()
   const { user, updateMe } = useAuth()
@@ -256,7 +259,7 @@ export default function UserPanel({ onToggleActivity, activityOpen }: UserPanelP
   if (!user) return null
 
   return (
-    <div className="flex items-center gap-2 px-2 py-2 bg-fc-bg/50 border-t border-fc-bg flex-shrink-0 relative pb-safe">
+    <div className={`flex items-center gap-2 px-2 py-2 bg-fc-bg/50 border-t border-fc-bg flex-shrink-0 relative pb-safe ${compact ? 'md:w-[72px] md:flex-col md:px-0 md:gap-1' : ''}`}>
       {/* Popup statut rapide */}
       {showStatusPopup && (
         <QuickStatusPopup onClose={() => setShowStatusPopup(false)} />
@@ -264,8 +267,8 @@ export default function UserPanel({ onToggleActivity, activityOpen }: UserPanelP
 
       <button
         onClick={() => setShowStatusPopup(v => !v)}
-        className="flex items-center gap-2 flex-1 min-w-0 rounded px-1 py-0.5 hover:bg-fc-hover transition text-left"
-        title="Changer le statut"
+        className={`flex items-center gap-2 flex-1 min-w-0 rounded px-1 py-0.5 hover:bg-fc-hover transition text-left ${compact ? 'md:flex-none' : ''}`}
+        title={compact ? `${user.username} — changer le statut` : 'Changer le statut'}
       >
         <div className="relative flex-shrink-0">
           <div className="w-8 h-8 rounded-full bg-fc-accent flex items-center justify-center font-bold text-sm text-white overflow-hidden">
@@ -275,7 +278,7 @@ export default function UserPanel({ onToggleActivity, activityOpen }: UserPanelP
           </div>
           <div className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-fc-channel ${STATUS_COLORS[shownStatus] ?? 'bg-fc-muted'}`} />
         </div>
-        <div className="min-w-0">
+        <div className={`min-w-0 ${hideOnPc}`}>
           <div className="text-sm font-semibold text-white truncate">{user.username}</div>
           <div className="text-xs text-fc-muted truncate">
             {user.custom_status_emoji && <span className="mr-0.5">{user.custom_status_emoji}</span>}
@@ -285,6 +288,7 @@ export default function UserPanel({ onToggleActivity, activityOpen }: UserPanelP
       </button>
 
       <div className="flex items-center gap-0.5 flex-shrink-0">
+        <div className={`contents ${compact ? 'md:hidden' : ''}`}>
         <button
           onClick={toggleFocus}
           className={`min-w-[44px] min-h-[44px] md:min-w-0 md:min-h-0 p-1.5 md:p-1 rounded hover:bg-fc-hover transition flex items-center justify-center ${
@@ -348,6 +352,7 @@ export default function UserPanel({ onToggleActivity, activityOpen }: UserPanelP
         >
           <LayoutDashboard size={16} />
         </button>
+        </div>
         <button
           onClick={() => nav('/settings')}
           className="min-w-[44px] min-h-[44px] md:min-w-0 md:min-h-0 p-1.5 md:p-1 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition flex items-center justify-center"
