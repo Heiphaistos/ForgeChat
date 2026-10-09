@@ -98,6 +98,12 @@ export function ServerRail({
             </View>
           ) : null}
         </Pressable>
+        {/* Actualités : articles des flux RSS, pour tout le monde */}
+        <Pressable onPress={() => router.push('/news')} accessibilityRole="button" accessibilityLabel={t('news.title')} style={styles.item}>
+          <View style={styles.home}>
+            <Ionicons name="newspaper-outline" size={22} color={colors.textMuted} />
+          </View>
+        </Pressable>
         <View style={styles.separator} />
         {onRetry ? (
           <Pressable style={styles.add} onPress={onRetry} accessibilityRole="button" accessibilityLabel={t('rail.retry')}>
