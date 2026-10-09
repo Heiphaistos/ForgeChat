@@ -582,7 +582,7 @@ pub async fn og_preview(
 }
 
 /// Attributs d'une balise (`name="v"`, `name='v'` ou `name=v`), noms en minuscules.
-fn tag_attrs(tag: &str) -> Vec<(String, String)> {
+pub(crate) fn tag_attrs(tag: &str) -> Vec<(String, String)> {
     let b = tag.as_bytes();
     let mut out = Vec::new();
     let mut i = tag.find(char::is_whitespace).unwrap_or(tag.len());
@@ -616,7 +616,7 @@ fn tag_attrs(tag: &str) -> Vec<(String, String)> {
     out
 }
 
-fn decode_entities(s: &str) -> String {
+pub(crate) fn decode_entities(s: &str) -> String {
     s.replace("&quot;", "\"").replace("&#39;", "'").replace("&#039;", "'").replace("&apos;", "'")
         .replace("&lt;", "<").replace("&gt;", ">").replace("&nbsp;", " ").replace("&amp;", "&")
 }

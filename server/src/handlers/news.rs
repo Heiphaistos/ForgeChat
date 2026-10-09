@@ -51,6 +51,42 @@ fn web_url(u: &str) -> Option<String> {
     ok.then(|| u.to_string())
 }
 
+/// Texte d'un extrait de flux RSS (souvent du HTML) : balises retirées, entités décodées, blancs réduits.
+fn html_text(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    let mut in_tag = false;
+    for c in s.chars() {
+        match c {
+            '<' => { in_tag = true; out.push(' ') }
+            '>' if in_tag => in_tag = false,
+            _ if !in_tag => out.push(c),
+            _ => {}
+        }
+    }
+    let t = crate::handlers::audit::decode_entities(&out).split_whitespace().collect::<Vec<_>>().join(" ");
+    // L'espace mis à la place d'une balise colle parfois à la ponctuation : « mot , » -> « mot, ».
+    t.replace(" ,", ",").replace(" .", ".")
+}
+
+/// Première image https d'un extrait HTML (les flux mettent souvent l'illustration dans le résumé).
+fn first_img(html: &str) -> Option<String> {
+    let lower = html.to_ascii_lowercase();
+    let p = lower.find("<img")?;
+    let e = p + lower[p..].find('>')?;
+    crate::handlers::audit::tag_attrs(&html[p..e]).into_iter()
+        .find(|(k, _)| k == "src")
+        .and_then(|(_, v)| web_url(&crate::handlers::audit::decode_entities(&v)))
+        .filter(|u| u.starts_with("https://"))
+}
+
+/// Miniature d'une vidéo YouTube (le VPS est bloqué par YouTube : sa page n'est pas lisible d'ici).
+fn youtube_thumb(link: &str) -> Option<String> {
+    let rest = ["youtube.com/watch?v=", "youtube.com/shorts/", "youtu.be/"].iter()
+        .find_map(|m| link.split_once(m).map(|(_, r)| r))?;
+    let id: String = rest.chars().take_while(|c| c.is_ascii_alphanumeric() || *c == '-' || *c == '_').collect();
+    (id.len() == 11).then(|| format!("https://i.ytimg.com/vi/{id}/hqdefault.jpg"))
+}
+
 /// POST /api/bot/news (Authorization: Bot <jeton du bot du serveur>).
 pub async fn bot_post_news(
     State(state): State<AppState>,
@@ -69,8 +105,10 @@ pub async fn bot_post_news(
     if site.is_empty() || category.is_empty() || title.is_empty() {
         return Err(AppError::BadRequest("Site, rubrique et titre requis".into()));
     }
-    let summary = b.summary.as_deref().map(|s| clip(s, 1200)).filter(|s| !s.is_empty());
-    let image = b.image.as_deref().and_then(web_url).filter(|u| u.starts_with("https://"));
+    let summary = b.summary.as_deref().map(|s| clip(&html_text(s), 1200)).filter(|s| !s.is_empty());
+    let image = b.image.as_deref().and_then(web_url).filter(|u| u.starts_with("https://"))
+        .or_else(|| b.summary.as_deref().and_then(first_img))
+        .or_else(|| youtube_thumb(&link));
     let published = b.published_at
         .and_then(|t| chrono::DateTime::from_timestamp(t, 0))
         .filter(|d| *d <= chrono::Utc::now() + chrono::Duration::hours(1))
@@ -127,21 +165,26 @@ pub async fn bot_post_news(
 /// Complète les articles sans image ou sans résumé avec les métadonnées de leur page (une tentative
 /// par article, les plus récents d'abord). Les flux RSS ne fournissent souvent ni l'un ni l'autre.
 pub async fn enrich_batch(state: &AppState) {
+    use futures_util::StreamExt;
     use sqlx::Row;
     let Ok(rows) = sqlx::query(
         "SELECT id, link FROM news_articles WHERE NOT og_checked AND (image IS NULL OR summary IS NULL)
-         ORDER BY published_at DESC LIMIT 20",
+         ORDER BY published_at DESC LIMIT 80",
     ).fetch_all(&state.db).await else { return };
-    for r in rows {
+    // 8 pages lues en parallèle : un site lent ne bloque plus toute la file.
+    futures_util::stream::iter(rows).for_each_concurrent(8, |r| async move {
         let id: Uuid = r.get("id");
         let link: String = r.get("link");
-        let og = crate::handlers::audit::fetch_og(state, &link).await;
-        let image = og.as_ref().and_then(|o| o.image.clone()).filter(|u| u.len() <= 2000);
-        let summary = og.as_ref().and_then(|o| o.description.as_deref()).map(|d| clip(d, 600)).filter(|d| !d.is_empty());
+        let og = match youtube_thumb(&link) {
+            Some(_) => None,
+            None => crate::handlers::audit::fetch_og(state, &link).await,
+        };
+        let image = og.as_ref().and_then(|o| o.image.clone()).filter(|u| u.len() <= 2000).or_else(|| youtube_thumb(&link));
+        let summary = og.as_ref().and_then(|o| o.description.as_deref()).map(|d| clip(&html_text(d), 600)).filter(|d| !d.is_empty());
         let _ = sqlx::query(
             "UPDATE news_articles SET image = COALESCE(image, $2), summary = COALESCE(summary, $3), og_checked = TRUE WHERE id = $1",
         ).bind(id).bind(image).bind(summary).execute(&state.db).await;
-    }
+    }).await;
     // Les articles qui ont déjà tout n'ont rien à chercher.
     let _ = sqlx::query("UPDATE news_articles SET og_checked = TRUE WHERE NOT og_checked AND image IS NOT NULL AND summary IS NOT NULL")
         .execute(&state.db).await;
@@ -259,5 +302,16 @@ mod tests {
         assert!(super::web_url("https://a.fr/\"><script>").is_none());
         assert_eq!(super::clip("abcdef", 4), "abc…");
         assert_eq!(super::clip("  abc ", 4), "abc");
+    }
+
+    #[test]
+    fn rss_html_and_images() {
+        let h = r#"<p>Le <a href="https://fr.wikipedia.org/wiki/DNS">serveur DNS</a>, c&#39;est&nbsp;clé.</p><img height=100 src="https://img.fr/a.jpg?x=1&amp;y=2">"#;
+        assert_eq!(super::html_text(h), "Le serveur DNS, c'est clé.");
+        assert_eq!(super::first_img(h).as_deref(), Some("https://img.fr/a.jpg?x=1&y=2"));
+        assert!(super::first_img(r#"<img src="http://x.fr/a.jpg">"#).is_none());
+        assert_eq!(super::youtube_thumb("https://www.youtube.com/shorts/0oudvTK55rA").as_deref(), Some("https://i.ytimg.com/vi/0oudvTK55rA/hqdefault.jpg"));
+        assert_eq!(super::youtube_thumb("https://www.youtube.com/watch?v=fICk_d6lnKU&t=3").as_deref(), Some("https://i.ytimg.com/vi/fICk_d6lnKU/hqdefault.jpg"));
+        assert!(super::youtube_thumb("https://www.numerama.com/x").is_none());
     }
 }
