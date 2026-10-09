@@ -8,7 +8,7 @@ import { safeEmojiUrl, useCustomEmojis } from '@/features/chat/customEmojis'
 import { cachedChannel, cachedRole, cachedUsername, roleColor } from '@/features/chat/tokens'
 import { t, useLang, useT } from '@/i18n'
 import { cachedDisplayName } from './UserName'
-import { openExternalUrl } from '@/lib/links'
+import { openExternalUrl, resolveMediaUrl } from '@/lib/links'
 import { formatTimestamp, parseMarkdown, type InlineNode } from '@/lib/markdown'
 import { queryClient } from '@/lib/queryClient'
 import { colors, font, isLight, radius, spacing } from '@/theme'
@@ -146,7 +146,27 @@ function renderInline(nodes: InlineNode[], myName: string | undefined, emojis: R
 
 const HEADING = { 1: { fontSize: 22, lineHeight: 28 }, 2: { fontSize: 19, lineHeight: 25 }, 3: { fontSize: 17, lineHeight: 23 } } as const
 
+/** Images du serveur citées dans le texte (forums, fils, messages importés de Discord) : affichées, pas en chemin brut. */
+const UPLOAD_IMG = /(\/uploads\/[\w.-]+\.(?:png|jpe?g|gif|webp))/i
+
 export const MessageText = memo(function MessageText({ content, myName }: { content: string; myName?: string }) {
+  const parts = useMemo(() => content.split(UPLOAD_IMG), [content])
+  if (parts.length > 1)
+    return (
+      <View style={{ gap: 4 }}>
+        {parts.map((p, i) => {
+          if (i % 2 === 1) {
+            const src = resolveMediaUrl(p)
+            return src ? <Image key={i} source={{ uri: src }} style={styles.inlineImage} contentFit="contain" accessibilityLabel={t('social.post.image')} /> : null
+          }
+          return p.trim() ? <MessageText key={i} content={p.trim()} myName={myName} /> : null
+        })}
+      </View>
+    )
+  return <MarkdownText content={content} myName={myName} />
+})
+
+function MarkdownText({ content, myName }: { content: string; myName?: string }) {
   const blocks = useMemo(() => parseMarkdown(content), [content])
   const emojis = useCustomEmojis()
   useLang((s) => s.lang) // rendu à nouveau au changement de langue (libellés de renderInline)
@@ -182,12 +202,13 @@ export const MessageText = memo(function MessageText({ content, myName }: { cont
       })}
     </View>
   )
-})
+}
 
 const mono = 'Menlo'
 
 const styles = StyleSheet.create({
   text: { color: colors.textSecondary, fontSize: font.md, lineHeight: 21 },
+  inlineImage: { width: '100%', maxWidth: 360, aspectRatio: 16 / 9, borderRadius: radius.md, backgroundColor: colors.bgAlt },
   heading: { color: colors.text, fontWeight: '800' },
   bold: { fontWeight: '700', color: colors.text },
   italic: { fontStyle: 'italic' },

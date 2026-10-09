@@ -13,8 +13,9 @@ export type RailEntry =
 const COLOR = /^#[0-9a-f]{6}$/i
 
 /**
- * Même rendu que le web : serveurs hors dossier d'abord, dans l'ordre choisi (inconnus à la fin),
- * puis les dossiers non vides. Une disposition absente ou abîmée donne la liste telle quelle.
+ * Même rendu que le web (client/src/components/layout/railLayout.ts) : serveurs hors dossier et dossiers
+ * non vides mêlés dans l'ordre choisi (`order` contient aussi les ids `folder_…`), nouveaux à la fin.
+ * Une disposition absente ou abîmée donne la liste telle quelle.
  */
 export function railEntries(servers: Server[], layout: ServerLayout | null | undefined): RailEntry[] {
   const byId = new Map(servers.map((s) => [s.id, s]))
@@ -44,6 +45,7 @@ export function railEntries(servers: Server[], layout: ServerLayout | null | und
     const i = order.indexOf(id)
     return i === -1 ? Number.MAX_SAFE_INTEGER : i
   }
-  const free = servers.filter((s) => !inFolder.has(s.id)).sort((a, b) => rank(a.id) - rank(b.id))
-  return [...free.map((server) => ({ kind: 'server' as const, server })), ...folders]
+  const entries: RailEntry[] = [...servers.filter((s) => !inFolder.has(s.id)).map((server) => ({ kind: 'server' as const, server })), ...folders]
+  const key = (e: RailEntry) => (e.kind === 'server' ? e.server.id : e.id)
+  return entries.map((e, i) => [e, i] as const).sort((a, b) => rank(key(a[0])) - rank(key(b[0])) || a[1] - b[1]).map(([e]) => e)
 }

@@ -123,6 +123,7 @@ export function ChannelList({
   if (channels.error) return <ErrorState message={errorMessage(channels.error)} onRetry={() => void channels.refetch()} />
 
   const banner = resolveMediaUrl(server.banner)
+  const [bannerRatio, setBannerRatio] = useState(16 / 9)
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.bgAlt }}>
@@ -132,7 +133,8 @@ export function ChannelList({
         accessibilityLabel={t('channels.serverOptions', { name: server.name })}
         style={({ pressed }) => [pressed && { opacity: 0.8 }]}
       >
-        {banner ? <Image source={{ uri: banner }} style={styles.banner} contentFit="cover" accessible={false} /> : null}
+        {/* Bannière entière à son format (le ratio vient de l'image elle-même) : jamais rognée. */}
+        {banner ? <Image source={{ uri: banner }} style={[styles.banner, { aspectRatio: bannerRatio }]} contentFit="cover" accessible={false} onLoad={(e) => e.source.width && e.source.height && setBannerRatio(e.source.width / e.source.height)} /> : null}
         <View style={styles.header}>
           {banner ? null : <Avatar uri={server.icon} name={server.name} size={28} rounded={false} />}
           <Text style={styles.serverName} numberOfLines={1}>
@@ -253,7 +255,7 @@ export function ChannelList({
 }
 
 const styles = StyleSheet.create({
-  banner: { height: 96, width: '100%' },
+  banner: { width: '100%' },
   header: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.lg, minHeight: 52 },
   toolbar: {
     flexDirection: 'row',

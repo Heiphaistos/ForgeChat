@@ -1,6 +1,6 @@
 import { useNavigate, useParams, useLocation } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Bookmark, MessageCircle, Plus, Compass, ChevronDown, FolderOpen, X, LayoutTemplate, Settings, LogOut, Copy, UserPlus, Trash2, BellOff, Bell, CheckCheck, Search as SearchIcon } from 'lucide-react'
+import { Bookmark, Newspaper, MessageCircle, Plus, Compass, ChevronDown, FolderOpen, X, LayoutTemplate, Settings, LogOut, Copy, UserPlus, Trash2, BellOff, Bell, CheckCheck, Search as SearchIcon } from 'lucide-react'
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import DeleteServerModal from '../modals/DeleteServerModal'
 import api, { mediaUrl } from '../../api/client'
@@ -11,25 +11,13 @@ import { useAuth } from '../../store/auth'
 import { useUnread } from '../../store/unread'
 import { useChannelNotif } from '../../store/channelNotif'
 import { useMobile } from '../../contexts/MobileContext'
+import { createPortal } from 'react-dom'
 import { useT, intlLocale, type Key } from '../../i18n'
+import { acceptsInto, applyDrop, dissolveFolder, FOLDER_COLORS, newFolderId, topLevel, type Drag, type Folders, type RailLayout, type Target, type Zone } from './railLayout'
 
-// ─── Types ─────────────────────────────────────────────────
+// ─── Dossiers (localStorage = cache, le compte fait foi) ─────
 
-interface ServerFolder {
-  name: string
-  color: string
-  serverIds: string[]
-}
-
-interface FoldersMap {
-  [folderId: string]: ServerFolder
-}
-
-const FOLDER_COLORS = ['#5865F2', '#57F287', '#FEE75C', '#EB459E', '#ED4245', '#FF7A00', '#00B8D9']
-
-// ─── Helpers localStorage ───────────────────────────────────
-
-function loadFolders(): FoldersMap {
+function loadFolders(): Folders {
   try {
     const raw = localStorage.getItem('fc_server_folders')
     return raw ? JSON.parse(raw) : {}
@@ -38,12 +26,8 @@ function loadFolders(): FoldersMap {
   }
 }
 
-function saveFolders(folders: FoldersMap) {
-  localStorage.setItem('fc_server_folders', JSON.stringify(folders))
-}
-
-function genFolderId() {
-  return `folder_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`
+function saveFolders(folders: Folders) {
+  try { localStorage.setItem('fc_server_folders', JSON.stringify(folders)) } catch { /* cache seulement */ }
 }
 
 // ─── ServerSidebar ──────────────────────────────────────────
@@ -56,6 +40,7 @@ export default function ServerSidebar() {
   const { closeSidebar } = useMobile()
   const isDMs = pathname.startsWith('/friends') || pathname.startsWith('/dms') || pathname.startsWith('/dm')
   const isSaved = pathname.startsWith('/saved')
+  const isNews = pathname.startsWith('/news')
   const qc = useQueryClient()
   const serverCounts = useUnread(s => s.serverCounts)
   // Non-lus DM = total des counts par canal moins la part attribuée aux serveurs
@@ -68,13 +53,15 @@ export default function ServerSidebar() {
   const serverMentionCounts = useUnread(s => s.serverMentionCounts)
   const [showCreate, setShowCreate] = useState(false)
   const [createStep, setCreateStep] = useState<Step>('choice')
-  const [folders, setFolders] = useState<FoldersMap>(loadFolders)
+  const [folders, setFolders] = useState<Folders>(loadFolders)
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set())
   const [contextMenu, setContextMenu] = useState<{
     x: number; y: number; serverId: string
   } | null>(null)
-  const [draggedServerId, setDraggedServerId] = useState<string | null>(null)
-  const [dragOverSlot, setDragOverSlot] = useState<number | null>(null)
+  // Glisser-déposer (comme Discord) : élément tenu et zone survolée (avant / après / dedans).
+  const [drag, setDrag] = useState<Drag | null>(null)
+  const [hint, setHint] = useState<(Target & { zone: Zone }) | null>(null)
+  const [editFolder, setEditFolder] = useState<string | null>(null)
   const [serverOrder, setServerOrder] = useState<string[]>(() => {
     try {
       const stored = localStorage.getItem('fc_server_order')
@@ -132,7 +119,7 @@ export default function ServerSidebar() {
     return () => window.removeEventListener('forgechat:create-server', openCreate)
   }, [])
 
-  const persistFolders = useCallback((next: FoldersMap) => {
+  const persistFolders = useCallback((next: Folders) => {
     setFolders(next)
     saveFolders(next)
   }, [])
@@ -146,29 +133,10 @@ export default function ServerSidebar() {
     })
   }
 
-  // Construire la liste d'affichage : ids de serveurs dans un dossier
-  const serverIdsInFolders = useMemo(
-    () => new Set(Object.values(folders).flatMap(f => f.serverIds)),
-    [folders]
-  )
-
-  // Séquence : serveurs libres + dossiers (en ordre d'insertion)
-  const freeServers = useMemo(
-    () => (servers as any[]).filter(s => !serverIdsInFolders.has(s.id)),
-    [servers, serverIdsInFolders]
-  )
-
-  // Serveurs libres ordonnés selon serverOrder (localStorage)
-  const orderedFreeServers = useMemo(() => {
-    if (!serverOrder.length) return freeServers
-    return [...freeServers].sort((a: any, b: any) => {
-      const ai = serverOrder.indexOf(a.id)
-      const bi = serverOrder.indexOf(b.id)
-      if (ai === -1) return 1
-      if (bi === -1) return -1
-      return ai - bi
-    })
-  }, [freeServers, serverOrder])
+  // Premier niveau de la barre : serveurs hors dossier et dossiers, dans l'ordre choisi.
+  const serverIds = useMemo(() => (servers as { id: string }[]).map(s => s.id), [servers])
+  const serverById = useMemo(() => new Map((servers as any[]).map(s => [s.id as string, s])), [servers])
+  const entries = useMemo(() => topLevel(serverIds, { order: serverOrder, folders }), [serverIds, serverOrder, folders])
 
   // Dossiers et ordre synchronisés entre appareils : le serveur fait foi, le localStorage sert de
   // cache hors ligne. Au premier passage sans disposition en ligne, celle de ce navigateur y monte.
@@ -205,29 +173,49 @@ export default function ServerSidebar() {
     try { localStorage.setItem('fc_server_order', JSON.stringify(newOrder)) } catch {}
   }, [])
 
-  // Drop sur un slot (séparateur entre serveurs) = réordonnement
-  const handleSlotDragOver = useCallback((e: React.DragEvent, slotIndex: number) => {
-    e.preventDefault()
-    e.stopPropagation()
-    e.dataTransfer.dropEffect = 'move'
-    setDragOverSlot(slotIndex)
-  }, [])
+  const applyLayout = useCallback((next: RailLayout) => {
+    persistFolders(next.folders)
+    saveServerOrder(next.order)
+  }, [persistFolders, saveServerOrder])
 
-  const handleSlotDrop = useCallback((e: React.DragEvent, slotIndex: number) => {
-    e.preventDefault()
-    e.stopPropagation()
-    if (!draggedServerId) { setDragOverSlot(null); return }
-    const current = orderedFreeServers.filter((s: any) => s.id !== draggedServerId)
-    const insertIdx = Math.min(slotIndex, current.length)
-    current.splice(insertIdx, 0, orderedFreeServers.find((s: any) => s.id === draggedServerId)!)
-    saveServerOrder(current.filter(Boolean).map((s: any) => s.id))
-    setDraggedServerId(null)
-    setDragOverSlot(null)
-  }, [draggedServerId, orderedFreeServers, saveServerOrder])
-
-  const handleSlotDragLeave = useCallback(() => {
-    setDragOverSlot(null)
-  }, [])
+  /** Zone survolée : haut / bas = déplacer avant / après, milieu = ranger dans un dossier (ou en créer un). */
+  const zoneAt = (e: React.DragEvent, target: Target): Zone => {
+    const r = e.currentTarget.getBoundingClientRect()
+    const y = (e.clientY - r.top) / r.height
+    if (drag && acceptsInto(drag, target)) return y < 0.28 ? 'before' : y > 0.72 ? 'after' : 'into'
+    return y < 0.5 ? 'before' : 'after'
+  }
+  const dndProps = (target: Target, kind: Drag['kind']) => ({
+    draggable: true,
+    onDragStart: (e: React.DragEvent) => {
+      e.stopPropagation()
+      e.dataTransfer.effectAllowed = 'move'
+      e.dataTransfer.setData('text/plain', target.id)
+      setDrag({ kind, id: target.id })
+    },
+    onDragOver: (e: React.DragEvent) => {
+      if (!drag || drag.id === target.id) return
+      e.preventDefault()
+      e.stopPropagation()
+      e.dataTransfer.dropEffect = 'move'
+      const zone = zoneAt(e, target)
+      if (hint?.id !== target.id || hint.zone !== zone || hint.inFolder !== target.inFolder) setHint({ ...target, zone })
+    },
+    onDrop: (e: React.DragEvent) => {
+      e.preventDefault()
+      e.stopPropagation()
+      if (drag && drag.id !== target.id) applyLayout(applyDrop(serverIds, { order: serverOrder, folders }, drag, target, zoneAt(e, target)))
+      setDrag(null)
+      setHint(null)
+    },
+    onDragEnd: () => { setDrag(null); setHint(null) },
+  })
+  /** Repère visuel de la zone survolée. */
+  const dropMark = (target: Target) => {
+    if (!hint || hint.id !== target.id || hint.inFolder !== target.inFolder) return null
+    if (hint.zone === 'into') return <span aria-hidden className="pointer-events-none absolute inset-0 m-auto w-12 h-12 rounded-2xl ring-2 ring-fc-accent" />
+    return <span aria-hidden className={`pointer-events-none absolute left-1/2 -translate-x-1/2 w-10 h-1 rounded-full bg-fc-accent ${hint.zone === 'before' ? '-top-1.5' : '-bottom-1.5'}`} />
+  }
 
   // Ouvre le serveur puis une fenêtre de sa barre des salons (Inviter, Créer un salon).
   const openPanel = (sId: string, what: 'invite' | 'create-channel') => {
@@ -243,13 +231,14 @@ export default function ServerSidebar() {
   }
 
   const addToNewFolder = (sId: string) => {
-    const folderId = genFolderId()
-    const color = FOLDER_COLORS[Math.floor(Math.random() * FOLDER_COLORS.length)]
-    persistFolders({
-      ...folders,
-      [folderId]: { name: 'Nouveau dossier', color, serverIds: [sId] },
-    })
+    const folderId = newFolderId()
+    const color = FOLDER_COLORS[Object.keys(folders).length % FOLDER_COLORS.length]
+    const next: Folders = Object.fromEntries(Object.entries(folders).map(([k, f]) => [k, { ...f, serverIds: f.serverIds.filter(id => id !== sId) }]).filter(([, f]) => (f as { serverIds: string[] }).serverIds.length))
+    next[folderId] = { name: t('servers.newFolderName'), color, serverIds: [sId] }
+    const order = entries.includes(sId) ? entries.map(id => (id === sId ? folderId : id)) : [...entries, folderId]
+    applyLayout({ order, folders: next })
     setExpandedFolders(prev => new Set([...prev, folderId]))
+    setEditFolder(folderId)
     setContextMenu(null)
   }
 
@@ -284,38 +273,16 @@ export default function ServerSidebar() {
     return null
   }
 
-  // Drag & drop — drop sur un autre serveur libre → crée dossier
-  const handleDragStart = (sId: string) => {
-    setDraggedServerId(sId)
-  }
-
-  const handleDropOnServer = (targetId: string) => {
-    if (!draggedServerId || draggedServerId === targetId) {
-      setDraggedServerId(null)
-      return
-    }
-    // Si les deux sont libres → nouveau dossier
-    const folderId = genFolderId()
-    const color = FOLDER_COLORS[Math.floor(Math.random() * FOLDER_COLORS.length)]
-    const next = { ...folders }
-    // Retirer les 2 de tout dossier existant où ils pourraient être
-    for (const [fid, f] of Object.entries(next)) {
-      const ids = f.serverIds.filter(id => id !== draggedServerId && id !== targetId)
-      if (ids.length === 0) delete next[fid]
-      else next[fid] = { ...f, serverIds: ids }
-    }
-    next[folderId] = { name: 'Nouveau dossier', color, serverIds: [draggedServerId, targetId] }
-    persistFolders(next)
-    setExpandedFolders(prev => new Set([...prev, folderId]))
-    setDraggedServerId(null)
-  }
-
-  const ServerIcon = ({ s, folderId: _folderId }: { s: any; folderId?: string }) => {
+  // Fonction de rendu (pas un composant) : redéfinir un composant à chaque rendu remontait l'icône
+  // et le navigateur annulait le glisser-déposer dès le premier redessin.
+  const serverIcon = (s: any, inFolder?: string) => {
+    const target: Target = { kind: 'server', id: s.id, inFolder }
     const muted = isServerMuted(s.id)
     const isActive = serverId === s.id
     const hasUnread = (serverCounts[s.id] ?? 0) > 0 && !isActive && !muted
     return (
-      <div className="relative w-full flex items-center justify-center">
+      <div className="relative w-full flex items-center justify-center" {...dndProps(target, 'server')}>
+        {dropMark(target)}
         {/* Discord-style active pill indicator */}
         <span
           aria-hidden
@@ -345,15 +312,11 @@ export default function ServerSidebar() {
           onTouchEnd={() => { if (serverLongPressRef.current) { clearTimeout(serverLongPressRef.current); serverLongPressRef.current = null } }}
           onTouchCancel={() => { if (serverLongPressRef.current) { clearTimeout(serverLongPressRef.current); serverLongPressRef.current = null } }}
           onTouchMove={() => { if (serverLongPressRef.current) { clearTimeout(serverLongPressRef.current); serverLongPressRef.current = null } }}
-          draggable
-          onDragStart={() => handleDragStart(s.id)}
-          onDragOver={e => e.preventDefault()}
-          onDrop={() => handleDropOnServer(s.id)}
           aria-current={isActive ? 'page' : undefined}
           aria-label={s.name}
           className={`w-12 h-12 rounded-full flex items-center justify-center transition-all hover:rounded-2xl font-bold text-white select-none
             ${isActive ? 'bg-fc-accent rounded-2xl' : 'bg-fc-channel hover:bg-fc-accent'}
-            ${draggedServerId === s.id ? 'opacity-50' : ''}`}
+            ${drag?.id === s.id ? 'opacity-40' : ''}`}
           title={s.name}
         >
           {s.icon
@@ -418,79 +381,84 @@ export default function ServerSidebar() {
         </button>
       </div>
 
+      {/* Actualités : articles des flux RSS, pour tout le monde */}
+      <div className="relative w-full flex items-center justify-center">
+        <span aria-hidden className={`absolute left-0 w-1 h-9 rounded-r-full bg-white transition-all duration-200 ${isNews ? 'opacity-100' : 'opacity-0 h-0'}`} />
+        <button
+          onClick={() => { nav('/news'); closeSidebar() }}
+          aria-current={isNews ? 'page' : undefined}
+          aria-label={t('news.title')}
+          className={`min-w-[44px] min-h-[44px] w-12 h-12 rounded-full flex items-center justify-center transition-all hover:rounded-2xl ${isNews ? 'bg-fc-accent rounded-2xl' : 'bg-fc-channel hover:bg-fc-accent'}`}
+          title={t('news.title')}
+        >
+          <Newspaper size={20} className="text-fc-text" />
+        </button>
+      </div>
+
       <div className="w-8 h-px bg-fc-hover mx-auto" />
 
-      {/* Serveurs libres (ordonnés, avec slots de réordonnement) */}
-      {/* Slot avant le premier serveur */}
-      {orderedFreeServers.length > 0 && (
-        <div
-          className={`w-8 h-1 rounded-full mx-auto transition-all ${dragOverSlot === 0 ? 'bg-fc-accent h-1.5' : 'bg-transparent'}`}
-          onDragOver={e => handleSlotDragOver(e, 0)}
-          onDrop={e => handleSlotDrop(e, 0)}
-          onDragLeave={handleSlotDragLeave}
-        />
-      )}
-      {orderedFreeServers.map((s: any, idx: number) => (
-        <div key={s.id} className="flex flex-col items-center gap-0 w-full">
-          <ServerIcon s={s} />
-          {/* Slot après chaque serveur */}
-          <div
-            className={`w-8 h-1 rounded-full mx-auto mt-0.5 transition-all ${dragOverSlot === idx + 1 ? 'bg-fc-accent h-1.5' : 'bg-transparent'}`}
-            onDragOver={e => handleSlotDragOver(e, idx + 1)}
-            onDrop={e => handleSlotDrop(e, idx + 1)}
-            onDragLeave={handleSlotDragLeave}
-          />
-        </div>
-      ))}
-
-      {/* Dossiers */}
-      {Object.entries(folders).map(([folderId, folder]) => {
-        const folderServers = folder.serverIds
-          .map(id => (servers as any[]).find((s: any) => s.id === id))
-          .filter(Boolean)
-        if (folderServers.length === 0) return null
-        const isExpanded = expandedFolders.has(folderId)
+      {/* Serveurs et dossiers : glisser-déposer comme Discord (haut/bas = déplacer, milieu = dossier) */}
+      {entries.map(id => {
+        const folder = folders[id]
+        if (!folder) {
+          const s = serverById.get(id)
+          return s ? <div key={id} className="w-full">{serverIcon(s)}</div> : null
+        }
+        const folderServers = folder.serverIds.map(x => serverById.get(x)).filter(Boolean)
+        const isExpanded = expandedFolders.has(id)
         const hasActiveServer = folderServers.some((s: any) => s.id === serverId)
-
+        const target: Target = { kind: 'folder', id }
         return (
-          <div key={folderId} className="flex flex-col items-center gap-1">
-            {/* Icône dossier */}
-            <button
-              onClick={() => toggleFolder(folderId)}
-              className={`w-12 h-12 rounded-2xl flex flex-col items-center justify-center transition-all gap-0.5
-                ${hasActiveServer ? 'ring-2 ring-fc-accent' : ''}
-                hover:brightness-110`}
-              style={{ backgroundColor: folder.color + '33', border: `2px solid ${folder.color}` }}
-              title={folder.name}
-            >
-              <FolderOpen size={14} style={{ color: folder.color }} />
-              <span className="text-[9px] font-bold" style={{ color: folder.color }}>
-                {folderServers.length}
-              </span>
-              <ChevronDown
-                size={10}
-                style={{ color: folder.color }}
-                className={`transition-transform ${isExpanded ? 'rotate-180' : ''}`}
-              />
-            </button>
+          <div key={id} className="flex flex-col items-center gap-1 w-full">
+            <div className="relative w-full flex items-center justify-center" {...dndProps(target, 'folder')}>
+              {dropMark(target)}
+              <button
+                onClick={() => toggleFolder(id)}
+                onContextMenu={e => { e.preventDefault(); setEditFolder(id) }}
+                onTouchStart={() => {
+                  serverLongPressRef.current = setTimeout(() => {
+                    serverLongPressRef.current = null
+                    if ('vibrate' in navigator) navigator.vibrate(20)
+                    setEditFolder(id)
+                  }, 500)
+                }}
+                onTouchEnd={() => { if (serverLongPressRef.current) { clearTimeout(serverLongPressRef.current); serverLongPressRef.current = null } }}
+                onTouchMove={() => { if (serverLongPressRef.current) { clearTimeout(serverLongPressRef.current); serverLongPressRef.current = null } }}
+                className={`w-12 h-12 rounded-2xl flex flex-col items-center justify-center transition-all gap-0.5
+                  ${hasActiveServer ? 'ring-2 ring-fc-accent' : ''} ${drag?.id === id ? 'opacity-40' : ''}
+                  hover:brightness-110`}
+                style={{ backgroundColor: folder.color + '33', border: `2px solid ${folder.color}` }}
+                title={`${folder.name} — ${t('servers.folderHint')}`}
+                aria-label={folder.name}
+                aria-expanded={isExpanded}
+              >
+                <FolderOpen size={14} style={{ color: folder.color }} />
+                <span className="text-[9px] font-bold" style={{ color: folder.color }}>{folderServers.length}</span>
+                <ChevronDown size={10} style={{ color: folder.color }} className={`transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+              </button>
+            </div>
 
-            {/* Serveurs du dossier (expand) */}
             {isExpanded && (
-              <div className="flex flex-col items-center gap-1 pl-0">
-                {folderServers.map((s: any) => (
-                  <div key={s.id} className="relative group">
-                    <ServerIcon s={s} folderId={folderId} />
-                    {/* Bouton retirer du dossier (au hover) */}
-                    <button
-                      onClick={e => { e.stopPropagation(); removeFromFolder(s.id, folderId) }}
-                      className="absolute -top-1 -right-1 w-4 h-4 bg-fc-red rounded-full items-center justify-center hidden group-hover:flex"
-                      title={t('servers.removeFromFolder')}
-                    >
-                      <X size={8} className="text-white" />
-                    </button>
-                  </div>
-                ))}
-              </div>
+              <>
+                <button onClick={() => setEditFolder(id)} className="max-w-[66px] truncate text-[10px] font-semibold hover:underline" style={{ color: folder.color }} title={t('servers.editFolder')}>
+                  {folder.name}
+                </button>
+                <div className="flex flex-col items-center gap-1 w-full rounded-2xl py-1" style={{ backgroundColor: folder.color + '1a' }}>
+                  {folderServers.map((s: any) => (
+                    <div key={s.id} className="relative group w-full">
+                      {serverIcon(s, id)}
+                      <button
+                        onClick={e => { e.stopPropagation(); removeFromFolder(s.id, id) }}
+                        className="absolute -top-1 right-2 w-4 h-4 bg-fc-red rounded-full items-center justify-center hidden group-hover:flex"
+                        title={t('servers.removeFromFolder')}
+                        aria-label={t('servers.removeFromFolder')}
+                      >
+                        <X size={8} className="text-white" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </>
             )}
           </div>
         )
@@ -679,6 +647,14 @@ export default function ServerSidebar() {
         )
       })()}
       {deleteTarget && <DeleteServerModal server={deleteTarget} onClose={() => setDeleteTarget(null)} />}
+      {editFolder && folders[editFolder] && (
+        <FolderEditModal
+          folder={folders[editFolder]}
+          onSave={(name, color) => { persistFolders({ ...folders, [editFolder]: { ...folders[editFolder], name, color } }); setEditFolder(null) }}
+          onDissolve={() => { applyLayout(dissolveFolder(serverIds, { order: serverOrder, folders }, editFolder)); setEditFolder(null) }}
+          onClose={() => setEditFolder(null)}
+        />
+      )}
 
       {showCreate && (
         <CreateServerModal
@@ -921,5 +897,53 @@ function CreateServerModal({
         )}
       </div>
     </div>
+  )
+}
+
+/** Renommer un dossier de serveurs, changer sa couleur, ou le défaire (ses serveurs reprennent sa place). */
+function FolderEditModal({ folder, onSave, onDissolve, onClose }: {
+  folder: { name: string; color: string }
+  onSave: (name: string, color: string) => void
+  onDissolve: () => void
+  onClose: () => void
+}) {
+  const t = useT()
+  const [name, setName] = useState(folder.name)
+  const [color, setColor] = useState(folder.color)
+  const save = () => onSave(name.trim().slice(0, 32) || folder.name, color)
+  // Portail vers <body> : la barre des serveurs fixe le repère des éléments `fixed`.
+  return createPortal(
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4" onClick={onClose}>
+      <div role="dialog" aria-modal="true" aria-labelledby="folder-edit-title" onClick={e => e.stopPropagation()}
+        className="bg-fc-channel rounded-xl w-full max-w-sm shadow-2xl p-5 space-y-4">
+        <h2 id="folder-edit-title" className="text-lg font-semibold text-white">{t('servers.editFolder')}</h2>
+        <label className="block space-y-1">
+          <span className="text-xs font-semibold text-fc-muted uppercase tracking-wide">{t('servers.folderName')}</span>
+          <input autoFocus value={name} maxLength={32} onChange={e => setName(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') save(); if (e.key === 'Escape') onClose() }}
+            onFocus={e => e.currentTarget.select()}
+            className="w-full px-3 py-2 bg-fc-input rounded-lg text-white outline-none focus:ring-2 focus:ring-fc-accent text-sm" />
+        </label>
+        <div className="space-y-1">
+          <span className="text-xs font-semibold text-fc-muted uppercase tracking-wide">{t('servers.folderColor')}</span>
+          <div className="flex flex-wrap gap-2 items-center">
+            {FOLDER_COLORS.map(c => (
+              <button key={c} onClick={() => setColor(c)} aria-label={c} aria-pressed={color.toLowerCase() === c.toLowerCase()}
+                className={`w-7 h-7 rounded-full transition ${color.toLowerCase() === c.toLowerCase() ? 'ring-2 ring-white ring-offset-2 ring-offset-fc-channel scale-110' : 'opacity-80 hover:opacity-100'}`}
+                style={{ backgroundColor: c }} />
+            ))}
+            <input type="color" value={color} onChange={e => setColor(e.target.value)} aria-label={t('catStyle.custom')} className="w-7 h-7 rounded bg-transparent cursor-pointer" />
+          </div>
+        </div>
+        <div className="flex items-center justify-between pt-1">
+          <button onClick={onDissolve} className="text-sm text-fc-red hover:underline">{t('servers.dissolveFolder')}</button>
+          <div className="flex gap-2">
+            <button onClick={onClose} className="px-3 py-2 text-sm text-fc-muted hover:text-white">{t('common.cancel')}</button>
+            <button onClick={save} className="px-4 py-2 bg-fc-accent hover:bg-indigo-500 text-white rounded-lg text-sm font-medium">{t('common.save')}</button>
+          </div>
+        </div>
+      </div>
+    </div>,
+    document.body,
   )
 }

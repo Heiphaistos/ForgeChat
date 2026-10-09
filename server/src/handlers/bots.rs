@@ -172,7 +172,7 @@ pub async fn regenerate_token(
 }
 
 /// Hash déterministe d'un token bot (SHA-256 base64) pour lookup direct en DB
-fn hash_bot_token(token: &str) -> String {
+pub(crate) fn hash_bot_token(token: &str) -> String {
     use base64::Engine;
     use sha2::{Digest, Sha256};
     let mut h = Sha256::new();

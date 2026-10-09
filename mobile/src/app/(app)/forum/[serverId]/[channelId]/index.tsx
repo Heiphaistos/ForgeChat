@@ -108,9 +108,9 @@ export default function ForumScreen() {
                 </Text>
               </View>
               <TagChips tags={p.tags} />
-              {p.content ? (
+              {snippet(p.content) ? (
                 <Text style={styles.snippet} numberOfLines={2}>
-                  {p.content}
+                  {snippet(p.content)}
                 </Text>
               ) : null}
               <View style={styles.foot}>
@@ -128,6 +128,9 @@ export default function ForumScreen() {
     </>
   )
 }
+
+/** Aperçu de la liste : sans chemins d'images du serveur (affichées dans la publication). */
+const snippet = (c: string | null | undefined) => (c ?? '').replace(/\/uploads\/[\w.-]+\.(?:png|jpe?g|gif|webp|mp4|webm|mov|enc)/gi, ' ').replace(/\s+/g, ' ').trim()
 
 const styles = StyleSheet.create({
   card: { backgroundColor: colors.bgAlt, borderRadius: radius.md, padding: spacing.md, gap: spacing.sm },

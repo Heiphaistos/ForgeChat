@@ -24,6 +24,9 @@ import { ChannelLock } from '../e2e/ChannelBadge'
 import UserPopup from '../components/UserPopup'
 import { isToday, isYesterday, format } from 'date-fns'
 
+/** Aperçu de la liste : sans chemins d'images du serveur (affichées dans la publication). */
+const snippet = (c: string | null | undefined) => (c ?? '').replace(/\/uploads\/[\w.-]+\.(?:png|jpe?g|gif|webp|mp4|webm|mov|enc)/gi, ' ').replace(/\s+/g, ' ').trim()
+
 const POST_PAGE = 50
 
 interface Props {
@@ -492,8 +495,8 @@ export default function ForumPage({ channel, serverId, channelId, canManageMessa
                     </>
                   )}
                 </div>
-                {post.content && (
-                  <p className="text-sm text-fc-muted line-clamp-2 mb-2">{post.content}</p>
+                {snippet(post.content) && (
+                  <p className="text-sm text-fc-muted line-clamp-2 mb-2">{snippet(post.content)}</p>
                 )}
                 <div className="flex items-center gap-3 text-xs text-fc-muted">
                   {post.tags.length > 0 && (

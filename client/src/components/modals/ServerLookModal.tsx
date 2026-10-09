@@ -1,5 +1,6 @@
 // « Apparence de ce serveur » : thème et style des catégories propres à un serveur, pour soi seul.
 // Sans choix, le serveur reprend l'apparence de ForgeChat. Appliqué en direct, synchronisé avec le compte.
+import { createPortal } from 'react-dom'
 import { X } from 'lucide-react'
 import { useLang, useT } from '../../i18n'
 import CategoryStyleEditor from '../settings/appearance/CategoryStyleEditor'
@@ -29,7 +30,8 @@ export default function ServerLookModal({ serverId, serverName, onClose }: { ser
   const setTheme = (theme: string | undefined) => setServerLook(serverId, { ...look, theme })
   const ownCategory = !!look.category
 
-  return (
+  // Portail vers <body> : ouvert depuis la barre des salons, dont un parent fixe le repère des éléments `fixed`.
+  return createPortal(
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4" onClick={onClose}>
       <div role="dialog" aria-modal="true" aria-labelledby="server-look-title" onClick={e => e.stopPropagation()}
         className="bg-fc-channel rounded-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl p-5 space-y-5">
@@ -76,6 +78,7 @@ export default function ServerLookModal({ serverId, serverName, onClose }: { ser
           <button onClick={onClose} className="px-4 py-2 bg-fc-accent hover:bg-indigo-500 text-white rounded-lg text-sm font-medium">{t('common.close')}</button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }

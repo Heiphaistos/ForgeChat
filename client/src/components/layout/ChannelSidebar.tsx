@@ -1159,9 +1159,10 @@ export default function ChannelSidebar() {
             aria-expanded={menuOpen}
           >
             {server?.banner ? (
-              <div className="relative h-16">
-                <img src={mediaUrl(server.banner)} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
-                <div className="absolute inset-0 bg-black/50" />
+              <div className="relative">
+                {/* Bannière entière, à son format (jamais rognée) ; le nom passe sur un dégradé en bas. */}
+                <img src={mediaUrl(server.banner)} alt="" loading="lazy" decoding="async" className="w-full h-auto block" />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent" />
                 <div className="absolute inset-0 flex items-end justify-between px-4 py-2">
                   <span className="font-semibold text-white text-sm truncate drop-shadow">{server.name}</span>
                   <ChevronDown size={16} className="text-white/80 flex-shrink-0" />

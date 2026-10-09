@@ -95,7 +95,7 @@ jobs:
         working-directory: client
         run: |
           PGPASSWORD=ci psql -h 127.0.0.1 -U forgechat forgechat -c "UPDATE site_settings SET value='open' WHERE key='registration_mode'"
-          for s in messaging community e2e-files friends; do
+          for s in messaging community e2e-files friends news; do
             redis-cli --scan --pattern 'register_attempts:*' | xargs -r redis-cli del >/dev/null
             node --experimental-strip-types scripts/$s.api.mjs
           done

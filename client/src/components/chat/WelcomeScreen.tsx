@@ -54,11 +54,13 @@ export default function WelcomeScreen({ server, channels }: Props) {
     <div className="flex flex-col items-center h-full overflow-y-auto overscroll-contain">
       {/* Banner */}
       {server.banner ? (
-        <div className="w-full h-[250px] flex-shrink-0 overflow-hidden">
+        // Bannière entière à son format : l'image floutée remplit les côtés, jamais de rognage.
+        <div className="relative w-full flex-shrink-0 overflow-hidden bg-black">
+          <img src={mediaUrl(server.banner)} alt="" aria-hidden className="absolute inset-0 w-full h-full object-cover blur-2xl scale-110 opacity-60" />
           <img
             src={mediaUrl(server.banner)}
             alt="Bannière du serveur"
-            className="w-full h-full object-cover"
+            className="relative mx-auto w-full max-h-[45vh] object-contain"
           />
         </div>
       ) : (

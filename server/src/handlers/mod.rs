@@ -35,6 +35,7 @@ pub mod group_dms;
 pub mod group_calls;
 pub mod threads;
 pub mod forum;
+pub mod news;
 pub mod reads;
 pub mod reports;
 pub mod emojis;
