@@ -1,0 +1,26 @@
+diff --git a/node_modules/expo-audio/android/src/main/java/expo/modules/audio/AudioPlayer.kt b/node_modules/expo-audio/android/src/main/java/expo/modules/audio/AudioPlayer.kt
+index c76a9fd..b12e945 100644
+--- a/node_modules/expo-audio/android/src/main/java/expo/modules/audio/AudioPlayer.kt
++++ b/node_modules/expo-audio/android/src/main/java/expo/modules/audio/AudioPlayer.kt
+@@ -181,7 +181,7 @@ class AudioPlayer(
+   }
+ 
+   override fun setPlaybackRate(rate: Float) {
+-    val playbackRate = rate.coerceIn(0.1f, 2.0f)
++    val playbackRate = rate.coerceIn(0.1f, 3.0f)
+     val pitch = if (preservesPitch) 1f else playbackRate
+     ref.playbackParameters = PlaybackParameters(playbackRate, pitch)
+   }
+diff --git a/node_modules/expo-audio/ios/AudioModule.swift b/node_modules/expo-audio/ios/AudioModule.swift
+index d265606..61260c6 100644
+--- a/node_modules/expo-audio/ios/AudioModule.swift
++++ b/node_modules/expo-audio/ios/AudioModule.swift
+@@ -216,7 +216,7 @@ public class AudioModule: Module {
+       }
+ 
+       Function("setPlaybackRate") { (player, rate: Double, pitchCorrectionQuality: PitchCorrectionQuality?) in
+-        let playerRate = rate < 0 ? 0.0 : Float(min(rate, 2.0))
++        let playerRate = rate < 0 ? 0.0 : Float(min(rate, 3.0))
+         player.currentRate = playerRate
+ 
+         if player.isPlaying {

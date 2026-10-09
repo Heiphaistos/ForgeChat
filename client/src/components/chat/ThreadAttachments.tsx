@@ -6,6 +6,7 @@ import { FileText, X } from 'lucide-react'
 import { mediaUrl } from '../../api/client'
 import { displayAttachments } from '../../e2e/files'
 import E2EAttachment from '../../e2e/E2EAttachment'
+import SpeedAudio from './SpeedAudio'
 
 export interface SimpleAttachment {
   id: string
@@ -101,7 +102,7 @@ export function AttachmentList({ attachments, body }: { attachments?: SimpleAtta
           return <video key={att.id} src={src} controls playsInline preload="metadata" className="max-w-full max-h-60 rounded bg-black" />
         }
         if (att.content_type.startsWith('audio/')) {
-          return <audio key={att.id} src={src} controls preload="metadata" className="max-w-full" />
+          return <SpeedAudio key={att.id} src={src} />
         }
         return (
           <a

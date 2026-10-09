@@ -85,3 +85,50 @@ export async function decodeToPcm(blob: Blob): Promise<Float32Array> {
     void ctx.close()
   }
 }
+
+/**
+ * Découpe un vocal en morceaux d'au plus `maxLen` s, coupés dans la pause la plus calme
+ * (énergie moyenne sur 0,3 s). Whisper transcrit chaque morceau seul : sur un long passage
+ * il se met à boucler, et les fenêtres de 30 s avec chevauchement perdaient des phrases.
+ */
+export function splitOnPauses(pcm: Float32Array, maxLen = 20, rate = RATE): Float32Array[] {
+  const max = maxLen * rate, min = 5 * rate, step = Math.round(rate * 0.03), win = Math.round(rate * 0.3)
+  const out: Float32Array[] = []
+  let start = 0
+  while (pcm.length - start > max) {
+    let cut = start + max, quiet = Infinity
+    for (let i = start + min; i + win <= start + max; i += step) {
+      const e = rms(pcm.subarray(i, i + win))
+      if (e < quiet) { quiet = e; cut = i + (win >> 1) }
+    }
+    out.push(pcm.subarray(start, cut))
+    start = cut
+  }
+  out.push(pcm.subarray(start))
+  return out
+}
+
+/**
+ * Retire les rafales de répétitions de Whisper (« ça bégaye et répète en boucle ») : un groupe
+ * de 1 à 12 mots répété au moins 3 fois d'affilée n'est gardé qu'une fois, et une rafale de
+ * ponctuation (« ............ ») est ramenée à trois signes.
+ */
+export function collapseRepeats(text: string): string {
+  const w = text.replace(/([^\p{L}\p{N}\s])\1{3,}/gu, '$1$1$1').split(/\s+/).filter(Boolean)
+  const key = w.map(s => s.toLowerCase().replace(/[^\p{L}\p{N}]/gu, ''))
+  const same = (a: number, b: number, n: number) => { for (let k = 0; k < n; k++) if (key[a + k] !== key[b + k]) return false; return true }
+  const out: string[] = []
+  for (let i = 0; i < w.length;) {
+    let run = 0, size = 0
+    for (let n = 1; n <= 12 && i + 3 * n <= w.length; n++) {
+      let k = 1
+      while (i + (k + 1) * n <= w.length && same(i, i + k * n, n)) k++
+      if (k >= 3) { run = k; size = n; break }
+    }
+    if (run) { out.push(...w.slice(i, i + size)); i += run * size } else out.push(w[i++])
+  }
+  return out.join(' ')
+}
+
+/** Whisper a bouclé sur ce morceau : rafale d'un même signe, ou groupe de mots répété en rafale. */
+export const looped = (text: string) => /(\S)\1{5,}/u.test(text) || collapseRepeats(text) !== text.split(/\s+/).filter(Boolean).join(' ')

@@ -11,6 +11,37 @@ use crate::{
     state::AppState,
 };
 
+/// Demande d'ami de `me` vers `target` : crée la demande, ou ACCEPTE celle que `target` avait
+/// déjà envoyée (demandes croisées = amis, comme Discord). Avant, n'importe quelle ligne entre
+/// les deux comptes (une demande restée en attente) renvoyait « Demande déjà existante ».
+async fn request_or_accept(state: &AppState, me: Uuid, target: Uuid, message: Option<String>) -> Result<&'static str> {
+    use sqlx::Row;
+    let row = sqlx::query(
+        "SELECT id, user_id, status FROM friendships WHERE (user_id=$1 AND friend_id=$2) OR (user_id=$2 AND friend_id=$1)"
+    )
+    .bind(me).bind(target).fetch_optional(&state.db).await?;
+    let me_name: String = sqlx::query_scalar("SELECT username FROM users WHERE id=$1")
+        .bind(me).fetch_optional(&state.db).await?.unwrap_or_default();
+    match row {
+        Some(r) if r.get::<String, _>("status") == "accepted" => Err(AppError::Conflict("Vous êtes déjà amis".into())),
+        Some(r) if r.get::<Uuid, _>("user_id") == me => Err(AppError::Conflict("Demande déjà envoyée, en attente de sa réponse".into())),
+        Some(r) => {
+            sqlx::query("UPDATE friendships SET status='accepted', friend_since=NOW() WHERE id=$1")
+                .bind(r.get::<Uuid, _>("id")).execute(&state.db).await?;
+            let event = serde_json::json!({ "type": "FRIEND_ACCEPTED", "from_id": me, "from_username": me_name });
+            state.broadcast_to_user(target, event.to_string()).await;
+            Ok("accepted")
+        }
+        None => {
+            sqlx::query("INSERT INTO friendships (user_id, friend_id, status, message) VALUES ($1, $2, 'pending', $3)")
+                .bind(me).bind(target).bind(message).execute(&state.db).await?;
+            let event = serde_json::json!({ "type": "FRIEND_REQUEST", "from_id": me, "from_username": me_name });
+            state.broadcast_to_user(target, event.to_string()).await;
+            Ok("sent")
+        }
+    }
+}
+
 pub async fn get_friends(
     State(state): State<AppState>,
     Extension(claims): Extension<Claims>,
@@ -103,42 +134,8 @@ pub async fn send_friend_request(
         _ => {}
     }
 
-    let exists = sqlx::query_scalar::<_, bool>(
-        "SELECT EXISTS(SELECT 1 FROM friendships WHERE
-         (user_id=$1 AND friend_id=$2) OR (user_id=$2 AND friend_id=$1))"
-    )
-    .bind(claims.sub)
-    .bind(target_id)
-    .fetch_one(&state.db)
-    .await?;
-
-    if exists {
-        return Err(AppError::Conflict("Demande déjà existante".into()));
-    }
-
-    sqlx::query(
-        "INSERT INTO friendships (user_id, friend_id, status) VALUES ($1, $2, 'pending')"
-    )
-    .bind(claims.sub)
-    .bind(target_id)
-    .execute(&state.db)
-    .await?;
-
-    // Récupérer le username de l'expéditeur pour la notif
-    let sender_row = sqlx::query("SELECT username FROM users WHERE id=$1")
-        .bind(claims.sub).fetch_optional(&state.db).await?;
-    let from_username: String = sender_row.as_ref()
-        .and_then(|r| { use sqlx::Row; r.try_get("username").ok() })
-        .unwrap_or_default();
-
-    let event = serde_json::json!({
-        "type": "FRIEND_REQUEST",
-        "from_id": claims.sub,
-        "from_username": from_username,
-    });
-    state.broadcast_to_user(target_id, event.to_string()).await;
-
-    Ok(Json(serde_json::json!({ "ok": true })))
+    let outcome = request_or_accept(&state, claims.sub, target_id, None).await?;
+    Ok(Json(serde_json::json!({ "ok": true, "outcome": outcome })))
 }
 
 pub async fn accept_friend(
@@ -693,14 +690,28 @@ pub async fn accept_friend_invite(
     .fetch_one(&state.db)
     .await?;
 
-    if !already {
-        sqlx::query(
-            "INSERT INTO friendships (user_id, friend_id, status) VALUES ($1, $2, 'accepted')",
-        )
-        .bind(inviter_id)
-        .bind(claims.sub)
-        .execute(&state.db)
-        .await?;
+    // Une demande restée en attente entre les deux comptes devient l'amitié : avant, le lien
+    // répondait « ok » sans rien faire et on se croyait déjà amis.
+    let upgraded = already && sqlx::query(
+        "UPDATE friendships SET status='accepted', friend_since=NOW() WHERE status='pending' AND
+         ((user_id=$1 AND friend_id=$2) OR (user_id=$2 AND friend_id=$1))",
+    )
+    .bind(inviter_id)
+    .bind(claims.sub)
+    .execute(&state.db)
+    .await?
+    .rows_affected() > 0;
+
+    if !already || upgraded {
+        if !already {
+            sqlx::query(
+                "INSERT INTO friendships (user_id, friend_id, status, friend_since) VALUES ($1, $2, 'accepted', NOW())",
+            )
+            .bind(inviter_id)
+            .bind(claims.sub)
+            .execute(&state.db)
+            .await?;
+        }
 
         sqlx::query("UPDATE friend_invites SET uses = uses + 1 WHERE code=$1")
             .bind(&code)
@@ -1130,29 +1141,9 @@ pub async fn send_friend_by_name(
         return Err(AppError::BadRequest("Impossible de s'ajouter soi-même".into()));
     }
 
-    let exists = sqlx::query_scalar::<_, bool>(
-        "SELECT EXISTS(SELECT 1 FROM friendships WHERE (user_id=$1 AND friend_id=$2) OR (user_id=$2 AND friend_id=$1))"
-    ).bind(claims.sub).bind(target_id).fetch_one(&state.db).await?;
-
-    if exists {
-        return Err(AppError::Conflict("Relation déjà existante".into()));
-    }
-
     let msg = body.message.as_deref().unwrap_or("").chars().take(256).collect::<String>();
-    sqlx::query(
-        "INSERT INTO friendships (user_id, friend_id, status, message) VALUES ($1, $2, 'pending', $3)"
-    ).bind(claims.sub).bind(target_id).bind(if msg.is_empty() { None } else { Some(msg) })
-     .execute(&state.db).await?;
-
-    let sender = sqlx::query("SELECT username FROM users WHERE id=$1")
-        .bind(claims.sub).fetch_optional(&state.db).await?;
-    let from_username: String = sender.as_ref()
-        .and_then(|r| { use sqlx::Row; r.try_get("username").ok() })
-        .unwrap_or_default();
-    let event = serde_json::json!({ "type": "FRIEND_REQUEST", "from_id": claims.sub, "from_username": from_username });
-    state.broadcast_to_user(target_id, event.to_string()).await;
-
-    Ok(Json(serde_json::json!({ "ok": true, "user_id": target_id })))
+    let outcome = request_or_accept(&state, claims.sub, target_id, if msg.is_empty() { None } else { Some(msg) }).await?;
+    Ok(Json(serde_json::json!({ "ok": true, "user_id": target_id, "outcome": outcome })))
 }
 
 /// DELETE /friends/:id/cancel — annuler une demande envoyée

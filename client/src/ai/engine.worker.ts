@@ -6,6 +6,7 @@ import { env, pipeline, Tensor, type Pipe } from './third-party/transformers.min
 import { AI_LANGS, PACKS, fileByPath, type PackId, type Step } from './manifest.ts'
 import { readVerified } from './modelStore.ts'
 import { chunkLine, needsTranslation } from './text.ts'
+import { RATE, collapseRepeats, looped, splitOnPauses } from './audio.ts'
 
 // Hôte fictif : transformers.js construit `<hôte><repo>/<fichier>`, que env.fetch sert
 // depuis le stockage local. Une requête hors manifeste reçoit un 404, jamais le réseau.
@@ -117,8 +118,16 @@ async function translateText(text: string, steps: Step[]): Promise<string> {
 async function transcribe(pcm: Float32Array, language?: string): Promise<{ text: string; lang: string }> {
   const asr = await pipe('whisper')
   const lang = language ?? await spokenLang(asr, pcm)
-  const r = await asr(pcm, { chunk_length_s: 30, stride_length_s: 5, task: 'transcribe', language: lang }) as { text: string }
-  return { text: r.text.trim(), lang }
+  const parts: string[] = []
+  for (const seg of splitOnPauses(pcm)) {
+    // Au plus ~8 jetons par seconde de parole : une boucle s'arrête là au lieu de remplir la fenêtre.
+    const opts = { task: 'transcribe', language: lang, max_new_tokens: Math.min(440, Math.ceil(seg.length / RATE * 8) + 16) }
+    let text = (await asr(seg, opts) as { text: string }).text.trim()
+    // Morceau qui a bouclé : second essai où un même groupe de 3 jetons ne peut plus revenir.
+    if (looped(text)) text = (await asr(seg, { ...opts, no_repeat_ngram_size: 3 }) as { text: string }).text.trim()
+    parts.push(text)
+  }
+  return { text: collapseRepeats(parts.join(' ')).trim(), lang }
 }
 
 export type EngineRequest =

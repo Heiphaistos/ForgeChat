@@ -1,6 +1,6 @@
 {
   "name": "forgechat-mobile",
-  "version": "1.18.1",
+  "version": "1.19.0",
   "main": "expo-router/entry",
   "dependencies": {
     "@config-plugins/react-native-webrtc": "^15.0.2",
@@ -61,6 +61,7 @@
     "eslint-config-expo": "^57.0.2",
     "jest": "~29.7.0",
     "jest-expo": "~57.0.5",
+    "patch-package": "^8.0.1",
     "typescript": "~6.0.3"
   },
   "scripts": {
@@ -75,7 +76,8 @@
     "doctor": "expo-doctor",
     "e2e": "node scripts/e2e-api.mjs",
     "e2e:authz": "node scripts/e2e-authz.mjs",
-    "e2e:delete": "node scripts/e2e-delete-account.mjs"
+    "e2e:delete": "node scripts/e2e-delete-account.mjs",
+    "postinstall": "patch-package"
   },
   "private": true,
   "jest": {
@@ -99,6 +101,16 @@
   "overrides": {
     "xcode": {
       "uuid": "^11.1.1"
+    }
+  },
+  "expo": {
+    "autolinking": {
+      "exclude": [
+        "expo-dev-client",
+        "expo-dev-launcher",
+        "expo-dev-menu",
+        "expo-dev-menu-interface"
+      ]
     }
   }
 }

@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons'
+import { useEffect, useState } from 'react'
 import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio'
 import { useVideoPlayer, VideoView } from 'expo-video'
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native'
@@ -39,6 +40,10 @@ export function AudioAttachment({
   const status = useAudioPlayerStatus(player)
   const ended = !status.playing && status.duration > 0 && status.currentTime >= status.duration - 0.25
   const progress = status.duration > 0 ? Math.min(1, status.currentTime / status.duration) : 0
+  // Vitesse 1× à 3× (plafond relevé à 3 par patches/expo-audio+57.0.5.patch), voix non déformée.
+  const [speed, setSpeed] = useState(0)
+  const rate = SPEEDS[speed] ?? 1
+  useEffect(() => { if (status.isLoaded) player.setPlaybackRate(rate, 'high') }, [player, rate, status.isLoaded])
 
   const toggle = () => {
     if (status.playing) {
@@ -78,9 +83,20 @@ export function AudioAttachment({
           {formatDuration(status.currentTime)} / {formatDuration(status.duration)}
         </Text>
       </View>
+      <Pressable
+        onPress={() => setSpeed((speed + 1) % SPEEDS.length)}
+        style={styles.speed}
+        accessibilityRole="button"
+        accessibilityLabel={t('panel.att.speed', { rate: String(rate) })}
+        hitSlop={8}
+      >
+        <Text style={styles.speedText}>{String(rate).replace('.', ',')}×</Text>
+      </Pressable>
     </View>
   )
 }
+
+const SPEEDS = [1, 1.25, 1.5, 2, 3] as const
 
 const styles = StyleSheet.create({
   video: { width: 260, height: 180, borderRadius: radius.md, overflow: 'hidden', backgroundColor: '#000' },
@@ -100,4 +116,6 @@ const styles = StyleSheet.create({
   track: { height: 4, borderRadius: 2, backgroundColor: colors.bgHover, overflow: 'hidden' },
   fill: { height: 4, backgroundColor: colors.primary },
   time: { color: colors.textMuted, fontSize: font.xs },
+  speed: { minWidth: 44, paddingHorizontal: spacing.sm, paddingVertical: 4, borderRadius: radius.md, backgroundColor: colors.bgHover, alignItems: 'center' },
+  speedText: { color: colors.text, fontSize: font.xs, fontWeight: '700' },
 })

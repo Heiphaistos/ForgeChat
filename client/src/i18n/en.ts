@@ -345,6 +345,7 @@ export const en: Partial<Record<Key, string>> = {
   'input.ephemeralActive': 'Disappearing message on: {ttl}',
   'input.expiration': 'Message expiration',
   'input.voiceTitle': 'Voice message',
+  'chat.audioSpeed': 'Playback speed',
   'input.voice': 'Record a voice message',
   'input.sendTitle': 'Send',
   'input.send': 'Send message',

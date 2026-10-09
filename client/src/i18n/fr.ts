@@ -344,6 +344,7 @@ export const fr = {
   'input.ephemeralActive': 'Message éphémère actif : {ttl}',
   'input.expiration': 'Expiration du message',
   'input.voiceTitle': 'Message vocal',
+  'chat.audioSpeed': 'Vitesse de lecture',
   'input.voice': 'Enregistrer un message vocal',
   'input.sendTitle': 'Envoyer',
   'input.send': 'Envoyer le message',
