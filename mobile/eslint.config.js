@@ -13,6 +13,8 @@ module.exports = defineConfig([
       'no-console': 'error',
       'no-eval': 'error',
       'no-implied-eval': 'error',
+      // Expo la laisse en avertissement : un hook après un return a fait planter l'ouverture des serveurs (1.23.0).
+      'react-hooks/rules-of-hooks': 'error',
     },
   },
   {

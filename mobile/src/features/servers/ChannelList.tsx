@@ -119,11 +119,13 @@ export function ChannelList({
   // Masqués pour moi seul (POST /channels/:id/hide) : réaffichables d'ici.
   const hidden = (channels.data ?? []).filter((c) => c.hidden && !c.archived)
 
+  // Avant tout return : un hook appelé après le chargement plantait l'app (« Rendered more hooks »).
+  const [bannerRatio, setBannerRatio] = useState(16 / 9)
+
   if (channels.isLoading) return <Loading />
   if (channels.error) return <ErrorState message={errorMessage(channels.error)} onRetry={() => void channels.refetch()} />
 
   const banner = resolveMediaUrl(server.banner)
-  const [bannerRatio, setBannerRatio] = useState(16 / 9)
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.bgAlt }}>
