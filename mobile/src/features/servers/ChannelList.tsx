@@ -8,6 +8,7 @@ import { serversApi } from '@/api/servers'
 import { settingsApi } from '@/api/settings'
 import { categoryLookFor, categoryStyles } from '@/features/appearance/categoryLook'
 import { themeStudioKey } from '@/features/appearance/sync'
+import { useAppearance } from '@/theme/prefs'
 import { Avatar } from '@/components/Avatar'
 import { UserName } from '@/components/UserName'
 import { Sheet } from '@/components/Sheet'
@@ -86,6 +87,8 @@ export function ChannelList({
   const rooms = useVoiceRooms((s) => s.rooms)
   const me = useAuth((s) => s.user)
   const collapsed = useUi((s) => s.collapsed)
+  const foldedByDefault = useAppearance((s) => s.categoriesFolded)
+  const isFolded = (id: string) => collapsed[id] ?? foldedByDefault
   const toggleCategory = useUi((s) => s.toggleCategory)
   const perms = useServerPerms(server.id)
   // Style des catégories choisi sur le web ou le bureau (propre à ce serveur ou général).
@@ -101,11 +104,12 @@ export function ChannelList({
   const sections = useMemo(
     () =>
       channelSections(channels.data ?? [], categories.data ?? []).map((sec) =>
-        sec.category && collapsed[sec.category.id]
+        sec.category && isFolded(sec.category.id)
           ? { ...sec, data: sec.data.filter((c) => c.id === activeChannelId || c.id === voiceChannel || (counts[c.id] ?? 0) > 0) }
           : sec,
       ),
-    [channels.data, categories.data, collapsed, activeChannelId, voiceChannel, counts],
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- isFolded ne lit que collapsed et foldedByDefault
+    [channels.data, categories.data, collapsed, foldedByDefault, activeChannelId, voiceChannel, counts],
   )
   // Moi en tête si je suis dans le salon (le serveur ne m'envoie pas mes propres arrivées).
   const participants = (channelId: string): VoiceRoomMember[] => {
@@ -160,10 +164,10 @@ export function ChannelList({
         }
         renderSectionHeader={({ section }) => {
           const cat = section.category
-          const folded = !!(cat && collapsed[cat.id])
+          const folded = !!(cat && isFolded(cat.id))
           return cat ? (
             <Pressable
-              onPress={() => toggleCategory(cat.id)}
+              onPress={() => toggleCategory(cat.id, folded)}
               onLongPress={() => setCategoryMenu(cat)}
               accessibilityRole="button"
               accessibilityLabel={folded ? `${cat.name}, ${t('channels.collapsed')}` : cat.name}

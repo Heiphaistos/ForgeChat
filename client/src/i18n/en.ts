@@ -346,6 +346,7 @@ export const en: Partial<Record<Key, string>> = {
   'input.expiration': 'Message expiration',
   'input.voiceTitle': 'Voice message',
   'chat.audioSpeed': 'Playback speed',
+  'chat.audioBack5': 'Go back 5 seconds',
   'catStyle.title': 'Channel categories',
   'catStyle.hint': 'Style of the category titles in servers’ channel lists.',
   'catStyle.shape': 'Shape',

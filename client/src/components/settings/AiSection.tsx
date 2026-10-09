@@ -9,7 +9,7 @@ import { AI_LANGS, PACKS, packSize, type AiLang, type PackId } from '../../ai/ma
 import { installedPacks, removePacks, usedBytes } from '../../ai/modelStore'
 import { download, stopEngine, useAiSettings } from '../../ai/engine'
 
-const ORDER: PackId[] = ['runtime', 'whisper', 'romance-en', 'en-romance', 'de-en', 'en-de']
+const ORDER: PackId[] = ['runtime', 'whisper', 'whisper-small', 'romance-en', 'en-romance', 'de-en', 'en-de']
 
 export default function AiSection() {
   const t = useT()
@@ -46,6 +46,7 @@ export default function AiSection() {
       <div className="space-y-3">
         {row(t('ai.set.translate'), s.translate, v => s.set({ translate: v }))}
         {row(t('ai.set.transcribe'), s.transcribe, v => s.set({ transcribe: v }))}
+        {row(t('ai.set.precise'), s.precise, v => s.set({ precise: v }), t('ai.set.preciseHint'))}
         {row(t('ai.set.summary'), s.summary, v => s.set({ summary: v }), t('ai.set.summaryHint'))}
       </div>
       <Field label={t('ai.set.target')}>

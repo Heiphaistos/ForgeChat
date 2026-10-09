@@ -211,6 +211,15 @@ export default function AppearanceScreen() {
         ))}
       </Section>
 
+      <Section footer={t('appearance.categoriesFoldedFooter')}>
+        <SwitchRow
+          icon="list-outline"
+          title={t('appearance.categoriesFolded')}
+          value={prefs.categoriesFolded}
+          onValueChange={(v) => saveAppearance({ categoriesFolded: v })}
+        />
+      </Section>
+
       <Section footer={t('appearance.streamerFooter')}>
         <SwitchRow
           icon="videocam-outline"

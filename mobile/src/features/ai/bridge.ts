@@ -4,8 +4,8 @@
 // part sur le réseau à part le téléchargement des modèles, vérifiés par SHA-256.
 import { create } from 'zustand'
 
-export type PackId = 'runtime' | 'whisper' | 'romance-en' | 'en-romance' | 'de-en' | 'en-de'
-export const ALL_PACKS: PackId[] = ['runtime', 'whisper', 'romance-en', 'en-romance', 'de-en', 'en-de']
+export type PackId = 'runtime' | 'whisper' | 'whisper-small' | 'romance-en' | 'en-romance' | 'de-en' | 'en-de'
+export const ALL_PACKS: PackId[] = ['runtime', 'whisper', 'whisper-small', 'romance-en', 'en-romance', 'de-en', 'en-de']
 
 export interface AiReply {
   id?: number

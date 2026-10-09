@@ -345,6 +345,7 @@ export const fr = {
   'input.expiration': 'Expiration du message',
   'input.voiceTitle': 'Message vocal',
   'chat.audioSpeed': 'Vitesse de lecture',
+  'chat.audioBack5': 'Revenir 5 secondes en arrière',
   'catStyle.title': 'Catégories des salons',
   'catStyle.hint': 'Style des titres de catégorie dans la liste des salons des serveurs.',
   'catStyle.shape': 'Forme',

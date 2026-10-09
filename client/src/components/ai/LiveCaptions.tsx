@@ -29,7 +29,7 @@ export default function LiveCaptions({ sources }: { sources: CaptionSource[] }) 
     try {
       for (let job = queue.current.shift(); job; job = queue.current.shift()) {
         const long = job.pcm.length >= 3 * RATE // avant transfert du tampon au Worker
-        const r = await transcribe(job.pcm, { ask: false, language: langs.current.get(job.id) }).catch(() => null)
+        const r = await transcribe(job.pcm, { ask: false, language: langs.current.get(job.id), pack: 'whisper' }).catch(() => null)
         // Langue retenue seulement sur une phrase assez longue (détection fiable).
         if (r?.lang && long) langs.current.set(job.id, r.lang)
         const text = r?.text ?? ''

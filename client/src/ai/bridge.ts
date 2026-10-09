@@ -13,7 +13,7 @@ type Req =
   | { id: number; op: 'download'; packs: PackId[] }
   | { id: number; op: 'remove'; packs: PackId[] }
   | { id: number; op: 'translate'; text: string; target: string }
-  | { id: number; op: 'transcribe'; audio: string; mime: string; language?: string }
+  | { id: number; op: 'transcribe'; audio: string; mime: string; language?: string; precise?: boolean }
 
 declare global {
   interface Window {
@@ -58,11 +58,12 @@ async function handle(r: Req): Promise<Record<string, unknown>> {
       return (await missing(packsFor(steps))) ?? { text: await translateSteps(r.text, steps), from: src }
     }
     case 'transcribe': {
-      const miss = await missing(['runtime', 'whisper'])
+      const pack = r.precise === false ? 'whisper' : 'whisper-small'
+      const miss = await missing(['runtime', pack])
       if (miss) return miss
       const bytes = Uint8Array.from(atob(r.audio), c => c.charCodeAt(0))
       const pcm = await decodeToPcm(new Blob([bytes], { type: r.mime }))
-      return { ...await transcribePcm(pcm, r.language) }
+      return { ...await transcribePcm(pcm, r.language, pack) }
     }
   }
 }

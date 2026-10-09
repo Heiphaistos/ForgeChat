@@ -1,6 +1,6 @@
 // Client du Worker de l'IA sur l'appareil, sans interface : utilisé par l'appli web
 // (engine.ts) et par la page moteur de l'appli Android (bridge.ts, ai-engine.html).
-import type { Step } from './manifest'
+import type { AsrPack, Step } from './manifest'
 import type { EngineRequest, EngineResponse } from './engine.worker'
 
 let worker: Worker | null = null
@@ -40,5 +40,5 @@ export function stopEngine(reason = 'stopped') {
 export const translateSteps = (text: string, steps: Step[]) => call({ op: 'translate', text, steps }).then(r => r.text)
 
 /** Audio mono 16 kHz → texte et langue parlée (le tampon est transféré au Worker). */
-export const transcribePcm = (pcm: Float32Array, language?: string) =>
-  call({ op: 'transcribe', pcm, language }, [pcm.buffer])
+export const transcribePcm = (pcm: Float32Array, language?: string, pack: AsrPack = 'whisper') =>
+  call({ op: 'transcribe', pcm, language, pack }, [pcm.buffer])

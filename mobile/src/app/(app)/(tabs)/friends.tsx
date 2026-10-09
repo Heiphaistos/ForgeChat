@@ -33,6 +33,9 @@ export default function FriendsScreen() {
   const activities = usePresence((s) => s.activities)
   const groups = useQuery({ queryKey: socialKeys.groups, queryFn: socialApi.groups })
   const q = useQuery({ queryKey: qk.friends(filter === 'online' ? 'all' : filter), queryFn: () => friendsApi.list(filter === 'online' ? 'all' : filter) })
+  // Demandes reçues : toujours en tête de liste (le badge de l'onglet les compte, il faut les voir sans chercher).
+  const pending = useQuery({ queryKey: qk.friends('pending'), queryFn: () => friendsApi.list('pending') })
+  const received = (pending.data?.friends ?? []).filter((f) => f.direction === 'received')
 
   useLayoutEffect(() => {
     navigation.setOptions({
@@ -66,9 +69,12 @@ export default function FriendsScreen() {
   }
 
   const organized = filter === 'online' || filter === 'all'
-  const sections = organized
-    ? friendSections(data, groups.data ?? [], { favorites: t('soc.fav.section'), others: t('soc.groups.others') })
-    : data.length ? [{ key: 'list', title: null, data }] : []
+  const sections = [
+    ...(organized && received.length ? [{ key: 'received', title: t('friends.receivedSection'), data: received }] : []),
+    ...(organized
+      ? friendSections(data, groups.data ?? [], { favorites: t('soc.fav.section'), others: t('soc.groups.others') })
+      : data.length ? [{ key: 'list', title: null, data }] : []),
+  ]
 
   const renderActions = (f: Friend) => {
     if (f.direction === 'received')
@@ -118,7 +124,9 @@ export default function FriendsScreen() {
             accessibilityRole="tab"
             accessibilityState={{ selected: filter === f.key }}
           >
-            <Text style={[styles.filterText, filter === f.key && { color: colors.text }]}>{t(f.label)}</Text>
+            <Text style={[styles.filterText, filter === f.key && { color: colors.text }]}>
+              {t(f.label)}{f.key === 'pending' && received.length ? ` · ${received.length}` : ''}
+            </Text>
           </Pressable>
         ))}
       </View>

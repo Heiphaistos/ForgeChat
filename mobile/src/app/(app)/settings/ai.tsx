@@ -39,6 +39,7 @@ export default function AiSettingsScreen() {
       <Section footer={t('ai.captions.android')}>
         <SwitchRow title={t('ai.set.translate')} value={s.translate} onValueChange={(v) => s.set({ translate: v })} />
         <SwitchRow title={t('ai.set.transcribe')} value={s.transcribe} onValueChange={(v) => s.set({ transcribe: v })} />
+        <SwitchRow title={t('ai.set.precise')} subtitle={t('ai.set.preciseHint')} value={s.precise} onValueChange={(v) => s.set({ precise: v })} />
         <SwitchRow title={t('ai.set.summary')} subtitle={t('ai.set.summaryHint')} value={s.summary} onValueChange={(v) => s.set({ summary: v })} />
       </Section>
       <Section title={t('ai.set.target')}>

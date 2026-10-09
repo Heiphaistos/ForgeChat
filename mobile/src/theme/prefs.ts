@@ -21,6 +21,8 @@ export interface AppearancePrefs {
   custom: ThemeSpec | null
   /** Densité : espacements de toute l'application (réglage de cet appareil). */
   density: Density
+  /** Catégories des serveurs repliées à l'ouverture (seuls leurs noms visibles) : réglage de cet appareil. */
+  categoriesFolded: boolean
 }
 
 export type Density = 'compact' | 'normal' | 'comfortable'
@@ -46,7 +48,7 @@ export const TEXT_SCALES = [
   { value: 1.3, label: 'appearance.textXLarge' },
 ] as const
 
-export const DEFAULT_PREFS: AppearancePrefs = { theme: DEFAULT_THEME, accent: null, timeFormat: '24h', textScale: 1, streamerMode: false, custom: null, density: 'normal' }
+export const DEFAULT_PREFS: AppearancePrefs = { theme: DEFAULT_THEME, accent: null, timeFormat: '24h', textScale: 1, streamerMode: false, custom: null, density: 'normal', categoriesFolded: true }
 
 /** Valeur stockée → préférences valides (tout champ invalide reprend sa valeur par défaut). */
 export function parsePrefs(raw: string | null | undefined): AppearancePrefs {
@@ -65,6 +67,7 @@ export function parsePrefs(raw: string | null | undefined): AppearancePrefs {
     streamerMode: v.streamerMode === true,
     custom: v.custom ? deviceCustom(v.custom) : null,
     density: DENSITIES.some((d) => d.value === v.density) ? (v.density as Density) : 'normal',
+    categoriesFolded: v.categoriesFolded !== false,
   }
 }
 

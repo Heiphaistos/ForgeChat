@@ -10,7 +10,7 @@ import { t } from '../i18n'
 import { confirm } from '../components/ui/ConfirmModal'
 import { formatBytes } from '../utils/compressImage'
 import { downloadPacks, installedPacks, type AiFileError } from './modelStore'
-import { isAiLang, packSize, packsFor, planTranslation, type AiLang, type PackId, type Step } from './manifest'
+import { isAiLang, packSize, packsFor, planTranslation, type AiLang, type AsrPack, type PackId, type Step } from './manifest'
 import { detectLang } from './text'
 import { stopEngine, transcribePcm, translateSteps } from './engineCore'
 
@@ -22,13 +22,15 @@ interface AiSettings {
   translate: boolean
   transcribe: boolean
   summary: boolean
+  /** Vocaux transcrits par whisper-small (précis, ~250 Mo) plutôt que whisper-base (rapide, ~80 Mo). */
+  precise: boolean
   /** Langue cible de la traduction ; null = langue de l'interface. */
   target: AiLang | null
   set: (p: Partial<Omit<AiSettings, 'set'>>) => void
 }
 
 export const useAiSettings = create<AiSettings>()(persist(
-  set => ({ translate: true, transcribe: true, summary: true, target: null, set: p => set(p) }),
+  set => ({ translate: true, transcribe: true, summary: true, precise: true, target: null, set: p => set(p) }),
   { name: 'fc-ai', storage: createJSONStorage(() => localStorage) },
 ))
 
@@ -91,9 +93,10 @@ export async function translate(text: string, uiLang: string): Promise<Translate
 export const prepareCaptions = () => ensurePacks(['runtime', 'whisper'], 'transcribe').catch(() => false)
 
 /** Audio mono 16 kHz → texte. `ask` = proposer le téléchargement si absent. */
-export async function transcribe(pcm: Float32Array, opts: { ask?: boolean; language?: string } = {}): Promise<{ text: string; lang?: string } | null> {
+export async function transcribe(pcm: Float32Array, opts: { ask?: boolean; language?: string; pack?: AsrPack } = {}): Promise<{ text: string; lang?: string } | null> {
+  const pack = opts.pack ?? (useAiSettings.getState().precise ? 'whisper-small' : 'whisper')
   if (opts.ask !== false) {
-    if (!(await ensurePacks(['runtime', 'whisper'], 'transcribe'))) return null
+    if (!(await ensurePacks(['runtime', pack], 'transcribe'))) return null
   }
-  return transcribePcm(pcm, opts.language)
+  return transcribePcm(pcm, opts.language, pack)
 }

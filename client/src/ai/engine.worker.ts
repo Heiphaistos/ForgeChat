@@ -3,7 +3,7 @@
 // transformers.js (copie locale, src/ai/third-party) + onnxruntime-web en WebAssembly.
 // AUCUN accès réseau ici : chaque fichier vient du stockage local, vérifié par SHA-256.
 import { env, pipeline, Tensor, type Pipe } from './third-party/transformers.min.js'
-import { AI_LANGS, PACKS, fileByPath, type PackId, type Step } from './manifest.ts'
+import { AI_LANGS, PACKS, fileByPath, type AsrPack, type PackId, type Step } from './manifest.ts'
 import { readVerified } from './modelStore.ts'
 import { chunkLine, needsTranslation } from './text.ts'
 import { RATE, collapseRepeats, looped, splitOnPauses } from './audio.ts'
@@ -115,8 +115,8 @@ async function translateText(text: string, steps: Step[]): Promise<string> {
   return out.join('\n')
 }
 
-async function transcribe(pcm: Float32Array, language?: string): Promise<{ text: string; lang: string }> {
-  const asr = await pipe('whisper')
+async function transcribe(pcm: Float32Array, language: string | undefined, pack: AsrPack): Promise<{ text: string; lang: string }> {
+  const asr = await pipe(pack)
   const lang = language ?? await spokenLang(asr, pcm)
   const parts: string[] = []
   for (const seg of splitOnPauses(pcm)) {
@@ -132,13 +132,13 @@ async function transcribe(pcm: Float32Array, language?: string): Promise<{ text:
 
 export type EngineRequest =
   | { id: number; op: 'translate'; text: string; steps: Step[] }
-  | { id: number; op: 'transcribe'; pcm: Float32Array; language?: string }
+  | { id: number; op: 'transcribe'; pcm: Float32Array; language?: string; pack?: AsrPack }
 export type EngineResponse = { id: number; ok: true; text: string; lang?: string } | { id: number; ok: false; error: string }
 
 self.onmessage = async (e: MessageEvent<EngineRequest>) => {
   const m = e.data
   try {
-    const res = m.op === 'translate' ? { text: await translateText(m.text, m.steps) } : await transcribe(m.pcm, m.language)
+    const res = m.op === 'translate' ? { text: await translateText(m.text, m.steps) } : await transcribe(m.pcm, m.language, m.pack === 'whisper-small' ? 'whisper-small' : 'whisper')
     self.postMessage({ id: m.id, ok: true, ...res } satisfies EngineResponse)
   } catch (err) {
     self.postMessage({ id: m.id, ok: false, error: err instanceof Error ? err.message : String(err) } satisfies EngineResponse)

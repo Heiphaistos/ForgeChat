@@ -7,7 +7,9 @@ export interface AiFile { path: string; size: number; sha256: string; src: strin
 export interface AiPack { repo?: string; revision?: string; license: string; files: AiFile[] }
 
 export const PACKS = models.packs as Record<string, AiPack>
-export type PackId = 'runtime' | 'whisper' | 'romance-en' | 'en-romance' | 'de-en' | 'en-de'
+export type PackId = 'runtime' | 'whisper' | 'whisper-small' | 'romance-en' | 'en-romance' | 'de-en' | 'en-de'
+/** Modèles de transcription : whisper (base, rapide) pour les sous-titres en direct, whisper-small (précis) pour les vocaux. */
+export type AsrPack = 'whisper' | 'whisper-small'
 
 /** Langues proposées pour la traduction (au moins fr/en/es/de/it/pt). */
 export const AI_LANGS = ['fr', 'en', 'es', 'de', 'it', 'pt'] as const

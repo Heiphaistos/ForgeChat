@@ -17,10 +17,11 @@ describe('panneau du salon et catégories', () => {
   })
 
   it('replie puis déplie une catégorie', () => {
-    useUi.getState().toggleCategory('c1')
+    // Catégorie affichée dépliée → repliée, puis l'inverse : le choix explicite est retenu.
+    useUi.getState().toggleCategory('c1', false)
     expect(useUi.getState().collapsed).toEqual({ c1: true })
-    useUi.getState().toggleCategory('c1')
-    expect(useUi.getState().collapsed).toEqual({})
+    useUi.getState().toggleCategory('c1', true)
+    expect(useUi.getState().collapsed).toEqual({ c1: false })
   })
 })
 

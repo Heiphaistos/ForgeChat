@@ -16,6 +16,11 @@ export default function SpeedAudio({ src }: { src?: string }) {
     <div className="flex items-center gap-2 max-w-full">
       <audio ref={ref} src={src} controls preload="metadata" className="max-w-full min-w-0"
         onLoadedMetadata={e => { e.currentTarget.playbackRate = rate }} />
+      <button type="button" onClick={() => { if (ref.current) ref.current.currentTime = Math.max(0, ref.current.currentTime - 5) }}
+        title={t('chat.audioBack5')} aria-label={t('chat.audioBack5')}
+        className="shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold tabular-nums bg-fc-accent/10 text-fc-accent hover:bg-fc-accent/20">
+        −5 s
+      </button>
       <button type="button" onClick={() => setI((i + 1) % SPEEDS.length)}
         title={t('chat.audioSpeed')} aria-label={`${t('chat.audioSpeed')} : ${rate}×`}
         className="shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold tabular-nums bg-fc-accent/10 text-fc-accent hover:bg-fc-accent/20">

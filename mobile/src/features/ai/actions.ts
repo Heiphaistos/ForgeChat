@@ -15,13 +15,15 @@ interface AiSettings {
   translate: boolean
   transcribe: boolean
   summary: boolean
+  /** Vocaux transcrits par Whisper small (précis, ~250 Mo) plutôt que base (rapide, ~80 Mo). */
+  precise: boolean
   /** Langue cible ; null = langue de l'interface. */
   target: AiLang | null
   set: (p: Partial<Omit<AiSettings, 'set'>>) => void
 }
 
 export const useAiSettings = create<AiSettings>()(
-  persist((set) => ({ translate: true, transcribe: true, summary: true, target: null, set: (p) => set(p) }), {
+  persist((set) => ({ translate: true, transcribe: true, summary: true, precise: true, target: null, set: (p) => set(p) }), {
     name: 'fc.ai.v1',
     storage: createJSONStorage(() => secureStateStorage),
     partialize: ({ set: _s, ...rest }) => rest,
@@ -60,7 +62,7 @@ export async function translateOnDevice(text: string): Promise<string | null> {
 
 /** Message vocal (déjà déchiffré, en base64) transcrit sur le téléphone. */
 export async function transcribeOnDevice(audio: string, mime: string): Promise<string | null> {
-  const r = await withModels({ op: 'transcribe', audio, mime }, 'ai.confirm.transcribe')
+  const r = await withModels({ op: 'transcribe', audio, mime, precise: useAiSettings.getState().precise }, 'ai.confirm.transcribe')
   if (!r) return null
   if (r.ok && typeof r.text === 'string') return r.text
   Alert.alert(t('ai.title'), t('ai.transcribeFailed'))
