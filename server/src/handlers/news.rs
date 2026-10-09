@@ -124,6 +124,29 @@ pub async fn bot_post_news(
     Ok(Json(serde_json::json!({ "ok": true, "new": inserted.is_some(), "posted": posted })))
 }
 
+/// Complète les articles sans image ou sans résumé avec les métadonnées de leur page (une tentative
+/// par article, les plus récents d'abord). Les flux RSS ne fournissent souvent ni l'un ni l'autre.
+pub async fn enrich_batch(state: &AppState) {
+    use sqlx::Row;
+    let Ok(rows) = sqlx::query(
+        "SELECT id, link FROM news_articles WHERE NOT og_checked AND (image IS NULL OR summary IS NULL)
+         ORDER BY published_at DESC LIMIT 20",
+    ).fetch_all(&state.db).await else { return };
+    for r in rows {
+        let id: Uuid = r.get("id");
+        let link: String = r.get("link");
+        let og = crate::handlers::audit::fetch_og(state, &link).await;
+        let image = og.as_ref().and_then(|o| o.image.clone()).filter(|u| u.len() <= 2000);
+        let summary = og.as_ref().and_then(|o| o.description.as_deref()).map(|d| clip(d, 600)).filter(|d| !d.is_empty());
+        let _ = sqlx::query(
+            "UPDATE news_articles SET image = COALESCE(image, $2), summary = COALESCE(summary, $3), og_checked = TRUE WHERE id = $1",
+        ).bind(id).bind(image).bind(summary).execute(&state.db).await;
+    }
+    // Les articles qui ont déjà tout n'ont rien à chercher.
+    let _ = sqlx::query("UPDATE news_articles SET og_checked = TRUE WHERE NOT og_checked AND image IS NOT NULL AND summary IS NOT NULL")
+        .execute(&state.db).await;
+}
+
 /// GET /api/news : sites publics, avec la date et le titre de leur dernier article.
 pub async fn list_sites(State(state): State<AppState>, Extension(_c): Extension<Claims>) -> Result<Json<serde_json::Value>> {
     use sqlx::Row;

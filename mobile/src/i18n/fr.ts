@@ -150,7 +150,7 @@ export const fr = {
   'you.statusFailed': 'Statut non modifié',
   'you.status': 'Statut',
   'you.profile': 'Mon profil',
-  'you.saved': 'Messages enregistrés',
+  'you.saved': 'Messages enregistrés',
   'news.title': 'Actualités',
   'news.empty': 'Aucun article pour le moment.',
   'news.siteToday': '{name}, {n} articles aujourd’hui',

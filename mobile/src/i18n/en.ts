@@ -149,7 +149,7 @@ export const en: Partial<Record<Key, string>> = {
   'you.statusFailed': 'Status not changed',
   'you.status': 'Status',
   'you.profile': 'My profile',
-  'you.saved': 'Saved messages',
+  'you.saved': 'Saved messages',
   'news.title': 'News',
   'news.empty': 'No articles yet.',
   'news.siteToday': '{name}, {n} articles today',
