@@ -6,7 +6,7 @@ import { cleanCategory, newsCategoryKey, orderCategories, type NewsSite } from '
 
 export const THEMES = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10] as const
 export type ThemeId = (typeof THEMES)[number]
-export const DEFAULT_THEME: ThemeId = 6
+export const DEFAULT_THEME: ThemeId = 10
 
 export interface NewsPrefs {
   /** Thème de navigation ; un numéro inconnu du mobile (thème plus récent du web) est gardé tel quel. */

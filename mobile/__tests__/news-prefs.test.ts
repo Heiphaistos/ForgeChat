@@ -102,13 +102,13 @@ describe('buildNews', () => {
 
 describe('sanitizePrefs', () => {
   it('valeurs abîmées : défauts du web, bornes', () => {
-    expect(sanitizePrefs(null)).toEqual({ theme: 6, pins: [], order: [], muted: [], folded: {} })
-    expect(sanitizePrefs({ theme: '3', pins: [1, 'c:ia', 'x'.repeat(121)], folded: { 'g:tech': true, k: 'oui' } })).toEqual({ theme: 6, pins: ['c:ia'], order: [], muted: [], folded: { 'g:tech': true } })
+    expect(sanitizePrefs(null)).toEqual({ theme: 10, pins: [], order: [], muted: [], folded: {} })
+    expect(sanitizePrefs({ theme: '3', pins: [1, 'c:ia', 'x'.repeat(121)], folded: { 'g:tech': true, k: 'oui' } })).toEqual({ theme: 10, pins: ['c:ia'], order: [], muted: [], folded: { 'g:tech': true } })
     expect(sanitizePrefs({ muted: Array.from({ length: 300 }, (_, i) => String(i)) }).muted).toHaveLength(200)
   })
   it('thème inconnu du mobile gardé tel quel, affiché comme le thème par défaut', () => {
     expect(sanitizePrefs({ theme: 12 }).theme).toBe(12)
-    expect(shownTheme(12)).toBe(6)
+    expect(shownTheme(12)).toBe(10)
     expect(shownTheme(9)).toBe(9)
   })
 })
@@ -147,7 +147,7 @@ describe('synchronisation des préférences', () => {
     useSettings.setState({ newsOrder: ['jeux', 'ia'] })
     mockGet.mockResolvedValue(null)
     await loadNewsPrefs()
-    expect(mockPut).toHaveBeenCalledWith('/users/me/news-prefs', { theme: 6, pins: [], order: ['jeux', 'ia'], muted: [], folded: {} })
+    expect(mockPut).toHaveBeenCalledWith('/users/me/news-prefs', { theme: 10, pins: [], order: ['jeux', 'ia'], muted: [], folded: {} })
     expect(useSettings.getState().newsOrder).toEqual([])
     expect(useNewsPrefs.getState().migrated).toBe(true)
   })
