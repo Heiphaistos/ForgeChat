@@ -5,6 +5,9 @@ import { Image } from 'expo-image'
 import { useMemo, useState } from 'react'
 import { Alert, Pressable, RefreshControl, SectionList, StyleSheet, Text, View } from 'react-native'
 import { serversApi } from '@/api/servers'
+import { settingsApi } from '@/api/settings'
+import { categoryLookFor, categoryStyles } from '@/features/appearance/categoryLook'
+import { themeStudioKey } from '@/features/appearance/sync'
 import { Avatar } from '@/components/Avatar'
 import { UserName } from '@/components/UserName'
 import { Sheet } from '@/components/Sheet'
@@ -85,6 +88,10 @@ export function ChannelList({
   const collapsed = useUi((s) => s.collapsed)
   const toggleCategory = useUi((s) => s.toggleCategory)
   const perms = useServerPerms(server.id)
+  // Style des catégories choisi sur le web ou le bureau (propre à ce serveur ou général).
+  const studio = useQuery({ queryKey: themeStudioKey, queryFn: settingsApi.themeStudio, staleTime: 60_000 })
+  const catLook = categoryLookFor(studio.data, server.id)
+  const catStyle = categoryStyles(catLook)
   const [menu, setMenu] = useState(false)
   const [channelMenu, setChannelMenu] = useState<Channel | null>(null)
   const [categoryMenu, setCategoryMenu] = useState<Category | null>(null)
@@ -164,10 +171,10 @@ export function ChannelList({
               accessibilityHint={t('channels.categoryHint')}
               accessibilityActions={[{ name: 'longpress', label: t('channels.categoryOptions') }]}
               onAccessibilityAction={(e) => e.nativeEvent.actionName === 'longpress' && setCategoryMenu(cat)}
-              style={styles.categoryRow}
+              style={[styles.categoryRow, catStyle.row]}
             >
               <Ionicons name={folded ? 'chevron-forward' : 'chevron-down'} size={12} color={colors.textMuted} />
-              <Text style={styles.category}>{cat.name.toUpperCase()}</Text>
+              <Text style={[styles.category, catStyle.text]}>{catLook.uppercase ? cat.name.toUpperCase() : cat.name}</Text>
             </Pressable>
           ) : (
             <View style={{ height: spacing.sm }} />
