@@ -22,6 +22,8 @@ function Mini({ id }: { id: ThemeId }) {
     6: <>{side(<>{b('h-1')}{a('h-1')}{a('h-1')}<span className="block h-1" />{b('h-2 border border-fc-hover')}{b('h-2')}</>)}{cards}</>,
     7: <span className="flex-1 flex flex-col gap-0.5 p-0.5">{a('h-1.5 w-6')}<span className="flex-1 grid grid-cols-4 gap-0.5 p-0.5 rounded-sm border border-fc-hover">{[0, 1, 2, 3].map(i => <span key={i} className="flex flex-col gap-0.5">{b('h-0.5')}{b('h-0.5')}{b('h-0.5')}</span>)}</span></span>,
     8: <>{side(<><span className="flex gap-0.5">{b('h-1 flex-1')}{a('h-1 flex-1')}{b('h-1 flex-1')}</span><span className="flex gap-0.5">{[0, 1, 2].map(i => <span key={i} className="block w-1.5 h-1.5 rounded-full bg-fc-hover" />)}</span><span className="flex gap-0.5">{[0, 1, 2].map(i => <span key={i} className="block w-1.5 h-1.5 rounded-full bg-fc-hover" />)}</span></>, 'w-8')}{cards}</>,
+    9: <>{side(<>{a('h-0.5 w-3')}{b('h-1')}{a('h-1')}{a('h-0.5 w-3 mt-0.5')}{b('h-1')}{b('h-1')}</>, 'w-6')}{side(<>{a('h-1')}{[0, 1, 2, 3].map(i => <span key={i} className="flex items-center gap-0.5"><span className="block w-1.5 h-1.5 rounded-full bg-fc-hover flex-shrink-0" />{b('h-1 flex-1')}</span>)}</>, 'w-8')}{cards}</>,
+    10: <>{side(<>{[0, 1, 2, 3].map(i => <span key={i} className={`block w-2.5 h-2.5 rounded-full ${i === 1 ? 'bg-fc-accent/70' : 'bg-fc-hover'}`} />)}</>, 'w-4 items-center')}{side(<>{a('h-1')}{[0, 1, 2, 3].map(i => <span key={i} className="flex items-center gap-0.5"><span className="block w-1.5 h-1.5 rounded-full bg-fc-hover flex-shrink-0" />{b('h-1 flex-1')}</span>)}</>, 'w-10')}{cards}</>,
   }
   return <span className="flex h-12 rounded-md border border-fc-hover bg-fc-chat overflow-hidden" aria-hidden>{body[id]}</span>
 }
