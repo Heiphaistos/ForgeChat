@@ -41,3 +41,18 @@ export function moveWithin(all: string[], subset: string[], item: string, to: nu
   let i = 0
   return all.map(c => (slots.has(c) ? sub[i++] : c))
 }
+
+const PAGE = 30
+const time = (a: { published_at: string }) => Date.parse(a.published_at)
+/** Fusionne des pages de plusieurs rubriques (le serveur n'en filtre qu'une par requête). On coupe à la fin
+ *  la plus récente parmi les pages pleines : plus ancien, un article d'une rubrique passerait avant ceux
+ *  qu'une autre n'a pas encore renvoyés ; `next` reprend là. Avec une seule liste : découpage habituel. */
+export function mergePages<A extends { id: string; published_at: string }>(lists: A[][]): { articles: A[]; next?: string } {
+  const ends = lists.filter(l => l.length >= PAGE).map(l => l[l.length - 1])
+  const last = ends.sort((a, b) => time(b) - time(a))[0]
+  const ids = new Set<string>()
+  const articles = lists.flat()
+    .filter(a => (!last || time(a) >= time(last)) && !ids.has(a.id) && !!ids.add(a.id))
+    .sort((a, b) => time(b) - time(a))
+  return { articles, next: last?.published_at }
+}

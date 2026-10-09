@@ -9,7 +9,11 @@ import { key, short, type GroupId } from '../newsOrder'
 import type { NewsPrefs } from './useNewsPrefs'
 
 export interface Site { id: string; name: string; category: string; last_title: string | null; last_at: string | null; today: number }
+/** « genre » : plusieurs rubriques lues ensemble (thèmes 9-10 : toutes les rubriques YouTube). */
 export type View = { kind: 'top' } | { kind: 'category'; category: string } | { kind: 'site'; site: Site }
+  | { kind: 'genre'; id: string; label: string; categories: string[] }
+/** Identifiant stable d'une vue (clé de requête et de composant). */
+export const viewId = (v: View) => v.kind === 'site' ? v.site.id : v.kind === 'category' ? v.category : v.kind === 'genre' ? v.id : ''
 export interface Rubric { cat: string; key: string; short: string; group: GroupId; sites: Site[]; today: number }
 export interface Group { id: GroupId; rubrics: Rubric[]; today: number }
 

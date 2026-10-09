@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import api from '../../api/client'
 import { key } from '../newsOrder'
 
-export const THEMES = [1, 2, 3, 4, 5, 6, 7, 8] as const
+export const THEMES = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10] as const
 export type ThemeId = typeof THEMES[number]
 export const DEFAULT_THEME: ThemeId = 6
 

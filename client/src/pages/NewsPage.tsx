@@ -1,15 +1,15 @@
 // Actualités : articles des flux RSS (relayés par le bot RSSDI), pour tous les comptes.
-// « À la une » mêle tous les sites ; la navigation par rubriques suit l'un des 8 thèmes au choix de
+// « À la une » mêle tous les sites ; la navigation par rubriques suit l'un des 10 thèmes au choix de
 // chaque compte (molette à côté du titre) ; recherche plein texte ; repère « Nouveau » depuis la
 // dernière visite (mémorisé sur cet appareil). Les cartes d'articles sont les mêmes pour tous les thèmes.
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
-import { useCallback, useEffect, useMemo, useState, type ComponentType } from 'react'
+import { useCallback, useEffect, useMemo, useState, type ComponentType, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { ExternalLink, ListTree, Newspaper, Search, Settings2, X } from 'lucide-react'
 import api from '../api/client'
 import { intlLocale, useT } from '../i18n'
-import { clean, groupOf, key, moveWithin, orderCategories, short, type GroupId } from './newsOrder'
-import { hue, type Group, type Nav, type Rubric, type Site, type View } from './news/shared'
+import { clean, groupOf, key, mergePages, moveWithin, orderCategories, short, type GroupId } from './newsOrder'
+import { hue, viewId, type Group, type Nav, type Rubric, type Site, type View } from './news/shared'
 import { useNewsPrefs, type ThemeId } from './news/useNewsPrefs'
 import NewsSettings from './news/NewsSettings'
 import Theme1Sidebar from './news/Theme1Sidebar'
@@ -20,6 +20,7 @@ import Theme5Rail from './news/Theme5Rail'
 import Theme6Pins from './news/Theme6Pins'
 import Theme7Mega from './news/Theme7Mega'
 import Theme8Tabs from './news/Theme8Tabs'
+import Theme9Columns from './news/Theme9Columns'
 
 interface Article { id: string; title: string; link: string; summary: string | null; image: string | null; published_at: string; site?: string; site_id?: string; category?: string }
 
@@ -97,6 +98,34 @@ export default function NewsPage() {
     </div>
   )
 
+  const cols = prefs.theme === 9 || prefs.theme === 10
+  // Thèmes 9-10 : `lead` remplace le titre dans la barre (bouton retour du téléphone) et les cartes prennent toute la largeur.
+  const main = (lead?: ReactNode) => (
+    <main className="flex-1 min-w-0 overflow-y-auto">
+      <div className="sticky top-0 z-30 bg-fc-chat border-b border-fc-hover px-4 h-12 flex items-center gap-3">
+        {cols ? lead : <div className={A ? 'md:hidden' : ''}>{title}</div>}
+        {prefs.theme === 7 && ready && <Theme7Mega nav={nav} />}
+        <div className="relative flex-1 min-w-0 max-w-md">
+          <Search size={15} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-fc-muted" aria-hidden />
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder={t('news.search')} aria-label={t('news.search')}
+            className="w-full pl-8 pr-8 py-1.5 bg-fc-input rounded-lg text-sm text-white outline-none focus:ring-2 focus:ring-fc-accent" />
+          {search && <button onClick={() => setSearch('')} aria-label={t('common.clearFilter')} className="absolute right-2 top-1/2 -translate-y-1/2 text-fc-muted hover:text-white"><X size={14} /></button>}
+        </div>
+        {/* Téléphone : la colonne du thème s'ouvre en feuille depuis le bas. */}
+        {A && ready && (
+          <button onClick={() => setSheet(true)} aria-label={t('news.rubrics')} title={t('news.rubrics')}
+            className="md:hidden flex-shrink-0 p-1.5 rounded-lg bg-fc-hover text-white"><ListTree size={16} /></button>
+        )}
+      </div>
+      {ready && prefs.theme === 2 && <Theme2Chips nav={nav} />}
+      {ready && prefs.theme === 4 && <Theme4Tabs nav={nav} />}
+      {ready && prefs.theme === 3 && !query && <Theme3Tiles nav={nav} />}
+      {sites.isLoading ? <p className="p-6 text-fc-muted text-sm">{t('common.loading')}</p>
+        : !ready ? <p className="p-6 text-fc-muted text-sm">{t('news.empty')}</p>
+        : <Feed key={`${view.kind}:${viewId(view)}:${query}`} view={view} query={query} seen={seen} muted={muted} wide={cols} onSite={id => { const s = sites.data?.find(x => x.id === id); if (s) pick({ kind: 'site', site: s }) }} />}
+    </main>
+  )
+
   return (
     <div className="flex h-full min-h-0 bg-fc-chat">
       {A && (
@@ -105,30 +134,7 @@ export default function NewsPage() {
           <div className="flex-1 min-h-0 overflow-y-auto flex flex-col">{ready && <A.C nav={nav} />}</div>
         </aside>
       )}
-
-      <main className="flex-1 min-w-0 overflow-y-auto">
-        <div className="sticky top-0 z-30 bg-fc-chat border-b border-fc-hover px-4 h-12 flex items-center gap-3">
-          <div className={A ? 'md:hidden' : ''}>{title}</div>
-          {prefs.theme === 7 && ready && <Theme7Mega nav={nav} />}
-          <div className="relative flex-1 min-w-0 max-w-md">
-            <Search size={15} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-fc-muted" aria-hidden />
-            <input value={search} onChange={e => setSearch(e.target.value)} placeholder={t('news.search')} aria-label={t('news.search')}
-              className="w-full pl-8 pr-8 py-1.5 bg-fc-input rounded-lg text-sm text-white outline-none focus:ring-2 focus:ring-fc-accent" />
-            {search && <button onClick={() => setSearch('')} aria-label={t('common.clearFilter')} className="absolute right-2 top-1/2 -translate-y-1/2 text-fc-muted hover:text-white"><X size={14} /></button>}
-          </div>
-          {/* Téléphone : la colonne du thème s'ouvre en feuille depuis le bas. */}
-          {A && ready && (
-            <button onClick={() => setSheet(true)} aria-label={t('news.rubrics')} title={t('news.rubrics')}
-              className="md:hidden flex-shrink-0 p-1.5 rounded-lg bg-fc-hover text-white"><ListTree size={16} /></button>
-          )}
-        </div>
-        {ready && prefs.theme === 2 && <Theme2Chips nav={nav} />}
-        {ready && prefs.theme === 4 && <Theme4Tabs nav={nav} />}
-        {ready && prefs.theme === 3 && !query && <Theme3Tiles nav={nav} />}
-        {sites.isLoading ? <p className="p-6 text-fc-muted text-sm">{t('common.loading')}</p>
-          : !ready ? <p className="p-6 text-fc-muted text-sm">{t('news.empty')}</p>
-          : <Feed key={`${view.kind}:${view.kind === 'site' ? view.site.id : view.kind === 'category' ? view.category : ''}:${query}`} view={view} query={query} seen={seen} muted={muted} onSite={id => { const s = sites.data?.find(x => x.id === id); if (s) pick({ kind: 'site', site: s }) }} />}
-      </main>
+      {cols && ready ? <Theme9Columns nav={nav} compact={prefs.theme === 10} title={title} main={main} /> : main()}
 
       {sheet && A && createPortal(
         <div className="fixed inset-0 z-[60] flex items-end md:hidden" role="dialog" aria-modal="true" aria-label={t('news.rubrics')}>
@@ -145,24 +151,26 @@ export default function NewsPage() {
   )
 }
 
-function Feed({ view, query, seen, muted, onSite }: { view: View; query: string; seen: number; muted: Set<string>; onSite: (siteId: string) => void }) {
+function Feed({ view, query, seen, muted, wide, onSite }: { view: View; query: string; seen: number; muted: Set<string>; wide?: boolean; onSite: (siteId: string) => void }) {
   const t = useT()
   const q = useInfiniteQuery({
-    queryKey: ['news', 'feed', view.kind, view.kind === 'site' ? view.site.id : view.kind === 'category' ? view.category : '', query],
-    queryFn: ({ pageParam }) => {
-      const before = pageParam ? { before: pageParam } : {}
-      if (view.kind === 'site' && !query) return api.get<{ articles: Article[] }>('/news/sites/' + view.site.id + '/articles', { params: before }).then(r => r.data.articles)
-      return api.get<{ articles: Article[] }>('/news/latest', { params: { ...before, ...(view.kind === 'category' ? { category: view.category } : {}), ...(query ? { q: query } : {}) } }).then(r => r.data.articles)
+    queryKey: ['news', 'feed', view.kind, viewId(view), query],
+    queryFn: async ({ pageParam }) => {
+      const get = (url: string, params: Record<string, string>) =>
+        api.get<{ articles: Article[] }>(url, { params: { ...(pageParam ? { before: pageParam } : {}), ...params } }).then(r => r.data.articles)
+      if (view.kind === 'site' && !query) return mergePages([await get('/news/sites/' + view.site.id + '/articles', {})])
+      const cats = view.kind === 'category' ? [view.category] : view.kind === 'genre' ? view.categories : [null]
+      return mergePages(await Promise.all(cats.map(c => get('/news/latest', { ...(c ? { category: c } : {}), ...(query ? { q: query } : {}) }))))
     },
     initialPageParam: null as string | null,
-    getNextPageParam: (last, _all) => (last.length >= 30 ? last[last.length - 1].published_at : undefined),
+    getNextPageParam: last => last.next,
   })
-  const articles = (q.data?.pages.flat() ?? []).filter(a => !a.site_id || !muted.has(a.site_id))
-  const title = query ? t('news.results', { q: query }) : view.kind === 'top' ? t('news.top') : view.kind === 'category' ? clean(view.category) : view.site.name
+  const articles = (q.data?.pages.flatMap(p => p.articles) ?? []).filter(a => !a.site_id || !muted.has(a.site_id))
+  const title = query ? t('news.results', { q: query }) : view.kind === 'top' ? t('news.top') : view.kind === 'category' ? clean(view.category) : view.kind === 'genre' ? view.label : view.site.name
   const [hero, ...rest] = articles
 
   return (
-    <div className="max-w-6xl mx-auto p-4 md:p-6 space-y-5">
+    <div className={`${wide ? '' : 'max-w-6xl mx-auto'} p-4 md:p-6 space-y-5`}>
       <header className="flex items-baseline gap-3 flex-wrap">
         <h2 className="text-2xl font-bold text-white">{title}</h2>
         {view.kind === 'site' && <span className="text-sm text-fc-muted">{clean(view.site.category)}</span>}
