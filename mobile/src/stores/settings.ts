@@ -31,6 +31,8 @@ interface SettingsState {
   updateSkippedVersion: string | null
   /** Animer les avatars et bannières GIF/WebP (toujours forcé à non si « réduire les animations »). */
   animateAvatars: boolean
+  /** Page Actualités : ordre des rubriques choisi (clés de newsCategoryKey). */
+  newsOrder: string[]
   hydrated: boolean
   set: (patch: Partial<Omit<SettingsState, 'set' | 'hydrated'>>) => void
 }
@@ -50,6 +52,7 @@ export const useSettings = create<SettingsState>()(
       updateLastCheckAt: 0,
       updateSkippedVersion: null,
       animateAvatars: true,
+      newsOrder: [],
       hydrated: false,
       set: (patch) => set(patch),
     }),

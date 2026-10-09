@@ -4,11 +4,12 @@ import { Ionicons } from '@expo/vector-icons'
 import { useQuery } from '@tanstack/react-query'
 import { router } from 'expo-router'
 import { useMemo, useState } from 'react'
-import { Pressable, RefreshControl, SectionList, StyleSheet, Text, TextInput, View } from 'react-native'
-import { cleanCategory, newsApi, type NewsSite } from '@/api/news'
+import { Alert, Pressable, RefreshControl, SectionList, StyleSheet, Text, TextInput, View } from 'react-native'
+import { cleanCategory, newsApi, newsCategoryKey, orderCategories, type NewsSite } from '@/api/news'
 import { EmptyState, ErrorState, Loading } from '@/components/ui'
 import { useT } from '@/i18n'
 import { errorMessage } from '@/lib/http'
+import { useSettings } from '@/stores/settings'
 import { colors, font, radius, spacing } from '@/theme'
 
 export default function NewsScreen() {
@@ -16,13 +17,30 @@ export default function NewsScreen() {
   const q = useQuery({ queryKey: ['news'], queryFn: newsApi.sites, refetchInterval: 120_000 })
   const [open, setOpen] = useState<Record<string, boolean>>({})
   const [search, setSearch] = useState('')
+  const order = useSettings((s) => s.newsOrder)
   const sections = useMemo(() => {
     const m = new Map<string, NewsSite[]>()
     for (const s of q.data ?? []) m.set(s.category, [...(m.get(s.category) ?? []), s])
-    return [...m.entries()]
-      .sort(([a], [b]) => cleanCategory(a).localeCompare(cleanCategory(b)))
+    return orderCategories([...m.keys()], order)
+      .map((key) => [key, m.get(key)!] as const)
       .map(([key, all]) => ({ key, title: cleanCategory(key), today: all.reduce((n, s) => n + s.today, 0), count: all.length, data: open[key] ? all : [] }))
-  }, [q.data, open])
+  }, [q.data, open, order])
+  /** Appui long sur une rubrique : la monter ou la descendre (ordre gardé sur cet appareil). */
+  const reorder = (key: string, title: string) => {
+    const keys = sections.map((s) => s.key)
+    const i = keys.indexOf(key)
+    const moveTo = (to: number) => {
+      const next = keys.filter((k) => k !== key)
+      next.splice(Math.max(0, Math.min(to, next.length)), 0, key)
+      useSettings.getState().set({ newsOrder: next.map(newsCategoryKey) })
+    }
+    Alert.alert(title, t('news.reorder'), [
+      { text: t('news.moveTop'), onPress: () => moveTo(0) },
+      { text: t('news.moveUp'), onPress: () => moveTo(i - 1) },
+      { text: t('news.moveDown'), onPress: () => moveTo(i + 1) },
+      { text: t('common.cancel'), style: 'cancel' },
+    ])
+  }
 
   if (q.isLoading) return <Loading />
   if (q.error) return <ErrorState message={errorMessage(q.error)} onRetry={() => void q.refetch()} />
@@ -63,6 +81,7 @@ export default function NewsScreen() {
           <Pressable
             style={styles.sectionToggle}
             onPress={() => setOpen((o) => ({ ...o, [section.key]: !o[section.key] }))}
+            onLongPress={() => reorder(section.key, section.title)}
             accessibilityRole="button"
             accessibilityState={{ expanded: !!open[section.key] }}
             accessibilityLabel={`${section.title}, ${section.count}`}

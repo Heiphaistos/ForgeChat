@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { ChevronRight, ExternalLink, Flame, Newspaper, Search, X } from 'lucide-react'
 import api from '../api/client'
 import { intlLocale, useT } from '../i18n'
+import { clean, key, orderCategories } from './newsOrder'
 
 interface Site { id: string; name: string; category: string; last_title: string | null; last_at: string | null; today: number }
 interface Article { id: string; title: string; link: string; summary: string | null; image: string | null; published_at: string; site?: string; site_id?: string; category?: string }
@@ -13,6 +14,7 @@ type View = { kind: 'top' } | { kind: 'category'; category: string } | { kind: '
 
 const SEEN_KEY = 'fc_news_seen'
 const FOLD_KEY = 'fc_news_folded'
+const ORDER_KEY = 'fc_news_order'
 const readJson = <T,>(k: string, d: T): T => { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) as T : d } catch { return d } }
 const writeJson = (k: string, v: unknown) => { try { localStorage.setItem(k, JSON.stringify(v)) } catch { /* réglage de confort */ } }
 
@@ -25,8 +27,6 @@ const when = (iso: string, t: ReturnType<typeof useT>) => {
   return d.toLocaleDateString(intlLocale(), { day: 'numeric', month: 'short' })
 }
 const host = (link: string) => { try { return new URL(link).hostname.replace(/^www\./, '') } catch { return '' } }
-/** Rubrique affichée : sans les décorations des noms de forum (⭒, emoji, lettres en gras Unicode). */
-const clean = (s: string) => s.normalize('NFKC').replace(/[⭒•·]/g, '').replace(/\p{Extended_Pictographic}/gu, '').replace(/-/g, ' ').trim()
 const hue = (s: string) => [...s].reduce((h, c) => (h * 31 + c.charCodeAt(0)) % 360, 7)
 
 export default function NewsPage() {
@@ -36,6 +36,8 @@ export default function NewsPage() {
   const [search, setSearch] = useState('')
   const [query, setQuery] = useState('')
   const [folded, setFolded] = useState<Record<string, boolean>>(() => readJson(FOLD_KEY, {}))
+  const [order, setOrder] = useState<string[]>(() => readJson(ORDER_KEY, []))
+  const [dragging, setDragging] = useState<string | null>(null)
   // Dernière visite : les articles plus récents portent « Nouveau » ; la date avance en quittant la page.
   const [seen] = useState<number>(() => readJson(SEEN_KEY, 0))
   useEffect(() => () => writeJson(SEEN_KEY, Date.now()), [])
@@ -44,8 +46,15 @@ export default function NewsPage() {
   const groups = useMemo(() => {
     const m = new Map<string, Site[]>()
     for (const s of sites.data ?? []) m.set(s.category, [...(m.get(s.category) ?? []), s])
-    return [...m.entries()].sort(([a], [b]) => clean(a).localeCompare(clean(b)))
-  }, [sites.data])
+    return orderCategories([...m.keys()], order).map(c => [c, m.get(c)!] as const)
+  }, [sites.data, order])
+  /** Place la rubrique `cat` à la position `to` et mémorise l'ordre complet. */
+  const move = (cat: string, to: number) => {
+    const list = groups.map(([c]) => c).filter(c => c !== cat)
+    list.splice(Math.max(0, Math.min(to, list.length)), 0, cat)
+    const next = list.map(key)
+    setOrder(next); writeJson(ORDER_KEY, next)
+  }
   const toggle = (cat: string) => { const next = { ...folded, [cat]: !(folded[cat] ?? true) }; setFolded(next); writeJson(FOLD_KEY, next) }
   const isFolded = (cat: string) => folded[cat] ?? true
   const pick = (v: View) => { setView(v); setSearch(''); setQuery('') }
@@ -59,13 +68,19 @@ export default function NewsPage() {
             className={`w-full flex items-center gap-2 px-2 py-1.5 rounded text-sm font-medium ${view.kind === 'top' ? 'bg-fc-hover text-white' : 'text-fc-text hover:bg-fc-hover/60'}`}>
             <Flame size={15} className="text-orange-400" /> {t('news.top')}
           </button>
-          {groups.map(([cat, list]) => {
+          {groups.map(([cat, list], idx) => {
             const today = list.reduce((n, s) => n + s.today, 0)
             const open = !isFolded(cat)
             return (
-              <div key={cat} className="pt-2">
-                <div className="flex items-center group">
-                  <button onClick={() => toggle(cat)} aria-expanded={open} className="flex-1 flex items-center gap-1 px-1 py-1 text-[11px] font-semibold uppercase tracking-wide text-fc-muted hover:text-white">
+              <div key={cat} className={`pt-2 ${dragging && dragging !== cat ? 'rounded' : ''}`}
+                onDragOver={e => { if (dragging) e.preventDefault() }}
+                onDrop={e => { e.preventDefault(); if (dragging && dragging !== cat) move(dragging, idx); setDragging(null) }}>
+                <div className={`flex items-center group ${dragging === cat ? 'opacity-40' : ''}`} draggable
+                  onDragStart={e => { e.dataTransfer.effectAllowed = 'move'; setDragging(cat) }} onDragEnd={() => setDragging(null)}
+                  title={t('news.reorder')}>
+                  <button onClick={() => toggle(cat)} aria-expanded={open}
+                    onKeyDown={e => { if (e.altKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) { e.preventDefault(); move(cat, idx + (e.key === 'ArrowUp' ? -1 : 1)) } }}
+                    className="flex-1 flex items-center gap-1 px-1 py-1 text-[11px] font-semibold uppercase tracking-wide text-fc-muted hover:text-white">
                     <ChevronRight size={12} className={`transition-transform ${open ? 'rotate-90' : ''}`} />
                     <span className="truncate">{clean(cat)}</span>
                   </button>
@@ -179,7 +194,7 @@ function Card({ a, seen, big, showSite, onSite }: { a: Article; seen: number; bi
         <a href={a.link} target="_blank" rel="noopener noreferrer nofollow" className="block">
           <h3 className={`font-bold text-white group-hover:underline leading-snug ${big ? 'text-xl md:text-2xl' : 'text-base line-clamp-3'}`}>{a.title}</h3>
         </a>
-        {a.summary && <p className={`text-sm text-fc-text leading-relaxed whitespace-pre-line ${big ? 'line-clamp-6' : 'line-clamp-4'}`}>{a.summary}</p>}
+        {a.summary && <p className={`text-sm text-fc-text leading-relaxed whitespace-pre-line ${big ? 'line-clamp-[10]' : 'line-clamp-6'}`}>{a.summary}</p>}
         <a href={a.link} target="_blank" rel="noopener noreferrer nofollow" className="mt-auto inline-flex items-center gap-1 text-xs text-fc-muted hover:text-white">
           {host(a.link)} <ExternalLink size={11} aria-hidden />
         </a>

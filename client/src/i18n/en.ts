@@ -350,6 +350,7 @@ export const en: Partial<Record<Key, string>> = {
   'news.sites': 'News sites',
   'news.empty': 'No articles yet.',
   'news.more': 'Older articles',
+  'news.reorder': 'Drag to reorder (or Alt + arrows)',
   'news.top': 'Top stories',
   'news.all': 'all',
   'news.allOf': 'All of “{name}”',

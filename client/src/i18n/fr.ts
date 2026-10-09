@@ -349,6 +349,7 @@ export const fr = {
   'news.sites': 'Sites d’actualité',
   'news.empty': 'Aucun article pour le moment.',
   'news.more': 'Articles plus anciens',
+  'news.reorder': 'Glisser pour réorganiser (ou Alt + flèches)',
   'news.top': 'À la une',
   'news.all': 'tout',
   'news.allOf': 'Tout « {name} »',

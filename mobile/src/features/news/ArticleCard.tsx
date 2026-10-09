@@ -48,7 +48,7 @@ export function ArticleCard({ a, big, showSite }: { a: NewsArticle & { site?: st
           <Text style={styles.meta}> · {when}</Text>
         </View>
         <Text style={[styles.title, big && { fontSize: font.lg }]} numberOfLines={big ? 4 : 3}>{a.title}</Text>
-        {a.summary ? <Text style={styles.summary} numberOfLines={big ? 6 : 4}>{a.summary}</Text> : null}
+        {a.summary ? <Text style={styles.summary} numberOfLines={big ? 10 : 6}>{a.summary}</Text> : null}
       </View>
     </Pressable>
   )
