@@ -4,7 +4,7 @@ import {
   ChevronDown, Hash, Plus, Volume2, UserPlus, Settings,
   Video, Megaphone, MessagesSquare, Images, Radio, ChevronRight,
   Mic, MicOff, VolumeX, Monitor, Clock, Lock, PlusCircle, Timer,
-  Users, X, GripVertical, Shield, Archive, EyeOff, BellOff, Pencil, Sparkles,
+  Users, X, GripVertical, Shield, Archive, EyeOff, BellOff, Pencil, Sparkles, Palette,
 } from 'lucide-react'
 import { useState, useEffect, useCallback, useMemo, useRef, useDeferredValue } from 'react'
 import { useEscapeKey } from '../../hooks/useEscapeKey'
@@ -40,6 +40,7 @@ import { openMessages, type RawMsg } from '../../e2e/conversations'
 import { fetchDmMessages } from '../../e2e/dmMessages'
 import AnimatedImg from '../ui/AnimatedImg'
 import UserName from '../ui/UserName'
+import ServerLookModal from '../modals/ServerLookModal'
 
 /** Type MIME du glisser-déposer d'un membre vers un autre salon vocal. */
 const VOICE_MEMBER_MIME = 'application/x-forgechat-voice-member'
@@ -234,6 +235,7 @@ export default function ChannelSidebar() {
   const [createInCategory, setCreateInCategory] = useState<string | null>(null)
   const [showInvite, setShowInvite] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
+  const [showLook, setShowLook] = useState(false)
   const [showOnboarding, setShowOnboarding] = useState(false)
   // Ouvrir la modale paramètres serveur depuis le menu contextuel du rail
   useEffect(() => {
@@ -1224,6 +1226,12 @@ export default function ChannelSidebar() {
               >
                 <Settings size={16} /> {t('servers.settings')}
               </button>
+              <button
+                onClick={() => { setShowLook(true); setMenuOpen(false) }}
+                className="w-full flex items-center gap-2 px-3 py-2 rounded hover:bg-fc-hover text-fc-muted hover:text-white text-sm transition"
+              >
+                <Palette size={16} /> {t('serverLook.title')}
+              </button>
               <ServerMenuExtras serverId={serverId} lockdown={!!data?.lockdown} onDone={() => { setMenuOpen(false); closeSidebar() }} />
               {data?.member?.has_onboarding && (
                 <button
@@ -1287,7 +1295,7 @@ export default function ChannelSidebar() {
                 <div
                   role="button"
                   tabIndex={0}
-                  className="flex items-center justify-between px-2 py-1 group cursor-pointer sticky top-0 z-10 bg-fc-channel"
+                  className="fc-cat flex items-center justify-between px-2 py-1 group cursor-pointer sticky top-0 z-10 bg-fc-channel"
                   onClick={() => toggleGroup(key)}
                   onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleGroup(key) } }}
                   onContextMenu={e => ctxMenu.open(e, [
@@ -1311,7 +1319,7 @@ export default function ChannelSidebar() {
                       size={12}
                       className={`text-fc-muted transition-transform ${isCollapsed ? '' : 'rotate-90'}`}
                     />
-                    <span className="text-xs font-semibold text-fc-muted uppercase tracking-wide select-none">{label}</span>
+                    <span className="fc-cat-label text-xs font-semibold text-fc-muted uppercase tracking-wide select-none">{label}</span>
                   </div>
                   {canCreate && <button
                     onClick={(e) => { e.stopPropagation(); setCreateInCategory(key); setShowCreateChannel(true) }}
@@ -1412,6 +1420,9 @@ export default function ChannelSidebar() {
       )}
       {showOnboarding && server && (
         <OnboardingModal serverId={server.id} serverName={server.name} onClose={() => setShowOnboarding(false)} />
+      )}
+      {showLook && server && (
+        <ServerLookModal serverId={server.id} serverName={server.name} onClose={() => setShowLook(false)} />
       )}
       {showSettings && server && (
         <ServerSettingsModal server={server} onClose={() => setShowSettings(false)} isAdmin={isOwnerOrAdmin} />

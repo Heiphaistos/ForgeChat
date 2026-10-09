@@ -2,6 +2,7 @@ import api from '../../../api/client'
 import { useT, type Key } from '../../../i18n'
 import { MEMBERS_MAX, MEMBERS_MIN, type LayoutPrefs } from '../../../theme/applyTheme'
 import { useThemeStore, type Density } from '../../../theme/themeStore'
+import CategoryStyleEditor from './CategoryStyleEditor'
 
 function Choice<T extends string>({ title, value, options, onChange }: {
   title: string; value: T; options: { id: T; label: Key; hint?: Key }[]; onChange: (v: T) => void
@@ -33,7 +34,7 @@ const DENSITIES: { id: Density; label: Key; hint: Key }[] = [
 /** Disposition : messages, liste des membres, rail des serveurs, barre de saisie (appliqué tout de suite). */
 export default function LayoutSettings() {
   const t = useT()
-  const { layout, setLayout, density, setDensity } = useThemeStore()
+  const { layout, setLayout, density, setDensity, category, setCategory } = useThemeStore()
   const set = <K extends keyof LayoutPrefs>(k: K) => (v: LayoutPrefs[K]) => setLayout({ [k]: v } as Partial<LayoutPrefs>)
 
   return (
@@ -56,6 +57,11 @@ export default function LayoutSettings() {
           { id: 'floating', label: 'layout.composer.floating' },
           { id: 'attached', label: 'layout.composer.attached' },
         ]} />
+      <div className="space-y-1.5">
+        <h4 className="text-sm text-fc-text">{t('catStyle.title')}</h4>
+        <p className="text-xs text-fc-muted">{t('catStyle.hint')}</p>
+        <CategoryStyleEditor value={category} onChange={setCategory} />
+      </div>
       <p className="text-xs text-fc-muted">{t('layout.synced')}</p>
     </div>
   )

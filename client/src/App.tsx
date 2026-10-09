@@ -1185,6 +1185,9 @@ function HomeRoute() {
 
 function LocationBoundary({ children }: { children: ReactNode }) {
   const location = useLocation()
+  // Serveur affiché : son apparence (thème, catégories) remplace celle de ForgeChat s'il en a une.
+  const serverId = /^\/servers\/([0-9a-f-]{36})/i.exec(location.pathname)?.[1] ?? null
+  useEffect(() => { useThemeStore.getState().setServerId(serverId) }, [serverId])
   return <ErrorBoundary resetKey={location.key}>{children}</ErrorBoundary>
 }
 

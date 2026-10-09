@@ -467,3 +467,40 @@ html[data-fc-composer="attached"] .fc-composer-box {
 @media (max-width: 767px) {
   nav[class~="fixed"] { --fc-surface-a: var(--fc-float-a, 1); }
 }
+
+/* ── CATÉGORIES DES SALONS (Apparence → Disposition, ou propre à un serveur) ──────────────
+   .fc-cat = en-tête de catégorie, .fc-cat-label = son titre. Couleur : --fc-cat-rgb, sinon
+   l'accent du thème. Le fond garde la couleur du panneau (en-têtes collants) : les teintes se
+   posent en background-image par-dessus. */
+html:not([data-fc-cat-upper]) .fc-cat-label { text-transform: none; letter-spacing: normal; }
+html[data-fc-cat]:not([data-fc-cat="auto"]):not([data-fc-cat="outline"]) .fc-cat { outline: none !important; }
+html[data-fc-cat="outline"] .fc-cat {
+  outline: 1px solid rgb(var(--fc-cat-rgb, var(--fc-border-rgb))) !important;
+  outline-offset: -1px;
+  border-radius: calc(6px * var(--fc-radius, 1));
+}
+html[data-fc-cat="pill"] .fc-cat {
+  border-radius: 9999px;
+  margin-bottom: 2px;
+  background-image: linear-gradient(rgb(var(--fc-cat-rgb, var(--fc-accent-rgb)) / 0.16), rgb(var(--fc-cat-rgb, var(--fc-accent-rgb)) / 0.16));
+}
+html[data-fc-cat="pill"] .fc-cat:hover { background-image: linear-gradient(rgb(var(--fc-cat-rgb, var(--fc-accent-rgb)) / 0.28), rgb(var(--fc-cat-rgb, var(--fc-accent-rgb)) / 0.28)); }
+html[data-fc-cat="pill"] .fc-cat-label,
+html[data-fc-cat="bar"] .fc-cat-label,
+html[data-fc-cat="underline"] .fc-cat-label { color: rgb(var(--fc-cat-rgb, var(--fc-accent-rgb))); }
+html[data-fc-cat="card"] .fc-cat {
+  border-radius: calc(8px * var(--fc-radius, 1));
+  margin-bottom: 3px;
+  background-image: linear-gradient(rgb(var(--fc-hover-rgb)), rgb(var(--fc-hover-rgb)));
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.35), inset 0 0 0 1px rgb(var(--fc-cat-rgb, var(--fc-border-rgb)) / 0.6);
+}
+html[data-fc-cat="card"] .fc-cat-label { color: rgb(var(--fc-text-rgb)); }
+html[data-fc-cat="bar"] .fc-cat {
+  border-left: 3px solid rgb(var(--fc-cat-rgb, var(--fc-accent-rgb)));
+  border-radius: 0 calc(6px * var(--fc-radius, 1)) calc(6px * var(--fc-radius, 1)) 0;
+  background-image: linear-gradient(90deg, rgb(var(--fc-cat-rgb, var(--fc-accent-rgb)) / 0.18), transparent 85%);
+}
+html[data-fc-cat="underline"] .fc-cat {
+  border-radius: 0;
+  box-shadow: inset 0 -1px 0 rgb(var(--fc-cat-rgb, var(--fc-accent-rgb)) / 0.7);
+}

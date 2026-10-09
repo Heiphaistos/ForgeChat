@@ -5,10 +5,14 @@ import {
   type CustomTheme, type ThemeSpec,
 } from './themeCore'
 import { applyLayoutToDom, applyThemeToDom, DEFAULT_LAYOUT, sanitizeLayout, type LayoutPrefs } from './applyTheme'
+import {
+  applyCategoryToDom, DEFAULT_CATEGORY, sanitizeCategory, sanitizeServerLooks, type CategoryStyle, type ServerLook,
+} from './serverLook'
 
 /**
  * Thème actif, thèmes perso et disposition. Stockés dans ce navigateur ET sur le compte
- * (/user/theme pour le thème actif, /user/theme-studio pour les thèmes perso et la disposition) :
+ * (/user/theme pour le thème actif, /user/theme-studio pour les thèmes perso, la disposition, le style
+ * des catégories et l'apparence propre à chaque serveur) :
  * web, bureau et téléphone partagent les mêmes choix.
  */
 export type Density = 'ultra-compact' | 'compact' | 'normal' | 'comfortable'
@@ -25,6 +29,12 @@ interface ThemeState {
   preview: ThemeSpec | null
   /** Densité des messages (interface_density du compte). */
   density: Density
+  /** Style des en-têtes de catégorie partout où un serveur n'a pas le sien. */
+  category: CategoryStyle
+  /** Apparence choisie pour certains serveurs (thème, catégories), par id de serveur. */
+  servers: Record<string, ServerLook>
+  /** Serveur affiché (null hors serveur) : son apparence remplace celle de ForgeChat. */
+  serverId: string | null
   select: (id: string) => void
   upsertCustom: (t: CustomTheme) => void
   removeCustom: (id: string) => void
@@ -32,6 +42,10 @@ interface ThemeState {
   setAccent: (accent: string | null) => void
   setPreview: (spec: ThemeSpec | null) => void
   setDensity: (d: Density) => void
+  setCategory: (patch: Partial<CategoryStyle>) => void
+  /** null = ce serveur reprend l'apparence de ForgeChat. */
+  setServerLook: (serverId: string, look: ServerLook | null) => void
+  setServerId: (serverId: string | null) => void
   loadRemote: () => Promise<void>
 }
 
@@ -40,7 +54,9 @@ const STUDIO_KEY = 'fc_theme_studio'
 /** Au-delà, les images locales (base64) ne partent pas sur le compte : elles restent sur cet appareil. */
 const SYNC_BUDGET = 900_000
 
-function readLocal(): { activeId: string; customs: CustomTheme[]; layout: LayoutPrefs; density: Density } {
+type Studio = { customs: CustomTheme[]; layout: LayoutPrefs; category: CategoryStyle; servers: Record<string, ServerLook> }
+
+function readLocal(): Studio & { activeId: string; density: Density } {
   let raw: Record<string, unknown> = {}
   let activeId = DEFAULT_THEME_ID
   let density: Density = 'normal'
@@ -50,7 +66,16 @@ function readLocal(): { activeId: string; customs: CustomTheme[]; layout: Layout
     const parsed: unknown = JSON.parse(localStorage.getItem(STUDIO_KEY) ?? '{}')
     if (parsed && typeof parsed === 'object') raw = parsed as Record<string, unknown>
   } catch { /* stockage indisponible ou corrompu : valeurs par défaut */ }
-  return { activeId, customs: sanitizeCustomList(raw.customs), layout: sanitizeLayout(raw.layout), density }
+  return { activeId, density, ...sanitizeStudio(raw) }
+}
+
+function sanitizeStudio(raw: Record<string, unknown>): Studio {
+  return {
+    customs: sanitizeCustomList(raw.customs),
+    layout: sanitizeLayout(raw.layout),
+    category: raw.category ? sanitizeCategory(raw.category) : DEFAULT_CATEGORY,
+    servers: sanitizeServerLooks(raw.servers),
+  }
 }
 
 function writeLocal(key: string, value: string) {
@@ -58,37 +83,45 @@ function writeLocal(key: string, value: string) {
 }
 
 /** Charge utile envoyée au compte (sans les images locales si elle est trop lourde). */
-export function studioPayload(customs: CustomTheme[], layout: LayoutPrefs) {
-  const full = { customs, layout }
-  if (JSON.stringify(full).length <= SYNC_BUDGET) return full
-  return { customs: customs.map(c => (c.image?.url.startsWith('data:') ? { ...c, image: null } : c)), layout }
+export function studioPayload(st: Studio) {
+  if (JSON.stringify(st).length <= SYNC_BUDGET) return st
+  return { ...st, customs: st.customs.map(c => (c.image?.url.startsWith('data:') ? { ...c, image: null } : c)) }
 }
+
+const studioOf = (s: Studio): Studio => ({ customs: s.customs, layout: s.layout, category: s.category, servers: s.servers })
 
 let syncTimer: ReturnType<typeof setTimeout> | null = null
 function scheduleSync() {
   if (syncTimer) clearTimeout(syncTimer)
   syncTimer = setTimeout(() => {
-    const { customs, layout } = useThemeStore.getState()
-    api.put('/user/theme-studio', studioPayload(customs, layout)).catch(() => { /* hors ligne : réessayé au prochain changement */ })
+    api.put('/user/theme-studio', studioPayload(studioOf(useThemeStore.getState()))).catch(() => { /* hors ligne : réessayé au prochain changement */ })
   }, 800)
 }
 
-function persistStudio(customs: CustomTheme[], layout: LayoutPrefs) {
-  writeLocal(STUDIO_KEY, JSON.stringify({ customs, layout }))
+function persistStudio() {
+  writeLocal(STUDIO_KEY, JSON.stringify(studioOf(useThemeStore.getState())))
 }
 
-/** Thème réellement affiché. */
-export function resolveTheme(s: Pick<ThemeState, 'activeId' | 'customs' | 'accent' | 'preview'>): ThemeSpec {
+/** Thème choisi pour le serveur affiché, s'il en a un (et qu'il existe encore). */
+function serverThemeId(s: Pick<ThemeState, 'servers' | 'serverId' | 'customs'>): string | null {
+  const id = s.serverId ? s.servers[s.serverId]?.theme : undefined
+  return id && findTheme(id, s.customs) ? id : null
+}
+
+/** Thème réellement affiché : aperçu en cours, sinon celui du serveur affiché, sinon celui de ForgeChat. */
+export function resolveTheme(s: Pick<ThemeState, 'activeId' | 'customs' | 'accent' | 'preview' | 'servers' | 'serverId'>): ThemeSpec {
   if (s.preview) return s.preview
-  const custom = s.customs.find(c => c.id === s.activeId)
+  const id = serverThemeId(s) ?? s.activeId
+  const custom = s.customs.find(c => c.id === id)
   if (custom) return custom
-  return withAccent(findTheme(s.activeId) ?? DEFAULT_SPEC, s.accent)
+  return withAccent(findTheme(id) ?? DEFAULT_SPEC, s.accent)
 }
 
 function render() {
   const s = useThemeStore.getState()
-  const known = !!findTheme(s.activeId, s.customs)
-  applyThemeToDom(known ? s.activeId : DEFAULT_THEME_ID, resolveTheme(s))
+  const id = serverThemeId(s) ?? s.activeId
+  applyThemeToDom(findTheme(id, s.customs) ? id : DEFAULT_THEME_ID, resolveTheme(s))
+  applyCategoryToDom((s.serverId && s.servers[s.serverId]?.category) || s.category)
 }
 
 const initial = readLocal()
@@ -97,6 +130,7 @@ export const useThemeStore = create<ThemeState>()((set, get) => ({
   ...initial,
   accent: null,
   preview: null,
+  serverId: null,
   select: id => {
     set({ activeId: id, preview: null })
     writeLocal(THEME_KEY, id)
@@ -108,14 +142,14 @@ export const useThemeStore = create<ThemeState>()((set, get) => ({
       ? get().customs.map(c => (c.id === t.id ? t : c))
       : [...get().customs, t]
     set({ customs })
-    persistStudio(customs, get().layout)
+    persistStudio()
     scheduleSync()
     render()
   },
   removeCustom: id => {
     const customs = get().customs.filter(c => c.id !== id)
     set({ customs })
-    persistStudio(customs, get().layout)
+    persistStudio()
     scheduleSync()
     if (get().activeId === id) get().select(DEFAULT_THEME_ID)
     else render()
@@ -123,7 +157,7 @@ export const useThemeStore = create<ThemeState>()((set, get) => ({
   setLayout: patch => {
     const layout = sanitizeLayout({ ...get().layout, ...patch })
     set({ layout })
-    persistStudio(get().customs, layout)
+    persistStudio()
     applyLayoutToDom(layout)
     scheduleSync()
   },
@@ -140,6 +174,28 @@ export const useThemeStore = create<ThemeState>()((set, get) => ({
     document.documentElement.setAttribute('data-density', d)
     writeLocal('fc_density', d)
   },
+  setCategory: patch => {
+    set({ category: sanitizeCategory({ ...get().category, ...patch }) })
+    persistStudio()
+    scheduleSync()
+    render()
+  },
+  setServerLook: (serverId, look) => {
+    const servers = { ...get().servers }
+    const key = serverId.toLowerCase()
+    if (look && (look.theme || look.category)) servers[key] = look
+    else delete servers[key]
+    set({ servers })
+    persistStudio()
+    scheduleSync()
+    render()
+  },
+  setServerId: serverId => {
+    const id = serverId?.toLowerCase() ?? null
+    if (id === get().serverId) return
+    set({ serverId: id })
+    render()
+  },
   loadRemote: async () => {
     const [theme, studio] = await Promise.allSettled([api.get('/user/theme'), api.get('/user/theme-studio')])
     if (studio.status === 'fulfilled') {
@@ -151,10 +207,10 @@ export const useThemeStore = create<ThemeState>()((set, get) => ({
           const kept = local.get(c.id)?.image
           return !c.image && kept ? { ...c, image: kept } : c
         })
-        const layout = sanitizeLayout(d.layout)
-        set({ customs, layout })
-        persistStudio(customs, layout)
-        applyLayoutToDom(layout)
+        const remote = sanitizeStudio(d)
+        set({ ...remote, customs })
+        persistStudio()
+        applyLayoutToDom(remote.layout)
       } else if (get().customs.length) {
         scheduleSync() // rien sur le compte : y envoyer les thèmes de cet appareil
       }
