@@ -31,7 +31,6 @@ const CHANNEL_PERMISSION_BITS = [
   { key: 'MUTE_MEMBERS',     bit: Math.pow(2, 15) },
   { key: 'DEAFEN_MEMBERS',   bit: Math.pow(2, 16) },
   { key: 'MOVE_MEMBERS',     bit: Math.pow(2, 17) },
-  { key: 'PRIORITY_SPEAKER', bit: Math.pow(2, 18) },
 ] as const
 
 const FORUM_SORT_OPTIONS = ['latest_activity', 'creation_date', 'most_replies', 'most_reactions'] as const

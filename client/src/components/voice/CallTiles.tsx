@@ -14,7 +14,7 @@ export function PeerTile({
 }: {
   peer: { userId?: string; username: string; avatar?: string; muted: boolean; videoEnabled: boolean; screenSharing: boolean }
   stream: MediaStream | null; muted?: boolean; isLocal?: boolean; speaking?: boolean
-  handRaised?: boolean; blurEnabled?: boolean; onExpand?: () => void; onVolume?: () => void
+  handRaised?: boolean; blurEnabled?: boolean; onExpand?: () => void; onVolume?: (e: React.MouseEvent) => void
   onPopOut?: () => void; connectionLost?: boolean
   /** Vignette de bandeau : avatar et textes réduits. */
   compact?: boolean

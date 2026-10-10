@@ -5,6 +5,7 @@ import { Alert, StyleSheet, Text, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Avatar } from '@/components/Avatar'
 import { CallButton, useAudioRoute } from '@/components/call/CallControls'
+import { PeerVolumeSheet } from '@/components/call/PeerVolumeSheet'
 import { CallVideoView } from '@/components/call/CallVideoView'
 import { PipView } from '@/components/call/PipView'
 import { QualityIcon, type CallTile } from '@/components/call/VideoTile'
@@ -34,6 +35,7 @@ export default function CallScreen() {
   const now = useNow(1000, s.phase === 'connected')
   const [immersive, setImmersive] = useState(false)
   const [swapped, setSwapped] = useState(false)
+  const [volumeOpen, setVolumeOpen] = useState(false)
   const route = useAudioRoute(s.speaker, s.toggleSpeaker, (on) => useCall.setState({ speaker: on }))
 
   const toggleShare = async () => {
@@ -106,6 +108,10 @@ export default function CallScreen() {
           ? formatDuration(now - s.connectedAt)
           : (s.endReason ?? '')
 
+  const volumeSheet = (
+    <PeerVolumeSheet peer={volumeOpen && s.partnerId ? { userId: s.partnerId, name: partnerName } : null} onClose={() => setVolumeOpen(false)} />
+  )
+
   const controls = (
     <>
       <CallButton icon={s.micMuted ? 'mic-off' : 'mic'} label={t(s.micMuted ? 'voice.unmuteMic' : 'voice.muteMic')} onPress={s.toggleMic} active={s.micMuted} />
@@ -124,6 +130,7 @@ export default function CallScreen() {
         </>
       ) : null}
       <CallButton icon={route.icon} label={route.label} onPress={route.open} active={route.onSpeaker} />
+      {s.partnerId ? <CallButton icon="volume-high" label={t('call.volume')} onPress={() => setVolumeOpen(true)} /> : null}
       {s.dmId ? <CallButton icon="help-buoy-outline" label={t('rs.button')} onPress={() => promptSupport(s.dmId!)} /> : null}
       <CallButton icon="call" label={t('call.hangUp')} onPress={s.hangup} danger />
     </>
@@ -160,6 +167,7 @@ export default function CallScreen() {
           controls={controls}
         />
         {route.sheet}
+        {volumeSheet}
       </View>
     )
   }
@@ -177,6 +185,7 @@ export default function CallScreen() {
       </View>
       <View style={[styles.controls, { paddingBottom: insets.bottom + spacing.xl }]}>{controls}</View>
       {route.sheet}
+      {volumeSheet}
     </View>
   )
 }

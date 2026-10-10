@@ -236,7 +236,7 @@ async function _connect(lk: LkAccess, set: SetFn, get: () => CallStore) {
   const cam = local?.getVideoTracks()[0]
   try {
     if (mic) {
-      _micPub = await room.localParticipant.publishTrack(mic, { source: Track.Source.Microphone })
+      _micPub = await room.localParticipant.publishTrack(mic, { source: Track.Source.Microphone, forceStereo: false })
       if (get().micMuted) await _micPub.mute()
     }
     if (cam) _camPub = await room.localParticipant.publishTrack(cam, { source: Track.Source.Camera, simulcast: true })
@@ -259,6 +259,7 @@ async function _connect(lk: LkAccess, set: SetFn, get: () => CallStore) {
 export function callAudioConstraints(): MediaTrackConstraints {
   const savedMicId = localStorage.getItem('fc_audio_input') || undefined
   return {
+    channelCount: 1, // voix en mono (idéal, jamais bloquant)
     echoCancellation: true,
     noiseSuppression: true,
     autoGainControl: true,

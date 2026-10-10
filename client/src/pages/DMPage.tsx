@@ -3,7 +3,8 @@ import NativeVideo from '../components/voice/NativeVideo'
 import FullscreenVideo from '../components/voice/FullscreenVideo'
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Phone, Video, Search, Mic, MicOff, PhoneOff, VideoOff, ChevronLeft, Pin, X, Maximize2, Captions } from 'lucide-react'
+import { Phone, Video, Search, Mic, MicOff, PhoneOff, VideoOff, ChevronLeft, Pin, X, Maximize2, Captions, Volume2 } from 'lucide-react'
+import { openUserVolume } from '../components/voice/UserVolumePopover'
 import LiveCaptions from '../components/ai/LiveCaptions'
 import { prepareCaptions, useAiSettings } from '../ai/engine'
 import api, { mediaUrl } from '../api/client'
@@ -494,7 +495,8 @@ export default function DMPage() {
           conversation (isThisCallActive) ; s'il tourne ailleurs, aucune UI ici (la
           VoiceBar globale ou une future pastille flottante s'en charge) */}
       {isThisCallActive && (
-        <div className={`flex flex-col items-center justify-center gap-4 p-6 border-b ${callType === 'video' ? 'border-fc-accent/40 bg-black' : 'border-green-600/40 bg-green-900/10'}`}>
+        <div onContextMenu={partnerId ? e => { e.preventDefault(); openUserVolume(partnerId, partnerName, e) } : undefined}
+          className={`flex flex-col items-center justify-center gap-4 p-6 border-b ${callType === 'video' ? 'border-fc-accent/40 bg-black' : 'border-green-600/40 bg-green-900/10'}`}>
           {callType === 'video' ? (
             <div className="relative w-full max-h-56 bg-black rounded-xl overflow-hidden flex items-center justify-center"
               onDoubleClick={remoteStream || remoteVideoUrl ? () => setVideoFullscreen(true) : undefined}
@@ -590,6 +592,16 @@ export default function DMPage() {
             >
               {micMuted ? <MicOff size={20} /> : <Mic size={20} />}
             </button>
+            {partnerId && (
+              <button
+                onClick={e => openUserVolume(partnerId, partnerName, e)}
+                className="p-3 rounded-full transition bg-fc-hover text-fc-muted hover:text-white"
+                title={t('voice.tile.volume')}
+                aria-label={t('voice.tile.volumeOf', { name: partnerName })}
+              >
+                <Volume2 size={20} />
+              </button>
+            )}
             {dmId && <RemoteSupportButton dmId={dmId} round />}
             <button
               onClick={hangup}

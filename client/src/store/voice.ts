@@ -42,7 +42,6 @@ export interface VoicePeer {
   deafened: boolean
   videoEnabled: boolean
   screenSharing: boolean
-  prioritySpeaker?: boolean
   /** Enregistre la conversation : affiché à tout le salon. */
   recording?: boolean
   /** Refuse d'être enregistré : retiré du mixage des enregistrements. */
@@ -98,7 +97,6 @@ interface VoiceStore {
   pttMode: boolean
   userVolumes: Record<string, number>
   screenVolumes: Record<string, number>
-  activePrioritySpeaker: string | null
   whisperTargets: string[] | null
   activeStreams: Record<string, ActiveStream>
   noiseEngine: NoiseEngine
@@ -118,7 +116,7 @@ interface VoiceStore {
   /** Muet / sourdine imposés à MOI par un modérateur : non levables ici. */
   serverMuted: boolean
   serverDeafened: boolean
-  /** Identités qui parlent (SFU) : sert à l'atténuation PRIORITY_SPEAKER. */
+  /** Identités qui parlent (SFU) : indicateurs « parle » en sourdine, AFK. */
   sfuSpeakers: string[]
 
   join(channelId: string, serverId: string, withVideo?: boolean, password?: string, channelName?: string, listenOnly?: boolean): Promise<void>
@@ -186,6 +184,8 @@ function micConstraints(): MediaTrackConstraints {
   const savedMicId = localStorage.getItem('fc_audio_input') || undefined
   const engine = getNoiseEngine()
   return {
+    // Voix en mono (valeur idéale, jamais bloquante) : une piste stéréo mal formée s'entendait d'un seul côté.
+    channelCount: 1,
     echoCancellation: true,
     ...browserProcessing(engine),
     ...(savedMicId ? { deviceId: { exact: savedMicId } } : {}),
@@ -392,7 +392,7 @@ export const useVoice = create<VoiceStore>((set, get) => {
       localVideoUrl: null, localScreenUrl: null, nativeSpeakers: [], watchedStreams: [],
       localStream: null, localScreenStream: null, peers: [], muted: false, deafened: false,
       videoEnabled: false, screenSharing: false, recording: false, error: null, notice: null,
-      pttActive: false, activePrioritySpeaker: null, whisperTargets: null,
+      pttActive: false, whisperTargets: null,
       serverMuted: false, serverDeafened: false, sfuSpeakers: [],
       // userVolumes/screenVolumes/pttMode sont des préférences : elles survivent
       // à la sortie du salon (et sont persistées).
@@ -447,7 +447,6 @@ export const useVoice = create<VoiceStore>((set, get) => {
     pttMode: localStorage.getItem(PTT_KEY) === 'true',
     userVolumes: loadVolumes(VOLUMES_KEY),
     screenVolumes: loadVolumes(SCREEN_VOLUMES_KEY),
-    activePrioritySpeaker: null,
     whisperTargets: null,
     activeStreams: {},
     noiseEngine: getNoiseEngine(),
@@ -525,7 +524,6 @@ export const useVoice = create<VoiceStore>((set, get) => {
       })
 
       const offVoiceState = ws.on('VOICE_STATE_UPDATE', (d: any) => {
-        const isPriority = d.priority_speaker === true
         // Comme Discord/Teams : tout le salon est prévenu qu'on l'enregistre.
         const before = get().peers.find(p => p.userId === d.user_id)
         if (before && !!d.recording !== !!before.recording) {
@@ -534,18 +532,13 @@ export const useVoice = create<VoiceStore>((set, get) => {
         }
         set(s => {
           const current = s.roomParticipants[d.channel_id] ?? []
-          let newActivePriority = s.activePrioritySpeaker
-          if (isPriority && !d.muted) newActivePriority = d.user_id
-          else if (s.activePrioritySpeaker === d.user_id && (d.muted || !isPriority)) newActivePriority = null
-
           return {
-            activePrioritySpeaker: newActivePriority,
             roomParticipants: {
               ...s.roomParticipants,
               [d.channel_id]: current.map(p => p.userId === d.user_id ? { ...p, muted: d.muted, video: d.video, screen: d.screen } : p),
             },
             peers: s.peers.map(p => p.userId === d.user_id
-              ? { ...p, muted: d.muted, deafened: !!d.deafened, videoEnabled: d.video, screenSharing: d.screen, prioritySpeaker: isPriority, screenStream: d.screen ? p.screenStream : null, recording: !!d.recording, noRecord: !!d.no_record }
+              ? { ...p, muted: d.muted, deafened: !!d.deafened, videoEnabled: d.video, screenSharing: d.screen, screenStream: d.screen ? p.screenStream : null, recording: !!d.recording, noRecord: !!d.no_record }
               : p),
           }
         })

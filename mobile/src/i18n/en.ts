@@ -540,9 +540,8 @@ export const en: Partial<Record<Key, string>> = {
 
   // --- Vocal et appels ---
   'voice.mute': 'Mute',
-  'voice.vol50': 'Volume 50%',
-  'voice.vol100': 'Normal volume (100%)',
-  'voice.vol200': 'Loud volume (200%)',
+  'call.volume': 'Volume',
+  'voice.volPct': 'Volume {n}%',
   'voice.weak': 'Weak connection',
   'voice.lost': 'Connection lost',
   'voice.invalid': 'Invalid voice channel link.',

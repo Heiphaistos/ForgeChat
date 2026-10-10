@@ -35,6 +35,7 @@ import { fontStack } from './theme/fonts'
 import MainLayout from './components/layout/MainLayout'
 import PersistentVoiceAudio from './components/voice/PersistentVoiceAudio'
 import PersistentDmCallAudio from './components/voice/PersistentDmCallAudio'
+import UserVolumePopover from './components/voice/UserVolumePopover'
 import FloatingCallPiP from './components/voice/FloatingCallPiP'
 import VoiceHotkeys from './components/voice/VoiceHotkeys'
 import AppLockOverlay from './components/AppLockOverlay'
@@ -1087,6 +1088,7 @@ function AppInner() {
             seulement sur les routes wrappées par MainLayout. */}
         {user && <PersistentVoiceAudio />}
         {user && <PersistentDmCallAudio />}
+        {user && <UserVolumePopover />}
         {user && <GroupCallRinger />}
         {user && <FloatingCallPiP />}
         {user && <VoiceHotkeys />}

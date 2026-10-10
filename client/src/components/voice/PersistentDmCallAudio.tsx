@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react'
 import { useCallStore } from '../../store/call'
 import { useVoice } from '../../store/voice'
 import { useAudioNotifications } from '../../hooks/useAudioNotifications'
+import { routeAudio, dropPlaybackWhere } from '../../lib/voicePlayback'
+import { clampVolumePct } from '../../lib/voiceMix'
 
 /**
  * Lecture audio d'un appel DM (vocal ou vidéo) — montée une seule fois, hors de
@@ -18,6 +20,9 @@ export default function PersistentDmCallAudio() {
   // Le bouton « casque coupé » vit dans le store vocal ; c'est ici que les deux stores se
   // croisent, donc ici qu'on propage l'état à l'appel DM en cours (défaut A21).
   const deafened = useVoice(s => s.deafened)
+  // Volume par personne : le même réglage que dans les salons (fc_user_volumes).
+  const partnerId = useCallStore(s => s.partnerId)
+  const volume = useVoice(s => clampVolumePct(partnerId ? s.userVolumes[partnerId] ?? 100 : 100))
   const [autoplayBlocked, setAutoplayBlocked] = useState(false)
   const elRef = useRef<HTMLAudioElement | null>(null)
   const { playRingback } = useAudioNotifications()
@@ -36,15 +41,17 @@ export default function PersistentDmCallAudio() {
     useCallStore.getState().setDeafened(deafened)
   }, [deafened, remoteStream])
 
+  useEffect(() => {
+    if (callState === 'idle' || !remoteStream) dropPlaybackWhere('dm:')
+  }, [callState, remoteStream])
+
   if (callState === 'idle' || !remoteStream) return null
 
   const attach = (el: HTMLAudioElement | null) => {
     if (!el) return
     elRef.current = el
-    if (el.srcObject !== remoteStream) el.srcObject = remoteStream
+    routeAudio(el, `dm:${partnerId ?? ''}`, remoteStream, 'voice', volume / 100, null, false)
     el.muted = deafened
-    const savedOut = localStorage.getItem('fc_audio_output')
-    if (savedOut && 'setSinkId' in el) (el as unknown as { setSinkId: (id: string) => Promise<void> }).setSinkId(savedOut).catch(() => {})
     // autoPlay seul ne suffit pas : sur une policy autoplay stricte (Safari, onglet
     // restauré) la lecture est refusée et l'appel paraît connecté mais muet, sans le
     // moindre indice (défaut A18). Le rejet doit être visible et rattrapable.

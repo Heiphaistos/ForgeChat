@@ -12,6 +12,7 @@ import { t } from '@/i18n'
 import { getMyId, registerSignOutHook } from './auth'
 import { E2EE_CLAIM, enableMediaE2EE, mediaE2EEError, openMediaE2EE, retryWhenKeyReady, watchOutdated, type MediaE2EE } from '@/e2e/media'
 import { audioCaptureDefaults, watchCameraEffect } from '@/services/voiceFx'
+import { applyPeerVolumes, peerVolume, usePeerVolumes } from './peerVolumes'
 
 /**
  * Salons vocaux de serveur — protocole du serveur ForgeChat ≥ 3.251 et du client web
@@ -98,7 +99,6 @@ interface VoiceState {
   /** Dernière réaction de chaque participant (effacée après quelques secondes). */
   reactions: Record<string, string>
   /** Volume de lecture choisi par participant (1 = normal). */
-  volumes: Record<string, number>
   mediaStatus: MediaStatus
   /** Médias du salon chiffrés de bout en bout (§5) ; participants dont l'appli ne chiffre pas. */
   e2ee: boolean
@@ -128,7 +128,6 @@ interface VoiceState {
   focusCamera: (userId: string | null) => void
   shareScreen: () => Promise<void>
   stopScreenShare: () => void
-  setPeerVolume: (userId: string, volume: number) => void
   toggleHand: () => void
   react: (emoji: string) => void
   dismiss: () => void
@@ -146,6 +145,8 @@ interface VoiceState {
 
 let room: Room | null = null
 let roomName: string | null = null
+// Volume par personne réglé ailleurs (salon, MP, groupe) : appliqué tout de suite ici aussi.
+usePeerVolumes.subscribe(() => applyPeerVolumes(room))
 /** Caméra regardée en grand (focusCamera) : reçue en haute qualité. */
 let focusedCamera: string | null = null
 /** Droits donnés par le serveur : parole (can_speak), muet et sourdine imposés par un modérateur. */
@@ -214,9 +215,8 @@ export const useVoice = create<VoiceState>((set, get) => {
     set((s) => (s.peers.some((p) => p.userId === id) ? { peers: s.peers.map((p) => (p.userId === id ? { ...p, ...patch } : p)) } : {}))
 
   const applyAudio = (p: RemoteParticipant) => {
-    const { deafened, volumes } = get()
-    const volume = volumes[p.identity]
-    if (volume !== undefined) p.setVolume?.(volume)
+    const { deafened } = get()
+    p.setVolume?.(peerVolume(p.identity))
     p.audioTrackPublications.forEach((pub) => {
       const mst = pub.track?.mediaStreamTrack
       if (mst) mst.enabled = !deafened
@@ -695,7 +695,6 @@ export const useVoice = create<VoiceState>((set, get) => {
     handRaised: false,
     speaking: [],
     reactions: {},
-    volumes: {},
     mediaStatus: 'idle',
     quality: null,
     qualities: {},
@@ -901,12 +900,6 @@ export const useVoice = create<VoiceState>((set, get) => {
       set({ screenSharing: false })
       if (room) void stopScreenShare(room)
       broadcastState()
-    },
-
-    setPeerVolume: (userId, volume) => {
-      set((s) => ({ volumes: { ...s.volumes, [userId]: volume } }))
-      const p = room?.remoteParticipants.get(userId)
-      if (p) applyAudio(p)
     },
 
     toggleHand: () => {

@@ -17,6 +17,7 @@ import LiveCaptions from '../components/ai/LiveCaptions'
 import { prepareCaptions, useAiSettings } from '../ai/engine'
 import SpeakerStats from '../components/voice/SpeakerStats'
 import VolumeSlider from '../components/voice/VolumeSlider'
+import { volumeMenuItem } from '../components/voice/UserVolumePopover'
 import Soundboard from '../components/voice/Soundboard'
 import VoiceActivityBar from '../components/voice/VoiceActivityBar'
 import Whiteboard from '../components/voice/Whiteboard'
@@ -186,9 +187,10 @@ export default function VoiceVideoPage({ channel, serverId }: Props) {
   const tileMenu = useContextMenu()
   const moderation = useMemberModeration(serverId)
   const remoteSupportItem = useRemoteSupportItem()
-  const openTileMenu = (e: React.MouseEvent, userId: string) => {
+  const openTileMenu = (e: React.MouseEvent, userId: string, username: string) => {
     const rs = remoteSupportItem(userId)
-    const items = [...(rs ? [rs] : []), ...moderation.voiceItemsFor(userId).filter(i => !('separator' in i && i.separator))]
+    const vol = volumeMenuItem(userId, username, e)
+    const items = [...(vol ? [vol] : []), ...(rs ? [rs] : []), ...moderation.voiceItemsFor(userId).filter(i => !('separator' in i && i.separator))]
     if (items.length === 0) return
     e.preventDefault()
     tileMenu.open(e, items)
@@ -434,7 +436,7 @@ export default function VoiceVideoPage({ channel, serverId }: Props) {
         connectionLost={(p as { connectionLost?: boolean }).connectionLost === true}
         onVolume={p.isLocal ? undefined : () => setVolumeTarget({ userId: p.userId, username: p.username, kind: 'voice' })}
         onPopOut={() => detach(p.userId, 'camera', p.username, t.url)}
-        onContextMenu={e => openTileMenu(e, p.userId)}
+        onContextMenu={e => openTileMenu(e, p.userId, p.username)}
         onExpand={o.expand && (t.stream || t.url) ? () => setFullscreenStream({ stream: t.stream, url: t.url, label: p.username }) : undefined} />
     )
   }

@@ -211,7 +211,6 @@ const DISCORD_TO_FORGECHAT: &[(u32, i64)] = &[
     (4, P::MANAGE_CHANNELS),
     (5, P::MANAGE_SERVER),
     (6, P::ADD_REACTIONS),
-    (8, P::PRIORITY_SPEAKER),
     (9, P::STREAM),
     (10, P::VIEW_CHANNEL),
     (11, P::SEND_MESSAGES),

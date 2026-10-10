@@ -59,7 +59,6 @@ const PERMISSION_GROUPS: { key: string; color: string; perms: { key: string; bit
       { key: 'CONNECT_VOICE',    bit: B(13) },
       { key: 'SPEAK_VOICE',      bit: B(14) },
       { key: 'STREAM',           bit: B(40) },
-      { key: 'PRIORITY_SPEAKER', bit: B(18) },
       { key: 'MUTE_MEMBERS',     bit: B(15) },
       { key: 'DEAFEN_MEMBERS',   bit: B(16) },
       { key: 'MOVE_MEMBERS',     bit: B(17) },

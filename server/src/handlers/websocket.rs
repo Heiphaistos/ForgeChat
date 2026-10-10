@@ -1223,13 +1223,11 @@ async fn handle_ws_message(
                 }
             }
 
-            // Permissions de canal (overrides compris) — sert à PRIORITY_SPEAKER,
-            // SPEAK_VOICE (N8) et STREAM (S4).
+            // Permissions de canal (overrides compris) — sert à SPEAK_VOICE (N8) et STREAM (S4).
             let Some((server_id, perms)) = channel_perms(state, user_id, channel_id).await else {
                 tracing::warn!(user_id = %user_id, channel_id = %channel_id, "VOICE_STATE rejeté : non membre du serveur");
                 return;
             };
-            let priority_speaker = has_perm(perms, Permissions::PRIORITY_SPEAKER);
 
             // S4 — le partage d'écran exige la permission STREAM (bit 40).
             if screen && !voice_perm_ok(state, server_id, channel_id, perms, crate::state::PERM_STREAM).await {
@@ -1283,7 +1281,6 @@ async fn handle_ws_message(
                 "screen": screen,
                 "recording": recording,
                 "no_record": no_record,
-                "priority_speaker": priority_speaker,
             });
             // N10 — ciblé sur les membres du serveur qui voient ce canal
             state.broadcast_to_channel_members_except(channel_id, Some(user_id), event.to_string()).await;

@@ -5,6 +5,7 @@ import { StyleSheet, Text, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { dmsApi } from '@/api/dms'
 import { CallButton, useAudioRoute } from '@/components/call/CallControls'
+import { PeerVolumeSheet } from '@/components/call/PeerVolumeSheet'
 import { CallVideoView } from '@/components/call/CallVideoView'
 import { PipView } from '@/components/call/PipView'
 import { VideoStage } from '@/components/call/VideoStage'
@@ -30,6 +31,7 @@ export default function GroupCallScreen() {
   const group = useQuery({ queryKey: qk.group(s.groupId ?? ''), queryFn: () => dmsApi.group(s.groupId ?? ''), enabled: !!s.groupId })
   const [pinned, setPinned] = useState<string | null>(null)
   const [open, setOpen] = useState<string | null>(null)
+  const [volumeOf, setVolumeOf] = useState<{ userId: string; name: string } | null>(null)
   const route = useAudioRoute(s.speaker, s.toggleSpeaker, (on) => useGroupCall.setState({ speaker: on }))
 
   // Appel terminé (raccroché, erreur) : fermer l'écran, le motif reste lisible un instant.
@@ -119,9 +121,11 @@ export default function GroupCallScreen() {
       </Text>
       <Text style={styles.status}>{status}</Text>
       <E2ECallBadge encrypted={s.e2ee} outdatedNames={s.e2eeOutdated.map((id) => members.get(id)?.username ?? '…')} />
-      <VideoStage tiles={tiles} pinned={pinned} onPin={setPinned} onOpen={setOpen} />
+      {/* Appui long sur un participant : son volume (mémorisé, le même qu'en salon). */}
+      <VideoStage tiles={tiles} pinned={pinned} onPin={setPinned} onOpen={setOpen} onLongPress={(tile) => !tile.self && setVolumeOf({ userId: tile.userId, name: tile.name })} />
       <View style={[styles.controls, { paddingBottom: insets.bottom + spacing.xl }]}>{controls}</View>
       {route.sheet}
+      <PeerVolumeSheet peer={volumeOf} onClose={() => setVolumeOf(null)} />
     </View>
   )
 }
