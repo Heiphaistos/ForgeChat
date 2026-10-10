@@ -274,7 +274,7 @@ pub async fn receive_github_webhook(
         let count: i64 = redis.incr(&rl_key, 1).await
             .map_err(|_| AppError::Internal(anyhow::anyhow!("rate limit unavailable")))?;
         if count == 1 { let _: () = redis.expire(&rl_key, 60).await.unwrap_or(()); }
-        if count > 30 { return Err(AppError::TooManyRequests.into()); }
+        if count > 30 { return Err(AppError::TooManyRequests); }
     }
 
     let payload: serde_json::Value = serde_json::from_slice(&body_bytes)
