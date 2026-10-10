@@ -91,10 +91,13 @@ pub fn make_cursor(ts: DateTime<Utc>, id: Uuid) -> String {
     format!("{}|{}", ts.to_rfc3339_opts(chrono::SecondsFormat::Micros, true), id)
 }
 
-/// Portée d'une recherche : partout (salons visibles, DM, groupes) ou un seul fil.
+/// Portée d'une recherche : partout (salons visibles, DM, groupes), tous les salons de
+/// serveur, tous les MP et groupes, ou un seul fil.
 #[derive(Clone, Copy)]
 enum Scope {
     All,
+    Servers,
+    Dms,
     Channel(Uuid),
     Dm(Uuid),
     Group(Uuid),
@@ -167,7 +170,7 @@ async fn search_messages(
         first = false;
     };
 
-    if matches!(scope, Scope::All | Scope::Channel(_)) {
+    if matches!(scope, Scope::All | Scope::Servers | Scope::Channel(_)) {
         union(&mut qb);
         qb.push(
             "(SELECT m.id, m.content, m.created_at,
@@ -189,7 +192,7 @@ async fn search_messages(
         push_filters(&mut qb, &CHANNELS, f, cursor);
         qb.push(" ORDER BY m.created_at DESC, m.id DESC LIMIT ").push_bind(limit + 1).push(")");
     }
-    if matches!(scope, Scope::All | Scope::Dm(_)) {
+    if matches!(scope, Scope::All | Scope::Dms | Scope::Dm(_)) {
         union(&mut qb);
         qb.push(
             "(SELECT m.id, m.content, m.created_at, u.username AS author_username, u.avatar AS author_avatar,
@@ -211,7 +214,7 @@ async fn search_messages(
         push_filters(&mut qb, &DMS, f, cursor);
         qb.push(" ORDER BY m.created_at DESC, m.id DESC LIMIT ").push_bind(limit + 1).push(")");
     }
-    if matches!(scope, Scope::All | Scope::Group(_)) {
+    if matches!(scope, Scope::All | Scope::Dms | Scope::Group(_)) {
         union(&mut qb);
         qb.push(
             "(SELECT m.id, m.content, m.created_at, u.username AS author_username, u.avatar AS author_avatar,
@@ -280,7 +283,11 @@ pub async fn global_search(
     } else if let Some(id) = id_param("group_id") {
         Scope::Group(id)
     } else {
-        Scope::All
+        match params.get("scope").map(String::as_str) {
+            Some("servers") => Scope::Servers,
+            Some("dms") => Scope::Dms,
+            _ => Scope::All,
+        }
     };
     let cursor = params.get("cursor").and_then(|c| parse_cursor(c));
     let limit = params.get("limit").and_then(|l| l.parse::<i64>().ok()).unwrap_or(25).clamp(1, 50);
