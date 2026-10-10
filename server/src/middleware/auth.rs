@@ -48,6 +48,7 @@ pub fn create_token(user_id: Uuid, sid: Option<Uuid>, secret: &str, issuer: &str
         .ok_or_else(|| anyhow::anyhow!("Erreur calcul expiration token"))?
         .timestamp();
     let claims = Claims { sub: user_id, exp, iss: issuer.to_string(), iat: now.timestamp(), sid };
+    crate::jwt::ready();
     Ok(encode(
         &Header::default(),
         &claims,
@@ -56,6 +57,7 @@ pub fn create_token(user_id: Uuid, sid: Option<Uuid>, secret: &str, issuer: &str
 }
 
 pub fn verify_token(token: &str, secret: &str, issuer: &str) -> Option<Claims> {
+    crate::jwt::ready();
     let mut validation = Validation::default();
     validation.set_issuer(&[issuer]);
     decode::<Claims>(

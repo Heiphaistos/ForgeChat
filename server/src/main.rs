@@ -14,6 +14,7 @@ mod privacy;
 mod crypto;
 mod email_crypto;
 mod upload_sign;
+mod jwt;
 
 use axum::{
     middleware as axum_middleware,

@@ -19,7 +19,8 @@ sqlx = { version = "0.8.1", features = ["postgres", "runtime-tokio-rustls", "uui
 uuid = { version = "1", features = ["v4", "serde"] }
 chrono = { version = "0.4", features = ["serde"] }
 bcrypt = "0.15"
-jsonwebtoken = { version = "10.3", default-features = false, features = ["rust_crypto"] }
+# Sans fonctionnalité de chiffrement (`rust_crypto` tirait `rsa`, RUSTSEC-2023-0071) : HS256 via src/jwt.rs.
+jsonwebtoken = { version = "10.3", default-features = false }
 redis = { version = "0.24", features = ["tokio-comp", "aio", "connection-manager"] }
 futures-util = "0.3"
 tracing = "0.1"
@@ -43,8 +44,10 @@ totp-lite = "2"
 data-encoding = "2.6"
 urlencoding = "2"
 zip = { version = "8.6.0", default-features = false, features = ["deflate"] }
-# Web Push (VAPID + aes128gcm) en Rust pur : la crate `web-push` tire `ece` -> openssl.
-web-push-native = { version = "0.5", default-features = false, features = ["vapid"] }
+# Web Push (aes128gcm) en Rust pur : la crate `web-push` tire `ece` -> openssl. Jeton VAPID signé
+# dans push.rs (ES256 via p256) : la fonctionnalité `vapid` tirait jwt-simple -> superboring -> rsa.
+web-push-native = { version = "0.5", default-features = false }
+p256 = { version = "0.13", default-features = false, features = ["ecdsa", "std"] }
 
 [profile.release]
 opt-level = 3
