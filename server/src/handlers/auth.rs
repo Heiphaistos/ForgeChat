@@ -572,6 +572,7 @@ pub async fn change_password(
     // Tous les appareils sont déconnectés, pas seulement celui-ci : c'est le but
     // d'un changement de mot de passe après un vol de session.
     crate::middleware::auth::revoke_all_tokens(&state, claims.sub).await;
+    state.disconnect_user_sockets(claims.sub).await;
 
     Ok(Json(serde_json::json!({ "ok": true })))
 }
@@ -587,7 +588,11 @@ pub async fn ws_ticket(
         .map(char::from)
         .collect();
     let key = format!("ws_ticket:{}", ticket);
-    let user_id_str = claims.sub.to_string();
+    // La session suit la socket : déconnecter ou révoquer cette session ferme ses sockets seulement.
+    let user_id_str = match claims.sid {
+        Some(sid) => format!("{}:{sid}", claims.sub),
+        None => claims.sub.to_string(),
+    };
     let mut redis = state.redis.lock().await;
     redis.set_ex::<_, _, ()>(&key, &user_id_str, 30)
         .await
@@ -599,7 +604,7 @@ pub async fn logout(
     State(state): State<AppState>,
     axum::Extension(claims): axum::Extension<crate::middleware::auth::Claims>,
     axum::Extension(raw_token): axum::Extension<crate::middleware::auth::RawToken>,
-    Json(_body): Json<serde_json::Value>,
+    Json(body): Json<serde_json::Value>,
 ) -> Result<(HeaderMap, Json<serde_json::Value>)> {
     // Blocklist l'access token courant pour sa durée de vie restante
     let remaining_secs = (claims.exp - Utc::now().timestamp()).max(0) as u64;
@@ -610,22 +615,29 @@ pub async fn logout(
         let _: () = redis.set_ex(&blocklist_key, "1", remaining_secs).await.unwrap_or(());
     }
 
-    // Supprimer tous les refresh tokens de l'utilisateur (invalide toutes les sessions)
-    sqlx::query("DELETE FROM refresh_tokens WHERE user_id=$1")
-        .bind(claims.sub)
-        .execute(&state.db)
-        .await?;
-    // Plus aucun jeton de rafraîchissement : les lignes de session ne désignent plus rien.
-    sqlx::query("DELETE FROM user_sessions WHERE user_id=$1")
-        .bind(claims.sub)
-        .execute(&state.db)
-        .await?;
-    sqlx::query("UPDATE users SET status='offline', updated_at=NOW() WHERE id=$1")
-        .bind(claims.sub)
-        .execute(&state.db)
-        .await?;
-    // Toutes les sessions sont fermées : plus de notifications vers les téléphones.
-    crate::mobile_push::forget_devices(&state, claims.sub).await;
+    // `scope: "current"` (appli mobile) : seulement la session de cet appareil. Sinon (défaut
+    // historique, appli web) : toutes les sessions du compte.
+    match (body["scope"].as_str(), claims.sid) {
+        (Some("current"), Some(sid)) => end_session(&state, claims.sub, sid).await?,
+        _ => {
+            sqlx::query("DELETE FROM refresh_tokens WHERE user_id=$1")
+                .bind(claims.sub)
+                .execute(&state.db)
+                .await?;
+            // Plus aucun jeton de rafraîchissement : les lignes de session ne désignent plus rien.
+            sqlx::query("DELETE FROM user_sessions WHERE user_id=$1")
+                .bind(claims.sub)
+                .execute(&state.db)
+                .await?;
+            sqlx::query("UPDATE users SET status='offline', updated_at=NOW() WHERE id=$1")
+                .bind(claims.sub)
+                .execute(&state.db)
+                .await?;
+            // Jetons d'accès des autres appareils et leurs sockets : coupés tout de suite.
+            crate::middleware::auth::revoke_all_tokens(&state, claims.sub).await;
+            state.disconnect_user_sockets(claims.sub).await;
+        }
+    }
 
     // Effacer les cookies côté client
     let clear = "access_token=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0";
@@ -705,23 +717,29 @@ pub async fn revoke_session(
     // indéfiniment son access token (jusqu'à l'expiration naturelle du refresh token,
     // 30 jours). Bouton de sécurité 100% cosmétique. Fix : supprimer aussi la ligne
     // refresh_tokens correspondante avant de retirer l'entrée d'affichage.
+    end_session(&state, claims.sub, session_id).await?;
+    Ok(axum::http::StatusCode::NO_CONTENT)
+}
+
+/// Termine UNE session du compte : ligne d'affichage, jeton de rafraîchissement, jetons
+/// d'accès déjà émis (révocation par `sid` jusqu'à leur expiration) et WebSocket ouvertes.
+pub(crate) async fn end_session(state: &AppState, user_id: Uuid, sid: Uuid) -> Result<()> {
     let hash: Option<String> = sqlx::query_scalar(
         "DELETE FROM user_sessions WHERE id = $1 AND user_id = $2 RETURNING refresh_token_hash",
     )
-    .bind(session_id)
-    .bind(claims.sub)
+    .bind(sid)
+    .bind(user_id)
     .fetch_optional(&state.db)
     .await?;
-
-    if let Some(hash) = hash {
-        sqlx::query("DELETE FROM refresh_tokens WHERE token_hash=$1 AND user_id=$2")
-            .bind(&hash)
-            .bind(claims.sub)
-            .execute(&state.db)
-            .await?;
-    }
-
-    Ok(axum::http::StatusCode::NO_CONTENT)
+    let Some(hash) = hash else { return Ok(()) };
+    sqlx::query("DELETE FROM refresh_tokens WHERE token_hash=$1 AND user_id=$2")
+        .bind(&hash)
+        .bind(user_id)
+        .execute(&state.db)
+        .await?;
+    crate::middleware::auth::revoke_session_tokens(state, sid).await;
+    state.disconnect_session_sockets(user_id, sid).await;
+    Ok(())
 }
 
 async fn store_refresh_token(state: &AppState, user_id: Uuid, token: &str) -> Result<()> {

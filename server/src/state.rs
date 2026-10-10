@@ -32,6 +32,11 @@ pub type ConnCountMap = Arc<RwLock<HashMap<Uuid, usize>>>;
 /// Signal interne (pas du JSON, jamais transmis au client) qui ferme les WebSocket d'un compte.
 pub const WS_CLOSE: &str = "!ws-close";
 
+/// Signal interne : ferme les sockets de la session `sid` seulement.
+pub fn ws_close_session(sid: Uuid) -> String {
+    format!("{WS_CLOSE}:{sid}")
+}
+
 #[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct VoiceStateData {
     pub channel_id: Uuid,
@@ -249,6 +254,12 @@ impl AppState {
     /// un nouveau ticket ; un jeton révoqué n'en obtient plus.
     pub async fn disconnect_user_sockets(&self, user_id: Uuid) {
         self.broadcast_to_user(user_id, WS_CLOSE.to_string()).await;
+    }
+
+    /// Ferme seulement les WebSocket ouvertes par la session `sid` (dÃ©connexion de cet
+    /// appareil, session rÃ©voquÃ©e) ; les autres appareils du compte restent connectÃ©s.
+    pub async fn disconnect_session_sockets(&self, user_id: Uuid, sid: Uuid) {
+        self.broadcast_to_user(user_id, ws_close_session(sid)).await;
     }
 
     pub async fn broadcast_to_user(&self, user_id: Uuid, event: String) {

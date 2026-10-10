@@ -378,6 +378,9 @@ pub async fn delete_account(
         .bind(claims.sub)
         .execute(&state.db)
         .await?;
+    // Compte supprimé : plus aucun jeton ni socket ne doit survivre.
+    crate::middleware::auth::revoke_all_tokens_strict(&state, claims.sub).await;
+    state.disconnect_user_sockets(claims.sub).await;
     Ok(Json(serde_json::json!({ "ok": true })))
 }
 
