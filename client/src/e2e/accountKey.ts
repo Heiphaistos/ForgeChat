@@ -8,6 +8,7 @@ import * as c from './crypto'
 import {
   type AccountSecrets, type AnyWrapped, deriveSecrets, newKdfSalt, passwordProblem, unwrapAny, wrapKeyV2,
 } from './authKdf'
+import { guardPrelogin, markMigrated } from './authGuard'
 
 interface KeysResponse { public: string; fingerprint: string; wrapped: AnyWrapped; backup: c.WrappedKey | null }
 interface StoredKey { priv: CryptoKey; pub: string }
@@ -65,9 +66,15 @@ function passwordOr(pw?: string): string {
 // ─── Connexion v2 : sel du compte et preuve du mot de passe ─────────────────
 export interface KdfInfo { kdf_salt: string | null; legacy: boolean }
 
-/** Sel avant connexion ; e-mail inconnu = sel factice et `legacy` (le serveur ne révèle rien). */
+/**
+ * Sel avant connexion ; e-mail inconnu = sel factice et `legacy` (le serveur ne révèle rien).
+ * `legacy` pour un compte vu migré sur cet appareil : AUTH_DOWNGRADE, le mot de passe ne part pas.
+ */
 export async function prelogin(email: string): Promise<KdfInfo> {
-  return (await api.post<KdfInfo>('/auth/prelogin', { email: email.trim() })).data
+  const data = (await api.post<KdfInfo>('/auth/prelogin', { email: email.trim() })).data
+  await guardPrelogin(email, data)
+  if (!data.legacy) await markMigrated(email)
+  return data
 }
 
 /** auth + wrapKey du compte connecté pour ce mot de passe ; null = compte pas encore migré. */

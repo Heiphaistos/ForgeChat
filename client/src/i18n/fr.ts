@@ -31,6 +31,7 @@ export const fr = {
   'auth.login.subtitle': 'Connecte-toi à ton compte ForgeChat',
   'auth.login.enterTotp': 'Entrez votre code 2FA',
   'auth.login.error': 'Erreur de connexion',
+  'auth.login.downgrade': "Le serveur demande ton mot de passe en clair alors que ton compte est déjà protégé : connexion bloquée par sécurité. Contacte l'administrateur.",
   'auth.login.totpHelp': "La double authentification est activée. Entrez votre code depuis l'application d'authentification, ou l'un de vos codes de secours si vous avez perdu l'accès.",
   'auth.login.totpLabel': 'Code 2FA ou code de secours',
   'auth.login.back': '← Retour',

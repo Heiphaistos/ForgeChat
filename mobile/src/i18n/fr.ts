@@ -91,6 +91,7 @@ export const fr = {
   'auth.password': 'Mot de passe',
   'auth.missingCredentials': 'Renseigne ton email et ton mot de passe.',
   'auth.invalidTotp': 'Code 2FA invalide.',
+  'auth.downgrade': "Le serveur demande ton mot de passe en clair alors que ton compte est déjà protégé : connexion bloquée par sécurité. Contacte l'administrateur.",
   'auth.twoStep': 'Vérification en deux étapes',
   'auth.welcomeBack': 'Content de te revoir !',
   'auth.totpHelp': 'Saisis le code de ton application d’authentification (ou un code de secours).',

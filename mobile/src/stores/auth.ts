@@ -14,6 +14,7 @@ import { classifyBootstrapFailure, SESSION_EXPIRED_NOTICE } from '@/lib/sessionN
 import { t } from '@/i18n'
 import { clearAccountKey, prelogin, rememberLogin } from '@/e2e/accountKey'
 import { deriveSecrets, newKdfSalt, passwordProblem } from '@/e2e/authKdf'
+import { markMigrated } from '@/e2e/authGuard'
 import { forgetOfflineData, setOfflineOwner } from '@/lib/offline'
 import { listAccounts, putAccount, takeAccount } from '@/lib/accounts'
 
@@ -142,6 +143,7 @@ export const useAuth = create<AuthState>((set, get) => {
         throw e
       }
       rememberLogin(password, secrets)
+      void markMigrated(email) // anti-retour arrière (e2e/authGuard.ts)
       await acceptSession(res)
     },
 

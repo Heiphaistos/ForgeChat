@@ -42,7 +42,7 @@ export default function LoginPage() {
       } else {
         setPassword('')
         setNeedTotp(false)
-        toast.error(msg || t('auth.login.error'))
+        toast.error(msg || t(err?.message === 'AUTH_DOWNGRADE' ? 'auth.login.downgrade' : 'auth.login.error'))
       }
     } finally {
       setLoading(false)
