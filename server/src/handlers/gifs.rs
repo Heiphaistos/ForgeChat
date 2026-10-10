@@ -328,7 +328,10 @@ async fn fetch(state: &AppState, claims: &Claims, q: Option<&str>, pos: Option<&
         tracing::warn!("GIF ({nom}) a répondu {}", resp.status());
         return Err(AppError::BadRequest("GIF indisponibles pour le moment".into()));
     }
-    let body: Value = resp.json().await.map_err(|_| AppError::BadRequest("Réponse GIF invalide".into()))?;
+    let body: Value = crate::net_guard::read_capped(resp, 4 * 1024 * 1024)
+        .await
+        .and_then(|b| serde_json::from_slice(&b).ok())
+        .ok_or_else(|| AppError::BadRequest("Réponse GIF invalide".into()))?;
     let out = match prov {
         Provider::Giphy { .. } => normalize_giphy(&body, offset),
         Provider::Klipy { .. } => normalize_klipy(&body),

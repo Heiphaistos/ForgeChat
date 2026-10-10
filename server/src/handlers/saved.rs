@@ -66,6 +66,19 @@ pub async fn save_message(
             return Err(AppError::Forbidden);
         }
     }
+    // Le message doit être dans CE salon / ce MP : sinon get_saved renvoyait les pièces
+    // jointes et le chiffré d'un message d'un salon masqué (identifiant connu).
+    let in_place: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM messages WHERE id=$1 AND channel_id=$2)
+             OR EXISTS(SELECT 1 FROM dm_messages WHERE id=$1 AND dm_channel_id=$2)",
+    )
+    .bind(body.message_id)
+    .bind(body.channel_id)
+    .fetch_one(&state.db)
+    .await?;
+    if !in_place {
+        return Err(AppError::NotFound("Message introuvable".into()));
+    }
     // Message chiffré de bout en bout (MP ou salon) : aucune copie du texte en clair côté serveur.
     let encrypted: bool = sqlx::query_scalar(
         "SELECT EXISTS(SELECT 1 FROM dm_messages WHERE id=$1 AND enc IS NOT NULL)

@@ -179,6 +179,7 @@ pub async fn reset_password(
     }
     // Les jetons d'accès déjà émis (appareil volé) deviennent invalides.
     revoke_all_tokens(&state, user_id).await;
+    state.disconnect_user_sockets(user_id).await;
     Ok(Json(serde_json::json!({ "ok": true })))
 }
 

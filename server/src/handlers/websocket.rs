@@ -12,66 +12,98 @@ use uuid::Uuid;
 use crate::{models::role::Permissions, state::{AppState, VoiceStateData}};
 // bcrypt est importé via le crate root (Cargo.toml)
 
+/// Taille maximale d'un message (et d'une trame) WebSocket reçu.
+const WS_MAX_MESSAGE: usize = 64 * 1024;
+/// WebSocket simultanées par compte et par adresse.
+const WS_MAX_PER_USER: usize = 10;
+const WS_MAX_PER_IP: usize = 50;
+/// Revérification périodique du compte (révocation, bannissement) d'une socket ouverte.
+const WS_RECHECK: std::time::Duration = std::time::Duration::from_secs(60);
+
 pub async fn ws_handler(
     ws: WebSocketUpgrade,
     State(state): State<AppState>,
+    axum::extract::ConnectInfo(addr): axum::extract::ConnectInfo<std::net::SocketAddr>,
+    headers: axum::http::HeaderMap,
     axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>,
 ) -> Response {
-    let ticket = params.get("ticket").cloned();
-    let token = params.get("token").cloned().unwrap_or_default();
-    let config_secret = state.config.jwt_secret.clone();
-    let config_issuer = state.config.jwt_issuer.clone();
-    ws.on_upgrade(move |socket| handle_socket(socket, state, ticket, token, config_secret, config_issuer))
+    use axum::{http::StatusCode, response::IntoResponse};
+    // Ticket éphémère à usage unique seulement (POST /auth/ws-ticket) : le JWT brut
+    // dans l'URL (`?token=`) finissait dans les journaux des proxys ; plus aucune
+    // appli ne l'utilise (web, bureau et mobile passent par le ticket).
+    let Some(ticket) = params.get("ticket") else {
+        return StatusCode::UNAUTHORIZED.into_response();
+    };
+    let user_id = match consume_ticket(&state, ticket).await {
+        Ok(Some(id)) => id,
+        Ok(None) => {
+            tracing::warn!("WebSocket: ticket invalide ou expiré");
+            return StatusCode::UNAUTHORIZED.into_response();
+        }
+        Err(()) => return StatusCode::SERVICE_UNAVAILABLE.into_response(),
+    };
+    if state.conn_counts.read().await.get(&user_id).copied().unwrap_or(0) >= WS_MAX_PER_USER {
+        return StatusCode::TOO_MANY_REQUESTS.into_response();
+    }
+    let ip = crate::privacy::client_key(&headers, &addr);
+    {
+        let mut ips = state.ws_ip_counts.lock().await;
+        let n = ips.entry(ip.clone()).or_insert(0);
+        if *n >= WS_MAX_PER_IP {
+            return StatusCode::TOO_MANY_REQUESTS.into_response();
+        }
+        *n += 1;
+    }
+    let opened_at = chrono::Utc::now().timestamp();
+    let ip_state = state.clone();
+    let ip_key = ip.clone();
+    // Compteur par adresse rendu même si la mise à niveau échoue (callback jamais appelé).
+    let guard = IpSlot { state: ip_state, ip: ip_key };
+    ws.max_message_size(WS_MAX_MESSAGE)
+        .max_frame_size(WS_MAX_MESSAGE)
+        .on_upgrade(move |socket| async move {
+            handle_socket(socket, state, user_id, opened_at).await;
+            drop(guard);
+        })
 }
 
-async fn handle_socket(
-    socket: WebSocket,
+/// Place occupée dans `ws_ip_counts`, rendue à la destruction.
+struct IpSlot {
     state: AppState,
-    ticket: Option<String>,
-    token: String,
-    secret: String,
-    issuer: String,
-) {
-    // Priorité 1 : ticket éphémère Redis (web — ne logue pas le JWT)
-    // Priorité 2 : JWT direct (Tauri)
-    let user_id: Uuid = if let Some(t) = ticket {
-        let key = format!("ws_ticket:{}", t);
-        let uid_str: Option<String> = {
-            let mut redis = state.redis.lock().await;
-            use redis::AsyncCommands;
-            // Single-use : supprimer le ticket immédiatement après validation
-            let val: Option<String> = redis.get(&key).await.unwrap_or(None);
-            if val.is_some() {
-                let _: () = redis.del(&key).await.unwrap_or(());
+    ip: String,
+}
+
+impl Drop for IpSlot {
+    fn drop(&mut self) {
+        let state = self.state.clone();
+        let ip = std::mem::take(&mut self.ip);
+        tokio::spawn(async move {
+            let mut ips = state.ws_ip_counts.lock().await;
+            if let Some(n) = ips.get_mut(&ip) {
+                *n = n.saturating_sub(1);
+                if *n == 0 {
+                    ips.remove(&ip);
+                }
             }
-            val
-        };
-        match uid_str.and_then(|s| Uuid::parse_str(&s).ok()) {
-            Some(id) => id,
-            None => {
-                tracing::warn!("WebSocket: ticket invalide ou expiré");
-                return;
-            }
-        }
-    } else {
-        // Mêmes contrôles que l'API : un jeton révoqué (déconnexion, mot de passe
-        // changé) ouvrait encore la WebSocket et recevait tous les DM pendant 24 h.
-        let Some(c) = crate::middleware::auth::verify_token(&token, &secret, &issuer) else {
-            tracing::warn!("WebSocket: token invalide");
-            return;
-        };
-        let blocked: Option<String> = {
-            use redis::AsyncCommands;
-            let key = format!("jwtblock:{}", crate::middleware::auth::hash_token(&token));
-            let mut redis = state.redis.lock().await;
-            redis.get(&key).await.unwrap_or(None)
-        };
-        if blocked.is_some() || crate::middleware::auth::is_revoked(&state, &c).await || crate::handlers::site_admin::is_banned(&state, c.sub).await {
-            tracing::warn!("WebSocket: token révoqué");
-            return;
-        }
-        c.sub
-    };
+        });
+    }
+}
+
+/// Ticket à usage unique (lu puis supprimé atomiquement). Err : Redis injoignable.
+async fn consume_ticket(state: &AppState, ticket: &str) -> std::result::Result<Option<Uuid>, ()> {
+    if ticket.is_empty() || ticket.len() > 64 {
+        return Ok(None);
+    }
+    let mut redis = state.redis.lock().await;
+    let val: Option<String> = redis::cmd("GETDEL")
+        .arg(format!("ws_ticket:{ticket}"))
+        .query_async(&mut *redis)
+        .await
+        .map_err(|e| tracing::error!("WebSocket: Redis injoignable ({e})"))?;
+    Ok(val.and_then(|s| Uuid::parse_str(&s).ok()))
+}
+
+async fn handle_socket(socket: WebSocket, state: AppState, user_id: Uuid, opened_at: i64) {
 
     // N5 — identité de CONNEXION, distincte de l'identité d'utilisateur.
     // Plusieurs onglets partagent le même `user_id` mais ont chacun leur
@@ -181,9 +213,26 @@ async fn handle_socket(
     // P1-8 — rappels échus pendant l'absence : livrés dès la reconnexion.
     crate::handlers::reminders::deliver_due(&state, Some(user_id)).await;
 
+    let check_state = state.clone();
     let send_task = tokio::spawn(async move {
+        let mut recheck = tokio::time::interval(WS_RECHECK);
+        recheck.tick().await; // premier tick immédiat : déjà vérifié à l'ouverture
         loop {
-            match rx.recv().await {
+            let next = tokio::select! {
+                m = rx.recv() => m,
+                _ = recheck.tick() => {
+                    // Jetons révoqués depuis l'ouverture (déconnexion partout, mot de passe
+                    // changé, bannissement) : la socket se ferme, l'appli devra se réauthentifier.
+                    if crate::middleware::auth::token_state(&check_state, user_id, opened_at, None).await
+                        == crate::middleware::auth::TokenState::Revoked
+                    {
+                        break;
+                    }
+                    continue;
+                }
+            };
+            match next {
+                Ok(msg) if msg == crate::state::WS_CLOSE => break,
                 Ok(msg) => {
                     // Compte banni ou déconnecté de force : le client est prévenu, puis la socket se ferme.
                     let terminal = msg.starts_with(r#"{"type":"ACCOUNT_BANNED""#) || msg.starts_with(r#"{"type":"FORCE_LOGOUT""#);
@@ -206,8 +255,8 @@ async fn handle_socket(
         while let Some(Ok(msg)) = receiver.next().await {
             match msg {
                 Message::Text(text) => {
-                    // Limite de taille pour éviter les attaques DoS
-                    if text.len() > 64 * 1024 {
+                    // Limite de taille pour éviter les attaques DoS (aussi bornée à la lecture : max_message_size)
+                    if text.len() > WS_MAX_MESSAGE {
                         tracing::warn!("WS: message trop grand ({} bytes) de {}", text.len(), user_id);
                         break;
                     }
@@ -470,15 +519,28 @@ async fn accept_dm_call(
     dm_id: &serde_json::Value,
     accepter_e2ee: bool,
 ) {
-    // Historique : appel décroché — started_at repart pour mesurer le temps de parole
-    let _ = sqlx::query(
+    // Blocage dans un sens ou dans l'autre : pas d'appel.
+    let blocked: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM blocks WHERE (blocker_id=$1 AND blocked_id=$2) OR (blocker_id=$2 AND blocked_id=$1))"
+    ).bind(user_id).bind(to).fetch_one(&state.db).await.unwrap_or(true);
+    if blocked { return; }
+    // Historique : appel décroché — started_at repart pour mesurer le temps de parole.
+    // Il faut un appel de `to` en sonnerie : avant, DM_CALL_ACCEPT seul ouvrait le
+    // média vers n'importe quel interlocuteur d'un MP, sans qu'il ait appelé (blocage contourné).
+    let answered = sqlx::query(
         "UPDATE call_history SET status='answered', started_at=NOW()
          WHERE id = (SELECT id FROM call_history
                      WHERE caller_id=$1 AND callee_id=$2 AND status='ringing'
                      ORDER BY started_at DESC LIMIT 1)"
     )
     .bind(to).bind(user_id)
-    .execute(&state.db).await;
+    .execute(&state.db).await
+    .map(|r| r.rows_affected())
+    .unwrap_or(0);
+    if answered == 0 {
+        tracing::warn!(user_id = %user_id, "DM_CALL_ACCEPT rejeté : aucun appel en sonnerie");
+        return;
+    }
     // Appels croisés : la sonnerie de l'appel inverse n'est plus qu'un doublon
     // (sinon son expiration à 45 s raccrochait l'appel en cours).
     let _ = sqlx::query("DELETE FROM call_history WHERE caller_id=$1 AND callee_id=$2 AND status='ringing'")
@@ -549,6 +611,18 @@ pub(crate) async fn rate_ok(state: &AppState, key: String, limit: i64, window_s:
 /// compris. `None` = pas membre du serveur du canal.
 async fn channel_perms(state: &AppState, user_id: Uuid, channel_id: Uuid) -> Option<(Uuid, i64)> {
     state.effective_channel_permissions(user_id, channel_id).await
+}
+
+/// Salon visible (VIEW_CHANNEL, surcharges comprises) : (serveur, permissions effectives).
+/// Avant : les événements vocaux et de scène ne vérifiaient que l'appartenance au
+/// serveur, un salon masqué restait joignable avec son identifiant.
+async fn visible_channel(state: &AppState, user_id: Uuid, channel_id: Uuid) -> Option<(Uuid, i64)> {
+    channel_perms(state, user_id, channel_id).await.filter(|(_, p)| has_perm(*p, Permissions::VIEW_CHANNEL))
+}
+
+/// L'utilisateur est actuellement dans ce salon vocal.
+async fn in_voice_room(state: &AppState, user_id: Uuid, channel_id: Uuid) -> bool {
+    state.user_voice.read().await.get(&user_id) == Some(&channel_id)
 }
 
 pub(crate) fn has_perm(perms: i64, bit: i64) -> bool {
@@ -790,6 +864,17 @@ async fn handle_ws_message(
                 tracing::warn!(user_id = %user_id, channel_id = %channel_id, "VOICE_JOIN rejeté : non membre du serveur");
                 return;
             };
+            if !has_perm(perms, Permissions::VIEW_CHANNEL) {
+                tracing::warn!(user_id = %user_id, channel_id = %channel_id, "VOICE_JOIN rejeté : salon masqué");
+                state.broadcast_to_user(user_id, serde_json::json!({
+                    "type": "VOICE_JOIN_ERROR",
+                    "channel_id": channel_id,
+                    "reason": "missing_permission",
+                    "permission": "VIEW_CHANNEL",
+                    "current": 0,
+                }).to_string()).await;
+                return;
+            }
             if !voice_perm_ok(state, server_id, channel_id, perms, Permissions::CONNECT_VOICE).await {
                 tracing::warn!(user_id = %user_id, channel_id = %channel_id, "VOICE_JOIN rejeté : CONNECT_VOICE manquant");
                 let current = state.voice_rooms.read().await
@@ -1218,16 +1303,7 @@ async fn handle_ws_message(
             let Some(channel_id) = msg["channel_id"].as_str().and_then(|s| s.parse::<Uuid>().ok()) else {
                 return;
             };
-            let is_member: bool = sqlx::query_scalar(
-                "SELECT EXISTS(
-                    SELECT 1 FROM channels c
-                    JOIN server_members sm ON sm.server_id = c.server_id
-                    WHERE c.id = $1 AND sm.user_id = $2
-                )"
-            )
-            .bind(channel_id).bind(user_id)
-            .fetch_one(&state.db).await.unwrap_or(false);
-            if !is_member { return; }
+            if visible_channel(state, user_id, channel_id).await.is_none() { return; }
 
             let speaker_ids: Vec<Uuid> = state.stage_speakers.read().await
                 .get(&channel_id).map(|s| s.iter().copied().collect()).unwrap_or_default();
@@ -1260,16 +1336,12 @@ async fn handle_ws_message(
             let Some(channel_id) = msg["channel_id"].as_str().and_then(|s| s.parse::<Uuid>().ok()) else {
                 return;
             };
-            let is_member: bool = sqlx::query_scalar(
-                "SELECT EXISTS(
-                    SELECT 1 FROM channels c
-                    JOIN server_members sm ON sm.server_id = c.server_id
-                    WHERE c.id = $1 AND sm.user_id = $2
-                )"
-            )
-            .bind(channel_id).bind(user_id)
-            .fetch_one(&state.db).await.unwrap_or(false);
-            if !is_member { return; }
+            let Some((server_id, _)) = visible_channel(state, user_id, channel_id).await else { return; };
+            // Un membre en timeout ne demande pas la parole (il peut toujours baisser la main).
+            let lowering = msg["type"].as_str() == Some("STAGE_HAND_RAISE") && msg["raised"].as_bool() != Some(true);
+            if !lowering && crate::handlers::servers::require_not_timed_out(state, user_id, server_id).await.is_err() {
+                return;
+            }
 
             // "Demander à parler" alimente la même file d'attente modérateur que
             // lever la main — pas de double mécanisme à maintenir côté client.
@@ -1308,16 +1380,15 @@ async fn handle_ws_message(
                 msg["target_user_id"].as_str().and_then(|s| s.parse::<Uuid>().ok()),
             ) else { return; };
 
-            let server_id_opt: Option<Uuid> = sqlx::query_scalar(
-                "SELECT server_id FROM channels WHERE id=$1"
-            ).bind(channel_id).fetch_optional(&state.db).await.unwrap_or(None).flatten();
-            let Some(server_id) = server_id_opt else { return; };
-
-            // Modérateur uniquement (MANAGE_CHANNELS) — l'auto-invitation (prendre la
-            // parole soi-même) est acceptée, pas de cas particulier nécessaire.
-            if crate::handlers::servers::require_permission_and_channel(
-                state, user_id, server_id, channel_id, Permissions::MANAGE_CHANNELS,
-            ).await.is_err() {
+            // Modérateur uniquement (MANAGE_CHANNELS sur ce salon, qu'il voit) — l'auto-invitation
+            // (prendre la parole soi-même) est acceptée, pas de cas particulier nécessaire.
+            let Some((server_id, perms)) = visible_channel(state, user_id, channel_id).await else { return; };
+            if !has_perm(perms, Permissions::MANAGE_CHANNELS) {
+                return;
+            }
+            // La cible doit voir la scène, avoir le droit d'y parler et ne pas être en timeout.
+            let Some((_, target_perms)) = visible_channel(state, target_id, channel_id).await else { return; };
+            if !crate::handlers::voice_moderation::voice_rights(state, target_id, server_id, channel_id, target_perms).await.speak {
                 return;
             }
 
@@ -1643,15 +1714,13 @@ async fn handle_ws_message(
                         tracing::warn!(user_id = %user_id, channel_id = %cid, "VOICE_REACTION rejeté : rate limit");
                         return;
                     }
-                    let is_member: bool = sqlx::query_scalar(
-                        "SELECT EXISTS(
-                            SELECT 1 FROM channels c
-                            JOIN server_members sm ON sm.server_id = c.server_id
-                            WHERE c.id = $1 AND sm.user_id = $2
-                        )"
-                    ).bind(cid).bind(user_id).fetch_one(&state.db).await.unwrap_or(false);
-                    if !is_member {
-                        tracing::warn!(user_id = %user_id, channel_id = %cid, "VOICE_REACTION rejeté : non membre du serveur");
+                    // Présent dans la salle (donc salon visible), pas en timeout, émoji court.
+                    if emoji_val.chars().count() > 32 || !in_voice_room(state, user_id, cid).await {
+                        tracing::warn!(user_id = %user_id, channel_id = %cid, "VOICE_REACTION rejeté : hors de la salle");
+                        return;
+                    }
+                    let Some(server_id) = state.channel_server_id(cid).await else { return };
+                    if crate::handlers::servers::require_not_timed_out(state, user_id, server_id).await.is_err() {
                         return;
                     }
                     let event = serde_json::json!({
@@ -1680,15 +1749,8 @@ async fn handle_ws_message(
                         tracing::warn!(user_id = %user_id, channel_id = %cid, "HAND_RAISE rejeté : rate limit");
                         return;
                     }
-                    let is_member: bool = sqlx::query_scalar(
-                        "SELECT EXISTS(
-                            SELECT 1 FROM channels c
-                            JOIN server_members sm ON sm.server_id = c.server_id
-                            WHERE c.id = $1 AND sm.user_id = $2
-                        )"
-                    ).bind(cid).bind(user_id).fetch_one(&state.db).await.unwrap_or(false);
-                    if !is_member {
-                        tracing::warn!(user_id = %user_id, channel_id = %cid, "HAND_RAISE rejeté : non membre du serveur");
+                    if !in_voice_room(state, user_id, cid).await {
+                        tracing::warn!(user_id = %user_id, channel_id = %cid, "HAND_RAISE rejeté : hors de la salle");
                         return;
                     }
                     // N13 — état serveur, même motif que `stage_hand_raises` :
@@ -1735,15 +1797,15 @@ async fn handle_ws_message(
                         tracing::warn!(user_id = %user_id, channel_id = %cid, "SOUNDBOARD_PLAY rejeté : rate limit");
                         return;
                     }
-                    let is_member: bool = sqlx::query_scalar(
-                        "SELECT EXISTS(
-                            SELECT 1 FROM channels c
-                            JOIN server_members sm ON sm.server_id = c.server_id
-                            WHERE c.id = $1 AND sm.user_id = $2
-                        )"
-                    ).bind(cid).bind(user_id).fetch_one(&state.db).await.unwrap_or(false);
-                    if !is_member {
-                        tracing::warn!(user_id = %user_id, channel_id = %cid, "SOUNDBOARD_PLAY rejeté : non membre du serveur");
+                    // Présent dans la salle et autorisé à y être entendu (SPEAK, pas de
+                    // timeout, ni muet ni sourdine imposés).
+                    if !in_voice_room(state, user_id, cid).await {
+                        tracing::warn!(user_id = %user_id, channel_id = %cid, "SOUNDBOARD_PLAY rejeté : hors de la salle");
+                        return;
+                    }
+                    let Some((server_id, perms)) = visible_channel(state, user_id, cid).await else { return };
+                    if !crate::handlers::voice_moderation::voice_rights(state, user_id, server_id, cid, perms).await.microphone() {
+                        tracing::warn!(user_id = %user_id, channel_id = %cid, "SOUNDBOARD_PLAY rejeté : pas le droit de parler");
                         return;
                     }
                     // Le son peut venir de N'IMPORTE LEQUEL de ses serveurs (gratuit, Nitro chez Discord)
@@ -1785,3 +1847,7 @@ async fn handle_ws_message(
         _ => {}
     }
 }
+
+#[cfg(test)]
+#[path = "security_db_tests.rs"]
+mod security_db_tests;

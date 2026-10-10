@@ -31,7 +31,7 @@ const MOVE_GRANT_TTL: Duration = Duration::from_secs(30);
 /// Droits média d'un membre dans un salon vocal.
 pub(crate) struct VoiceRights {
     /// SPEAK_VOICE et pas de timeout (caméra comprise).
-    speak: bool,
+    pub(crate) speak: bool,
     /// Partage d'écran (STREAM) et pas de timeout.
     stream: bool,
     pub server_muted: bool,

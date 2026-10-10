@@ -1761,7 +1761,7 @@ export const en: Partial<Record<Key, string>> = {
   'feeds.ghSecret': 'GitHub webhook secret',
   'feeds.generate': 'Generate',
   'feeds.saveAndUrl': 'Save and generate the URL',
-  'feeds.ghUrlWarning': 'Webhook URL: copy it now, the secret will never be shown again',
+  'feeds.ghUrlWarning': 'Paste the URL into "Payload URL" and the secret into "Secret" on GitHub now: the secret will never be shown again',
   'feeds.ghUrl': 'GitHub webhook URL',
   'feeds.ghCopy': 'Copy GitHub webhook URL',
   'feeds.copied': 'Copied!',

@@ -263,12 +263,22 @@ async fn e2e_channels() {
     assert_eq!(err(ch::check_content(&db, chan, false, Some(&enc(0)), cid, false).await), "EPOCH_STALE");
     assert!(ch::check_content(&db, chan, false, Some(&enc(0)), None, false).await.is_err()); // sans client_msg_id
 
-    // Époque 0 : le créateur s'inclut, les autres par lots ; un non-membre ne fait rien.
+    // Époque 0 : le créateur s'inclut et couvre les membres munis d'une clé (petit salon) ;
+    // un non-membre ne fait rien, le créateur ne garde pas l'époque pour lui seul.
     assert_eq!(err(store_envelopes(&db, conv, x, &body(&db, 0, true, &[x], 9).await).await), "FORBIDDEN");
     assert_eq!(err(store_envelopes(&db, conv, a, &body(&db, 0, true, &[c], 9).await).await), "MEMBERS_CHANGED");
-    store_envelopes(&db, conv, a, &body(&db, 0, true, &[a], 9).await).await.unwrap();
+    assert_eq!(err(store_envelopes(&db, conv, a, &body(&db, 0, true, &[a], 9).await).await), "MEMBERS_CHANGED");
+    assert_eq!(err(store_envelopes(&db, conv, a, &body(&db, 0, true, &[a, c], 9).await).await), "MEMBERS_CHANGED");
+    store_envelopes(&db, conv, a, &body(&db, 0, true, &[a, c, o], 9).await).await.unwrap();
     assert_eq!(err(store_envelopes(&db, conv, c, &body(&db, 0, true, &[c], 9).await).await), "EPOCH_STALE");
-    store_envelopes(&db, conv, a, &body(&db, 0, false, &[c, o], 9).await).await.unwrap();
+    // Enveloppe empoisonnée par c pour o : ignorée tant que celle de o existe ; o la signale,
+    // elle disparaît et c ne peut plus lui en redonner, a si.
+    assert!(forget_unreadable(&db, conv, o, 0).await.unwrap()); // posée par a
+    assert!(!forget_unreadable(&db, conv, o, 0).await.unwrap());
+    store_envelopes(&db, conv, a, &body(&db, 0, false, &[o], 5).await).await.unwrap(); // a signalé : ignorée
+    assert!(my_envelopes(&db, conv, o).await.unwrap().is_empty());
+    store_envelopes(&db, conv, c, &body(&db, 0, false, &[o], 9).await).await.unwrap();
+    assert_eq!(my_envelopes(&db, conv, o).await.unwrap().len(), 1);
     // b n'a pas de clé : pas d'enveloppe pour lui, et un étranger n'en reçoit pas.
     assert_eq!(err(store_envelopes(&db, conv, a, &body(&db, 0, false, &[x], 9).await).await), "FORBIDDEN");
     assert_eq!(my_envelopes(&db, conv, c).await.unwrap().len(), 1);
@@ -309,7 +319,8 @@ async fn e2e_channels() {
     assert_eq!(err(store_envelopes(&db, conv, o, &serde_json::from_value(b2.clone()).unwrap()).await), "SERVER_KEY_REQUIRED");
     assert_eq!(err(store_envelopes(&db, conv, o, &with_server(b2.clone(), "autre")).await), "SERVER_KEY_REQUIRED");
     store_envelopes(&db, conv, o, &with_server(b2, &sfp)).await.unwrap();
-    // Complément d'une ancienne époque pour la clé du serveur (sans enveloppe de membre).
+    // Complément d'une ancienne époque pour la clé du serveur : propriétaire / MANAGE_SERVER seulement.
+    assert_eq!(err(store_envelopes(&db, conv, c, &with_server(json!({ "epoch": 1, "envelopes": [] }), &sfp)).await), "FORBIDDEN");
     store_envelopes(&db, conv, o, &with_server(json!({ "epoch": 1, "envelopes": [] }), &sfp)).await.unwrap();
     let rec = sk::recovery_envelopes(&db, s, o).await.unwrap();
     let epochs: Vec<i64> = rec["channels"][0]["epochs"].as_array().unwrap().iter().map(|e| e["epoch"].as_i64().unwrap()).collect();

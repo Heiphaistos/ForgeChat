@@ -24,10 +24,8 @@ pub struct Config {
     /// STUN_URLS (séparés par des virgules). Aucun STUN public par défaut.
     pub stun_urls: Vec<String>,
     pub turn_url: Option<String>,
-    pub turn_username: Option<String>,
-    pub turn_password: Option<String>,
     /// Secret partagé coturn (`static-auth-secret`) pour les credentials éphémères
-    /// (TURN REST API). Si présent, il prime sur turn_username/turn_password.
+    /// (TURN REST API). Seul mode TURN : sans lui, pas de relais.
     pub turn_static_auth_secret: Option<String>,
     /// Origine autorisée des ZIP d'import Discord (anti-SSRF).
     pub archiveforge_url: String,
@@ -37,13 +35,29 @@ pub struct Config {
     pub discord_import_tmp_dir: String,
 }
 
+/// Valeur d'exemple de server/.env.example : jamais acceptée.
+const EXAMPLE_JWT_SECRET: &str = "change_me_to_a_very_long_random_secret_key_at_least_64_chars";
+
+/// JWT_SECRET d'au moins 32 octets, différent de l'exemple : sinon le serveur ne démarre pas
+/// (avant : une valeur courte ou copiée de l'exemple permettait de forger des jetons).
+fn check_jwt_secret(secret: String) -> anyhow::Result<String> {
+    let t = secret.trim();
+    if t.len() < 32 {
+        anyhow::bail!("JWT_SECRET trop court ({} octets, 32 minimum) : générez-en un avec `openssl rand -base64 48`", t.len());
+    }
+    if t == EXAMPLE_JWT_SECRET || t.starts_with("change_me") {
+        anyhow::bail!("JWT_SECRET est la valeur d'exemple de .env.example : générez-en un avec `openssl rand -base64 48`");
+    }
+    Ok(secret)
+}
+
 impl Config {
     pub fn from_env() -> anyhow::Result<Self> {
         dotenvy::dotenv().ok();
         Ok(Self {
             database_url: env::var("DATABASE_URL")?,
             redis_url: env::var("REDIS_URL").unwrap_or_else(|_| "redis://127.0.0.1:6379".into()),
-            jwt_secret: env::var("JWT_SECRET")?,
+            jwt_secret: check_jwt_secret(env::var("JWT_SECRET")?)?,
             jwt_issuer: env::var("JWT_ISSUER").unwrap_or_else(|_| "forgechat".into()),
             port: env::var("PORT")
                 .unwrap_or_else(|_| "8080".into())
@@ -73,8 +87,6 @@ impl Config {
                 .unwrap_or_else(|_| "noreply@forgechat.heiphaistos.org".into()),
             stun_urls: crate::handlers::voice::parse_stun_urls(&env::var("STUN_URLS").unwrap_or_default()),
             turn_url: env::var("TURN_URL").ok(),
-            turn_username: env::var("TURN_USERNAME").ok(),
-            turn_password: env::var("TURN_PASSWORD").ok(),
             turn_static_auth_secret: env::var("TURN_STATIC_AUTH_SECRET").ok(),
             archiveforge_url: env::var("ARCHIVEFORGE_URL")
                 .unwrap_or_else(|_| "https://forgearchive.heiphaistos.org".into()),
@@ -86,5 +98,18 @@ impl Config {
                 std::env::temp_dir().join("forgechat-discord-import").to_string_lossy().into_owned()
             }),
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn jwt_secret_rules() {
+        assert!(check_jwt_secret("court".into()).is_err());
+        assert!(check_jwt_secret(EXAMPLE_JWT_SECRET.into()).is_err());
+        assert!(check_jwt_secret("x".repeat(31)).is_err());
+        assert!(check_jwt_secret("Zq3".repeat(16)).is_ok());
     }
 }

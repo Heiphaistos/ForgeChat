@@ -1063,8 +1063,10 @@ pub async fn get_friends_v2(
                 "avatar": r.get::<Option<String>, _>("avatar"),
                 "user_status": r.get::<String, _>("user_status"),
                 "custom_status": r.get::<Option<String>, _>("custom_status"),
-                "activity_type": r.get::<Option<String>, _>("activity_type"),
-                "activity_name": r.get::<Option<String>, _>("activity_name"),
+                // Demande en attente = pas encore ami : pas d'activité (enrich_friends
+                // la recalcule selon la visibilité pour les amis acceptés).
+                "activity_type": if direction == "accepted" { r.get::<Option<String>, _>("activity_type") } else { None },
+                "activity_name": if direction == "accepted" { r.get::<Option<String>, _>("activity_name") } else { None },
                 "custom_nickname": r.get::<Option<String>, _>("custom_nickname"),
                 "notify_online": r.get::<bool, _>("notify_online"),
             })

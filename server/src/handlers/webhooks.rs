@@ -114,9 +114,12 @@ pub async fn delete_webhook(
     Ok(Json(serde_json::json!({ "ok": true })))
 }
 
-// Route publique — POST /api/github-webhook/:channel_id?token=...
-// Le token doit correspondre à channels.github_webhook_token (configuré par le propriétaire du serveur)
-async fn verify_github_token_get(state: &AppState, channel_id: Uuid, token: &str) -> Result<String, AppError> {
+// Route publique — POST /api/github-webhook/:channel_id
+// Authentifiée par la signature X-Hub-Signature-256 (HMAC du corps avec
+// channels.github_webhook_token, le « Secret » saisi dans GitHub). L'ancien
+// `?token=` (le secret en clair dans l'URL, donc dans les journaux) reste toléré
+// pour les webhooks déjà configurés, mais n'est plus nécessaire.
+async fn github_secret(state: &AppState, channel_id: Uuid, token: Option<&str>) -> Result<String, AppError> {
     let stored: Option<String> = sqlx::query_scalar(
         "SELECT github_webhook_token FROM channels WHERE id=$1"
     )
@@ -125,15 +128,27 @@ async fn verify_github_token_get(state: &AppState, channel_id: Uuid, token: &str
     .await?
     .flatten();
 
-    match stored {
-        Some(t) => {
-            // Comparaison en temps constant pour éviter les timing attacks
-            let valid = t.len() == token.len()
-                && t.bytes().zip(token.bytes()).fold(0u8, |acc, (a, b)| acc | (a ^ b)) == 0;
-            if valid { Ok(t) } else { Err(AppError::Unauthorized) }
+    let t = stored.ok_or(AppError::Forbidden)?;
+    if let Some(token) = token {
+        // Comparaison en temps constant pour éviter les timing attacks
+        let valid = t.len() == token.len()
+            && t.bytes().zip(token.bytes()).fold(0u8, |acc, (a, b)| acc | (a ^ b)) == 0;
+        if !valid {
+            return Err(AppError::Unauthorized);
         }
-        None => Err(AppError::Forbidden),
     }
+    Ok(t)
+}
+
+/// Signature GitHub `sha256=<hex>` du corps avec le secret du salon.
+fn github_signature_ok(secret: &str, sig_header: &str, body: &[u8]) -> bool {
+    use hmac::{Hmac, Mac};
+    use sha2::Sha256;
+    let Some(hex_sig) = sig_header.strip_prefix("sha256=") else { return false };
+    let Ok(expected) = data_encoding::HEXLOWER_PERMISSIVE.decode(hex_sig.as_bytes()) else { return false };
+    let Ok(mut mac) = Hmac::<Sha256>::new_from_slice(secret.as_bytes()) else { return false };
+    mac.update(body);
+    mac.verify_slice(&expected).is_ok()
 }
 
 // Route publique — POST /api/webhook/:id/:token
@@ -148,17 +163,6 @@ pub async fn execute_webhook(
     Path((webhook_id, token)): Path<(Uuid, String)>,
     Json(body): Json<WebhookMessageBody>,
 ) -> Result<Json<serde_json::Value>, AppError> {
-    // Rate limit : 10 messages / minute par webhook (fail-closed si Redis down)
-    {
-        use redis::AsyncCommands;
-        let rl_key = format!("webhook_rl:{}", webhook_id);
-        let mut redis = state.redis.lock().await;
-        let count: i64 = redis.incr(&rl_key, 1).await
-            .map_err(|_| AppError::Internal(anyhow::anyhow!("rate limit unavailable")))?;
-        if count == 1 { let _: () = redis.expire(&rl_key, 60).await.unwrap_or(()); }
-        if count > 10 { return Err(AppError::TooManyRequests); }
-    }
-
     use sqlx::Row;
     // Comparaison du token en temps constant, comme verify_github_token_get plus bas
     // dans ce même fichier -- filtrer par `WHERE token=$2` en SQL laisse Postgres
@@ -177,6 +181,18 @@ pub async fn execute_webhook(
         && stored_token.bytes().zip(token.bytes()).fold(0u8, |acc, (a, b)| acc | (a ^ b)) == 0;
     if !valid {
         return Err(AppError::Unauthorized);
+    }
+
+    // Rate limit : 10 messages / minute par webhook (fail-closed si Redis down), compté
+    // APRÈS le jeton : avant, n'importe qui connaissant l'id épuisait le quota du webhook.
+    {
+        use redis::AsyncCommands;
+        let rl_key = format!("webhook_rl:{}", webhook_id);
+        let mut redis = state.redis.lock().await;
+        let count: i64 = redis.incr(&rl_key, 1).await
+            .map_err(|_| AppError::Internal(anyhow::anyhow!("rate limit unavailable")))?;
+        if count == 1 { let _: () = redis.expire(&rl_key, 60).await.unwrap_or(()); }
+        if count > 10 { return Err(AppError::TooManyRequests); }
     }
 
     let channel_id: Uuid = row.get("channel_id");
@@ -239,11 +255,16 @@ pub async fn receive_github_webhook(
 ) -> Result<axum::response::Response, AppError> {
     use axum::response::IntoResponse;
     use sqlx::Row;
-    use hmac::{Hmac, Mac};
-    use sha2::Sha256;
 
-    let token = params.get("token").map(|s| s.as_str()).unwrap_or("");
-    let stored_token = verify_github_token_get(&state, channel_id, token).await?;
+    let stored_token = github_secret(&state, channel_id, params.get("token").map(|s| s.as_str())).await?;
+    // Signature HMAC-SHA256 GitHub (X-Hub-Signature-256) — obligatoire, vérifiée AVANT
+    // le compteur (un tiers ne peut pas épuiser le quota du salon).
+    let sig_header = headers.get("X-Hub-Signature-256")
+        .and_then(|v| v.to_str().ok())
+        .ok_or(AppError::Unauthorized)?;
+    if !github_signature_ok(&stored_token, sig_header, &body_bytes) {
+        return Err(AppError::Unauthorized);
+    }
 
     // Rate limit : 30 événements / minute par canal (fail-closed si Redis down)
     {
@@ -253,20 +274,8 @@ pub async fn receive_github_webhook(
         let count: i64 = redis.incr(&rl_key, 1).await
             .map_err(|_| AppError::Internal(anyhow::anyhow!("rate limit unavailable")))?;
         if count == 1 { let _: () = redis.expire(&rl_key, 60).await.unwrap_or(()); }
-        if count > 30 { return Err(AppError::TooManyRequests.into()); }
+        if count > 30 { return Err(AppError::TooManyRequests); }
     }
-
-    // Vérifier la signature HMAC-SHA256 GitHub (X-Hub-Signature-256) — obligatoire
-    let sig_header = headers.get("X-Hub-Signature-256")
-        .and_then(|v| v.to_str().ok())
-        .ok_or(AppError::Unauthorized)?;
-    let hex_sig = sig_header.trim_start_matches("sha256=");
-    let expected = data_encoding::HEXLOWER.decode(hex_sig.as_bytes())
-        .map_err(|_| AppError::Unauthorized)?;
-    let mut mac = Hmac::<Sha256>::new_from_slice(stored_token.as_bytes())
-        .map_err(|_| AppError::Internal(anyhow::anyhow!("hmac key")))?;
-    mac.update(&body_bytes);
-    mac.verify_slice(&expected).map_err(|_| AppError::Unauthorized)?;
 
     let payload: serde_json::Value = serde_json::from_slice(&body_bytes)
         .map_err(|_| AppError::BadRequest("JSON invalide".into()))?;
@@ -355,4 +364,21 @@ async fn _check_manage(user_id: Uuid, server_id: Uuid, state: &AppState) -> Resu
     use crate::handlers::servers::require_permission;
     use crate::models::role::Permissions;
     require_permission(state, user_id, server_id, Permissions::MANAGE_SERVER).await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn github_signature() {
+        use hmac::{Hmac, Mac};
+        let mut mac = Hmac::<sha2::Sha256>::new_from_slice(b"secret-du-salon-1234").unwrap();
+        mac.update(b"{}");
+        let sig = format!("sha256={}", data_encoding::HEXLOWER.encode(&mac.finalize().into_bytes()));
+        assert!(github_signature_ok("secret-du-salon-1234", &sig, b"{}"));
+        assert!(!github_signature_ok("autre-secret-du-salon", &sig, b"{}"));
+        assert!(!github_signature_ok("secret-du-salon-1234", &sig, b"{ }"));
+        assert!(!github_signature_ok("secret-du-salon-1234", "abc", b"{}"));
+    }
 }

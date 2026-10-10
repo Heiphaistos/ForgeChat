@@ -32,7 +32,7 @@ pub(crate) async fn deliver_due(state: &AppState, only: Option<Uuid>) {
              )
              RETURNING user_id, message_id
          )
-         SELECT due.user_id, due.message_id, COALESCE(m.content, dm.content) AS content
+         SELECT due.user_id, due.message_id, m.channel_id, COALESCE(m.content, dm.content) AS content
          FROM due
          LEFT JOIN messages m ON m.id = due.message_id
          LEFT JOIN dm_messages dm ON dm.id = due.message_id",
@@ -49,10 +49,18 @@ pub(crate) async fn deliver_due(state: &AppState, only: Option<Uuid>) {
     };
     for r in rows {
         use sqlx::Row;
+        let user: Uuid = r.get("user_id");
+        // Salon devenu invisible depuis la pose du rappel : rappel sans le texte.
+        let mut content: Option<String> = r.get("content");
+        if let Some(cid) = r.get::<Option<Uuid>, _>("channel_id") {
+            if state.hidden_channels(user, None, Some(cid)).await.map(|h| h.contains(&cid)).unwrap_or(true) {
+                content = None;
+            }
+        }
         let event = serde_json::json!({
             "type": "REMINDER",
             "message_id": r.get::<Uuid, _>("message_id").to_string(),
-            "content": r.get::<Option<String>, _>("content"),
+            "content": content,
         });
         state.broadcast_to_user(r.get::<Uuid, _>("user_id"), event.to_string()).await;
     }

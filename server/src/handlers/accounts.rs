@@ -67,8 +67,9 @@ async fn token_owner(state: &AppState, token: &str) -> Result<Option<Uuid>> {
         .await?)
 }
 
-async fn rate_limit(state: &AppState, addr: &SocketAddr) -> Result<()> {
-    let key = format!("acct_switch:{}", addr.ip());
+async fn rate_limit(state: &AppState, headers: &HeaderMap, addr: &SocketAddr) -> Result<()> {
+    // Adresse du client (derrière nginx, `addr` est celle du proxy : tout le monde partageait un compteur).
+    let key = format!("acct_switch:{}", crate::privacy::client_key(headers, addr));
     let mut redis = state.redis.lock().await;
     let count: i64 = redis.incr(&key, 1i64).await.unwrap_or(0);
     if count == 1 {
@@ -110,7 +111,7 @@ pub async fn stash(
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
     headers: HeaderMap,
 ) -> Result<(HeaderMap, Json<serde_json::Value>)> {
-    rate_limit(&state, &addr).await?;
+    rate_limit(&state, &headers, &addr).await?;
     let current = cookies(&headers).into_iter().find(|(k, _)| k == "refresh_token").map(|(_, v)| v);
     let current = current.ok_or(AppError::Unauthorized)?;
     let owner = token_owner(&state, &current).await?.ok_or(AppError::Unauthorized)?;
@@ -138,7 +139,7 @@ pub async fn switch(
     headers: HeaderMap,
     Json(body): Json<AccountBody>,
 ) -> Result<(HeaderMap, Json<serde_json::Value>)> {
-    rate_limit(&state, &addr).await?;
+    rate_limit(&state, &headers, &addr).await?;
     let target = alt_cookies(&headers).into_iter().find(|(id, _)| *id == body.user_id).map(|(_, t)| t);
     let target = target.ok_or_else(|| AppError::NotFound("Compte inconnu sur ce navigateur".into()))?;
     // Le nom du cookie n'est qu'une annonce : le jeton doit bien appartenir à ce compte.

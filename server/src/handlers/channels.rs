@@ -549,6 +549,9 @@ pub async fn put_channel_permission(
     if !["role", "member"].contains(&body.target_type.as_str()) {
         return Err(AppError::BadRequest("target_type invalide (role|member)".into()));
     }
+    let actor = actor_channel_perms(&state, claims.sub, channel_id).await?;
+    let (allow, deny) = check_override_bits(actor, body.allow, body.deny)?;
+    require_override_target(&state, claims.sub, server_id, target_id, &body.target_type).await?;
     let before = state.channel_audience(channel_id).await;
     sqlx::query(
         "INSERT INTO channel_permissions (channel_id, target_id, target_type, allow, deny)
@@ -559,12 +562,58 @@ pub async fn put_channel_permission(
     .bind(channel_id)
     .bind(target_id)
     .bind(&body.target_type)
-    .bind(body.allow)
-    .bind(body.deny)
+    .bind(allow)
+    .bind(deny)
     .execute(&state.db)
     .await?;
     notify_permission_change(&state, channel_id, server_id, before).await;
     Ok(Json(serde_json::json!({ "ok": true })))
+}
+
+/// Permissions effectives de l'acteur SUR CE SALON (surcharges comprises) : un
+/// détenteur d'EDIT_CHANNELS à qui le salon est masqué n'a pas VIEW_CHANNEL ici,
+/// il ne peut donc pas se l'accorder.
+async fn actor_channel_perms(state: &AppState, actor: Uuid, channel_id: Uuid) -> Result<i64> {
+    state
+        .effective_channel_permissions(actor, channel_id)
+        .await
+        .map(|(_, p)| p)
+        .ok_or(AppError::Forbidden)
+}
+
+/// Une surcharge ne peut accorder ni refuser qu'un bit que l'acteur possède lui-même
+/// sur le salon (même règle que create_role/assign_role), jamais ADMINISTRATOR.
+fn check_override_bits(actor_perms: i64, allow: i64, deny: i64) -> Result<(i64, i64)> {
+    if allow < 0 || deny < 0 || (allow | deny) & !Permissions::ALL != 0 {
+        return Err(AppError::BadRequest("Permissions inconnues".into()));
+    }
+    if (allow | deny) & Permissions::ADMINISTRATOR != 0 {
+        return Err(AppError::BadRequest("ADMINISTRATOR interdit dans une surcharge de salon".into()));
+    }
+    if (allow | deny) & !actor_perms != 0 {
+        return Err(AppError::Forbidden);
+    }
+    Ok((allow, deny))
+}
+
+/// La cible doit appartenir au serveur et être strictement sous l'acteur.
+async fn require_override_target(state: &AppState, actor: Uuid, server_id: Uuid, target_id: Uuid, target_type: &str) -> Result<()> {
+    if target_type == "role" {
+        // require_role_below vérifie aussi que le rôle est bien de ce serveur.
+        return crate::handlers::servers::require_role_below(state, actor, target_id, server_id).await;
+    }
+    let member: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM server_members WHERE server_id=$1 AND user_id=$2)")
+        .bind(server_id)
+        .bind(target_id)
+        .fetch_one(&state.db)
+        .await?;
+    if !member {
+        return Err(AppError::NotFound("Membre introuvable".into()));
+    }
+    if target_id != actor {
+        crate::handlers::servers::require_outranks(state, actor, target_id, server_id).await?;
+    }
+    Ok(())
 }
 
 pub async fn delete_channel_permission(
@@ -574,6 +623,20 @@ pub async fn delete_channel_permission(
 ) -> Result<Json<serde_json::Value>> {
     let server_id = channel_server_id(&state, channel_id).await?;
     require_permission(&state, claims.sub, server_id, CAN_EDIT).await?;
+    let existing: Option<(String, i64, i64)> = sqlx::query_as(
+        "SELECT target_type, allow, deny FROM channel_permissions WHERE channel_id=$1 AND target_id=$2",
+    )
+    .bind(channel_id)
+    .bind(target_id)
+    .fetch_optional(&state.db)
+    .await?;
+    let Some((target_type, allow, deny)) = existing else {
+        return Ok(Json(serde_json::json!({ "ok": true })));
+    };
+    // Supprimer un refus revient à accorder : mêmes règles que pour la poser.
+    let actor = actor_channel_perms(&state, claims.sub, channel_id).await?;
+    check_override_bits(actor, allow & Permissions::ALL & !Permissions::ADMINISTRATOR, deny & Permissions::ALL & !Permissions::ADMINISTRATOR)?;
+    require_override_target(&state, claims.sub, server_id, target_id, &target_type).await?;
     let before = state.channel_audience(channel_id).await;
     sqlx::query("DELETE FROM channel_permissions WHERE channel_id=$1 AND target_id=$2")
         .bind(channel_id)
@@ -932,4 +995,21 @@ pub(crate) async fn notify_permission_change(state: &AppState, channel_id: Uuid,
         "channel_id": channel_id,
         "server_id": server_id,
     }).to_string()).await;
+}
+
+#[cfg(test)]
+mod override_tests {
+    use super::*;
+
+    #[test]
+    fn override_bits_limited_to_actor() {
+        let editor = Permissions::EDIT_CHANNELS | Permissions::SEND_MESSAGES;
+        // Salon masqué : l'éditeur n'a pas VIEW_CHANNEL ici, il ne peut pas se l'accorder.
+        assert!(check_override_bits(editor, Permissions::VIEW_CHANNEL, 0).is_err());
+        assert!(check_override_bits(editor, 0, Permissions::BAN_MEMBERS).is_err());
+        assert!(check_override_bits(i64::MAX, Permissions::ADMINISTRATOR, 0).is_err());
+        assert!(check_override_bits(i64::MAX, -1, 0).is_err());
+        assert_eq!(check_override_bits(editor, Permissions::SEND_MESSAGES, 0).ok(), Some((Permissions::SEND_MESSAGES, 0)));
+        assert!(check_override_bits(i64::MAX, Permissions::VIEW_CHANNEL, Permissions::SEND_MESSAGES).is_ok());
+    }
 }

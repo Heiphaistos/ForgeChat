@@ -845,6 +845,25 @@ pub async fn search_messages(
     Ok(Json(result))
 }
 
+/// Message de salon `message_id` : false s'il n'existe pas (l'appelant essaie alors les
+/// MP), Err si son salon est masqué pour `user` (VIEW_CHANNEL, surcharges comprises).
+/// Avant : seule l'appartenance au serveur était vérifiée, l'historique d'éditions et
+/// les rappels d'un message d'un salon privé restaient lisibles avec son identifiant.
+pub(crate) async fn channel_message_visible(state: &AppState, user: Uuid, message_id: Uuid) -> Result<bool> {
+    let loc: Option<(Uuid, Uuid)> = sqlx::query_as(
+        "SELECT c.server_id, m.channel_id FROM messages m JOIN channels c ON c.id = m.channel_id
+         WHERE m.id = $1 AND c.server_id IS NOT NULL",
+    )
+    .bind(message_id)
+    .fetch_optional(&state.db)
+    .await?;
+    let Some((server_id, channel_id)) = loc else { return Ok(false) };
+    require_member_and_channel(state, user, server_id, channel_id)
+        .await
+        .map_err(|_| AppError::NotFound("Message introuvable".into()))?;
+    Ok(true)
+}
+
 pub async fn get_message_edits(
     State(state): State<AppState>,
     Extension(claims): Extension<Claims>,
@@ -854,14 +873,7 @@ pub async fn get_message_edits(
     // serveur ET en DM -- même pattern déjà corrigé sur remind/report/forward.
     // Le message peut donc être dans `messages` (avec appartenance serveur) ou
     // `dm_messages` (avec appartenance DM).
-    let in_channel: bool = sqlx::query_scalar(
-        "SELECT EXISTS(
-            SELECT 1 FROM messages m
-            JOIN channels c ON c.id = m.channel_id
-            JOIN server_members sm ON sm.server_id = c.server_id AND sm.user_id = $2
-            WHERE m.id = $1
-         )"
-    ).bind(message_id).bind(claims.sub).fetch_one(&state.db).await?;
+    let in_channel = channel_message_visible(&state, claims.sub, message_id).await?;
 
     let in_dm: bool = if in_channel {
         false
@@ -1084,14 +1096,7 @@ pub async fn set_reminder(
     // (DMConversation réutilise MessageList/MessageRow, msg.id y est un
     // dm_messages.id) -- vérifier les deux tables, pas seulement les canaux
     // de serveur, sinon 100% des rappels DM échouent en 404.
-    let channel_ok: bool = sqlx::query_scalar(
-        "SELECT EXISTS(
-            SELECT 1 FROM messages m
-            JOIN channels c ON c.id = m.channel_id
-            JOIN server_members sm ON sm.server_id = c.server_id AND sm.user_id = $2
-            WHERE m.id = $1
-         )"
-    ).bind(message_id).bind(claims.sub).fetch_one(&state.db).await?;
+    let channel_ok = channel_message_visible(&state, claims.sub, message_id).await?;
 
     let dm_ok: bool = if channel_ok {
         false
