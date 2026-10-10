@@ -50,7 +50,7 @@ export const fr = {
   'auth.register.subtitle': 'Rejoins ForgeChat gratuitement',
   'auth.register.username': "Nom d'utilisateur",
   'auth.register.usernamePlaceholder': 'tonpseudo',
-  'auth.register.passwordPlaceholder': '8 caractères minimum',
+  'auth.register.passwordPlaceholder': '10 caractères minimum',
   'auth.register.confirm': 'Confirmer le mot de passe',
   'auth.register.confirmPlaceholder': 'Répéter le mot de passe',
   'auth.register.termsBefore': "J'accepte les",

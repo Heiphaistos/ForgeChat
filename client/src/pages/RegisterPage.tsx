@@ -7,11 +7,12 @@ import toast from 'react-hot-toast'
 import Logo3D from '../components/Logo3D'
 import { LegalLinks } from './LegalPages'
 import { t as tr, useT } from '../i18n'
+import { MIN_PASSWORD, passwordProblem } from '../e2e/authKdf'
 
 function getPasswordStrength(pwd: string): { score: number; label: string; color: string } {
   if (pwd.length === 0) return { score: 0, label: '', color: '' }
   let score = 0
-  if (pwd.length >= 8) score++
+  if (pwd.length >= MIN_PASSWORD) score++
   if (pwd.length >= 12) score++
   if (/[A-Z]/.test(pwd)) score++
   if (/[0-9]/.test(pwd)) score++
@@ -54,12 +55,16 @@ export default function RegisterPage() {
       toast.error(t('auth.register.acceptTerms'))
       return
     }
+    const problem = passwordProblem(password)
+    if (problem) { toast.error(problem); return }
     setLoading(true)
     try {
       await register(username, email, password, inviteCode)
-      nav('/friends')
+      // Le mot de passe ne reste pas dans l'écran : la clé est créée après la vérification de l'adresse.
+      setPassword(''); setConfirmPassword('')
+      nav('/verify-email', { state: { email: email.trim() } })
     } catch (err: any) {
-      toast.error(err.response?.data?.error ?? t('auth.register.error'))
+      toast.error(err.response?.data?.error ?? err?.message ?? t('auth.register.error'))
     } finally {
       setLoading(false)
     }
@@ -148,7 +153,7 @@ export default function RegisterPage() {
                 value={password}
                 onChange={e => setPassword(e.target.value)}
                 required
-                minLength={8}
+                minLength={MIN_PASSWORD}
                 autoComplete="new-password"
                 placeholder={t('auth.register.passwordPlaceholder')}
                 enterKeyHint="next"

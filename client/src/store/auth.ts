@@ -11,7 +11,8 @@ import { disableWebPush } from '../utils/webPush'
 import { listAccounts } from '../lib/accounts'
 import { forgetOfflineData } from '../lib/offline'
 import { queryClient } from '../main'
-import { clearAccountKey, rememberPassword } from '../e2e/accountKey'
+import { clearAccountKey, prelogin, rememberLogin } from '../e2e/accountKey'
+import { deriveSecrets, newKdfSalt, passwordProblem } from '../e2e/authKdf'
 import { clearSearchIndex } from '../e2e/searchIndex'
 
 const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
@@ -41,6 +42,7 @@ interface AuthState {
   user: User | null
   loading: boolean
   login: (email: string, password: string, totpCode?: string) => Promise<void>
+  /** Envoie le code de vérification ; le compte naît à /verify-email. */
   register: (username: string, email: string, password: string, inviteCode?: string) => Promise<void>
   logout: () => Promise<void>
   fetchMe: () => Promise<void>
@@ -53,10 +55,25 @@ export const useAuth = create<AuthState>()(
     loading: true,
 
     login: async (email, password, totpCode) => {
-      const body: any = { email, password }
+      // Connexion v2 : seul `auth` part. Compte pas encore migré : le mot de passe part une
+      // dernière fois avec la nouvelle preuve, et le serveur bascule le compte.
+      const pre = await prelogin(email)
+      const salt = pre.legacy || !pre.kdf_salt ? newKdfSalt() : pre.kdf_salt
+      const secrets = await deriveSecrets(password, salt)
+      let body: Record<string, string> | null = pre.legacy
+        ? { email, password, auth_new: secrets.auth, kdf_salt_new: salt }
+        : { email, auth: secrets.auth }
       if (totpCode) body.totp_code = totpCode
-      const { data } = await api.post('/auth/login', body)
-      rememberPassword(password)
+      let data: any
+      try {
+        data = (await api.post('/auth/login', body)).data
+      } catch (err) {
+        secrets.wrapKey.fill(0)
+        throw err
+      } finally {
+        body = null
+      }
+      rememberLogin(password, secrets)
       // Web : tokens dans les cookies httpOnly (automatiques via withCredentials)
       // Tauri : tokens dans localStorage (les cookies cross-origin ne sont pas garantis)
       if (isTauri) {
@@ -67,13 +84,20 @@ export const useAuth = create<AuthState>()(
     },
 
     register: async (username, email, password, inviteCode) => {
-      const { data } = await api.post('/auth/register', { username, email, password, ...(inviteCode?.trim() ? { invite_code: inviteCode.trim() } : {}) })
-      rememberPassword(password)
-      if (isTauri) {
-        localStorage.setItem('access_token', data.access_token)
-        localStorage.setItem('refresh_token', data.refresh_token)
+      const problem = passwordProblem(password)
+      if (problem) throw new Error(problem)
+      const kdf_salt = newKdfSalt()
+      const secrets = await deriveSecrets(password, kdf_salt)
+      try {
+        await api.post('/auth/register', {
+          username, email, auth: secrets.auth, kdf_salt, ...(inviteCode?.trim() ? { invite_code: inviteCode.trim() } : {}),
+        })
+      } catch (err) {
+        secrets.wrapKey.fill(0)
+        throw err
       }
-      set(s => { s.user = data.user })
+      // Gardé en mémoire jusqu'à la création de la clé, après la vérification de l'adresse.
+      rememberLogin(password, secrets)
     },
 
     logout: async () => {

@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ChevronLeft, Copy, Ban, LogOut, Trash2, Plus, Search, Crown } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api, { SERVER_URL } from '../api/client'
+import { passwordProof } from '../e2e/accountKey'
 import { useMobile } from '../contexts/MobileContext'
 import { useSiteAdmin, useSiteAdminInfo } from '../hooks/useSiteAdmin'
 
@@ -200,7 +201,7 @@ function ServersTab() {
   const suspend = useMutation({ mutationFn: ({ id, reason }: { id: string; reason: string }) => api.post(`/admin/servers/${id}/suspend`, { reason }), onSuccess: () => { toast.success('Serveur suspendu'); refresh() }, onError: fail })
   const resume = useMutation({ mutationFn: (id: string) => api.delete(`/admin/servers/${id}/suspend`), onSuccess: () => { toast.success('Serveur rétabli'); refresh() }, onError: fail })
   const remove = useMutation({
-    mutationFn: ({ id, password }: { id: string; password: string }) => api.delete(`/admin/servers/${id}`, { data: { password } }),
+    mutationFn: async ({ id, password }: { id: string; password: string }) => api.delete(`/admin/servers/${id}`, { data: await passwordProof(password) }),
     onSuccess: () => { toast.success('Serveur supprimé'); setDel(null); setPw(''); refresh() }, onError: fail,
   })
 

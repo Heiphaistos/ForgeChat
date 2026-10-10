@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import api from '../api/client'
+import { MIN_PASSWORD, deriveSecrets, newKdfSalt, passwordProblem } from '../e2e/authKdf'
 import { useT } from '../i18n'
 
 const inputCls =
@@ -90,14 +91,21 @@ function ResetForm({ token }: { token: string }) {
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (pw !== pw2) { toast.error(t('auth.passwordMismatch')); return }
+    const problem = passwordProblem(pw)
+    if (problem) { toast.error(problem); return }
     setLoading(true)
     try {
-      await api.post('/auth/reset-password', { token, new_password: pw })
+      // Le nouveau mot de passe ne part pas : seulement sa preuve et le nouveau sel.
+      const new_kdf_salt = newKdfSalt()
+      const s = await deriveSecrets(pw, new_kdf_salt)
+      s.wrapKey.fill(0)
+      await api.post('/auth/reset-password', { token, new_auth: s.auth, new_kdf_salt })
       toast.success(t('auth.reset.done'))
       nav('/login')
     } catch (err: any) {
       toast.error(err.response?.data?.error ?? t('auth.reset.invalid'))
     } finally {
+      setPw(''); setPw2('')
       setLoading(false)
     }
   }
@@ -108,12 +116,12 @@ function ResetForm({ token }: { token: string }) {
       <form onSubmit={submit} className="space-y-4">
         <div>
           <label htmlFor="rp-pw" className="block text-xs font-semibold text-fc-muted uppercase mb-1">{t('auth.reset.newPassword')}</label>
-          <input id="rp-pw" type="password" value={pw} onChange={e => setPw(e.target.value)} required minLength={8} maxLength={128}
+          <input id="rp-pw" type="password" value={pw} onChange={e => setPw(e.target.value)} required minLength={MIN_PASSWORD} maxLength={128} placeholder={t('auth.register.passwordPlaceholder')}
             autoFocus autoComplete="new-password" className={inputCls} />
         </div>
         <div>
           <label htmlFor="rp-pw2" className="block text-xs font-semibold text-fc-muted uppercase mb-1">{t('auth.reset.confirm')}</label>
-          <input id="rp-pw2" type="password" value={pw2} onChange={e => setPw2(e.target.value)} required minLength={8} maxLength={128}
+          <input id="rp-pw2" type="password" value={pw2} onChange={e => setPw2(e.target.value)} required minLength={MIN_PASSWORD} maxLength={128} placeholder={t('auth.register.passwordPlaceholder')}
             autoComplete="new-password" className={inputCls} />
         </div>
         <button type="submit" disabled={loading}
