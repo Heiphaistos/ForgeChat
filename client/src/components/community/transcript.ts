@@ -3,7 +3,7 @@
 import api from '../../api/client'
 import { openMessages } from '../../e2e/conversations'
 import { displayAttachments } from '../../e2e/files'
-import { downloadText } from './format'
+import { saveFile } from '../../lib/saveFile'
 
 const MAX_PAGES = 50
 
@@ -24,6 +24,6 @@ export async function exportTranscript(serverId: string, channelId: string, titl
     if (m.content) lines.push(`[${at}] ${m.author_username ?? '?'} : ${m.content}`)
     for (const a of displayAttachments(m.attachments ?? [], m.e2e_body)) lines.push(`[${at}] ${m.author_username ?? '?'} : [${a.filename ?? a.url}]`)
   }
-  downloadText(`${title.replace(/[^\p{L}\p{N}-]+/gu, '-')}.txt`, lines.join('\n'), 'text/plain')
+  void saveFile(lines.join('\n'), `${title.replace(/[^\p{L}\p{N}-]+/gu, '-')}.txt`, 'text/plain')
   return opened.length
 }

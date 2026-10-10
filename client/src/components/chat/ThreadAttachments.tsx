@@ -4,6 +4,7 @@
 import { useState } from 'react'
 import { FileText, X } from 'lucide-react'
 import { mediaUrl } from '../../api/client'
+import { desktopDownloadClick } from '../../lib/saveFile'
 import { displayAttachments } from '../../e2e/files'
 import E2EAttachment from '../../e2e/E2EAttachment'
 import SpeedAudio from './SpeedAudio'
@@ -109,6 +110,7 @@ export function AttachmentList({ attachments, body }: { attachments?: SimpleAtta
             key={att.id}
             href={src}
             download={att.filename}
+            onClick={desktopDownloadClick(src, att.filename)}
             target="_blank"
             rel="noopener noreferrer"
             className="flex items-center gap-2 max-w-xs px-2.5 py-2 rounded bg-fc-hover/60 hover:bg-fc-hover text-xs text-fc-text transition"

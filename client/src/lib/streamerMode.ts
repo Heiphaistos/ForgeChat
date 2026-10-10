@@ -5,7 +5,7 @@ import { useEffect, useState } from 'react'
 import api from '../api/client'
 import { queryClient } from '../main'
 import { streamerActive, useUxPrefs } from './uxPrefs'
-import { isStreamingSoftwareRunning } from './streamingDetect'
+import { isStreamingSoftwareRunning } from './streamingSoftware'
 
 const setAttr = (on: boolean) => document.documentElement.setAttribute('data-streamer-mode', String(on))
 

@@ -27,6 +27,8 @@ mod diagnostic;
 mod presence;
 /// Jetons de session dans le trousseau de l'OS (audit M10).
 mod session;
+/// Réglages « Système » : démarrage, fermeture, GPU, téléchargements, icône.
+mod systeme;
 
 /// Vocal natif de l'application Linux (WebKitGTK sans WebRTC).
 pub mod native_voice;
@@ -171,10 +173,18 @@ fn animate_tray_icon(app: &tauri::AppHandle) -> tauri::Result<()> {
     std::thread::spawn(move || {
         let mut i = 0usize;
         loop {
+            // Icône personnalisée choisie : elle reste fixe, l'animation attend.
+            if crate::systeme::icone_perso_active() {
+                std::thread::sleep(Duration::from_millis(TRAY_FRAME_INTERVAL_MS));
+                continue;
+            }
             let frame = frames[i].clone();
             let handle = app_handle.clone();
             let _ = app_handle.run_on_main_thread(move || {
                 if let Some(tray) = handle.tray_by_id("main-tray") {
+                    if crate::systeme::icone_perso_active() {
+                        return;
+                    }
                     let _ = tray.set_icon(Some(frame));
                 }
             });
@@ -375,6 +385,11 @@ pub fn run() {
         if std::env::var_os("WEBKIT_DISABLE_COMPOSITING_MODE").is_none() {
             std::env::set_var("WEBKIT_DISABLE_COMPOSITING_MODE", "1");
         }
+        // Réglage « Accélération matérielle » coupé : WebKitGTK compose déjà en
+        // logiciel (ci-dessus), il reste le rendu GL de Mesa.
+        if !systeme::config().hardware_acceleration && std::env::var_os("LIBGL_ALWAYS_SOFTWARE").is_none() {
+            std::env::set_var("LIBGL_ALWAYS_SOFTWARE", "1");
+        }
     }
 
     // WebRTC dans WebView2 (Windows uniquement).
@@ -397,7 +412,7 @@ pub fn run() {
     // Linux/WebKitGTK n'a pas d'équivalent WEBVIEW2_* : la capture y est
     // autorisée par le handler `permission-request` posé dans `setup()`.
     #[cfg(windows)]
-    {
+    let browser_args = {
         let mut browser_args = String::from(
             "--use-fake-ui-for-media-stream \
              --enable-features=WebRTC-H264WithOpenH264FFmpeg",
@@ -406,12 +421,24 @@ pub fn run() {
         if std::env::var("FORGECHAT_FAKE_MEDIA").as_deref() == Ok("1") {
             browser_args.push_str(" --use-fake-device-for-media-stream");
         }
+        // Réglage « Accélération matérielle » coupé (Système) : lu avant la WebView.
+        if !systeme::config().hardware_acceleration {
+            browser_args.push_str(" --disable-gpu");
+        }
         // Note : --remote-debugging-port ne sert a rien ici, WebView2 filtre ce
         // drapeau dans AdditionalBrowserArguments (essaye le 2026-09-22, le port
         // n'ecoute jamais). Pour lire la console d'une build de production,
         // utiliser F12 : la feature `devtools` de tauri est activee en release.
         std::env::set_var("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS", &browser_args);
-    }
+        // Mesuré le 2026-10-11 (ligne de commande de msedgewebview2.exe) : la variable
+        // ci-dessus n'est PAS appliquée, wry passe ses propres AdditionalBrowserArguments
+        // qui l'emportent. On passe donc les drapeaux à la fenêtre (`setup`), en reprenant
+        // ceux que wry posait par défaut (menus Edge, SmartScreen, lecture automatique).
+        format!(
+            "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection \
+             --autoplay-policy=no-user-gesture-required {browser_args}"
+        )
+    };
 
     let builder = tauri::Builder::default()
         .plugin(tauri_plugin_window_state::Builder::new().build())
@@ -424,7 +451,13 @@ pub fn run() {
             }
         }))
         .plugin(tauri_plugin_shell::init())
-        .plugin(tauri_plugin_notification::init());
+        .plugin(tauri_plugin_notification::init())
+        // Boîte « Enregistrer sous » ouverte côté Rust seulement (systeme::save_file).
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_autostart::init(
+            tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+            Some(vec![systeme::ARG_AUTOSTART]),
+        ));
 
     // Push-to-talk global : plugin + commandes exposées au front (correctif A9).
     #[cfg(desktop)]
@@ -455,11 +488,21 @@ pub fn run() {
             session::session_stash,
             session::session_switch,
             session::session_forget,
-            session::session_import_account
+            session::session_import_account,
+            systeme::system_get,
+            systeme::system_set,
+            systeme::system_set_autostart,
+            systeme::restart_app,
+            systeme::save_file,
+            systeme::reveal_saved,
+            systeme::pick_download_dir,
+            systeme::clear_download_dir,
+            systeme::set_app_icon,
+            systeme::streaming_software_running
         ]);
 
     builder
-        .setup(|app| {
+        .setup(move |app| {
             // Fenêtre principale créée ici (et non par tauri.conf.json, `create: false`)
             // pour lui attacher un gestionnaire de nouvelles fenêtres. Sans lui, wry
             // refuse tout `window.open` sous WebView2 : impossible de détacher un
@@ -482,7 +525,15 @@ pub fn run() {
             if std::env::var("FORGECHAT_SELFTEST").as_deref() == Ok("popout") {
                 main_builder = main_builder.initialization_script(POPOUT_SELFTEST_JS);
             }
+            // Lancé avec l'ordinateur et « Démarrer réduit » : fenêtre cachée dans la zone de notification.
+            let demarrer_reduit = std::env::args().any(|a| a == systeme::ARG_AUTOSTART)
+                && systeme::config().start_minimized;
+            #[cfg(windows)]
+            {
+                main_builder = main_builder.additional_browser_args(&browser_args);
+            }
             main_builder
+                .visible(!demarrer_reduit)
                 .on_new_window(|url, _features| {
                     if url.as_str() == "about:blank" {
                         tauri::webview::NewWindowResponse::Allow
@@ -492,8 +543,15 @@ pub fn run() {
                 })
                 .build()?;
 
+            // window-state peut réafficher la fenêtre en restaurant son état.
+            if demarrer_reduit {
+                if let Some(w) = app.get_webview_window("main") {
+                    let _ = w.hide();
+                }
+            }
+
             #[cfg(debug_assertions)]
-            {
+            if !demarrer_reduit {
                 let window = app.get_webview_window("main").unwrap();
                 window.open_devtools();
             }
@@ -553,14 +611,20 @@ pub fn run() {
             if let Err(e) = animate_tray_icon(app.handle()) {
                 eprintln!("[ForgeChat] Animation icône tray désactivée (chargement frames échoué) : {e}");
             }
+            // Icône choisie dans Apparence (fenêtre, barre des tâches, zone de notification).
+            systeme::restaurer_icone(app.handle());
 
-            // ── Fermer = réduire dans le tray (ne pas quitter) ───────
+            // ── Fermer = réduire dans le tray, ou quitter (réglage Système) ──
             let window = app.get_webview_window("main").unwrap();
             let win_hide = window.clone();
             window.on_window_event(move |event| {
                 if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                     api.prevent_close();
-                    let _ = win_hide.hide();
+                    if systeme::config().close_to_tray {
+                        let _ = win_hide.hide();
+                    } else {
+                        win_hide.app_handle().exit(0);
+                    }
                 }
             });
 

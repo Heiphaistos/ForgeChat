@@ -13,6 +13,7 @@ import { comfortEn } from './comfort.ts'
 import { voiceLotEn } from './voiceLotEn.ts'
 import { remoteSupportEn } from './remoteSupport.ts'
 import { voiceDockEn } from './voiceDock.ts'
+import { systemDeskEn } from './systemDesk.ts'
 
 export const en: Partial<Record<Key, string>> = {
   ...profileEn,
@@ -25,6 +26,7 @@ export const en: Partial<Record<Key, string>> = {
   ...voiceDockEn,
   ...ai.en,
   ...notifCenter.en,
+  ...systemDeskEn,
   // --- Connexion, inscription, mot de passe oublié ---
   'auth.email': 'Email',
   'auth.password': 'Password',
@@ -1139,7 +1141,7 @@ export const en: Partial<Record<Key, string>> = {
   'settings.keywords.account': 'email password nickname name username delete account',
   'settings.keywords.profile': 'avatar photo picture banner bio about color pronouns',
   'settings.keywords.connected': 'github google spotify linked accounts oauth connection',
-  'settings.keywords.appearance': 'theme dark light color accent appearance background font',
+  'settings.keywords.appearance': 'theme dark light color accent appearance background font icon logo taskbar',
   'settings.keywords.notifications': 'sounds push mentions badge notification quiet hours',
   'settings.keywords.notifications_email': 'email mail digest newsletter',
   'settings.keywords.keybindings': 'shortcuts keyboard keys combinations hotkeys',

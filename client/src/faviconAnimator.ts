@@ -12,6 +12,8 @@ const FRAMES = Array.from({ length: FRAME_COUNT }, (_, i) => `/favicon-frames/f$
 
 let timer: ReturnType<typeof setInterval> | null = null
 let frameIndex = 0
+/** Icône choisie dans Apparence (lib/appIcon.ts) : remplace l'animation tant qu'elle est posée. */
+let override: string | null = null
 
 function applyFrame() {
   const link = document.getElementById('dynamic-favicon') as HTMLLinkElement | null
@@ -21,12 +23,23 @@ function applyFrame() {
 }
 
 function start() {
-  if (timer) return
+  if (timer || override) return
   timer = setInterval(applyFrame, FRAME_INTERVAL_MS)
 }
 
 function stop() {
   if (timer) { clearInterval(timer); timer = null }
+}
+
+export function setFaviconOverride(href: string | null) {
+  override = href
+  const link = document.getElementById('dynamic-favicon') as HTMLLinkElement | null
+  if (href) {
+    stop()
+    if (link) link.href = href
+  } else if (document.visibilityState === 'visible') {
+    start()
+  }
 }
 
 export function initFaviconAnimation() {

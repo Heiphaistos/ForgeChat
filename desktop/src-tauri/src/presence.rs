@@ -65,8 +65,13 @@ pub fn game_from_path(path: &str) -> Option<String> {
 }
 
 /// Jeu en cours d'exécution (le premier trouvé), sinon None.
+/// Commande asynchrone : une commande synchrone tourne sur le thread de l'interface.
 #[tauri::command]
-pub fn current_game() -> Option<String> {
+pub async fn current_game() -> Option<String> {
+    tauri::async_runtime::spawn_blocking(current_game_sync).await.ok().flatten()
+}
+
+fn current_game_sync() -> Option<String> {
     let kind = ProcessRefreshKind::nothing().with_exe(UpdateKind::OnlyIfNotSet);
     let mut sys = System::new_with_specifics(RefreshKind::nothing().with_processes(kind));
     sys.refresh_processes_specifics(ProcessesToUpdate::All, true, kind);
@@ -93,7 +98,7 @@ mod tests {
 
     #[test]
     fn parcourt_les_processus_reels_sans_planter() {
-        let _ = super::current_game();
+        let _ = super::current_game_sync();
     }
 
     #[test]

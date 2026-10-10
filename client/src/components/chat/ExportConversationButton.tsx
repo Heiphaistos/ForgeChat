@@ -2,6 +2,8 @@ import { useChat } from '../../store/chat'
 import { Download } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { displayAttachments } from '../../e2e/files'
+import { saveFile } from '../../lib/saveFile'
+import { isDesktop } from '../../lib/desktop'
 
 interface ExportConversationButtonProps {
   channelId: string
@@ -22,7 +24,7 @@ function formatDate(iso: string): string {
 export default function ExportConversationButton({ channelId, channelName }: ExportConversationButtonProps) {
   const messages = useChat(s => s.messagesByChannel[channelId] ?? [])
 
-  const handleExport = () => {
+  const handleExport = async () => {
     if (messages.length === 0) {
       toast.error('Aucun message à exporter')
       return
@@ -57,22 +59,16 @@ export default function ExportConversationButton({ channelId, channelName }: Exp
       }
     }
 
-    const blob = new Blob([lines.join('\n')], { type: 'text/plain;charset=utf-8' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `forgechat-${channelName}-${new Date().toISOString().slice(0, 10)}.txt`
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
-    URL.revokeObjectURL(url)
-
-    toast.success(`${sorted.length} messages exportés`)
+    const name = `forgechat-${channelName}-${new Date().toISOString().slice(0, 10)}.txt`
+    // Bureau : saveFile affiche lui-même « Enregistré dans … ».
+    if (await saveFile(lines.join('\n'), name, 'text/plain') && !isDesktop) {
+      toast.success(`${sorted.length} messages exportés`)
+    }
   }
 
   return (
     <button
-      onClick={handleExport}
+      onClick={() => void handleExport()}
       aria-label={`Exporter la conversation #${channelName} en fichier texte`}
       className="p-1.5 text-fc-muted hover:text-white transition rounded hover:bg-fc-hover"
     >

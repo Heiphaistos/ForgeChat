@@ -13,6 +13,7 @@ import { Toggle } from './shared'
 import ThemeGallery from './appearance/ThemeGallery'
 import ThemeEditor from './appearance/ThemeEditor'
 import LayoutSettings from './appearance/LayoutSettings'
+import AppIconPicker from './appearance/AppIconPicker'
 
 const AVATAR_SHAPES: { id: string; label: Key }[] = [
   { id: 'round', label: 'settings.appearance.round' },
@@ -150,6 +151,11 @@ export default function AppearanceSection() {
       <section>
         <H>{t('layout.title')}</H>
         <LayoutSettings />
+      </section>
+
+      <section>
+        <H>{t('appIcon.title')}</H>
+        <AppIconPicker />
       </section>
 
       <section>

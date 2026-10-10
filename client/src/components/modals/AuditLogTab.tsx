@@ -7,7 +7,8 @@ import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
 import api from '../../api/client'
 import { useT, t as tr, type Key } from '../../i18n'
-import { downloadText, toCsv } from '../community/format'
+import { toCsv } from '../community/format'
+import { saveFile } from '../../lib/saveFile'
 
 interface Server {
   id: string
@@ -106,9 +107,10 @@ export default function AuditLogTab({ server }: Props) {
     try {
       const { data } = await api.get<AuditEntry[]>(`/servers/${server.id}/audit?${params({ limit: 1000 })}`)
       const stamp = new Date().toISOString().slice(0, 10)
-      if (format === 'json') downloadText(`audit-${stamp}.json`, JSON.stringify(data, null, 2), 'application/json')
-      else downloadText(`audit-${stamp}.csv`, toCsv(data as unknown as Record<string, unknown>[], ['created_at', 'action', 'username', 'user_id', 'target_name', 'target_id', 'details']), 'text/csv')
-      toast.success(t('community.audit.exported', { n: data.length }))
+      const saved = format === 'json'
+        ? await saveFile(JSON.stringify(data, null, 2), `audit-${stamp}.json`, 'application/json')
+        : await saveFile(toCsv(data as unknown as Record<string, unknown>[], ['created_at', 'action', 'username', 'user_id', 'target_name', 'target_id', 'details']), `audit-${stamp}.csv`, 'text/csv')
+      if (saved) toast.success(t('community.audit.exported', { n: data.length }))
     } catch {
       toast.error(t('common.error'))
     }

@@ -3,6 +3,7 @@ import { useSignedUrl } from '../../lib/useSignedUrl'
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { X, Download, ChevronLeft, ChevronRight, ZoomIn, ZoomOut, Share2, Copy } from 'lucide-react'
 import toast from 'react-hot-toast'
+import { saveUrl } from '../../lib/saveFile'
 
 interface Props {
   images: string[]
@@ -40,10 +41,7 @@ export default function LightboxModal({ images, initialIndex, onClose }: Props) 
   }, [onClose, prev, next])
 
   const download = () => {
-    const a = document.createElement('a')
-    a.href = src ?? ''
-    a.download = uploadPath(images[index]).split('/').pop() ?? 'image'
-    a.click()
+    if (src) void saveUrl(src, uploadPath(images[index]).split('/').pop() || 'image')
   }
 
   // Web Share API (mobile) avec fallback copie du lien
