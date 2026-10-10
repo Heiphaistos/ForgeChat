@@ -33,6 +33,7 @@ export function E2EKeySection() {
     } catch (err: any) {
       toast.error(err?.response?.data?.error ?? t('e2e.unlock.wrong'))
     } finally {
+      setPw('')
       setBusy(false)
     }
   }

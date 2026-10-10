@@ -92,6 +92,8 @@ function UnlockModal({ userId }: { userId: string }) {
       else await resetAccountKey(userId, pw || undefined)
     } catch (e) {
       setError(errorText(e, tab === 'code' ? 'e2e.unlock.badCode' : 'e2e.unlock.wrong'))
+    } finally {
+      setPw('')
     }
   }
 

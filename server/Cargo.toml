@@ -37,6 +37,8 @@ reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"
 sha2 = "0.10"
 sha1 = "0.10"
 hmac = "0.12"
+# Secret TOTP chiffré au repos (déjà présent via web-push-native).
+aes-gcm = { version = "0.10", default-features = false, features = ["aes", "alloc"] }
 totp-lite = "2"
 data-encoding = "2.6"
 urlencoding = "2"

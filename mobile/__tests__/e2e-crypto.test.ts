@@ -3,6 +3,7 @@
 import { readFileSync } from 'fs'
 import { join } from 'path'
 import * as c from '@/e2e/crypto'
+import * as k from '@/e2e/authKdf'
 
 jest.mock('expo-crypto', () => ({
   getRandomBytes: (n: number) => new Uint8Array(require('crypto').randomBytes(n)),
@@ -159,4 +160,22 @@ test('brouillon chiffré par la clé de compte', async () => {
   expect(await c.sealDraft(d(x.key), x.userId, x.convId, x.text, d(x.iv))).toEqual(x.blob)
   expect(await c.openDraft(d(x.key), x.userId, x.convId, x.blob)).toBe(x.text)
   await expect(c.openDraft(d(x.key), x.userId, x.userId, x.blob)).rejects.toThrow()
+})
+
+test('connexion v2 : master, auth, wrapKey et enveloppe v2 (NFKC), mêmes octets que le web', async () => {
+  const x = V.authV2
+  expect(e(await c.pbkdf2(x.passwordNfkc, d(x.kdfSalt), x.iterations))).toBe(x.master)
+  const s = await k.deriveSecrets(x.password, x.kdfSalt, x.iterations)
+  expect(s.auth).toBe(x.auth)
+  expect(e(s.wrapKey)).toBe(x.wrapKey)
+  expect((await k.deriveSecrets(x.passwordNfkc, x.kdfSalt, x.iterations)).auth).toBe(x.auth)
+  expect(k.keyAadV2(x.userId)).toBe(x.aad)
+  expect(await k.wrapKeyV2(d(x.priv), s.wrapKey, x.userId, d(x.wrapped.iv))).toEqual(x.wrapped)
+  expect(e(await k.unwrapKeyV2(x.wrapped, s.wrapKey, x.userId))).toBe(x.priv)
+  expect(e(await k.unwrapAny(x.wrapped, 'ignoré', s, x.userId))).toBe(x.priv)
+  await expect(k.unwrapKeyV2(x.wrapped, s.wrapKey, '00000000-0000-4000-8000-000000000000')).rejects.toThrow()
+  const other = await k.deriveSecrets('autre mot de passe', x.kdfSalt, x.iterations)
+  await expect(k.unwrapKeyV2(x.wrapped, other.wrapKey, x.userId)).rejects.toThrow()
+  expect(k.passwordProblem('123456789')).not.toBeNull()
+  expect(k.passwordProblem('1234567890')).toBeNull()
 })

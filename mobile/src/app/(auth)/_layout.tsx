@@ -8,6 +8,7 @@ export default function AuthLayout() {
     <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.bgDeep }, animation: 'fade' }}>
       <Stack.Screen name="login" />
       <Stack.Screen name="register" />
+      <Stack.Screen name="verify-email" />
     </Stack>
   )
 }

@@ -1,15 +1,16 @@
 //! Clé de compte du chiffrement de bout en bout (docs/CHIFFREMENT-E2E.md §3).
 //!
 //! Le serveur stocke la clé publique et deux enveloppes opaques de la clé
-//! privée, chiffrées sur l'appareil (mot de passe, code de récupération). Il
-//! valide strictement leur forme mais ne peut ni les ouvrir ni les vérifier.
+//! privée, chiffrées sur l'appareil (wrapKey dérivée du mot de passe, code de
+//! récupération). Il valide strictement leur forme mais ne peut ni les ouvrir
+//! ni les vérifier. Les actions sensibles exigent `auth` (connexion v2), ou
+//! `password` pour un compte pas encore migré (handlers/auth_v2.rs).
 
 use axum::{
     extract::{Path, State},
     Extension, Json,
 };
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
-use bcrypt::verify;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
@@ -17,7 +18,7 @@ use uuid::Uuid;
 
 use crate::{
     error::{AppError, Result},
-    handlers::password_reset::over_limit,
+    handlers::auth_v2::verify_proof,
     middleware::auth::Claims,
     state::AppState,
 };
@@ -27,12 +28,15 @@ const FRESH_SESSION_SECS: i64 = 600;
 /// Anciennes clés publiques conservées par compte.
 const OLD_KEYS_KEPT: i64 = 20;
 
-/// Clé privée enveloppée : {v:1, salt 16 o, iv 12 o, ct 32 o + tag 16 o}, base64url.
+/// Clé privée enveloppée, base64url : v1 = {v:1, salt 16 o, iv 12 o, ct 32 o + tag 16 o}
+/// (PBKDF2 du mot de passe, encore lisible pour la migration) ; v2 = {v:2, iv, ct} (wrapKey de la
+/// connexion v2, pas de sel propre).
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct Wrapped {
     pub v: u8,
-    pub salt: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub salt: Option<String>,
     pub iv: String,
     pub ct: String,
 }
@@ -52,10 +56,13 @@ fn b64_exact(s: &str, len: usize, what: &str) -> Result<Vec<u8>> {
 
 impl Wrapped {
     pub fn validate(&self) -> Result<()> {
-        if self.v != 1 {
-            return Err(AppError::BadRequest("Version d'enveloppe inconnue".into()));
+        match (self.v, self.salt.as_deref()) {
+            (1, Some(salt)) => {
+                b64_exact(salt, 16, "salt")?;
+            }
+            (2, None) => {}
+            _ => return Err(AppError::BadRequest("Version d'enveloppe inconnue".into())),
         }
-        b64_exact(&self.salt, 16, "salt")?;
         b64_exact(&self.iv, 12, "iv")?;
         b64_exact(&self.ct, 48, "ct")?;
         Ok(())
@@ -72,25 +79,7 @@ pub fn public_fingerprint(public: &str) -> Result<String> {
 }
 
 fn to_json(w: &Wrapped) -> Value {
-    json!({ "v": w.v, "salt": w.salt, "iv": w.iv, "ct": w.ct })
-}
-
-/// Mot de passe actuel, 5 essais / 15 min par compte (les routes de clé partagent le compteur).
-async fn check_password(state: &AppState, user_id: Uuid, password: &str) -> Result<()> {
-    if over_limit(state, &format!("e2ekey_pw:{user_id}"), 5, 900).await {
-        return Err(AppError::TooManyRequests);
-    }
-    if password.is_empty() || password.len() > 128 {
-        return Err(AppError::BadRequest("Mot de passe actuel incorrect".into()));
-    }
-    let hash: String = sqlx::query_scalar("SELECT password_hash FROM users WHERE id=$1")
-        .bind(user_id)
-        .fetch_one(&state.db)
-        .await?;
-    if !verify(password, &hash).unwrap_or(false) {
-        return Err(AppError::BadRequest("Mot de passe actuel incorrect".into()));
-    }
-    Ok(())
+    serde_json::to_value(w).unwrap_or(Value::Null)
 }
 
 fn no_key() -> AppError {
@@ -157,19 +146,22 @@ pub async fn create_my_keys(
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct RewrapBody {
-    password: String,
+    #[serde(default)]
+    auth: Option<String>,
+    #[serde(default)]
+    password: Option<String>,
     wrapped: Wrapped,
 }
 
-/// PUT /users/me/keys/wrapped — ré-enveloppe avec le mot de passe actuel
-/// (après une réinitialisation par e-mail + code de récupération).
+/// PUT /users/me/keys/wrapped {auth, wrapped} — ré-enveloppe : migration v1 → v2 juste après la
+/// connexion (idempotent), ou après une réinitialisation par e-mail + code de récupération.
 pub async fn rewrap_my_key(
     State(state): State<AppState>,
     Extension(claims): Extension<Claims>,
     Json(body): Json<RewrapBody>,
 ) -> Result<Json<Value>> {
     body.wrapped.validate()?;
-    check_password(&state, claims.sub, &body.password).await?;
+    verify_proof(&state, claims.sub, body.auth.as_deref(), body.password.as_deref()).await?;
     let done = sqlx::query("UPDATE user_keys SET wrapped=$2 WHERE user_id=$1")
         .bind(claims.sub)
         .bind(to_json(&body.wrapped))
@@ -184,7 +176,10 @@ pub async fn rewrap_my_key(
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct BackupBody {
-    password: String,
+    #[serde(default)]
+    auth: Option<String>,
+    #[serde(default)]
+    password: Option<String>,
     backup: Wrapped,
 }
 
@@ -195,7 +190,7 @@ pub async fn put_my_backup(
     Json(body): Json<BackupBody>,
 ) -> Result<Json<Value>> {
     body.backup.validate()?;
-    check_password(&state, claims.sub, &body.password).await?;
+    verify_proof(&state, claims.sub, body.auth.as_deref(), body.password.as_deref()).await?;
     let done = sqlx::query("UPDATE user_keys SET backup=$2, backup_at=NOW() WHERE user_id=$1")
         .bind(claims.sub)
         .bind(to_json(&body.backup))
@@ -210,7 +205,10 @@ pub async fn put_my_backup(
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct PasswordBody {
-    password: String,
+    #[serde(default)]
+    auth: Option<String>,
+    #[serde(default)]
+    password: Option<String>,
 }
 
 /// DELETE /users/me/keys/backup — supprime le code de récupération.
@@ -219,7 +217,7 @@ pub async fn delete_my_backup(
     Extension(claims): Extension<Claims>,
     Json(body): Json<PasswordBody>,
 ) -> Result<Json<Value>> {
-    check_password(&state, claims.sub, &body.password).await?;
+    verify_proof(&state, claims.sub, body.auth.as_deref(), body.password.as_deref()).await?;
     sqlx::query("UPDATE user_keys SET backup=NULL, backup_at=NULL WHERE user_id=$1")
         .bind(claims.sub)
         .execute(&state.db)
@@ -230,7 +228,10 @@ pub async fn delete_my_backup(
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ResetKeyBody {
-    password: String,
+    #[serde(default)]
+    auth: Option<String>,
+    #[serde(default)]
+    password: Option<String>,
     public: String,
     wrapped: Wrapped,
     backup: Option<Wrapped>,
@@ -249,7 +250,7 @@ pub async fn reset_my_key(
     if !is_fresh(claims.iat, chrono::Utc::now().timestamp()) {
         return Err(AppError::ForbiddenMsg("FRESH_LOGIN_REQUIRED".into()));
     }
-    check_password(&state, claims.sub, &body.password).await?;
+    verify_proof(&state, claims.sub, body.auth.as_deref(), body.password.as_deref()).await?;
 
     let mut tx = state.db.begin().await?;
     sqlx::query(
@@ -336,7 +337,7 @@ mod tests {
     fn wrapped() -> Wrapped {
         Wrapped {
             v: 1,
-            salt: "MjM0NTY3ODk6Ozw9Pj9AQQ".into(),
+            salt: Some("MjM0NTY3ODk6Ozw9Pj9AQQ".into()),
             iv: "RkdISUpLTE1OT1BR".into(),
             ct: "qrP0E2lRj1Ywingccp04DXW4S5WAAuSIkk9t_gGSd6cwf34kTjLUpmyoulia68tZ".into(),
         }
@@ -361,8 +362,12 @@ mod tests {
     #[test]
     fn validates_wrapped() {
         assert!(wrapped().validate().is_ok());
-        assert!(Wrapped { v: 2, ..wrapped() }.validate().is_err());
-        assert!(Wrapped { salt: "AAAA".into(), ..wrapped() }.validate().is_err());
+        assert!(Wrapped { v: 2, ..wrapped() }.validate().is_err()); // v2 n'a pas de sel
+        assert!(Wrapped { v: 2, salt: None, ..wrapped() }.validate().is_ok());
+        assert!(Wrapped { v: 1, salt: None, ..wrapped() }.validate().is_err());
+        assert!(Wrapped { v: 3, salt: None, ..wrapped() }.validate().is_err());
+        assert!(Wrapped { salt: Some("AAAA".into()), ..wrapped() }.validate().is_err());
+        assert_eq!(to_json(&Wrapped { v: 2, salt: None, ..wrapped() }).get("salt"), None);
         assert!(Wrapped { iv: URL_SAFE_NO_PAD.encode([0u8; 16]), ..wrapped() }.validate().is_err());
         assert!(Wrapped { ct: URL_SAFE_NO_PAD.encode([0u8; 47]), ..wrapped() }.validate().is_err());
         assert!(Wrapped { ct: "!!".into(), ..wrapped() }.validate().is_err());

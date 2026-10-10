@@ -4,6 +4,8 @@ import { useAuth } from '../store/auth'
 import api from '../api/client'
 import toast from 'react-hot-toast'
 
+const CODE_LEN = 6
+
 const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
 
 export default function VerifyEmailPage() {
@@ -13,14 +15,10 @@ export default function VerifyEmailPage() {
 
   const email = (location.state as any)?.email ?? ''
   const devCode = (location.state as any)?.dev_code as string | undefined
-  const [digits, setDigits] = useState(devCode ? devCode.split('') : ['', '', '', ''])
+  const [digits, setDigits] = useState(devCode ? devCode.split('') : Array<string>(CODE_LEN).fill(''))
   const [loading, setLoading] = useState(false)
-  const refs = [
-    useRef<HTMLInputElement>(null),
-    useRef<HTMLInputElement>(null),
-    useRef<HTMLInputElement>(null),
-    useRef<HTMLInputElement>(null),
-  ]
+  const box = useRef<(HTMLInputElement | null)[]>([])
+  const refs = Array.from({ length: CODE_LEN }, (_, i) => ({ get current() { return box.current[i] ?? null } }))
 
   useEffect(() => {
     if (!email) nav('/register')
@@ -32,7 +30,7 @@ export default function VerifyEmailPage() {
     const next = [...digits]
     next[i] = d
     setDigits(next)
-    if (d && i < 3) refs[i + 1].current?.focus()
+    if (d && i < CODE_LEN - 1) refs[i + 1].current?.focus()
   }
 
   const handleKeyDown = (i: number, e: React.KeyboardEvent) => {
@@ -42,17 +40,17 @@ export default function VerifyEmailPage() {
   }
 
   const handlePaste = (e: React.ClipboardEvent) => {
-    const pasted = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, 4)
-    if (pasted.length === 4) {
+    const pasted = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, CODE_LEN)
+    if (pasted.length === CODE_LEN) {
       setDigits(pasted.split(''))
-      refs[3].current?.focus()
+      refs[CODE_LEN - 1].current?.focus()
     }
   }
 
   const submit = async () => {
     const code = digits.join('')
-    if (code.length !== 4) {
-      toast.error('Entre les 4 chiffres')
+    if (code.length !== CODE_LEN) {
+      toast.error(`Entre les ${CODE_LEN} chiffres`)
       return
     }
     setLoading(true)
@@ -99,24 +97,24 @@ export default function VerifyEmailPage() {
 
         <div
           role="group"
-          aria-label="Code de vérification à 4 chiffres"
+          aria-label={`Code de vérification à ${CODE_LEN} chiffres`}
           className="flex justify-center gap-3 mb-6"
           onPaste={handlePaste}
         >
           {digits.map((d, i) => (
             <input
               key={i}
-              ref={refs[i]}
+              ref={el => { box.current[i] = el }}
               type="text"
               inputMode="numeric"
-              enterKeyHint={i < 3 ? 'next' : 'done'}
+              enterKeyHint={i < CODE_LEN - 1 ? 'next' : 'done'}
               maxLength={1}
               value={d}
               onChange={e => handleDigit(i, e.target.value)}
               onKeyDown={e => handleKeyDown(i, e)}
               autoComplete={i === 0 ? 'one-time-code' : 'off'}
-              aria-label={`Chiffre ${i + 1} sur 4`}
-              className="w-14 h-16 text-center text-2xl font-bold bg-fc-input text-white rounded-lg
+              aria-label={`Chiffre ${i + 1} sur ${CODE_LEN}`}
+              className="w-11 h-14 text-center text-2xl font-bold bg-fc-input text-white rounded-lg
                          outline-none focus:ring-2 focus:ring-fc-accent transition caret-transparent"
             />
           ))}

@@ -51,6 +51,10 @@ pub struct User {
     pub profile_links: Option<serde_json::Value>,
     #[sqlx(default)]
     pub custom_status_expires_at: Option<DateTime<Utc>>,
+    /// Connexion v2 : bcrypt de `auth` (dérivé du mot de passe sur l'appareil). NULL = compte non migré.
+    #[sqlx(default)]
+    #[serde(skip_serializing, default)]
+    pub auth_hash: Option<String>,
 }
 
 impl User {
@@ -141,20 +145,37 @@ impl From<User> for UserPublic {
     }
 }
 
-#[derive(Debug, Deserialize)]
+/// Inscription v2 : `auth` et `kdf_salt` calculés sur l'appareil, jamais le mot de passe.
+/// Pas de `Debug` : ces corps ne doivent jamais finir dans un journal.
+#[derive(Deserialize)]
 pub struct RegisterRequest {
     pub username: String,
     pub email: String,
-    pub password: String,
+    #[serde(default)]
+    pub auth: Option<String>,
+    #[serde(default)]
+    pub kdf_salt: Option<String>,
+    /// Envoyé seulement par les anciennes applis : refus 426.
+    #[serde(default)]
+    pub password: Option<String>,
     /// Code d'invitation (obligatoire quand l'inscription est sur invitation).
     #[serde(default)]
     pub invite_code: Option<String>,
 }
 
-#[derive(Debug, Deserialize)]
+/// Compte migré : `{email, auth}`. Compte non migré : `{email, password, auth_new, kdf_salt_new}`
+/// (dernière fois que le serveur voit le mot de passe), ou `{email, password}` (ancienne appli).
+#[derive(Deserialize)]
 pub struct LoginRequest {
     pub email: String,
-    pub password: String,
+    #[serde(default)]
+    pub auth: Option<String>,
+    #[serde(default)]
+    pub password: Option<String>,
+    #[serde(default)]
+    pub auth_new: Option<String>,
+    #[serde(default)]
+    pub kdf_salt_new: Option<String>,
     pub totp_code: Option<String>,
 }
 
@@ -263,4 +284,7 @@ pub struct PendingRegistration {
     pub code: String,
     pub expires_at: DateTime<Utc>,
     pub created_at: DateTime<Utc>,
+    pub auth_hash: String,
+    pub kdf_salt: String,
+    pub invite_code: Option<String>,
 }

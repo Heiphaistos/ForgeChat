@@ -39,6 +39,9 @@ export default function RegisterScreen() {
     setServerError(null)
     try {
       await register(username, email, password, inviteCode)
+      setPassword('')
+      setConfirm('')
+      router.push({ pathname: '/verify-email', params: { email: email.trim().toLowerCase() } })
     } catch (e) {
       setServerError(errorMessage(e))
     } finally {

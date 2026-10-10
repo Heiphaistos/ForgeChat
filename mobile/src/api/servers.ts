@@ -1,4 +1,5 @@
 import { serverKeyForNewOwner } from '@/e2e/serverKey'
+import { passwordProof } from '@/e2e/accountKey'
 import { http, path } from '@/lib/http'
 import type { Ban, Category, Channel, Invite, InviteInfo, Member, Role, Server, ServerDetail } from '@/types/models'
 
@@ -53,7 +54,8 @@ export const serversApi = {
   /** Enregistre salons, catégories et rôles comme modèle (propriétaire). */
   saveTemplate: (id: string, name: string, isPublic: boolean) => http.post(path`/servers/${id}/template`, { name: name.trim(), is_public: isPublic }),
   /** Propriétaire seulement : mot de passe + code 2FA si activée (features/servers/deleteServer). */
-  remove: (id: string, body: { password: string; totp_code?: string }) => http.delete(path`/servers/${id}`, { body }),
+  remove: async (id: string, { password, ...rest }: { password: string; totp_code?: string }) =>
+    http.delete(path`/servers/${id}`, { body: { ...(await passwordProof(password)), ...rest } }),
   uploadImage: (id: string, kind: 'icon' | 'banner', file: { uri: string; name: string; type: string }) => {
     const fd = new FormData()
     fd.append(kind, file as unknown as Blob)
@@ -61,7 +63,7 @@ export const serversApi = {
   },
   /** Clé de récupération du serveur ré-enveloppée pour le nouveau propriétaire (null : il saisira le code). */
   transfer: async (id: string, userId: string, password: string) =>
-    http.post(path`/servers/${id}/transfer`, { user_id: userId, password, server_key_owner_wrapped: await serverKeyForNewOwner(id, userId) }),
+    http.post(path`/servers/${id}/transfer`, { user_id: userId, ...(await passwordProof(password)), server_key_owner_wrapped: await serverKeyForNewOwner(id, userId) }),
   /** Pseudo sur ce serveur ; null = retirer. */
   setNickname: (id: string, nickname: string | null) => http.patch(path`/servers/${id}/nickname`, { nickname }),
   /** Profil propre à ce serveur : bio (null = celle du compte). */

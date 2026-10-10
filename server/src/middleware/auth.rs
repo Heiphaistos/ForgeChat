@@ -101,7 +101,7 @@ pub async fn require_auth(
     match token_state(&state, claims.sub, claims.iat, Some(&token)).await {
         TokenState::Valid => {}
         TokenState::Revoked => return Err(AppError::Unauthorized),
-        TokenState::Unknown => return Err(AppError::Unavailable),
+        TokenState::Unknown => return Err(AppError::Unavailable("Service momentanément indisponible".into())),
     }
 
     let mut req = req;

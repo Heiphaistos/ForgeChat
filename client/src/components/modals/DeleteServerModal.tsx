@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import { ShieldAlert, Trash2, X } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../../api/client'
+import { passwordProof } from '../../e2e/accountKey'
 import { useAuth } from '../../store/auth'
 import { useEscapeKey } from '../../hooks/useEscapeKey'
 import { useT } from '../../i18n'
@@ -26,7 +27,7 @@ export default function DeleteServerModal({ server, onClose }: { server: { id: s
   const nomOk = nom.trim().toLowerCase() === server.name.trim().toLowerCase()
 
   const supprimer = useMutation({
-    mutationFn: () => api.delete(`/servers/${server.id}`, { data: { password, totp_code: code.trim() || undefined } }),
+    mutationFn: async () => api.delete(`/servers/${server.id}`, { data: { ...(await passwordProof(password)), totp_code: code.trim() || undefined } }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['servers'] })
       toast.success(t('servers.delete.done', { name: server.name }))

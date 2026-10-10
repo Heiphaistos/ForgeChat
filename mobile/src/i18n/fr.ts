@@ -115,7 +115,7 @@ export const fr = {
   'auth.invalidEmailAddress': 'Adresse e-mail invalide.',
   'auth.usernameRule': '2 à 32 caractères : lettres, chiffres, _ ou -',
   'auth.invalidEmail': 'Email invalide',
-  'auth.passwordMin': '8 caractères minimum',
+  'auth.passwordMin': '10 caractères minimum',
   'auth.passwordMax': '128 caractères maximum',
   'auth.passwordWeak': 'Mot de passe trop faible',
   'auth.passwordMismatch': 'Les mots de passe ne correspondent pas',

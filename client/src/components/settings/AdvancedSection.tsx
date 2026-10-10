@@ -5,6 +5,7 @@ import { Trash2, Copy, Eye, EyeOff, Bug, ClipboardList } from 'lucide-react'
 import { sendManualReport } from '../../lib/errorReporter'
 import { useAuth } from '../../store/auth'
 import api from '../../api/client'
+import { passwordProof } from '../../e2e/accountKey'
 import toast from 'react-hot-toast'
 import { useT } from '../../i18n'
 
@@ -22,7 +23,7 @@ export default function AdvancedSection({ user }: Props) {
   const [showDeletePw, setShowDeletePw] = useState(false)
 
   const deleteAccount = useMutation({
-    mutationFn: () => api.delete('/users/me', { data: { password: deletePassword } }),
+    mutationFn: async () => api.delete('/users/me', { data: await passwordProof(deletePassword) }),
     onSuccess: async () => { await logout(); nav('/login') },
     onError: (e: any) => toast.error(e.response?.data?.error ?? t('settings.adv.deleteError')),
   })

@@ -12,7 +12,8 @@ import { useUi } from './ui'
 import { useUnread } from './unread'
 import { classifyBootstrapFailure, SESSION_EXPIRED_NOTICE } from '@/lib/sessionNotice'
 import { t } from '@/i18n'
-import { clearAccountKey, rememberPassword } from '@/e2e/accountKey'
+import { clearAccountKey, prelogin, rememberLogin } from '@/e2e/accountKey'
+import { deriveSecrets, newKdfSalt, passwordProblem } from '@/e2e/authKdf'
 import { forgetOfflineData, setOfflineOwner } from '@/lib/offline'
 import { listAccounts, putAccount, takeAccount } from '@/lib/accounts'
 
@@ -49,7 +50,9 @@ interface AuthState {
   notice: string | null
   bootstrap: () => Promise<void>
   login: (email: string, password: string, totpCode?: string) => Promise<void>
+  /** Envoie le code de vérification ; le compte naît à `verifyEmail`. */
   register: (username: string, email: string, password: string, inviteCode?: string) => Promise<void>
+  verifyEmail: (email: string, code: string) => Promise<void>
   logout: (scope?: 'current' | 'all') => Promise<void>
   /** Fin de session sans appel serveur (session déjà révoquée côté serveur). */
   signOutLocally: (notice?: string) => Promise<void>
@@ -122,15 +125,43 @@ export const useAuth = create<AuthState>((set, get) => {
     },
 
     login: async (email, password, totpCode) => {
-      const res = await authApi.login(email, password, totpCode)
-      rememberPassword(password)
+      // Connexion v2 : seul `auth` part. Compte pas encore migré : le mot de passe part une
+      // dernière fois avec la nouvelle preuve, et le serveur bascule le compte.
+      const pre = await prelogin(email)
+      const salt = pre.legacy || !pre.kdf_salt ? newKdfSalt() : pre.kdf_salt
+      const secrets = await deriveSecrets(password, salt)
+      let res: AuthResponse
+      try {
+        res = await authApi.login(
+          email,
+          pre.legacy ? { password, auth_new: secrets.auth, kdf_salt_new: salt } : { auth: secrets.auth },
+          totpCode,
+        )
+      } catch (e) {
+        secrets.wrapKey.fill(0)
+        throw e
+      }
+      rememberLogin(password, secrets)
       await acceptSession(res)
     },
 
     register: async (username, email, password, inviteCode) => {
-      const res = await authApi.register(username, email, password, inviteCode)
-      rememberPassword(password)
-      await acceptSession(res)
+      const problem = passwordProblem(password)
+      if (problem) throw new Error(problem)
+      const kdfSalt = newKdfSalt()
+      const secrets = await deriveSecrets(password, kdfSalt)
+      try {
+        await authApi.register(username, email, secrets.auth, kdfSalt, inviteCode)
+      } catch (e) {
+        secrets.wrapKey.fill(0)
+        throw e
+      }
+      // Gardé en mémoire jusqu'à la création de la clé, après la vérification de l'adresse.
+      rememberLogin(password, secrets)
+    },
+
+    verifyEmail: async (email, code) => {
+      await acceptSession(await authApi.verifyEmail(email, code))
     },
 
     logout: async (scope = 'current') => {

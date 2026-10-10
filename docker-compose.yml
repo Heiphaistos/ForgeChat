@@ -48,6 +48,7 @@ services:
       DATABASE_URL: postgres://forgechat:${POSTGRES_PASSWORD}@postgres:5432/forgechat
       REDIS_URL: redis://redis:6379
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET requis}
+      TOTP_ENC_KEY: ${TOTP_ENC_KEY:?TOTP_ENC_KEY requis (openssl rand -base64 32)}
       PORT: 8080
       UPLOAD_DIR: /app/uploads
       FRONTEND_URL: ${FRONTEND_URL:-https://forgechat.heiphaistos.org}

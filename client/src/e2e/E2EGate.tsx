@@ -104,6 +104,7 @@ function UnlockScreen({ userId }: { userId: string }) {
     } catch (err) {
       toast.error(errorText(err, t, tab))
     } finally {
+      setPw('')
       setBusy(false)
     }
   }

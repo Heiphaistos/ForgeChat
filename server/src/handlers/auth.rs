@@ -3,7 +3,7 @@ use axum::{
     http::{HeaderMap, HeaderValue, header::SET_COOKIE},
     Json,
 };
-use bcrypt::{hash, verify, DEFAULT_COST};
+use bcrypt::verify;
 use chrono::Utc;
 use rand::Rng;
 use redis::AsyncCommands;
@@ -12,6 +12,7 @@ use uuid::Uuid;
 
 use crate::{
     error::{AppError, Result},
+    handlers::auth_v2::{self, account_key, check_auth, check_salt, email_norm, hash_auth, hit, NO_PASSWORD, UPGRADE_MSG},
     middleware::auth::create_token,
     models::user::{AuthResponse, LoginRequest, PendingRegistration, RegisterRequest},
     state::AppState,
@@ -50,28 +51,6 @@ mod email_domain_tests {
     }
 }
 
-/// Vérifie et incrémente le compteur de tentatives de login par IP.
-async fn check_login_rate_limit(state: &AppState, ip: &str) -> Result<()> {
-    let key = format!("login_attempts:{}", ip);
-    let mut redis = state.redis.lock().await;
-    let count: Option<i64> = redis.get(&key).await.unwrap_or(None);
-    let count = count.unwrap_or(0);
-    if count >= 10 {
-        return Err(AppError::TooManyRequests);
-    }
-    let _: () = redis.incr(&key, 1).await.unwrap_or(());
-    if count == 0 {
-        let _: () = redis.expire(&key, 900).await.unwrap_or(());
-    }
-    Ok(())
-}
-
-async fn reset_login_rate_limit(state: &AppState, ip: &str) {
-    let key = format!("login_attempts:{}", ip);
-    let mut redis = state.redis.lock().await;
-    let _: () = redis.del(&key).await.unwrap_or(());
-}
-
 /// Construit les headers Set-Cookie pour access_token et refresh_token.
 /// Les tokens sont aussi retournés dans le corps JSON pour la compatibilité Tauri.
 fn auth_cookie_headers(auth: &AuthResponse, secure: bool) -> HeaderMap {
@@ -100,40 +79,53 @@ pub(crate) fn is_secure(state: &AppState) -> bool {
     state.config.frontend_url.starts_with("https")
 }
 
+/// Durée de validité du code de vérification d'e-mail.
+const PENDING_TTL_MIN: i64 = 15;
+
+fn mail_html(title: &str, body: &str) -> String {
+    format!(
+        r#"<!DOCTYPE html><html><body style="font-family:sans-serif;background:#1e1f22;color:#dbdee1;padding:32px">
+<div style="max-width:480px;margin:auto;background:#313338;border-radius:12px;padding:32px">
+  <h2 style="color:#5865f2;margin-top:0">{title}</h2>{body}</div></body></html>"#
+    )
+}
+
+fn send_in_background(state: &AppState, to: String, subject: &'static str, html: String) {
+    let config = state.config.clone();
+    tokio::spawn(async move {
+        if let Err(e) = crate::email::send_email(&config, &to, subject, html).await {
+            tracing::warn!("envoi e-mail d'inscription échoué : {}", crate::privacy::redact_emails(&e.to_string()));
+        }
+    });
+}
+
+/// POST /api/auth/register {username, email, auth, kdf_salt, invite_code?} → {pending: true}
+/// Aucun compte n'est créé ici : un code est envoyé à l'adresse, le compte naît à verify_email.
+/// Réponse identique si l'adresse a déjà un compte (son propriétaire reçoit alors un avertissement).
 pub async fn register(
     State(state): State<AppState>,
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
     headers: axum::http::HeaderMap,
     Json(body): Json<RegisterRequest>,
-) -> Result<(HeaderMap, Json<AuthResponse>)> {
-    {
-        let key = format!("register_attempts:{}", crate::privacy::client_key(&headers, &addr));
-        let mut redis = state.redis.lock().await;
-        let count: Option<i64> = redis.get(&key).await.unwrap_or(None);
-        let count = count.unwrap_or(0);
-        if count >= 5 {
-            return Err(AppError::TooManyRequests);
+) -> Result<Json<serde_json::Value>> {
+    hit(&state, &format!("register_attempts:{}", crate::privacy::client_key(&headers, &addr)), 5, 900).await?;
+    let (Some(auth), Some(kdf_salt)) = (body.auth.as_deref(), body.kdf_salt.as_deref()) else {
+        if body.password.is_some() {
+            return Err(AppError::UpgradeRequired("Mets à jour ForgeChat pour créer un compte".into()));
         }
-        let _: () = redis.incr(&key, 1).await.unwrap_or(());
-        if count == 0 {
-            let _: () = redis.expire(&key, 900).await.unwrap_or(());
-        }
-    }
+        return Err(AppError::BadRequest("auth et kdf_salt requis".into()));
+    };
     if body.username.len() < 2 || body.username.len() > 32 {
         return Err(AppError::BadRequest("Nom d'utilisateur 2-32 chars".into()));
     }
     if !body.username.chars().all(|c| c.is_alphanumeric() || c == '_' || c == '-') {
         return Err(AppError::BadRequest("Nom : lettres, chiffres, _ ou - uniquement".into()));
     }
-    if body.password.len() < 8 {
-        return Err(AppError::BadRequest("Mot de passe min 8 chars".into()));
-    }
-    if body.password.len() > 128 {
-        return Err(AppError::BadRequest("Mot de passe max 128 chars".into()));
-    }
+    check_auth(auth)?;
+    check_salt(kdf_salt)?;
 
-    let email_lower = body.email.to_lowercase();
-    if !email_lower.contains('@') || !email_lower.contains('.') {
+    let email_lower = email_norm(&body.email);
+    if email_lower.len() > 254 || !email_lower.contains('@') || !email_lower.contains('.') {
         return Err(AppError::BadRequest("Email invalide".into()));
     }
     if !email_domain_allowed(&email_lower) {
@@ -141,48 +133,135 @@ pub async fn register(
             "Adresse refusée : inscris-toi avec une vraie boîte mail (Gmail, Outlook/Hotmail/Live, Proton, Orange, Free, SFR ou Bouygues)".into(),
         ));
     }
+    hit(&state, &account_key("register_acct", &email_lower), 3, 3600).await?;
 
     // Cercle privé : inscription sur invitation. Tant qu'aucun compte n'existe, la première
     // inscription est libre et donne les droits d'administrateur du site.
     let first_user: bool = sqlx::query_scalar(crate::handlers::site_admin::NO_REAL_USERS_SQL).fetch_one(&state.db).await?;
     let mode = if first_user { "open".to_string() } else { crate::handlers::site_admin::registration_mode(&state).await };
+    let invite_code = body.invite_code.as_deref().map(str::trim).filter(|c| !c.is_empty());
     match mode.as_str() {
         "closed" => return Err(AppError::ForbiddenMsg("Les inscriptions sont fermées".into())),
-        "invite" if body.invite_code.as_deref().map(str::trim).unwrap_or("").is_empty() => {
-            return Err(AppError::ForbiddenMsg("Un code d'invitation est nécessaire pour créer un compte".into()));
+        "invite" => {
+            let Some(code) = invite_code else {
+                return Err(AppError::ForbiddenMsg("Un code d'invitation est nécessaire pour créer un compte".into()));
+            };
+            // Code vérifié tout de suite, consommé seulement à la création du compte (transaction annulée).
+            let mut probe = state.db.begin().await?;
+            crate::handlers::site_admin::consume_invite(&mut probe, code).await?;
+            probe.rollback().await?;
         }
         _ => {}
     }
 
-    let exists = sqlx::query_scalar::<_, bool>(
-        "SELECT EXISTS(SELECT 1 FROM users WHERE email=$1)",
-    )
-    .bind(&email_lower)
-    .fetch_one(&state.db)
-    .await?;
+    // Haché avant de savoir si l'adresse existe : même durée dans les deux cas.
+    let auth_hash = hash_auth(auth)?;
+    let ok = Json(serde_json::json!({ "pending": true }));
 
+    let exists: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM users WHERE email=$1)")
+        .bind(&email_lower)
+        .fetch_one(&state.db)
+        .await?;
     if exists {
-        return Err(AppError::Conflict("Email déjà utilisé".into()));
+        let html = mail_html(
+            "Tentative d'inscription avec ton adresse",
+            "<p>Quelqu'un a essayé de créer un compte ForgeChat avec cette adresse, qui a déjà un compte. \
+             Aucun compte n'a été créé.</p><p style=\"color:#949ba4;font-size:13px\">Si c'était toi, connecte-toi \
+             ou utilise « Mot de passe oublié ». Sinon, tu peux ignorer cet e-mail.</p>",
+        );
+        send_in_background(&state, email_lower, "Tentative d'inscription — ForgeChat", html);
+        return Ok(ok);
     }
 
+    let code = format!("{:06}", rand::thread_rng().gen_range(0..1_000_000));
     let discriminator = format!("{:04}", rand::thread_rng().gen_range(1..=9999));
-    let password_hash = hash(&body.password, DEFAULT_COST)
-        .map_err(|e| AppError::Internal(e.into()))?;
+    sqlx::query(
+        "INSERT INTO pending_registrations (email, username, password_hash, discriminator, code, expires_at, auth_hash, kdf_salt, invite_code)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+         ON CONFLICT (email) DO UPDATE SET username=EXCLUDED.username, discriminator=EXCLUDED.discriminator,
+            code=EXCLUDED.code, expires_at=EXCLUDED.expires_at, auth_hash=EXCLUDED.auth_hash,
+            kdf_salt=EXCLUDED.kdf_salt, invite_code=EXCLUDED.invite_code, created_at=NOW()",
+    )
+    .bind(&email_lower)
+    .bind(&body.username)
+    .bind(NO_PASSWORD)
+    .bind(&discriminator)
+    .bind(&code)
+    .bind(Utc::now() + chrono::Duration::minutes(PENDING_TTL_MIN))
+    .bind(&auth_hash)
+    .bind(kdf_salt)
+    .bind(invite_code)
+    .execute(&state.db)
+    .await?;
+    let html = mail_html(
+        "Confirme ton adresse",
+        &format!(
+            "<p>Ton code de vérification ForgeChat :</p><p style=\"font-size:32px;letter-spacing:6px;text-align:center;color:#fff\">{code}</p>\
+             <p style=\"color:#949ba4;font-size:13px\">Il expire dans {PENDING_TTL_MIN} minutes. Si tu n'es pas à l'origine de cette inscription, ignore cet e-mail.</p>"
+        ),
+    );
+    send_in_background(&state, email_lower, "Ton code de vérification — ForgeChat", html);
+    Ok(ok)
+}
 
-    // Le code et le compte vivent dans la même transaction : un pseudo déjà pris ne brûle pas le code.
+/// POST /api/auth/verify-email {email, code} : crée le compte (et consomme l'invitation).
+pub async fn verify_email(
+    State(state): State<AppState>,
+    Json(body): Json<serde_json::Value>,
+) -> Result<(HeaderMap, Json<AuthResponse>)> {
+    let email = body["email"]
+        .as_str()
+        .map(email_norm)
+        .ok_or_else(|| AppError::BadRequest("email requis".into()))?;
+    let code = body["code"]
+        .as_str()
+        .map(str::trim)
+        .ok_or_else(|| AppError::BadRequest("code requis".into()))?;
+    hit(&state, &account_key("verify_attempts", &email), 5, 900).await?;
+
+    let bad = || AppError::BadRequest("Code incorrect ou expiré".into());
+    let pending = sqlx::query_as::<_, PendingRegistration>("SELECT * FROM pending_registrations WHERE email=$1")
+        .bind(&email)
+        .fetch_optional(&state.db)
+        .await?
+        .ok_or_else(bad)?;
+    if pending.expires_at < Utc::now() || pending.auth_hash.is_empty() {
+        return Err(bad());
+    }
+    if !constant_time_eq(pending.code.as_bytes(), code.as_bytes()) {
+        return Err(bad());
+    }
+
     let mut tx = state.db.begin().await?;
-    let invite = match (mode.as_str(), body.invite_code.as_deref()) {
-        ("invite", Some(code)) => Some(crate::handlers::site_admin::consume_invite(&mut tx, code).await?),
+    // Usage unique, même en course : seul celui qui supprime la ligne crée le compte.
+    let taken = sqlx::query("DELETE FROM pending_registrations WHERE id=$1")
+        .bind(pending.id)
+        .execute(&mut *tx)
+        .await?;
+    if taken.rows_affected() != 1 {
+        return Err(bad());
+    }
+    let first_user: bool = sqlx::query_scalar(crate::handlers::site_admin::NO_REAL_USERS_SQL).fetch_one(&mut *tx).await?;
+    let mode = if first_user { "open".to_string() } else { crate::handlers::site_admin::registration_mode(&state).await };
+    let invite = match mode.as_str() {
+        "closed" => return Err(AppError::ForbiddenMsg("Les inscriptions sont fermées".into())),
+        "invite" => {
+            let code = pending.invite_code.as_deref()
+                .ok_or_else(|| AppError::ForbiddenMsg("Un code d'invitation est nécessaire pour créer un compte".into()))?;
+            Some(crate::handlers::site_admin::consume_invite(&mut tx, code).await?)
+        }
         _ => None,
     };
     let user = sqlx::query_as::<_, crate::models::user::User>(
-        "INSERT INTO users (username, discriminator, email, password_hash, is_verified, invited_by, registration_invite_id)
-         VALUES ($1, $2, $3, $4, true, $5, $6) RETURNING *",
+        "INSERT INTO users (username, discriminator, email, password_hash, auth_hash, kdf_salt, is_verified, invited_by, registration_invite_id)
+         VALUES ($1, $2, $3, $4, $5, $6, true, $7, $8) RETURNING *",
     )
-    .bind(&body.username)
-    .bind(&discriminator)
-    .bind(&email_lower)
-    .bind(&password_hash)
+    .bind(&pending.username)
+    .bind(&pending.discriminator)
+    .bind(&pending.email)
+    .bind(NO_PASSWORD)
+    .bind(&pending.auth_hash)
+    .bind(&pending.kdf_salt)
     .bind(invite.and_then(|(_, by)| by))
     .bind(invite.map(|(id, _)| id))
     .fetch_one(&mut *tx)
@@ -194,10 +273,18 @@ pub async fn register(
             .execute(&mut *tx)
             .await?;
     }
+    // Propriétaire du site : lié une fois pour toutes au premier compte qui prouve l'adresse du
+    // propriétaire, puis à son UUID seulement (un compte recréé avec l'adresse n'hérite de rien).
+    if user.email == crate::handlers::site_admin::admin_email() {
+        sqlx::query("INSERT INTO site_settings (key, value) VALUES ('owner_user_id', $1) ON CONFLICT (key) DO NOTHING")
+            .bind(user.id.to_string())
+            .execute(&mut *tx)
+            .await?;
+    }
     tx.commit().await?;
 
     let access_token = create_token(user.id, None, &state.config.jwt_secret, &state.config.jwt_issuer)
-        .map_err(|e| AppError::Internal(e))?;
+        .map_err(AppError::Internal)?;
     let refresh_token = generate_refresh_token();
     store_refresh_token(&state, user.id, &refresh_token).await?;
 
@@ -206,83 +293,24 @@ pub async fn register(
     Ok((headers, Json(auth)))
 }
 
-pub async fn verify_email(
-    State(state): State<AppState>,
-    Json(body): Json<serde_json::Value>,
-) -> Result<(HeaderMap, Json<AuthResponse>)> {
-    let email = body["email"]
-        .as_str()
-        .map(|s| s.to_lowercase())
-        .ok_or_else(|| AppError::BadRequest("email requis".into()))?;
-
-    let code = body["code"]
-        .as_str()
-        .ok_or_else(|| AppError::BadRequest("code requis".into()))?;
-
-    {
-        let key = format!("verify_attempts:{}", crate::privacy::pseudonym(&email));
-        let mut redis = state.redis.lock().await;
-        let count: Option<i64> = redis.get(&key).await.unwrap_or(None);
-        let count = count.unwrap_or(0);
-        if count >= 5 {
-            return Err(AppError::TooManyRequests);
-        }
-        let _: () = redis.incr(&key, 1).await.unwrap_or(());
-        if count == 0 {
-            let _: () = redis.expire(&key, 900).await.unwrap_or(());
-        }
+/// Vérifie la preuve de connexion selon l'état du compte (voir LoginRequest). `Ok(None)` = refus.
+pub(crate) fn login_credentials(
+    body: &LoginRequest,
+    user_opt: Option<crate::models::user::User>,
+) -> Result<Option<crate::models::user::User>> {
+    // Hash constant pour égaliser le timing même quand l'email n'existe pas
+    const DUMMY_HASH: &str = "$2b$12$KIkwRMJIlEHNBFdnfwDnSOkypZs5yWjn7KDSnT5hHUH2EPT3HCVNS";
+    let Some(user) = user_opt else {
+        let _ = verify(body.auth.as_deref().or(body.password.as_deref()).unwrap_or(""), DUMMY_HASH);
+        return Ok(None);
+    };
+    if user.auth_hash.is_some() && body.password.is_some() {
+        // Ancienne appli sur un compte migré : le champ n'est ni vérifié ni journalisé.
+        return Err(AppError::UpgradeRequired(UPGRADE_MSG.into()));
     }
-
-    let pending = sqlx::query_as::<_, PendingRegistration>(
-        "SELECT * FROM pending_registrations WHERE email=$1",
-    )
-    .bind(&email)
-    .fetch_optional(&state.db)
-    .await?
-    .ok_or_else(|| AppError::BadRequest("Aucune inscription en attente pour cet email".into()))?;
-
-    if pending.expires_at < Utc::now() {
-        sqlx::query("DELETE FROM pending_registrations WHERE email=$1")
-            .bind(&email)
-            .execute(&state.db)
-            .await?;
-        return Err(AppError::BadRequest("Code expiré, recommence l'inscription".into()));
-    }
-
-    if !constant_time_eq(pending.code.as_bytes(), code.as_bytes()) {
-        return Err(AppError::BadRequest("Code incorrect".into()));
-    }
-
-    let user = sqlx::query_as::<_, crate::models::user::User>(
-        "INSERT INTO users (username, discriminator, email, password_hash, is_verified)
-         VALUES ($1, $2, $3, $4, true) RETURNING *",
-    )
-    .bind(&pending.username)
-    .bind(&pending.discriminator)
-    .bind(&pending.email)
-    .bind(&pending.password_hash)
-    .fetch_one(&state.db)
-    .await?;
-
-    sqlx::query("DELETE FROM pending_registrations WHERE email=$1")
-        .bind(&email)
-        .execute(&state.db)
-        .await?;
-
-    {
-        let key = format!("verify_attempts:{}", crate::privacy::pseudonym(&email));
-        let mut redis = state.redis.lock().await;
-        let _: () = redis.del(&key).await.unwrap_or(());
-    }
-
-    let access_token = create_token(user.id, None, &state.config.jwt_secret, &state.config.jwt_issuer)
-        .map_err(|e| AppError::Internal(e))?;
-    let refresh_token = generate_refresh_token();
-    store_refresh_token(&state, user.id, &refresh_token).await?;
-
-    let auth = AuthResponse { access_token, refresh_token, user: user.into_self_public() };
-    let headers = auth_cookie_headers(&auth, is_secure(&state));
-    Ok((headers, Json(auth)))
+    let ok = auth_v2::check_proof(&user.password_hash, user.auth_hash.as_deref(), body.auth.as_deref(), body.password.as_deref())
+        == auth_v2::ProofCheck::Ok;
+    Ok(ok.then_some(user))
 }
 
 pub async fn login(
@@ -291,27 +319,27 @@ pub async fn login(
     headers: axum::http::HeaderMap,
     Json(body): Json<LoginRequest>,
 ) -> Result<(HeaderMap, Json<AuthResponse>)> {
-    let client_ip = crate::privacy::client_key(&headers, &addr);
+    let email = email_norm(&body.email);
+    // Par IP (toutes les tentatives) et par compte (réussites décomptées : l'attaquant ne réussit
+    // jamais sur le compte visé). Plus de remise à zéro par IP après une connexion réussie.
+    hit(&state, &format!("login_attempts:{}", crate::privacy::client_key(&headers, &addr)), 20, 900).await?;
+    let acct_key = account_key("login_acct", &email);
+    hit(&state, &acct_key, 10, 900).await?;
+    // Migration annoncée : format vérifié avant toute écriture.
+    let migration = match (body.auth_new.as_deref(), body.kdf_salt_new.as_deref()) {
+        (Some(a), Some(s)) => {
+            check_auth(a)?;
+            check_salt(s)?;
+            Some((a, s))
+        }
+        _ => None,
+    };
 
-    check_login_rate_limit(&state, &client_ip).await?;
-
-    let user_opt = sqlx::query_as::<_, crate::models::user::User>(
-        "SELECT * FROM users WHERE email=$1",
-    )
-    .bind(body.email.to_lowercase())
-    .fetch_optional(&state.db)
-    .await?;
-
-    // Hash constant pour égaliser le timing même quand l'email n'existe pas
-    const DUMMY_HASH: &str = "$2b$12$KIkwRMJIlEHNBFdnfwDnSOkypZs5yWjn7KDSnT5hHUH2EPT3HCVNS";
-    let hash_to_check = user_opt.as_ref()
-        .map(|u| u.password_hash.as_str())
-        .unwrap_or(DUMMY_HASH);
-
-    // Hachage illisible (compte « Utilisateur supprimé ») = refus, pas une erreur 500.
-    let valid = verify(&body.password, hash_to_check).unwrap_or(false);
-
-    let user = user_opt.filter(|_| valid).ok_or(AppError::Unauthorized)?;
+    let user_opt = sqlx::query_as::<_, crate::models::user::User>("SELECT * FROM users WHERE email=$1")
+        .bind(&email)
+        .fetch_optional(&state.db)
+        .await?;
+    let user = login_credentials(&body, user_opt)?.ok_or(AppError::Unauthorized)?;
 
     // Compte banni du site : le mot de passe est bon, l'accès est refusé avec le motif.
     let (banned_at, ban_reason): (Option<chrono::DateTime<Utc>>, Option<String>) =
@@ -326,29 +354,23 @@ pub async fn login(
         }));
     }
 
-    // Vérification 2FA si activée
+    // Double authentification : anti-rejeu, codes de secours, 5 échecs / 15 min par compte.
     if user.totp_enabled {
-        let totp_secret: Option<String> = sqlx::query_scalar(
-            "SELECT totp_secret FROM users WHERE id=$1",
-        )
-        .bind(user.id)
-        .fetch_one(&state.db)
-        .await?;
-
-        match (body.totp_code.as_deref(), totp_secret.as_deref()) {
-            (None, _) => return Err(AppError::TotpRequired),
-            (Some(code), Some(secret)) => {
-                if !crate::handlers::totp::verify_totp(secret, code)
-                    && !crate::handlers::totp::verify_and_consume_backup_code(&state, user.id, code).await?
-                {
-                    return Err(AppError::Unauthorized);
-                }
-            }
-            (Some(_), None) => return Err(AppError::TotpRequired),
+        let Some(code) = body.totp_code.as_deref() else { return Err(AppError::TotpRequired) };
+        if !crate::handlers::totp::check_code(&state, user.id, code).await? {
+            return Err(AppError::Unauthorized);
         }
     }
 
-    reset_login_rate_limit(&state, &client_ip).await;
+    if user.auth_hash.is_none() {
+        if let Some((auth_new, salt_new)) = migration {
+            auth_v2::migrate_account(&state.db, user.id, auth_new, salt_new).await?;
+        }
+    }
+    {
+        let mut redis = state.redis.lock().await;
+        let _: () = redis.decr(&acct_key, 1).await.unwrap_or(());
+    }
 
     // Le statut en direct est posé par la connexion WebSocket (presence.rs) :
     // l'écrire ici à « online » rendait visible un utilisateur invisible.
@@ -356,13 +378,8 @@ pub async fn login(
     let refresh_token = generate_refresh_token();
     store_refresh_token(&state, user.id, &refresh_token).await?;
 
-    // Enregistrer la session
+    // Session : même hachage que refresh_tokens.token_hash, pour que revoke_session la retrouve.
     let sid: Option<Uuid> = {
-        // hash_token() (même fonction que pour refresh_tokens.token_hash, base64) --
-        // avant ce fix, ce bloc calculait son propre hash hex-encodé en dur, donc
-        // user_sessions.refresh_token_hash ne matchait JAMAIS refresh_tokens.token_hash
-        // (encodages différents). Sans corrélation possible, revoke_session ne pouvait
-        // pas retrouver quel refresh_token invalider -- "Révoquer" ne faisait rien.
         let token_hash = hash_token(&refresh_token);
         // Étiquette d'appareil seulement, ni user-agent brut ni IP.
         let device = headers.get("user-agent")
@@ -379,7 +396,7 @@ pub async fn login(
         .ok()
     };
     let access_token = create_token(user.id, sid, &state.config.jwt_secret, &state.config.jwt_issuer)
-        .map_err(|e| AppError::Internal(e))?;
+        .map_err(AppError::Internal)?;
 
     let auth = AuthResponse { access_token, refresh_token, user: user.into_self_public() };
     let resp_headers = auth_cookie_headers(&auth, is_secure(&state));
@@ -486,43 +503,26 @@ pub(crate) async fn rotate_refresh_token(state: &AppState, token: &str) -> Resul
     Ok((user_id, new_refresh_token, access_token))
 }
 
+/// POST /auth/change-password {old_auth, new_auth, new_kdf_salt, wrapped?}
+/// (`old_password` au lieu de `old_auth` seulement pour un compte pas encore migré).
+/// Atomique : nouvelle preuve, nouveau sel et clé E2E ré-enveloppée (v2) ensemble ; toutes les
+/// sessions sont révoquées.
 pub async fn change_password(
     State(state): State<AppState>,
     axum::Extension(claims): axum::Extension<crate::middleware::auth::Claims>,
     axum::Extension(raw_token): axum::Extension<crate::middleware::auth::RawToken>,
     Json(body): Json<serde_json::Value>,
 ) -> Result<Json<serde_json::Value>> {
-    // Rate limit : 5 tentatives / 15 min par compte. Avant : par le 1er
-    // X-Forwarded-For, que le client choisit librement (essais illimités).
-    {
-        let key = format!("chgpw_attempts:{}", claims.sub);
-        let mut redis = state.redis.lock().await;
-        let count: Option<i64> = redis.get(&key).await.unwrap_or(None);
-        let count = count.unwrap_or(0);
-        if count >= 5 {
-            return Err(AppError::TooManyRequests);
+    let (Some(new_auth), Some(new_salt)) = (body["new_auth"].as_str(), body["new_kdf_salt"].as_str()) else {
+        if body.get("new_password").is_some() {
+            return Err(AppError::UpgradeRequired(UPGRADE_MSG.into()));
         }
-        let _: () = redis.incr(&key, 1).await.unwrap_or(());
-        if count == 0 {
-            let _: () = redis.expire(&key, 900).await.unwrap_or(());
-        }
-    }
-
-    let old_pw = body["old_password"]
-        .as_str()
-        .ok_or_else(|| AppError::BadRequest("old_password requis".into()))?;
-    let new_pw = body["new_password"]
-        .as_str()
-        .ok_or_else(|| AppError::BadRequest("new_password requis".into()))?;
-
-    if new_pw.len() < 8 {
-        return Err(AppError::BadRequest("Mot de passe min 8 chars".into()));
-    }
-    if new_pw.len() > 128 {
-        return Err(AppError::BadRequest("Mot de passe max 128 chars".into()));
-    }
-    // Clé E2E ré-enveloppée par l'appli avec le nouveau mot de passe : enregistrée
-    // dans la même transaction, sinon elle resterait scellée par l'ancien.
+        return Err(AppError::BadRequest("new_auth et new_kdf_salt requis".into()));
+    };
+    check_auth(new_auth)?;
+    check_salt(new_salt)?;
+    // Clé E2E ré-enveloppée par l'appli avec la nouvelle clé : enregistrée dans la même
+    // transaction, sinon elle resterait scellée par l'ancienne.
     let wrapped = match body.get("wrapped") {
         None | Some(serde_json::Value::Null) => None,
         Some(v) => {
@@ -532,17 +532,8 @@ pub async fn change_password(
             Some(serde_json::to_value(&w).map_err(|e| AppError::Internal(e.into()))?)
         }
     };
-
-    let pw_hash = sqlx::query_scalar::<_, String>("SELECT password_hash FROM users WHERE id=$1")
-        .bind(claims.sub)
-        .fetch_one(&state.db)
-        .await?;
-
-    if !verify(old_pw, &pw_hash).unwrap_or(false) {
-        return Err(AppError::BadRequest("Mot de passe actuel incorrect".into()));
-    }
-
-    let new_hash = hash(new_pw, DEFAULT_COST).map_err(|e| AppError::Internal(e.into()))?;
+    auth_v2::verify_proof(&state, claims.sub, body["old_auth"].as_str(), body["old_password"].as_str()).await?;
+    let new_hash = hash_auth(new_auth)?;
 
     // Blocklister le token actuel pour sa durée de vie restante
     let remaining_secs = (claims.exp - Utc::now().timestamp()).max(0) as u64;
@@ -559,9 +550,15 @@ pub async fn change_password(
         .bind(claims.sub)
         .execute(&mut *tx)
         .await?;
-    sqlx::query("UPDATE users SET password_hash=$2, updated_at=NOW() WHERE id=$1")
+    sqlx::query("DELETE FROM user_sessions WHERE user_id=$1")
+        .bind(claims.sub)
+        .execute(&mut *tx)
+        .await?;
+    sqlx::query("UPDATE users SET auth_hash=$2, kdf_salt=$3, password_hash=$4, updated_at=NOW() WHERE id=$1")
         .bind(claims.sub)
         .bind(&new_hash)
+        .bind(new_salt)
+        .bind(NO_PASSWORD)
         .execute(&mut *tx)
         .await?;
     if let Some(w) = wrapped {

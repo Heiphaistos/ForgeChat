@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
 import api from '../../api/client'
+import { passwordProof } from '../../e2e/accountKey'
 import { useAuth } from '../../store/auth'
 import { useT } from '../../i18n'
 import { serverKeyForNewOwner } from '../../e2e/serverKey'
@@ -30,7 +31,7 @@ export default function TransferOwnershipSection({ serverId, ownerId }: { server
   const transfer = useMutation({
     // Clé de récupération du serveur ré-enveloppée pour le nouveau propriétaire (null : il saisira le code).
     mutationFn: async () => api.post(`/servers/${serverId}/transfer`, {
-      user_id: target, password, server_key_owner_wrapped: await serverKeyForNewOwner(serverId, target),
+      user_id: target, ...(await passwordProof(password)), server_key_owner_wrapped: await serverKeyForNewOwner(serverId, target),
     }),
     onSuccess: () => {
       toast.success(t('transfer.done'))

@@ -29,6 +29,7 @@ export default function LoginPage() {
     setLoading(true)
     try {
       await login(email, password, needTotp ? totpCode : undefined)
+      setPassword('')
       try { localStorage.setItem('fc_last_email', email.trim()) } catch { /* stockage indisponible */ }
       const redirect = searchParams.get('redirect')
       nav(redirect && redirect.startsWith('/') && !redirect.startsWith('//') ? redirect : '/friends')
@@ -39,6 +40,8 @@ export default function LoginPage() {
         setTotpCode('')
         toast(t('auth.login.enterTotp'))
       } else {
+        setPassword('')
+        setNeedTotp(false)
         toast.error(msg || t('auth.login.error'))
       }
     } finally {

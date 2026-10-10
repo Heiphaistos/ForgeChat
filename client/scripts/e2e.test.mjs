@@ -223,3 +223,22 @@ test('brouillon chiffré par la clé de compte', async () => {
   await assert.rejects(c.openDraft(d(x.key), x.userId, V.draft.userId, x.blob))
   await assert.rejects(c.openDraft(d(x.key), x.convId, x.convId, x.blob))
 })
+
+test('connexion v2 : master, auth, wrapKey et enveloppe v2 (NFKC)', async () => {
+  const { deriveSecrets, keyAadV2, unwrapAny, unwrapKeyV2, wrapKeyV2 } = await import('../src/e2e/authKdf.ts')
+  const x = V.authV2
+  assert.equal(e(await c.pbkdf2(x.passwordNfkc, d(x.kdfSalt), x.iterations)), x.master)
+  const s = await deriveSecrets(x.password, x.kdfSalt, x.iterations)
+  assert.equal(s.auth, x.auth)
+  assert.equal(e(s.wrapKey), x.wrapKey)
+  // Même résultat avec la forme déjà normalisée : un clavier ne doit pas changer la clé.
+  assert.equal((await deriveSecrets(x.passwordNfkc, x.kdfSalt, x.iterations)).auth, x.auth)
+  assert.equal(keyAadV2(x.userId), x.aad)
+  assert.deepEqual(await wrapKeyV2(d(x.priv), s.wrapKey, x.userId, d(x.wrapped.iv)), x.wrapped)
+  assert.equal(e(await unwrapKeyV2(x.wrapped, s.wrapKey, x.userId)), x.priv)
+  assert.equal(e(await unwrapAny(x.wrapped, 'ignoré', s, x.userId)), x.priv)
+  // Autre compte (AAD) ou autre mot de passe : illisible.
+  await assert.rejects(unwrapKeyV2(x.wrapped, s.wrapKey, '00000000-0000-4000-8000-000000000000'))
+  const other = await deriveSecrets('autre mot de passe', x.kdfSalt, x.iterations)
+  await assert.rejects(unwrapKeyV2(x.wrapped, other.wrapKey, x.userId))
+})

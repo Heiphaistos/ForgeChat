@@ -1,4 +1,5 @@
 pub mod auth;
+pub mod auth_v2;
 pub mod site_admin;
 pub mod accounts;
 pub mod gifs;

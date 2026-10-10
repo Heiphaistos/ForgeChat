@@ -4,6 +4,7 @@ import { Alert, ScrollView, StyleSheet, View } from 'react-native'
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { authApi } from '@/api/auth'
+import { MIN_PASSWORD, deriveSecrets, newKdfSalt } from '@/e2e/authKdf'
 import { Button, PasswordField, T, TextField } from '@/components/ui'
 import { extractResetToken } from '@/features/account/rules'
 import { useT } from '@/i18n'
@@ -29,13 +30,17 @@ export default function ResetPasswordScreen() {
 
   const submit = async () => {
     if (!token) return setError(t('social.reset.pasteLink'))
-    if (pw.length < 8 || pw.length > 128) return setError(t('social.reset.length'))
+    if (pw.length < MIN_PASSWORD || pw.length > 128) return setError(t('social.reset.length'))
     if (passwordStrength(pw).score < 2) return setError(t('social.reset.weak'))
     if (pw !== confirm) return setError(t('social.reset.mismatch'))
     setLoading(true)
     setError(null)
     try {
-      await authApi.resetPassword(token, pw)
+      // Le nouveau mot de passe ne part pas : seulement sa preuve et le nouveau sel.
+      const kdfSalt = newKdfSalt()
+      const s = await deriveSecrets(pw, kdfSalt)
+      s.wrapKey.fill(0)
+      await authApi.resetPassword(token, s.auth, kdfSalt)
       // Le serveur a révoqué toutes les sessions, y compris celle-ci le cas échéant.
       if (useAuth.getState().status === 'signedIn') {
         await useAuth.getState().signOutLocally(t('social.reset.signedOut'))
@@ -46,6 +51,8 @@ export default function ResetPasswordScreen() {
     } catch (e) {
       setError(errorMessage(e))
     } finally {
+      setPw('')
+      setConfirm('')
       setLoading(false)
     }
   }

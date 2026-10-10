@@ -275,5 +275,24 @@
       "iv": "cHFyc3R1dnd4eXp7",
       "ct": "OH0zHOPbUYDWsisK5zO36VLIqkoSzehfMqV7uHGYr18yS4d-HIK2rv-jT-evzede45GQ9viD_rg7o4oA"
     }
+  },
+  "authV2": {
+    "password": "Ｍot de passe ﬁable 42!",
+    "passwordNfkc": "Mot de passe fiable 42!",
+    "kdfSalt": "Hh8gISIjJCUmJygpKissLQ",
+    "iterations": 1000,
+    "master": "bulbuzlbsLlBkcTZvJeRqGBgN929qHoEM1RdNOipv04",
+    "authInfo": "forgechat auth v2",
+    "wrapInfo": "forgechat wrap v2",
+    "auth": "hCkR6hWLB8aFyS5z4wtHeXVv3M_aA0j3Csgl3eg2AfI",
+    "wrapKey": "3zemAq25OGqxkrPlCvxTIbIz-_fshHWjSytP1rPtres",
+    "userId": "6f1c2b3a-9d4e-4c5b-8a7f-0e1d2c3b4a59",
+    "priv": "L24splOxTaDPUjoID3CwNoGNy24phnKElhs2cqVYqFY",
+    "aad": "forgechat key v2|6f1c2b3a-9d4e-4c5b-8a7f-0e1d2c3b4a59",
+    "wrapped": {
+      "v": 2,
+      "iv": "WltcXV5fYGFiY2Rl",
+      "ct": "bT1vma47nNkXxCTJyWo-vpX7PzX2CRuFBk7RQ3jM7xtwrgE4M62sfIgkYorm_EbN"
+    }
   }
 }
