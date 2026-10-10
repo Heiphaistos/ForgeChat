@@ -1,7 +1,9 @@
 // Index local des messages déchiffrés (IndexedDB `forgechat-search`), pour chercher dans
 // les conversations chiffrées sans jamais envoyer le texte au serveur. Alimenté au
 // déchiffrement (e2e/conversations.ts), vidé à la déconnexion et au changement de compte,
-// purgé des messages supprimés ou échus (messages éphémères).
+// purgé des messages supprimés ou échus (messages éphémères). Le texte, l'auteur et le nom de
+// la conversation sont chiffrés au repos (AES-GCM, clé NON extractible rangée dans la base,
+// effacée avec elle) : une copie du disque ne livre pas le texte déchiffré en clair.
 import { useAuth } from '../store/auth'
 import { isEmptyQuery, matches, parseQuery, type IndexedMsg } from './searchQuery'
 
@@ -17,11 +19,16 @@ const FLUSH_MS = 1000
 let dbp: Promise<IDBDatabase> | null = null
 function db(): Promise<IDBDatabase> {
   dbp ??= new Promise((resolve, reject) => {
-    const open = indexedDB.open(DB, 1)
-    open.onupgradeneeded = () => {
-      const s = open.result.createObjectStore(MSGS, { keyPath: 'id' })
-      s.createIndex('createdAt', 'createdAt')
-      open.result.createObjectStore(META)
+    const open = indexedDB.open(DB, 2)
+    open.onupgradeneeded = e => {
+      if (e.oldVersion < 1) {
+        const s = open.result.createObjectStore(MSGS, { keyPath: 'id' })
+        s.createIndex('createdAt', 'createdAt')
+        open.result.createObjectStore(META)
+      } else {
+        // Version 1 : textes en clair, effacés (réindexés au prochain déchiffrement).
+        open.transaction?.objectStore(MSGS).clear()
+      }
     }
     open.onerror = () => { dbp = null; reject(open.error) }
     open.onsuccess = () => resolve(open.result)
@@ -37,6 +44,45 @@ const req = <T>(r: IDBRequest<T>) => new Promise<T>((resolve, reject) => {
   r.onsuccess = () => resolve(r.result)
   r.onerror = () => reject(r.error)
 })
+
+// ─── Chiffrement au repos ────────────────────────────────────────────────────
+/** Entrée rangée : métadonnées en clair (filtres, tri), contenu `{text, authorName, convName}` chiffré. */
+type Stored = Omit<IndexedMsg, 'text' | 'authorName' | 'convName'> & { iv: Uint8Array<ArrayBuffer>; ct: ArrayBuffer }
+const enc = new TextEncoder()
+const dec = new TextDecoder()
+
+let keyp: Promise<CryptoKey> | null = null
+/** Clé AES-GCM non extractible de cet index (créée au premier usage, effacée avec l'index). */
+function restKey(d: IDBDatabase): Promise<CryptoKey> {
+  keyp ??= (async () => {
+    const got = await req(d.transaction(META).objectStore(META).get('key'))
+    if (got instanceof CryptoKey) return got
+    const k = await crypto.subtle.generateKey({ name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt'])
+    const tx = d.transaction(META, 'readwrite')
+    tx.objectStore(META).put(k, 'key')
+    await done(tx)
+    return k
+  })().catch(e => { keyp = null; throw e })
+  return keyp
+}
+
+async function sealEntry(key: CryptoKey, m: IndexedMsg): Promise<Stored> {
+  const { text, authorName, convName, ...meta } = m
+  const iv = crypto.getRandomValues(new Uint8Array(12))
+  const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv, additionalData: enc.encode(m.id) }, key,
+    enc.encode(JSON.stringify({ text, authorName, convName: convName ?? null })))
+  return { ...meta, iv, ct }
+}
+
+async function openEntry(key: CryptoKey, s: Stored): Promise<IndexedMsg | null> {
+  try {
+    const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: s.iv, additionalData: enc.encode(s.id) }, key, s.ct)
+    const { iv: _iv, ct: _ct, ...meta } = s
+    return { ...meta, ...(JSON.parse(dec.decode(pt)) as Pick<IndexedMsg, 'text' | 'authorName' | 'convName'>) }
+  } catch {
+    return null // autre clé (index effacé entre-temps) ou entrée altérée
+  }
+}
 
 // ─── Noms des conversations (filtre dans:) ───────────────────────────────────
 const convNames = new Map<string, { name: string; serverId?: string | null }>()
@@ -63,6 +109,9 @@ async function flush() {
   removed.clear()
   try {
     const d = await db()
+    // Chiffré AVANT d'ouvrir la transaction d'écriture (un await la refermerait).
+    const key = await restKey(d)
+    const sealed = await Promise.all(puts.map(m => sealEntry(key, m)))
     const tx = d.transaction([MSGS, META], 'readwrite')
     const meta = tx.objectStore(META)
     const owner = await req(meta.get('owner'))
@@ -72,7 +121,7 @@ async function flush() {
       meta.put(me, 'owner')
     }
     const store = tx.objectStore(MSGS)
-    for (const m of puts) store.put(m)
+    for (const m of sealed) store.put(m)
     for (const id of dels) store.delete(id)
     await done(tx)
     await trim(d)
@@ -122,25 +171,25 @@ export async function searchLocal(input: string, convId?: string): Promise<Index
   try {
     const d = await db()
     if ((await req(d.transaction(META).objectStore(META).get('owner'))) !== me) return []
+    const key = await restKey(d)
     const out: IndexedMsg[] = []
     const expired: string[] = []
     const now = Date.now()
-    await new Promise<void>((resolve, reject) => {
-      const cur = d.transaction(MSGS).objectStore(MSGS).index('createdAt').openCursor(null, 'prev')
-      cur.onerror = () => reject(cur.error)
-      cur.onsuccess = () => {
-        const c = cur.result
-        if (!c || out.length >= MAX_RESULTS) return resolve()
-        const m = c.value as IndexedMsg
-        if (m.expiresAt && Date.parse(m.expiresAt) <= now) expired.push(m.id)
-        else if (!convId || m.convId === convId) {
-          // Nom connu depuis l'indexation (salon renommé, conversation ouverte plus tard).
-          const named = m.convName ? m : { ...m, convName: convNames.get(m.convId)?.name ?? null }
-          if (matches(named, q, now)) out.push(named)
-        }
-        c.continue()
+    // Tout est lu d'abord (le déchiffrement est asynchrone), du plus récent au plus ancien.
+    // ponytail: déchiffre tout l'index à chaque recherche (50 000 entrées au plus) ; index chiffré si c'est trop lent.
+    const all = (await req(d.transaction(MSGS).objectStore(MSGS).index('createdAt').getAll()) as Stored[]).reverse()
+    for (let i = 0; i < all.length && out.length < MAX_RESULTS; i += 500) {
+      const page = all.slice(i, i + 500).filter(s => {
+        if (s.expiresAt && Date.parse(s.expiresAt) <= now) { expired.push(s.id); return false }
+        return !convId || s.convId === convId
+      })
+      for (const m of await Promise.all(page.map(s => openEntry(key, s)))) {
+        if (!m || out.length >= MAX_RESULTS) continue
+        // Nom connu depuis l'indexation (salon renommé, conversation ouverte plus tard).
+        const named = m.convName ? m : { ...m, convName: convNames.get(m.convId)?.name ?? null }
+        if (matches(named, q, now)) out.push(named)
       }
-    })
+    }
     expired.forEach(unindexMessage)
     return out
   } catch {
@@ -162,6 +211,7 @@ export async function clearSearchIndex() {
   pending.clear()
   removed.clear()
   convNames.clear()
+  keyp = null // la clé est effacée avec l'index : une nouvelle sera créée
   try {
     const d = await db()
     const tx = d.transaction([MSGS, META], 'readwrite')

@@ -1,6 +1,5 @@
 import { create } from 'zustand'
 import { immer } from 'zustand/middleware/immer'
-import { persist, createJSONStorage } from 'zustand/middleware'
 import type { EncPayload, MsgBody } from '../e2e/crypto'
 import type { E2EState } from '../e2e/conversations'
 import { mergeUnlocked } from '../e2e/keysRetry'
@@ -13,22 +12,35 @@ interface DraftState {
   clearDraft: (channelId: string) => void
 }
 
-export const useDraft = create<DraftState>()(
-  persist(
-    (set, get) => ({
-      drafts: {},
-      setDraft: (channelId, content) => set({
-        drafts: content.trim()
-          ? { ...get().drafts, [channelId]: content }
-          : Object.fromEntries(Object.entries(get().drafts).filter(([k]) => k !== channelId)),
-      }),
-      clearDraft: (channelId) => set({
-        drafts: Object.fromEntries(Object.entries(get().drafts).filter(([k]) => k !== channelId)),
-      }),
-    }),
-    { name: 'fc-drafts', storage: createJSONStorage(() => localStorage) }
-  )
-)
+/**
+ * Ancien stockage des brouillons EN CLAIR (localStorage `fc-drafts`) : relu une fois puis effacé.
+ * Les brouillons vivent désormais en mémoire ; leur copie durable est chiffrée sur le serveur
+ * (e2e/drafts.ts, qui envoie aussi ces anciens brouillons au premier chargement).
+ */
+function legacyDrafts(): Record<string, string> {
+  try {
+    const raw = localStorage.getItem('fc-drafts')
+    localStorage.removeItem('fc-drafts')
+    const d: unknown = raw ? JSON.parse(raw)?.state?.drafts : null
+    return d && typeof d === 'object'
+      ? Object.fromEntries(Object.entries(d).filter((e): e is [string, string] => typeof e[1] === 'string'))
+      : {}
+  } catch {
+    return {}
+  }
+}
+
+export const useDraft = create<DraftState>()((set, get) => ({
+  drafts: legacyDrafts(),
+  setDraft: (channelId, content) => set({
+    drafts: content.trim()
+      ? { ...get().drafts, [channelId]: content }
+      : Object.fromEntries(Object.entries(get().drafts).filter(([k]) => k !== channelId)),
+  }),
+  clearDraft: (channelId) => set({
+    drafts: Object.fromEntries(Object.entries(get().drafts).filter(([k]) => k !== channelId)),
+  }),
+}))
 
 export interface Attachment {
   id: string
