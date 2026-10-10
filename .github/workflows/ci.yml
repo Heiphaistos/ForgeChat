@@ -73,7 +73,10 @@ jobs:
       # Clés jetables de test (32 octets fixes en base64), jamais celles de la prod.
       TOTP_ENC_KEY: AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=
       EMAIL_ENC_KEY: AgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgI=
-      # Sans SMTP, les scripts lisent le code de vérification d'e-mail en base (scripts/_auth.mjs).
+      # Le serveur écrit ses e-mails dans ce dossier au lieu de les envoyer (refusé avec un
+      # FRONTEND_URL https) : les scripts y lisent le code de vérification (scripts/_auth.mjs).
+      FORGECHAT_TEST_MAILBOX: /tmp/mails
+      # news.api.mjs pose ses fils de forum directement en base.
       FORGECHAT_PSQL: postgres://forgechat:ci@127.0.0.1:5432/forgechat
       PORT: '58080'
       UPLOAD_DIR: /tmp/uploads

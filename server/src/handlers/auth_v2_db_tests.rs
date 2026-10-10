@@ -146,7 +146,9 @@ async fn auth_v2_email_at_rest() {
     let redis_url = std::env::var("FORGECHAT_TEST_REDIS_URL").expect("FORGECHAT_TEST_REDIS_URL");
     std::env::set_var("DATABASE_URL", "postgres://inutilise");
     std::env::set_var("JWT_SECRET", "secret-de-test-assez-long-pour-demarrer-0123456789");
-    let config = crate::config::Config::from_env().unwrap();
+    let mut config = crate::config::Config::from_env().unwrap();
+    let mailbox = std::env::temp_dir().join(format!("fc-mails-{}", Uuid::new_v4()));
+    config.test_mailbox = Some(mailbox.to_string_lossy().into_owned());
     let conn = redis::Client::open(redis_url).unwrap().get_connection_manager().await.unwrap();
     let state = AppState::new(db.clone(), conn, config).await;
     sqlx::query("INSERT INTO site_settings (key, value) VALUES ('registration_mode', 'open') ON CONFLICT (key) DO UPDATE SET value='open'")
@@ -162,9 +164,13 @@ async fn auth_v2_email_at_rest() {
     })).unwrap();
     let _ = crate::handlers::auth::register(State(state.clone()), ip(), HeaderMap::new(), Json(reg)).await.unwrap();
     let h = crate::email_crypto::hmac(&email);
-    let (code, clear): (String, Option<String>) =
+    let (stored, clear): (String, Option<String>) =
         sqlx::query_as("SELECT code, email FROM pending_registrations WHERE email_hmac=$1").bind(&h).fetch_one(&db).await.unwrap();
     assert_eq!(clear, None);
+    // Le code n'arrive que par e-mail (ici la boîte de test) ; la base n'en garde qu'une empreinte.
+    let code = mailed_code(&mailbox, &norm).await;
+    assert_eq!(stored.len(), 64);
+    assert!(!stored.contains(&code));
 
     // Vérification : compte créé avec empreinte et adresse chiffrée.
     let (_, Json(created)) = crate::handlers::auth::verify_email(State(state.clone()), HeaderMap::new(), Json(json!({ "email": norm, "code": code })))
@@ -210,4 +216,40 @@ async fn auth_v2_email_at_rest() {
     for u in [id, old] {
         sqlx::query("DELETE FROM users WHERE id=$1").bind(u).execute(&db).await.unwrap();
     }
+
+    // 5 mauvais codes : la demande est annulée, même le bon code ne passe plus.
+    let email2 = format!("t2.{}@gmail.com", &tag[..12]);
+    let reg: crate::models::user::RegisterRequest = serde_json::from_value(json!({
+        "username": format!("b{}", &tag[..19]), "email": email2, "auth": AUTH, "kdf_salt": SALT,
+    })).unwrap();
+    let _ = crate::handlers::auth::register(State(state.clone()), ip(), HeaderMap::new(), Json(reg)).await.unwrap();
+    let good = mailed_code(&mailbox, &email2).await;
+    let wrong = if good == "000000" { "000001" } else { "000000" };
+    for _ in 0..5 {
+        let r = crate::handlers::auth::verify_email(State(state.clone()), HeaderMap::new(), Json(json!({ "email": email2, "code": wrong }))).await;
+        assert!(r.is_err());
+    }
+    let left: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM pending_registrations WHERE email_hmac=$1")
+        .bind(crate::email_crypto::hmac(&email2)).fetch_one(&db).await.unwrap();
+    assert_eq!(left, 0, "demande annulée au 5e mauvais code");
+    let _ = std::fs::remove_dir_all(&mailbox);
+}
+
+/// Code à 6 chiffres du dernier e-mail écrit pour `to` dans la boîte de test (envoi en tâche de fond).
+async fn mailed_code(dir: &std::path::Path, to: &str) -> String {
+    for _ in 0..100 {
+        let mut names: Vec<_> = std::fs::read_dir(dir).into_iter().flatten().flatten()
+            .map(|e| e.path()).filter(|p| p.extension().is_some_and(|x| x == "json")).collect();
+        names.sort();
+        for p in names.iter().rev() {
+            let mail: Value = serde_json::from_str(&std::fs::read_to_string(p).unwrap()).unwrap();
+            if mail["to"] == to {
+                let body = mail["body"].as_str().unwrap();
+                let i = body.find("color:#fff\">").expect("code dans l'e-mail") + "color:#fff\">".len();
+                return body[i..i + 6].to_string();
+            }
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    }
+    panic!("aucun e-mail pour {to}");
 }

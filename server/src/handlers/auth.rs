@@ -100,6 +100,13 @@ pub(crate) fn is_secure(state: &AppState) -> bool {
 
 /// Durée de validité du code de vérification d'e-mail.
 const PENDING_TTL_MIN: i64 = 15;
+/// Mauvais codes avant que la demande d'inscription soit annulée.
+const VERIFY_MAX_ATTEMPTS: i32 = 5;
+
+/// Empreinte gardée en base à la place du code (lié à l'adresse) : jamais le code en clair.
+fn verify_code_mac(email_hmac: &str, code: &str) -> String {
+    crate::email_crypto::mac_with("forgechat verify code v1", &format!("{email_hmac}|{code}"))
+}
 
 fn mail_html(title: &str, body: &str) -> String {
     format!(
@@ -199,14 +206,14 @@ pub async fn register(
         "INSERT INTO pending_registrations (email_hmac, username, password_hash, discriminator, code, expires_at, auth_hash, kdf_salt, invite_code)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
          ON CONFLICT (email_hmac) DO UPDATE SET username=EXCLUDED.username, discriminator=EXCLUDED.discriminator,
-            code=EXCLUDED.code, expires_at=EXCLUDED.expires_at, auth_hash=EXCLUDED.auth_hash,
+            code=EXCLUDED.code, attempts=0, expires_at=EXCLUDED.expires_at, auth_hash=EXCLUDED.auth_hash,
             kdf_salt=EXCLUDED.kdf_salt, invite_code=EXCLUDED.invite_code, created_at=NOW()",
     )
     .bind(&email_hmac)
     .bind(&body.username)
     .bind(NO_PASSWORD)
     .bind(&discriminator)
-    .bind(&code)
+    .bind(verify_code_mac(&email_hmac, &code))
     .bind(Utc::now() + chrono::Duration::minutes(PENDING_TTL_MIN))
     .bind(&auth_hash)
     .bind(kdf_salt)
@@ -241,15 +248,26 @@ pub async fn verify_email(
     hit(&state, &account_key("verify_attempts", &email), 5, 900).await?;
 
     let bad = || AppError::BadRequest("Code incorrect ou expiré".into());
+    let email_hmac = crate::email_crypto::hmac(&email);
     let pending = sqlx::query_as::<_, PendingRegistration>("SELECT * FROM pending_registrations WHERE email_hmac=$1")
-        .bind(crate::email_crypto::hmac(&email))
+        .bind(&email_hmac)
         .fetch_optional(&state.db)
         .await?
         .ok_or_else(bad)?;
     if pending.expires_at < Utc::now() || pending.auth_hash.is_empty() {
         return Err(bad());
     }
-    if !constant_time_eq(pending.code.as_bytes(), code.as_bytes()) {
+    if !constant_time_eq(pending.code.as_bytes(), verify_code_mac(&email_hmac, code).as_bytes()) {
+        // Compté en base aussi (le compteur Redis ci-dessus repart à chaque fenêtre) :
+        // au 5e mauvais code, la demande est annulée et il faut se réinscrire.
+        let attempts: i32 = sqlx::query_scalar("UPDATE pending_registrations SET attempts=attempts+1 WHERE id=$1 RETURNING attempts")
+            .bind(pending.id)
+            .fetch_optional(&state.db)
+            .await?
+            .unwrap_or(VERIFY_MAX_ATTEMPTS);
+        if attempts >= VERIFY_MAX_ATTEMPTS {
+            sqlx::query("DELETE FROM pending_registrations WHERE id=$1").bind(pending.id).execute(&state.db).await?;
+        }
         return Err(bad());
     }
 

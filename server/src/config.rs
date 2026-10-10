@@ -33,6 +33,9 @@ pub struct Config {
     pub discord_import_max_bytes: u64,
     /// Dossier des ZIP d'import en cours de traitement (hors du dossier servi /uploads).
     pub discord_import_tmp_dir: String,
+    /// FORGECHAT_TEST_MAILBOX (tests de bout en bout seulement) : dossier où chaque e-mail est
+    /// écrit au lieu d'être envoyé. Refusée avec un FRONTEND_URL en https (production).
+    pub test_mailbox: Option<String>,
 }
 
 /// Valeur d'exemple de server/.env.example : jamais acceptée.
@@ -51,10 +54,21 @@ fn check_jwt_secret(secret: String) -> anyhow::Result<String> {
     Ok(secret)
 }
 
+/// Boîte aux lettres de test : jamais derrière un FRONTEND_URL https (production).
+fn check_test_mailbox(mailbox: Option<String>, frontend_url: &str) -> anyhow::Result<Option<String>> {
+    let mailbox = mailbox.filter(|m| !m.trim().is_empty());
+    if mailbox.is_some() && frontend_url.trim().to_ascii_lowercase().starts_with("https://") {
+        anyhow::bail!("FORGECHAT_TEST_MAILBOX est réservée aux tests : interdite avec un FRONTEND_URL en https");
+    }
+    Ok(mailbox)
+}
+
 impl Config {
     pub fn from_env() -> anyhow::Result<Self> {
         dotenvy::dotenv().ok();
+        let frontend_url = env::var("FRONTEND_URL").unwrap_or_else(|_| "http://localhost:5173".into());
         Ok(Self {
+            test_mailbox: check_test_mailbox(env::var("FORGECHAT_TEST_MAILBOX").ok(), &frontend_url)?,
             database_url: env::var("DATABASE_URL")?,
             redis_url: env::var("REDIS_URL").unwrap_or_else(|_| "redis://127.0.0.1:6379".into()),
             jwt_secret: check_jwt_secret(env::var("JWT_SECRET")?)?,
@@ -74,8 +88,7 @@ impl Config {
                 .ok()
                 .and_then(|v| v.parse().ok())
                 .unwrap_or(20),
-            frontend_url: env::var("FRONTEND_URL")
-                .unwrap_or_else(|_| "http://localhost:5173".into()),
+            frontend_url,
             smtp_host: env::var("SMTP_HOST").ok(),
             smtp_port: env::var("SMTP_PORT")
                 .unwrap_or_else(|_| "587".into())
@@ -111,5 +124,14 @@ mod tests {
         assert!(check_jwt_secret(EXAMPLE_JWT_SECRET.into()).is_err());
         assert!(check_jwt_secret("x".repeat(31)).is_err());
         assert!(check_jwt_secret("Zq3".repeat(16)).is_ok());
+    }
+
+    #[test]
+    fn test_mailbox_never_in_production() {
+        assert!(check_test_mailbox(Some("/tmp/mails".into()), "https://forgechat.example").is_err());
+        assert!(check_test_mailbox(Some("/tmp/mails".into()), " HTTPS://forgechat.example").is_err());
+        assert_eq!(check_test_mailbox(Some("/tmp/mails".into()), "http://localhost:5173").unwrap().as_deref(), Some("/tmp/mails"));
+        assert_eq!(check_test_mailbox(None, "https://forgechat.example").unwrap(), None);
+        assert_eq!(check_test_mailbox(Some(" ".into()), "https://forgechat.example").unwrap(), None);
     }
 }

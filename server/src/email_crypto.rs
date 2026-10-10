@@ -55,23 +55,50 @@ fn aad(user_id: Uuid) -> String {
 }
 
 pub fn seal(user_id: Uuid, email: &str) -> String {
+    seal_key(&keys().enc, &aad(user_id), &norm(email))
+}
+
+pub fn open(user_id: Uuid, stored: &str) -> Option<String> {
+    open_key(&keys().enc, &aad(user_id), stored)
+}
+
+fn seal_key(key: &[u8; 32], aad: &str, pt: &str) -> String {
     let iv: [u8; 12] = rand::thread_rng().gen();
-    let ct = Aes256Gcm::new((&keys().enc).into())
-        .encrypt(Nonce::from_slice(&iv), Payload { msg: norm(email).as_bytes(), aad: aad(user_id).as_bytes() })
+    let ct = Aes256Gcm::new(key.into())
+        .encrypt(Nonce::from_slice(&iv), Payload { msg: pt.as_bytes(), aad: aad.as_bytes() })
         .expect("AES-GCM");
     format!("{SEALED}{}", URL_SAFE_NO_PAD.encode([&iv[..], &ct].concat()))
 }
 
-pub fn open(user_id: Uuid, stored: &str) -> Option<String> {
+fn open_key(key: &[u8; 32], aad: &str, stored: &str) -> Option<String> {
     let raw = URL_SAFE_NO_PAD.decode(stored.strip_prefix(SEALED)?).ok()?;
     if raw.len() < 12 + 16 {
         return None;
     }
     let (iv, ct) = raw.split_at(12);
-    let pt = Aes256Gcm::new((&keys().enc).into())
-        .decrypt(Nonce::from_slice(iv), Payload { msg: ct, aad: aad(user_id).as_bytes() })
+    let pt = Aes256Gcm::new(key.into())
+        .decrypt(Nonce::from_slice(iv), Payload { msg: ct, aad: aad.as_bytes() })
         .ok()?;
     String::from_utf8(pt).ok()
+}
+
+// Autres secrets au repos, même format `v1:` : clé = HKDF(EMAIL_ENC_KEY, `info`), AAD =
+// `<info>|<aad>` (aad = identifiant de la ligne : une valeur recopiée ailleurs ne s'ouvre pas).
+
+/// Chiffre `pt` (AES-256-GCM, clé dérivée de EMAIL_ENC_KEY par `info`).
+pub fn seal_with(info: &str, aad: &str, pt: &str) -> String {
+    seal_key(&hkdf32(&keys().enc, info.as_bytes()), &format!("{info}|{aad}"), pt)
+}
+
+pub fn open_with(info: &str, aad: &str, stored: &str) -> Option<String> {
+    open_key(&hkdf32(&keys().enc, info.as_bytes()), &format!("{info}|{aad}"), stored)
+}
+
+/// HMAC-SHA256 en hexadécimal, clé = HKDF(EMAIL_ENC_KEY, `info`).
+pub fn mac_with(info: &str, data: &str) -> String {
+    let mut m = <HmacSha256 as Mac>::new_from_slice(&hkdf32(&keys().enc, info.as_bytes())).expect("hmac");
+    m.update(data.as_bytes());
+    data_encoding::HEXLOWER.encode(&m.finalize().into_bytes())
 }
 
 /// Au démarrage : chiffre les adresses encore en clair puis les efface (comptes, inscriptions en
@@ -131,5 +158,11 @@ mod tests {
         assert_eq!(hmac("ALICE@example.com"), hmac(" alice@example.com"));
         assert_ne!(hmac("alice@example.com"), hmac("bob@example.com"));
         assert_eq!(hmac("x@y.z").len(), 64);
+        let t = seal_with("forgechat test v1", "1", "secret");
+        assert_eq!(open_with("forgechat test v1", "1", &t).as_deref(), Some("secret"));
+        assert_eq!(open_with("forgechat test v1", "2", &t), None, "AAD liée à la ligne");
+        assert_eq!(open_with("forgechat autre v1", "1", &t), None, "clé liée à l'usage");
+        assert_eq!(mac_with("a", "x"), mac_with("a", "x"));
+        assert_ne!(mac_with("a", "x"), mac_with("b", "x"));
     }
 }
