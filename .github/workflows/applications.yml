@@ -126,7 +126,7 @@ jobs:
       - name: Effacer la clé
         if: always()
         run: rm -rf "$RUNNER_TEMP/cle"
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: android
           path: ${{ runner.temp }}/out/*
@@ -182,12 +182,12 @@ jobs:
           (cd "$RUNNER_TEMP/ipa" && zip -qry "$RUNNER_TEMP/out/ForgeChat-$VERSION.ipa" Payload)
       - name: Journal Xcode (échec)
         if: failure()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: xcode-log
           path: ${{ runner.temp }}/xcode.log
           retention-days: 1
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: ios
           path: ${{ runner.temp }}/out/*
@@ -214,7 +214,7 @@ jobs:
         env:
           VERSION: ${{ needs.version.outputs.version }}
         run: ls -la dist-desktop && test -f "dist-desktop/ForgeChat-Setup-v$VERSION.exe" && test -f "dist-desktop/ForgeChat-Portable-v$VERSION.exe"
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: windows
           path: dist-desktop/*.exe
@@ -251,7 +251,7 @@ jobs:
           sudo apt-get install -yq libc++-21-dev libc++abi-21-dev
       - name: Build
         run: bash desktop/build.sh
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: linux
           path: |
@@ -286,7 +286,7 @@ jobs:
           mkdir -p "$RUNNER_TEMP/out"
           cp "$b"/dmg/*.dmg "$RUNNER_TEMP/out/ForgeChat-v$VERSION-macos.dmg"
           tar -czf "$RUNNER_TEMP/out/ForgeChat-v$VERSION-macos.app.tar.gz" -C "$b/macos" ForgeChat.app
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: macos
           path: ${{ runner.temp }}/out/*
