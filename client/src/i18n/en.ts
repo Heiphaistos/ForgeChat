@@ -32,6 +32,7 @@ export const en: Partial<Record<Key, string>> = {
   'auth.login.subtitle': 'Sign in to your ForgeChat account',
   'auth.login.enterTotp': 'Enter your 2FA code',
   'auth.login.error': 'Sign-in failed',
+  'auth.proof.downgrade': 'The server is asking for your password in clear text although your account is already protected: action blocked for safety. Contact the administrator.',
   'auth.login.downgrade': 'The server is asking for your password in clear text although your account is already protected: sign-in blocked for safety. Contact the administrator.',
   'auth.login.totpHelp': 'Two-factor authentication is enabled. Enter the code from your authenticator app, or one of your backup codes if you lost access.',
   'auth.login.totpLabel': '2FA code or backup code',

@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../store/auth'
 import api from '../api/client'
 import { storeSession } from '../lib/localSession'
+import { markUserMigrated } from '../e2e/authGuard'
 import toast from 'react-hot-toast'
 
 const CODE_LEN = 6
@@ -59,6 +60,8 @@ export default function VerifyEmailPage() {
       const { data } = await api.post('/auth/verify-email', { email, code })
       // Web : jetons en cookies HttpOnly (posés par le serveur). Bureau : trousseau de l'OS.
       if (isTauri) await storeSession(data.access_token, data.refresh_token)
+      // Compte né en v2 : anti-retour arrière des actions sensibles (e2e/authGuard.ts)
+      if (typeof data?.user?.id === 'string') void markUserMigrated(data.user.id)
       await fetchMe()
       toast.success('Compte créé !')
       nav('/')

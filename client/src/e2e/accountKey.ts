@@ -8,7 +8,9 @@ import * as c from './crypto'
 import {
   type AccountSecrets, type AnyWrapped, deriveSecrets, newKdfSalt, passwordProblem, unwrapAny, wrapKeyV2,
 } from './authKdf'
-import { guardPrelogin, markMigrated } from './authGuard'
+import { guardKdf, guardPrelogin, markMigrated } from './authGuard'
+import { useAuth } from '../store/auth'
+import { t } from '../i18n'
 
 interface KeysResponse { public: string; fingerprint: string; wrapped: AnyWrapped; backup: c.WrappedKey | null }
 interface StoredKey { priv: CryptoKey; pub: string }
@@ -77,10 +79,18 @@ export async function prelogin(email: string): Promise<KdfInfo> {
   return data
 }
 
-/** auth + wrapKey du compte connecté pour ce mot de passe ; null = compte pas encore migré. */
+/**
+ * auth + wrapKey du compte connecté pour ce mot de passe ; null = compte pas encore migré.
+ * `legacy` pour un compte vu migré sur cet appareil : AUTH_DOWNGRADE, le mot de passe ne part pas.
+ */
 async function secretsFor(password: string): Promise<AccountSecrets | null> {
   if (typed?.password === password && typed.secrets) return typed.secrets
   const { data } = await api.get<KdfInfo>('/users/me/kdf')
+  // Erreur au format axios : les écrans affichent `response.data.error`.
+  const refuse = () => Object.assign(new Error('AUTH_DOWNGRADE'), { response: { data: { error: t('auth.proof.downgrade') } } })
+  const userId = useAuth.getState().user?.id
+  // Sans compte chargé : aucun état migré connu, rien à comparer.
+  if (userId) await guardKdf(userId, data).catch(() => { throw refuse() })
   if (data.legacy || !data.kdf_salt) return null
   return deriveSecrets(password, data.kdf_salt)
 }

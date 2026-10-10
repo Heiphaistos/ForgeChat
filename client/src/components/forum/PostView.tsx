@@ -9,7 +9,7 @@ import { useAuth } from '../../store/auth'
 import { useWs } from '../../store/ws'
 import toast from 'react-hot-toast'
 import { confirm } from '../ui/ConfirmModal'
-import MediaContent, { EncMedia, isEncUrl, uploadPath } from '../chat/MediaContent'
+import MediaContent, { EncMedia, UploadImg, UploadVideo, isEncUrl, uploadPath } from '../chat/MediaContent'
 import LightboxModal from '../chat/LightboxModal'
 import EmojiPicker from '../chat/EmojiPicker'
 import LinkPreview, { extractFirstUrl } from '../chat/LinkPreview'
@@ -61,11 +61,11 @@ function PostMedia({ url, files }: { url: string; files: FileEntry[] }) {
   const [open, setOpen] = useState(false)
   if (isEncUrl(url)) return <EncMedia url={url} files={files} className="w-full max-h-[70vh] object-contain rounded-lg bg-black" />
   if (isVideoUrl(url)) {
-    return <video src={mediaUrl(url)} controls playsInline preload="metadata" className="w-full max-h-[70vh] rounded-lg bg-black" />
+    return <UploadVideo url={url} controls playsInline preload="metadata" className="w-full max-h-[70vh] rounded-lg bg-black" />
   }
   return (
     <>
-      <img src={mediaUrl(url)} alt="" decoding="async" onClick={() => setOpen(true)}
+      <UploadImg url={url} decoding="async" onClick={() => setOpen(true)}
         className="w-full max-h-[70vh] object-contain rounded-lg bg-black cursor-zoom-in" />
       {open && <LightboxModal images={[url]} initialIndex={0} onClose={() => setOpen(false)} />}
     </>

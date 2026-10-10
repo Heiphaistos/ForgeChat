@@ -63,3 +63,19 @@ export async function checkForUpdateNow() {
     Alert.alert(t('store.update.checkFailed'), t('store.update.checkFailedBody'))
   }
 }
+
+/**
+ * 426 (appli trop ancienne) : vérification par manifeste signé (bannière UpdateBanner, version ignorée
+ * comprise), sinon `fallback` (page /telecharger) : pas de manifeste dans ce build, réseau, aucune
+ * version signée plus récente.
+ */
+export async function updateFromRequired(fallback: () => void, fetchImpl: typeof fetch = fetch): Promise<void> {
+  const update = UPDATES_MANIFEST_URL
+    ? await fetchAvailableUpdate(UPDATES_MANIFEST_URL, APP_VERSION, fetchImpl, platform()).catch((e: unknown) => {
+        logger.debug('mise à jour', 'vérification (426) impossible', e)
+        return null
+      })
+    : null
+  if (update) offerUpdate(update)
+  else fallback()
+}

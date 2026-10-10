@@ -22,6 +22,9 @@ const api = axios.create({
   // Envoie les cookies httpOnly automatiquement (auth web)
   withCredentials: true,
   timeout: 30_000,
+  // Web : jetons en cookies HttpOnly seulement, jamais dans le corps JSON (login, verify-email,
+  // refresh). Bureau (Tauri) : pas d'en-tête, Rust a besoin des jetons du corps pour le trousseau.
+  ...(isTauri ? {} : { headers: { 'X-ForgeChat-Tokens': 'cookie' } }),
 })
 
 api.interceptors.request.use(cfg => {
@@ -87,7 +90,7 @@ api.interceptors.response.use(
           refreshPromise = (async () => {
             // Bureau : Rust rafraîchit avec le jeton du trousseau. Web : cookie HttpOnly.
             if (isTauri) await refreshAccess()
-            else await axios.post(`${baseURL}/auth/refresh`, {}, { withCredentials: true })
+            else await axios.post(`${baseURL}/auth/refresh`, {}, { withCredentials: true, timeout: 15_000, headers: { 'X-ForgeChat-Tokens': 'cookie' } })
           })().finally(() => { refreshPromise = null })
         }
         await refreshPromise

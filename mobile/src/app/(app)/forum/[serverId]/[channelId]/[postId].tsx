@@ -18,7 +18,8 @@ import { useServerPerms } from '@/features/servers/menus'
 import { TagChips } from '@/features/forum/TagChips'
 import { isVideoMedia } from '@/features/forum/forum'
 import { VideoAttachment } from '@/features/chat/MediaPlayers'
-import { imageSource, resolveMediaUrl } from '@/lib/links'
+import { imageSource } from '@/lib/links'
+import { useSignedMediaUrl } from '@/lib/useSignedUrl'
 import { formatShort } from '@/lib/format'
 import { useT } from '@/i18n'
 import { errorMessage } from '@/lib/http'
@@ -187,11 +188,11 @@ export default function PostScreen() {
 /** Média d'une publication de salon média, en grand (vidéo : plein écran natif du lecteur). */
 function PostMedia({ url, files }: { url: string; files?: FileEntry[] }) {
   const t = useT()
-  const src = resolveMediaUrl(url)
-  if (!src) return null
-  // Média chiffré : déchiffré sur l'appareil par la liste des pièces jointes.
+  // Média chiffré : déchiffré sur l'appareil par la liste des pièces jointes (signé au téléchargement).
   const att = encryptedMedia(url, files)
+  const src = useSignedMediaUrl(att ? null : url)
   if (att) return <Attachments items={[att]} files={files} />
+  if (!src) return null
   return isVideoMedia(url) ? (
     <VideoAttachment src={src} label={t('social.post.video')} />
   ) : (

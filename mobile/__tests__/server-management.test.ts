@@ -180,7 +180,7 @@ describe('suppression du serveur', () => {
 })
 
 jest.mock('@/lib/tokens', () => ({
-  tokens: { getAccessToken: () => 'jeton', accessTokenExpiresSoon: () => false, setAccessToken: jest.fn() },
+  tokens: { getAccessToken: () => 'jeton', accessTokenExpiresSoon: () => false, setAccessToken: jest.fn(), getUserId: async () => null },
 }))
 
 describe('DELETE /servers/:id via le client HTTP', () => {

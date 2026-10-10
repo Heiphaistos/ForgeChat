@@ -90,6 +90,7 @@ export const en: Partial<Record<Key, string>> = {
   'auth.password': 'Password',
   'auth.missingCredentials': 'Enter your email and password.',
   'auth.invalidTotp': 'Invalid 2FA code.',
+  'auth.proofDowngrade': 'The server is asking for your password in clear text although your account is already protected: action blocked for safety. Contact the administrator.',
   'auth.downgrade': 'The server is asking for your password in clear text although your account is already protected: sign-in blocked for safety. Contact the administrator.',
   'auth.twoStep': 'Two-step verification',
   'auth.welcomeBack': 'Welcome back!',

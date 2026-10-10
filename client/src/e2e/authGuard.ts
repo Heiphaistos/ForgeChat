@@ -19,6 +19,17 @@ export async function checkPrelogin(store: TagStore, email: string, info: { lega
 
 export const markIn = async (store: TagStore, email: string) => store.add(await accountTag(email))
 
+/** Même principe par identifiant de compte (actions sensibles, connecté : pas d'e-mail sous la main). */
+export const userTag = (userId: string) => accountTag(`user|${userId}`)
+
+/** Lève `AUTH_DOWNGRADE` si `GET /users/me/kdf` répond `legacy` pour un compte connu migré. */
+export async function checkKdf(store: TagStore, userId: string, info: { legacy: boolean }) {
+  if (!info.legacy) return store.add(await userTag(userId))
+  if (await store.has(await userTag(userId))) throw new Error('AUTH_DOWNGRADE')
+}
+
+export const markUserIn = async (store: TagStore, userId: string) => store.add(await userTag(userId))
+
 function idb<T>(mode: IDBTransactionMode, op: (s: IDBObjectStore) => IDBRequest): Promise<T> {
   return new Promise((resolve, reject) => {
     const open = indexedDB.open('forgechat-v2', 1)
@@ -41,3 +52,6 @@ const idbStore: TagStore = {
 export const guardPrelogin = (email: string, info: { legacy: boolean }) => checkPrelogin(idbStore, email, info)
 /** Après une connexion v2 réussie (ou la migration du compte). */
 export const markMigrated = (email: string) => markIn(idbStore, email)
+export const markUserMigrated = (userId: string) => markUserIn(idbStore, userId)
+/** Avant d'envoyer une preuve de mot de passe : mémorise l'état migré, refuse le retour arrière. */
+export const guardKdf = (userId: string, info: { legacy: boolean }) => checkKdf(idbStore, userId, info)
