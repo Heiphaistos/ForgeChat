@@ -18,6 +18,7 @@ import { useChannelNotif } from '../../store/channelNotif'
 import { useVoice } from '../../store/voice'
 import { useWs } from '../../store/ws'
 import { useAuth } from '../../store/auth'
+import { volumeMenuItem } from '../voice/UserVolumePopover'
 import { useDraft, useChat } from '../../store/chat'
 import { SplitContext } from '../../contexts/SplitContext'
 import { useContext } from 'react'
@@ -1104,7 +1105,8 @@ export default function ChannelSidebar() {
                 } : undefined}
                 onContextMenu={e => {
                   const rs = remoteSupportItem(p.userId)
-                  const items = [...(rs ? [rs] : []), ...moderation.voiceItemsFor(p.userId).filter(i => !('separator' in i && i.separator))]
+                  const vol = volumeMenuItem(p.userId, p.username, e)
+                  const items = [...(vol ? [vol] : []), ...(rs ? [rs] : []), ...moderation.voiceItemsFor(p.userId).filter(i => !('separator' in i && i.separator))]
                   if (items.length === 0) return
                   e.preventDefault()
                   e.stopPropagation()

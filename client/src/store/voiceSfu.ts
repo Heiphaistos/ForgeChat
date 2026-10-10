@@ -431,7 +431,7 @@ export async function connectMedia(url: string, token: string, roomName: string,
     .on(RoomEvent.TrackUnmuted, (_pub, p) => { if (p !== room.localParticipant) rebuildPeer(p as RemoteParticipant) })
     .on(RoomEvent.ParticipantConnected, (p) => { rebuildPeer(p); applyWhisper() })
     .on(RoomEvent.ParticipantDisconnected, (p) => patchPeer(p.identity, { stream: null, screenStream: null, connectionLost: true }))
-    // PRIORITY_SPEAKER : les autres ne sont atténués que pendant qu'il parle.
+    // Qui parle selon le SFU (indicateurs en sourdine, AFK).
     .on(RoomEvent.ActiveSpeakersChanged, (speakers) => ctx.set({ sfuSpeakers: speakers.map(p => p.identity) }))
     .on(RoomEvent.Reconnecting, () => { ctx.set({ mediaStatus: 'reconnecting' }); report('reconnecting') })
     .on(RoomEvent.Reconnected, () => { ctx.set({ mediaStatus: 'connected', error: null }); report('reconnected') })
@@ -499,7 +499,7 @@ async function publishMic(room: Room) {
   if (!_micTrack || _micPub || _micPublishing) return
   _micPublishing = true
   try {
-    _micPub = await room.localParticipant.publishTrack(_micTrack, { source: Track.Source.Microphone })
+    _micPub = await room.localParticipant.publishTrack(_micTrack, { source: Track.Source.Microphone, forceStereo: false })
     if (!_micOpen) await _micPub.mute()
     applyWhisper()
   } finally {

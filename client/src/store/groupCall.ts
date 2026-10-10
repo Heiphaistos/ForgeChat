@@ -8,6 +8,8 @@ import api from '../api/client'
 import { useWs } from './ws'
 import { useCallStore, callAudioConstraints, callVideoConstraints } from './call'
 import { useVoice } from './voice'
+import { routeAudio, dropPlayback } from '../lib/voicePlayback'
+import { clampVolumePct } from '../lib/voiceMix'
 import { webrtcMissing } from '../lib/webrtcSupport'
 import { t } from '../i18n'
 import { e2eeClaim, enableMediaE2EE, mediaE2EEError, openMediaE2EE, watchOutdated } from '../e2e/media'
@@ -41,7 +43,23 @@ interface GroupCallStore {
 
 let _room: Room | null = null
 let _mySessionId: string | null = null
-const _audioEls = new Map<string, HTMLMediaElement>()
+/** trackSid → lecture d'une voix (volume par personne, mono centré : lib/voicePlayback). */
+const _audioEls = new Map<string, { el: HTMLAudioElement; who: string; stream: MediaStream }>()
+
+function _play(sid: string, a: { el: HTMLAudioElement; who: string; stream: MediaStream }) {
+  const v = useVoice.getState()
+  routeAudio(a.el, `group:${sid}`, a.stream, 'voice', clampVolumePct(v.userVolumes[a.who] ?? 100) / 100, null, false)
+  a.el.muted = v.deafened
+}
+
+function _dropAudio(sid: string) {
+  const a = _audioEls.get(sid)
+  if (!a) return
+  a.el.srcObject = null
+  a.el.remove()
+  dropPlayback(`group:${sid}`)
+  _audioEls.delete(sid)
+}
 
 type Set = (p: Partial<GroupCallStore> | ((s: GroupCallStore) => Partial<GroupCallStore>)) => void
 
@@ -62,8 +80,7 @@ function _cleanup(set: Set) {
   const room = _room
   _room = null
   void room?.disconnect(true)
-  _audioEls.forEach(el => el.remove())
-  _audioEls.clear()
+  ;[..._audioEls.keys()].forEach(_dropAudio)
   set(s => {
     s.localStream?.getTracks().forEach(t => t.stop())
     return { groupId: null, status: 'idle', localStream: null, remotes: {}, micMuted: false, camOff: false, activeSpeakerId: null, e2ee: false, e2eeOutdated: [] }
@@ -100,21 +117,22 @@ async function _connect(lk: { url: string; token: string; e2ee?: boolean }, set:
     .on(RoomEvent.TrackSubscribed, (track: RemoteTrack, pub, rp) => {
       // Son joué par un <audio> hors de tout composant : il continue quand on change de page.
       if (track.kind === Track.Kind.Audio) {
-        const el = track.attach()
+        _dropAudio(pub.trackSid)
+        const el = new Audio()
+        el.autoplay = true
         el.dataset.groupCall = '1'
         // data-fc-call : la sortie choisie dans Réglages s'applique aussi ici.
         el.dataset.fcCall = '1'
-        const out = localStorage.getItem('fc_audio_output')
-        if (out && 'setSinkId' in el) (el as unknown as { setSinkId: (id: string) => Promise<void> }).setSinkId(out).catch(() => {})
-        el.muted = useVoice.getState().deafened
         document.body.appendChild(el)
-        _audioEls.set(pub.trackSid, el)
+        const a = { el, who: rp.identity, stream: new MediaStream([track.mediaStreamTrack]) }
+        _audioEls.set(pub.trackSid, a)
+        _play(pub.trackSid, a)
+        void el.play().catch(() => {})
       }
       _refresh(rp, set)
     })
-    .on(RoomEvent.TrackUnsubscribed, (track: RemoteTrack, pub, rp) => {
-      track.detach().forEach(el => el.remove())
-      _audioEls.delete(pub.trackSid)
+    .on(RoomEvent.TrackUnsubscribed, (_track: RemoteTrack, pub, rp) => {
+      _dropAudio(pub.trackSid)
       _refresh(rp, set)
     })
     .on(RoomEvent.ParticipantConnected, rp => _refresh(rp, set))
@@ -154,7 +172,7 @@ async function _connect(lk: { url: string; token: string; e2ee?: boolean }, set:
   const mic = local?.getAudioTracks()[0]
   const cam = local?.getVideoTracks()[0]
   try {
-    if (mic) await room.localParticipant.publishTrack(mic, { source: Track.Source.Microphone })
+    if (mic) await room.localParticipant.publishTrack(mic, { source: Track.Source.Microphone, forceStereo: false })
     if (cam) await room.localParticipant.publishTrack(cam, { source: Track.Source.Camera, simulcast: true })
   } catch (e) {
     console.warn('[group-call] publication', e)
@@ -163,9 +181,9 @@ async function _connect(lk: { url: string; token: string; e2ee?: boolean }, set:
   set({ status: 'connected' })
 }
 
-// Sourdine globale (bouton casque) : coupe aussi le son de l'appel de groupe.
+// Sourdine globale (bouton casque) et volume par personne : appliqués aussi à l'appel de groupe.
 useVoice.subscribe((s, prev) => {
-  if (s.deafened !== prev.deafened) _audioEls.forEach(el => { el.muted = s.deafened })
+  if (s.deafened !== prev.deafened || s.userVolumes !== prev.userVolumes) _audioEls.forEach((a, sid) => _play(sid, a))
 })
 
 export const useGroupCall = create<GroupCallStore>((set, get) => ({
