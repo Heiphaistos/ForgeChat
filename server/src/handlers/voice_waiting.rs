@@ -167,7 +167,7 @@ pub async fn handle_decision(state: &AppState, moderator: Uuid, msg: &serde_json
         msg["user_id"].as_str().and_then(|s| s.parse::<Uuid>().ok()),
     ) else { return };
     let allowed = state.effective_channel_permissions(moderator, channel_id).await
-        .is_some_and(|(_, perms)| has_perm(perms, Permissions::MOVE_MEMBERS));
+        .is_some_and(|(_, perms)| has_perm(perms, Permissions::MOVE_MEMBERS) && has_perm(perms, Permissions::VIEW_CHANNEL));
     if !allowed {
         tracing::warn!(user_id = %moderator, channel_id = %channel_id, "VOICE_ADMIT/DENY rejeté : MOVE_MEMBERS manquant");
         return;

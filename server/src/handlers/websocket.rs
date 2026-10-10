@@ -519,15 +519,28 @@ async fn accept_dm_call(
     dm_id: &serde_json::Value,
     accepter_e2ee: bool,
 ) {
-    // Historique : appel décroché — started_at repart pour mesurer le temps de parole
-    let _ = sqlx::query(
+    // Blocage dans un sens ou dans l'autre : pas d'appel.
+    let blocked: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM blocks WHERE (blocker_id=$1 AND blocked_id=$2) OR (blocker_id=$2 AND blocked_id=$1))"
+    ).bind(user_id).bind(to).fetch_one(&state.db).await.unwrap_or(true);
+    if blocked { return; }
+    // Historique : appel décroché — started_at repart pour mesurer le temps de parole.
+    // Il faut un appel de `to` en sonnerie : avant, DM_CALL_ACCEPT seul ouvrait le
+    // média vers n'importe quel interlocuteur d'un MP, sans qu'il ait appelé (blocage contourné).
+    let answered = sqlx::query(
         "UPDATE call_history SET status='answered', started_at=NOW()
          WHERE id = (SELECT id FROM call_history
                      WHERE caller_id=$1 AND callee_id=$2 AND status='ringing'
                      ORDER BY started_at DESC LIMIT 1)"
     )
     .bind(to).bind(user_id)
-    .execute(&state.db).await;
+    .execute(&state.db).await
+    .map(|r| r.rows_affected())
+    .unwrap_or(0);
+    if answered == 0 {
+        tracing::warn!(user_id = %user_id, "DM_CALL_ACCEPT rejeté : aucun appel en sonnerie");
+        return;
+    }
     // Appels croisés : la sonnerie de l'appel inverse n'est plus qu'un doublon
     // (sinon son expiration à 45 s raccrochait l'appel en cours).
     let _ = sqlx::query("DELETE FROM call_history WHERE caller_id=$1 AND callee_id=$2 AND status='ringing'")
@@ -598,6 +611,18 @@ pub(crate) async fn rate_ok(state: &AppState, key: String, limit: i64, window_s:
 /// compris. `None` = pas membre du serveur du canal.
 async fn channel_perms(state: &AppState, user_id: Uuid, channel_id: Uuid) -> Option<(Uuid, i64)> {
     state.effective_channel_permissions(user_id, channel_id).await
+}
+
+/// Salon visible (VIEW_CHANNEL, surcharges comprises) : (serveur, permissions effectives).
+/// Avant : les événements vocaux et de scène ne vérifiaient que l'appartenance au
+/// serveur, un salon masqué restait joignable avec son identifiant.
+async fn visible_channel(state: &AppState, user_id: Uuid, channel_id: Uuid) -> Option<(Uuid, i64)> {
+    channel_perms(state, user_id, channel_id).await.filter(|(_, p)| has_perm(*p, Permissions::VIEW_CHANNEL))
+}
+
+/// L'utilisateur est actuellement dans ce salon vocal.
+async fn in_voice_room(state: &AppState, user_id: Uuid, channel_id: Uuid) -> bool {
+    state.user_voice.read().await.get(&user_id) == Some(&channel_id)
 }
 
 pub(crate) fn has_perm(perms: i64, bit: i64) -> bool {
@@ -839,6 +864,17 @@ async fn handle_ws_message(
                 tracing::warn!(user_id = %user_id, channel_id = %channel_id, "VOICE_JOIN rejeté : non membre du serveur");
                 return;
             };
+            if !has_perm(perms, Permissions::VIEW_CHANNEL) {
+                tracing::warn!(user_id = %user_id, channel_id = %channel_id, "VOICE_JOIN rejeté : salon masqué");
+                state.broadcast_to_user(user_id, serde_json::json!({
+                    "type": "VOICE_JOIN_ERROR",
+                    "channel_id": channel_id,
+                    "reason": "missing_permission",
+                    "permission": "VIEW_CHANNEL",
+                    "current": 0,
+                }).to_string()).await;
+                return;
+            }
             if !voice_perm_ok(state, server_id, channel_id, perms, Permissions::CONNECT_VOICE).await {
                 tracing::warn!(user_id = %user_id, channel_id = %channel_id, "VOICE_JOIN rejeté : CONNECT_VOICE manquant");
                 let current = state.voice_rooms.read().await
@@ -1267,16 +1303,7 @@ async fn handle_ws_message(
             let Some(channel_id) = msg["channel_id"].as_str().and_then(|s| s.parse::<Uuid>().ok()) else {
                 return;
             };
-            let is_member: bool = sqlx::query_scalar(
-                "SELECT EXISTS(
-                    SELECT 1 FROM channels c
-                    JOIN server_members sm ON sm.server_id = c.server_id
-                    WHERE c.id = $1 AND sm.user_id = $2
-                )"
-            )
-            .bind(channel_id).bind(user_id)
-            .fetch_one(&state.db).await.unwrap_or(false);
-            if !is_member { return; }
+            if visible_channel(state, user_id, channel_id).await.is_none() { return; }
 
             let speaker_ids: Vec<Uuid> = state.stage_speakers.read().await
                 .get(&channel_id).map(|s| s.iter().copied().collect()).unwrap_or_default();
@@ -1309,16 +1336,12 @@ async fn handle_ws_message(
             let Some(channel_id) = msg["channel_id"].as_str().and_then(|s| s.parse::<Uuid>().ok()) else {
                 return;
             };
-            let is_member: bool = sqlx::query_scalar(
-                "SELECT EXISTS(
-                    SELECT 1 FROM channels c
-                    JOIN server_members sm ON sm.server_id = c.server_id
-                    WHERE c.id = $1 AND sm.user_id = $2
-                )"
-            )
-            .bind(channel_id).bind(user_id)
-            .fetch_one(&state.db).await.unwrap_or(false);
-            if !is_member { return; }
+            let Some((server_id, _)) = visible_channel(state, user_id, channel_id).await else { return; };
+            // Un membre en timeout ne demande pas la parole (il peut toujours baisser la main).
+            let lowering = msg["type"].as_str() == Some("STAGE_HAND_RAISE") && msg["raised"].as_bool() != Some(true);
+            if !lowering && crate::handlers::servers::require_not_timed_out(state, user_id, server_id).await.is_err() {
+                return;
+            }
 
             // "Demander à parler" alimente la même file d'attente modérateur que
             // lever la main — pas de double mécanisme à maintenir côté client.
@@ -1357,16 +1380,15 @@ async fn handle_ws_message(
                 msg["target_user_id"].as_str().and_then(|s| s.parse::<Uuid>().ok()),
             ) else { return; };
 
-            let server_id_opt: Option<Uuid> = sqlx::query_scalar(
-                "SELECT server_id FROM channels WHERE id=$1"
-            ).bind(channel_id).fetch_optional(&state.db).await.unwrap_or(None).flatten();
-            let Some(server_id) = server_id_opt else { return; };
-
-            // Modérateur uniquement (MANAGE_CHANNELS) — l'auto-invitation (prendre la
-            // parole soi-même) est acceptée, pas de cas particulier nécessaire.
-            if crate::handlers::servers::require_permission_and_channel(
-                state, user_id, server_id, channel_id, Permissions::MANAGE_CHANNELS,
-            ).await.is_err() {
+            // Modérateur uniquement (MANAGE_CHANNELS sur ce salon, qu'il voit) — l'auto-invitation
+            // (prendre la parole soi-même) est acceptée, pas de cas particulier nécessaire.
+            let Some((server_id, perms)) = visible_channel(state, user_id, channel_id).await else { return; };
+            if !has_perm(perms, Permissions::MANAGE_CHANNELS) {
+                return;
+            }
+            // La cible doit voir la scène, avoir le droit d'y parler et ne pas être en timeout.
+            let Some((_, target_perms)) = visible_channel(state, target_id, channel_id).await else { return; };
+            if !crate::handlers::voice_moderation::voice_rights(state, target_id, server_id, channel_id, target_perms).await.speak {
                 return;
             }
 
@@ -1692,15 +1714,13 @@ async fn handle_ws_message(
                         tracing::warn!(user_id = %user_id, channel_id = %cid, "VOICE_REACTION rejeté : rate limit");
                         return;
                     }
-                    let is_member: bool = sqlx::query_scalar(
-                        "SELECT EXISTS(
-                            SELECT 1 FROM channels c
-                            JOIN server_members sm ON sm.server_id = c.server_id
-                            WHERE c.id = $1 AND sm.user_id = $2
-                        )"
-                    ).bind(cid).bind(user_id).fetch_one(&state.db).await.unwrap_or(false);
-                    if !is_member {
-                        tracing::warn!(user_id = %user_id, channel_id = %cid, "VOICE_REACTION rejeté : non membre du serveur");
+                    // Présent dans la salle (donc salon visible), pas en timeout, émoji court.
+                    if emoji_val.chars().count() > 32 || !in_voice_room(state, user_id, cid).await {
+                        tracing::warn!(user_id = %user_id, channel_id = %cid, "VOICE_REACTION rejeté : hors de la salle");
+                        return;
+                    }
+                    let Some(server_id) = state.channel_server_id(cid).await else { return };
+                    if crate::handlers::servers::require_not_timed_out(state, user_id, server_id).await.is_err() {
                         return;
                     }
                     let event = serde_json::json!({
@@ -1729,15 +1749,8 @@ async fn handle_ws_message(
                         tracing::warn!(user_id = %user_id, channel_id = %cid, "HAND_RAISE rejeté : rate limit");
                         return;
                     }
-                    let is_member: bool = sqlx::query_scalar(
-                        "SELECT EXISTS(
-                            SELECT 1 FROM channels c
-                            JOIN server_members sm ON sm.server_id = c.server_id
-                            WHERE c.id = $1 AND sm.user_id = $2
-                        )"
-                    ).bind(cid).bind(user_id).fetch_one(&state.db).await.unwrap_or(false);
-                    if !is_member {
-                        tracing::warn!(user_id = %user_id, channel_id = %cid, "HAND_RAISE rejeté : non membre du serveur");
+                    if !in_voice_room(state, user_id, cid).await {
+                        tracing::warn!(user_id = %user_id, channel_id = %cid, "HAND_RAISE rejeté : hors de la salle");
                         return;
                     }
                     // N13 — état serveur, même motif que `stage_hand_raises` :
@@ -1784,15 +1797,15 @@ async fn handle_ws_message(
                         tracing::warn!(user_id = %user_id, channel_id = %cid, "SOUNDBOARD_PLAY rejeté : rate limit");
                         return;
                     }
-                    let is_member: bool = sqlx::query_scalar(
-                        "SELECT EXISTS(
-                            SELECT 1 FROM channels c
-                            JOIN server_members sm ON sm.server_id = c.server_id
-                            WHERE c.id = $1 AND sm.user_id = $2
-                        )"
-                    ).bind(cid).bind(user_id).fetch_one(&state.db).await.unwrap_or(false);
-                    if !is_member {
-                        tracing::warn!(user_id = %user_id, channel_id = %cid, "SOUNDBOARD_PLAY rejeté : non membre du serveur");
+                    // Présent dans la salle et autorisé à y être entendu (SPEAK, pas de
+                    // timeout, ni muet ni sourdine imposés).
+                    if !in_voice_room(state, user_id, cid).await {
+                        tracing::warn!(user_id = %user_id, channel_id = %cid, "SOUNDBOARD_PLAY rejeté : hors de la salle");
+                        return;
+                    }
+                    let Some((server_id, perms)) = visible_channel(state, user_id, cid).await else { return };
+                    if !crate::handlers::voice_moderation::voice_rights(state, user_id, server_id, cid, perms).await.microphone() {
+                        tracing::warn!(user_id = %user_id, channel_id = %cid, "SOUNDBOARD_PLAY rejeté : pas le droit de parler");
                         return;
                     }
                     // Le son peut venir de N'IMPORTE LEQUEL de ses serveurs (gratuit, Nitro chez Discord)
