@@ -3,6 +3,7 @@
 // messages programmés (liste, modification rechiffrée, envoi immédiat), sondages anonymes.
 // Usage : FORGECHAT_API_URL=http://127.0.0.1:58080 node scripts/messaging.api.mjs
 import * as c from '../src/e2e/crypto.ts'
+import * as A from './_auth.mjs'
 
 const BASE = process.env.FORGECHAT_API_URL ?? 'http://127.0.0.1:58080'
 if (!['127.0.0.1', 'localhost', '::1'].includes(new URL(BASE).hostname)) throw new Error('serveur local uniquement')
@@ -23,12 +24,10 @@ async function api(method, path, { token, body } = {}) {
   return { status: res.status, body: json }
 }
 
-const PASSWORD = 'Mot de passe de test 42!'
+const { PASSWORD } = A
 async function account(name) {
-  const user = { username: `${name}${Math.random().toString(36).slice(2, 7)}`, email: `${name}${Date.now()}${Math.random().toString(36).slice(2, 6)}@test.local`, password: PASSWORD }
-  const reg = await api('POST', '/api/auth/register', { body: user })
-  const login = await api('POST', '/api/auth/login', { body: { email: user.email, password: PASSWORD } })
-  const token = login.body?.access_token ?? reg.body?.access_token
+  const user = { username: `${name}${Math.random().toString(36).slice(2, 7)}`, email: `${name}${Date.now()}${Math.random().toString(36).slice(2, 6)}@test.local` }
+  const token = (await A.register(api, user)).body?.access_token
   const me = (await api('GET', '/api/users/me', { token })).body
   const kp = await c.generateKeyPair()
   const wrapped = await c.wrapKey(kp.priv, PASSWORD, c.keyAad(me.id), { iterations: 1000 })

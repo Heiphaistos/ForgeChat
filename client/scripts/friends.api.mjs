@@ -2,6 +2,7 @@
 // l'ajout (demandes croisées = amis, aussi par pseudo) et le lien d'invitation transforme la
 // demande en amitié.
 // Usage : FORGECHAT_API_URL=http://127.0.0.1:58081 node scripts/friends.api.mjs
+import * as A from './_auth.mjs'
 const BASE = process.env.FORGECHAT_API_URL ?? 'http://127.0.0.1:58081'
 if (!['127.0.0.1', 'localhost', '::1'].includes(new URL(BASE).hostname)) throw new Error('serveur local uniquement')
 
@@ -23,11 +24,9 @@ async function api(method, path, { token, body, ip } = {}) {
   return { status: res.status, body: json }
 }
 
-const PASSWORD = 'Mot de passe de test 42!'
 async function account(username) {
   const email = `${username}${Date.now()}${Math.random().toString(36).slice(2, 6)}@test.local`
-  await api('POST', '/api/auth/register', { body: { username, email, password: PASSWORD }, ip: `10.9.${Math.floor(Math.random() * 250)}.${Math.floor(Math.random() * 250)}` })
-  const token = (await api('POST', '/api/auth/login', { body: { email, password: PASSWORD } })).body?.access_token
+  const token = (await A.register(api, { username, email }, { ip: `10.9.${Math.floor(Math.random() * 250)}.${Math.floor(Math.random() * 250)}` })).body?.access_token
   const me = (await api('GET', '/api/users/me', { token })).body
   return { token, id: me?.id, tag: `${me?.username}#${me?.discriminator}` }
 }

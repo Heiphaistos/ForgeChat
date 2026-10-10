@@ -4,6 +4,7 @@
 // Usage : FORGECHAT_API_URL=http://127.0.0.1:58081 FORGECHAT_PSQL=postgres://… node scripts/news.api.mjs
 // (les fils de forum exigent le chiffrement : ceux du test sont posés directement en base par psql)
 import { execFileSync } from 'node:child_process'
+import * as A from './_auth.mjs'
 const BASE = process.env.FORGECHAT_API_URL ?? 'http://127.0.0.1:58081'
 if (!['127.0.0.1', 'localhost', '::1'].includes(new URL(BASE).hostname)) throw new Error('serveur local uniquement')
 
@@ -23,11 +24,9 @@ async function api(method, path, { token, bot, body, ip } = {}) {
   try { json = text ? JSON.parse(text) : null } catch { json = text }
   return { status: res.status, body: json }
 }
-const PASSWORD = 'Mot de passe de test 42!'
 async function account(username) {
   const email = `${username}${Date.now()}@test.local`
-  await api('POST', '/api/auth/register', { body: { username, email, password: PASSWORD }, ip: `10.8.${Math.floor(Math.random() * 250)}.${Math.floor(Math.random() * 250)}` })
-  return (await api('POST', '/api/auth/login', { body: { email, password: PASSWORD } })).body?.access_token
+  return (await A.register(api, { username, email }, { ip: `10.8.${Math.floor(Math.random() * 250)}.${Math.floor(Math.random() * 250)}` })).body?.access_token
 }
 
 const sfx = Math.random().toString(36).slice(2, 6)

@@ -5,6 +5,7 @@
 // Écrit le marqueur en clair utilisé dans les fichiers : le chercher ensuite dans le pg_dump et
 // dans le dossier des envois (il ne doit apparaître nulle part).
 import * as c from '../src/e2e/crypto.ts'
+import * as A from './_auth.mjs'
 
 const BASE = process.env.FORGECHAT_API_URL ?? 'http://127.0.0.1:58080'
 if (!['127.0.0.1', 'localhost', '::1'].includes(new URL(BASE).hostname)) throw new Error('serveur local uniquement')
@@ -26,12 +27,10 @@ async function api(method, path, { token, body, form } = {}) {
   return { status: res.status, body: json }
 }
 
-const PASSWORD = 'Mot de passe de test 42!'
+const { PASSWORD } = A
 async function account(name) {
-  const user = { username: `${name}${Math.random().toString(36).slice(2, 7)}`, email: `${name}${Date.now()}${Math.random().toString(36).slice(2, 6)}@test.local`, password: PASSWORD }
-  const reg = await api('POST', '/api/auth/register', { body: user })
-  const login = await api('POST', '/api/auth/login', { body: { email: user.email, password: PASSWORD } })
-  const token = login.body?.access_token ?? reg.body?.access_token
+  const user = { username: `${name}${Math.random().toString(36).slice(2, 7)}`, email: `${name}${Date.now()}${Math.random().toString(36).slice(2, 6)}@test.local` }
+  const token = (await A.register(api, user)).body?.access_token
   const me = (await api('GET', '/api/users/me', { token })).body
   const kp = await c.generateKeyPair()
   const wrapped = await c.wrapKey(kp.priv, PASSWORD, c.keyAad(me.id), { iterations: 1000 })
@@ -103,7 +102,7 @@ const badName = await api('POST', `/api/dms/${dmId}/messages/${msgId}/attachment
 ok(badName.status === 400, 'MP : message chiffré + fichier au nom en clair refusé')
 const up = await api('POST', `/api/dms/${dmId}/messages/${msgId}/attachments`, { token: a.token, form: form(c.blobName(f1.entry.id), f1.blob) })
 const att = up.body?.[0]
-ok(up.status === 200 && att?.content_type === 'application/octet-stream' && att?.filename === c.blobName(f1.entry.id) && /\/uploads\/[0-9a-f-]{36}\.enc$/.test(att?.url),
+ok(up.status === 200 && att?.content_type === 'application/octet-stream' && att?.filename === c.blobName(f1.entry.id) && /\/uploads\/[0-9a-f-]{36}\.enc\?exp=\d+&sig=/.test(att?.url),
   'MP : blob opaque rangé (octet-stream, nom aléatoire)', JSON.stringify(up.body))
 
 // Bob relit le message, ouvre la clé d'époque, déchiffre le message puis le fichier.

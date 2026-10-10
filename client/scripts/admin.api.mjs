@@ -6,7 +6,8 @@
 const BASE = process.env.FORGECHAT_API_URL ?? 'http://127.0.0.1:58080'
 if (!['127.0.0.1', 'localhost', '::1'].includes(new URL(BASE).hostname)) throw new Error('serveur local uniquement')
 
-import { execSync } from 'node:child_process'
+import { execFileSync } from 'node:child_process'
+import * as A from './_auth.mjs'
 
 let failed = 0
 const ok = (cond, label, extra = '') => {
@@ -22,16 +23,22 @@ async function api(method, path, { token, body } = {}) {
   try { json = text ? JSON.parse(text) : null } catch { json = text }
   return { status: res.status, body: json }
 }
-const PASSWORD = 'Mot de passe de test 42!'
 const uniq = () => Math.random().toString(36).slice(2, 8)
 // La limite d'inscriptions par IP (5 / 15 min) est testée ailleurs : on la remet à zéro (Redis local).
 const REDIS_DB = process.env.FORGECHAT_REDIS_DB ?? '0'
-const resetRegisterLimit = () => { try { execSync(`redis-cli -n ${REDIS_DB} --scan --pattern 'register_attempts:*' | xargs -r redis-cli -n ${REDIS_DB} del`, { stdio: 'ignore' }) } catch { /* redis-cli absent */ } }
+// Sans shell (xargs absent sous Windows) ; REDIS_URL = celui du serveur.
+const redis = (...args) => execFileSync('redis-cli', ['-u', process.env.REDIS_URL ?? 'redis://127.0.0.1:6379', '-n', REDIS_DB, ...args], { encoding: 'utf8' })
+const resetRegisterLimit = () => {
+  try {
+    const keys = redis('--scan', '--pattern', 'register_attempts:*').split(/\s+/).filter(Boolean)
+    if (keys.length) redis('del', ...keys)
+  } catch { /* redis-cli absent */ }
+}
 const ADMIN_EMAIL = (process.env.FORGECHAT_ADMIN_EMAIL ?? 'heiphaistos44@gmail.com').toLowerCase()
 async function register(name, invite_code, email) {
   resetRegisterLimit()
-  const user = { username: `${name}${uniq()}`, email: email ?? `${name}${uniq()}@test.local`, password: PASSWORD }
-  const r = await api('POST', '/api/auth/register', { body: invite_code === undefined ? user : { ...user, invite_code } })
+  const user = { username: `${name}${uniq()}`, email: email ?? `${name}${uniq()}@test.local` }
+  const r = await A.register(api, { ...user, invite_code })
   return { ...user, status: r.status, error: r.body?.error, token: r.body?.access_token, refresh: r.body?.refresh_token, id: r.body?.user?.id }
 }
 
@@ -74,8 +81,8 @@ ok(reuse.status === 403, 'code à usage unique : deuxième inscription refusée'
 // Un pseudo déjà pris ne doit pas brûler le code
 const inv2 = (await api('POST', '/api/admin/invites', { token: adminToken, body: { max_uses: 2 } })).body
 resetRegisterLimit()
-const dup = await api('POST', '/api/auth/register', { body: { username: nonAdmin.username, email: `dup${uniq()}@test.local`, password: PASSWORD, invite_code: inv2.code } })
-ok(dup.status === 409, 'pseudo déjà pris → 409', `${dup.status}`)
+const dup = await A.register(api, { username: nonAdmin.username, email: `dup${uniq()}@test.local`, invite_code: inv2.code })
+ok(dup.status === 409, 'pseudo déjà pris → 409 à la vérification de l’e-mail', `${dup.status}`)
 const afterDup = (await api('GET', '/api/admin/invites', { token: adminToken })).body.invites.find(i => i.id === inv2.id)
 ok(afterDup.uses === 0, 'le code n’est pas consommé par une inscription échouée', `uses=${afterDup.uses}`)
 
@@ -102,13 +109,13 @@ ok((await api('POST', `/api/admin/users/${nonAdmin.id}/ban`, { token: adminToken
 ok((await api('GET', '/api/users/me', { token: nonAdmin.token })).status === 401, 'jeton d’accès du banni refusé immédiatement')
 const refreshBanned = await api('POST', '/api/auth/refresh', { body: { refresh_token: nonAdmin.refresh } })
 ok(refreshBanned.status === 401, 'jeton de rafraîchissement du banni refusé', `${refreshBanned.status}`)
-const loginBanned = await api('POST', '/api/auth/login', { body: { email: nonAdmin.email, password: PASSWORD } })
+const loginBanned = await A.login(api, nonAdmin.email)
 ok(loginBanned.status === 403 && /suspendu/.test(loginBanned.body?.error ?? '') && /Test de bannissement/.test(loginBanned.body?.error ?? ''), 'connexion du banni refusée avec le motif', JSON.stringify(loginBanned.body))
 const bannedList = (await api('GET', '/api/admin/users?filter=banned', { token: adminToken })).body
 ok(bannedList.users.some(u => u.id === nonAdmin.id && u.ban_reason === 'Test de bannissement'), 'filtre « bannis »')
 
 ok((await api('DELETE', `/api/admin/users/${nonAdmin.id}/ban`, { token: adminToken })).status === 204, 'débannissement')
-const loginAgain = await api('POST', '/api/auth/login', { body: { email: nonAdmin.email, password: PASSWORD } })
+const loginAgain = await A.login(api, nonAdmin.email)
 ok(loginAgain.status === 200, 'le compte débanni peut se reconnecter', `${loginAgain.status}`)
 
 // ── Déconnexion forcée
@@ -120,7 +127,7 @@ ok((await api('GET', '/api/users/me', { token: tok2 })).status === 401, 'jeton c
 // La déconnexion forcée révoque aussi les jetons émis dans la seconde qui suit (revoke_all_tokens_strict) :
 // se reconnecter tout de suite donnait un jeton déjà mort une fois sur deux.
 await new Promise(r => setTimeout(r, 1200))
-const asLea = async () => (await api('POST', '/api/auth/login', { body: { email: nonAdmin.email, password: PASSWORD } })).body.access_token
+const asLea = async () => (await A.login(api, nonAdmin.email)).body.access_token
 let leaTok = await asLea()
 ok((await api('GET', '/api/admin/me', { token: leaTok })).status === 403, 'sans le rôle, aucun accès à l’administration')
 ok((await api('GET', '/api/admin/audit', { token: leaTok })).status === 403, 'journal admin refusé sans le rôle')
@@ -199,9 +206,11 @@ ok((await api('GET', S2, { token: host.token })).status === 200, 'serveur rétab
 ok((await api('DELETE', `/api/admin/servers/${srv2.id}/supervise`, { token: adminToken })).status === 204, 'fin de la supervision')
 ok((await api('GET', S2, { token: adminToken })).status === 403, 'supervision terminée : accès fermé')
 ok((await api('GET', S2, { token: host.token })).status === 200, 'l’adhésion du propriétaire du serveur n’est pas touchée')
-const wrongPw = await api('DELETE', `/api/admin/servers/${srv2.id}`, { token: adminToken, body: { password: 'faux' } })
+const wrongPw = await api('DELETE', `/api/admin/servers/${srv2.id}`, { token: adminToken, body: { auth: await A.proofFor(api, adminToken, 'mauvais mot de passe') } })
 ok(wrongPw.status === 400 || wrongPw.status === 403, 'suppression refusée sans le bon mot de passe', `${wrongPw.status}`)
-ok((await api('DELETE', `/api/admin/servers/${srv2.id}`, { token: adminToken, body: { password: PASSWORD } })).status === 204, 'suppression du serveur avec le mot de passe')
+const legacyPw = await api('DELETE', `/api/admin/servers/${srv2.id}`, { token: adminToken, body: { password: A.PASSWORD } })
+ok(legacyPw.status === 426, 'compte migré : mot de passe en clair refusé (appli à mettre à jour)', `${legacyPw.status}`)
+ok((await api('DELETE', `/api/admin/servers/${srv2.id}`, { token: adminToken, body: { auth: await A.proofFor(api, adminToken) } })).status === 204, 'suppression du serveur avec la preuve du mot de passe')
 ok((await api('GET', S2, { token: host.token })).status >= 400, 'serveur supprimé')
 // Un El Patron qui perd le rôle perd aussi ses supervisions
 const srv3 = (await api('POST', '/api/servers', { token: host.token, body: { name: 'Autre serveur' } })).body
@@ -227,7 +236,7 @@ const detail = (await api('GET', `/api/admin/users/${nonAdmin.id}`, { token: adm
 ok(Array.isArray(detail.sessions) && Array.isArray(detail.servers) && Array.isArray(detail.invited), 'détail d’un compte (appareils, serveurs, invités)')
 
 // ── Session : rotation du jeton tolérante (deux fenêtres, réponse perdue)
-const sess = (await api('POST', '/api/auth/login', { body: { email: nonAdmin.email, password: PASSWORD } })).body
+const sess = (await A.login(api, nonAdmin.email)).body
 const r1 = await api('POST', '/api/auth/refresh', { body: { refresh_token: sess.refresh_token } })
 ok(r1.status === 200 && r1.body.refresh_token && r1.body.refresh_token !== sess.refresh_token, 'rafraîchissement : nouveau jeton')
 const r2 = await api('POST', '/api/auth/refresh', { body: { refresh_token: sess.refresh_token } })

@@ -70,6 +70,11 @@ jobs:
       DATABASE_URL: postgres://forgechat:ci@127.0.0.1:5432/forgechat
       REDIS_URL: redis://127.0.0.1:6379
       JWT_SECRET: ci-secret-ci-secret-ci-secret-ci-secret
+      # Clés jetables de test (32 octets fixes en base64), jamais celles de la prod.
+      TOTP_ENC_KEY: AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=
+      EMAIL_ENC_KEY: AgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgI=
+      # Sans SMTP, les scripts lisent le code de vérification d'e-mail en base (scripts/_auth.mjs).
+      FORGECHAT_PSQL: postgres://forgechat:ci@127.0.0.1:5432/forgechat
       PORT: '58080'
       UPLOAD_DIR: /tmp/uploads
       FRONTEND_URL: http://localhost:5173
@@ -90,7 +95,7 @@ jobs:
           cat /tmp/server.log; exit 1
       - run: npm ci --no-audit --no-fund
         working-directory: client
-      # Les tests remettent à zéro la limite d'inscriptions par IP avec redis-cli (absent du runner).
+      # Les tests remettent à zéro les limites par IP (inscription, connexion) avec redis-cli (absent du runner).
       - run: sudo apt-get update -qq && sudo apt-get install -y --no-install-recommends redis-tools
       - name: Le premier compte devient administrateur, puis les inscriptions passent sur invitation
         working-directory: client
@@ -102,7 +107,9 @@ jobs:
         run: |
           PGPASSWORD=ci psql -h 127.0.0.1 -U forgechat forgechat -c "UPDATE site_settings SET value='open' WHERE key='registration_mode'"
           for s in messaging community e2e-files friends news; do
-            redis-cli --scan --pattern 'register_attempts:*' | xargs -r redis-cli del >/dev/null
+            for p in 'register_attempts:*' 'login_attempts:*' 'prelogin_ip:*'; do
+              redis-cli --scan --pattern "$p" | xargs -r redis-cli del >/dev/null
+            done
             node --experimental-strip-types scripts/$s.api.mjs
           done
 
