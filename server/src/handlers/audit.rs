@@ -312,18 +312,7 @@ pub async fn get_reaction_detail(
     // dans une table séparée `dm_reactions` (pas `reactions`), même pattern
     // d'architecture que attachments/pinned_messages. Vérifier membership
     // serveur d'abord, sinon retomber sur dm_reactions+dm_channels.
-    let member_check = sqlx::query_scalar::<_, bool>(
-        "SELECT EXISTS(
-            SELECT 1 FROM messages m
-            JOIN channels c ON c.id = m.channel_id
-            JOIN server_members sm ON sm.server_id = c.server_id AND sm.user_id = $2
-            WHERE m.id = $1
-        )"
-    )
-    .bind(q.message_id)
-    .bind(claims.sub)
-    .fetch_one(&state.db)
-    .await?;
+    let member_check = crate::handlers::messages::channel_message_visible(&state, claims.sub, q.message_id).await?;
 
     let rows = if member_check {
         sqlx::query(
