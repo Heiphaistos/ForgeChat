@@ -8,8 +8,11 @@ export const baseURL = isTauri ? 'https://forgechat.heiphaistos.org/api' : '/api
 
 // Le serveur renvoie des chemins relatifs `/uploads/...`. L'app bureau sert le client
 // depuis `tauri.localhost` : sans préfixe, avatars, pièces jointes et sons y pointeraient.
+// Adresse venue du serveur : chemin relatif, http(s), blob: (fichier déchiffré) ou image data: ;
+// tout autre schéma (javascript:…) est refusé, elle finit souvent dans un `href`.
 export function mediaUrl(u: string | null | undefined): string | undefined {
   if (!u) return undefined
+  if (!/^(\/(?!\/)|https?:|blob:|data:image\/)/i.test(u)) return undefined
   return SERVER_URL && u.startsWith('/uploads/') ? SERVER_URL + u : u
 }
 

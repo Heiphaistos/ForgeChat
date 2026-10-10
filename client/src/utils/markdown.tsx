@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { cachedChannel, cachedRole, cachedUsername } from './mentions'
+import { deceptiveHost } from './safeUrl'
 import UserName from '../components/ui/UserName'
 import { intlLocale } from '../i18n'
 
@@ -208,9 +209,11 @@ function tokenize(text: string, customEmojis?: Record<string, string>): React.Re
       // Lien Markdown [texte](url)
       const linkMatch = full.match(/^\[([^\]]+)\]\((https?:\/\/[^)]+)\)$/)
       if (linkMatch) {
+        // Texte qui imite une autre adresse que la cible : l'hôte réel est affiché à côté.
+        const real = deceptiveHost(linkMatch[1], linkMatch[2])
         result.push(
-          <a key={match.index} href={linkMatch[2]} target="_blank" rel="noopener noreferrer">
-            {linkMatch[1]}
+          <a key={match.index} href={linkMatch[2]} target="_blank" rel="noopener noreferrer" title={linkMatch[2]}>
+            {linkMatch[1]}{real && <span className="text-fc-yellow"> ({real})</span>}
           </a>
         )
       } else {

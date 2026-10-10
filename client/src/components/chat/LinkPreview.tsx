@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import api from '../../api/client'
 import { ExternalLink } from 'lucide-react'
+import { isSafeUrl } from '../../utils/safeUrl'
 
 interface OGData {
   title?: string
@@ -29,15 +30,6 @@ function asOg(v: unknown): OGData | null {
   const str = (k: string) => (typeof o[k] === 'string' ? (o[k] as string) : undefined)
   const url = str('url')
   return url ? { url, title: str('title'), description: str('description'), image: str('image'), site_name: str('site_name') } : null
-}
-
-function isSafeUrl(url: string): boolean {
-  try {
-    const parsed = new URL(url)
-    return parsed.protocol === 'https:' || parsed.protocol === 'http:'
-  } catch {
-    return false
-  }
 }
 
 export default function LinkPreview({ url, data: given }: Props) {

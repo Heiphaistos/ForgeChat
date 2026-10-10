@@ -33,6 +33,9 @@ const savedId = () => { try { return localStorage.getItem(ID_KEY) ?? '' } catch 
 
 /** Ouvre un lien ghosthanddesk:// (appli) ou https (navigateur), y compris depuis l'appli de bureau. */
 async function openExternal(url: string) {
+  // Lien d'application : confirmation explicite avant de lancer un programme local.
+  if (url.startsWith('ghosthanddesk:') && !window.confirm(tr('rs.confirmOpen'))) return
+  if (!/^(https:|ghosthanddesk:)/.test(url)) return
   if (isTauri) {
     const { invoke } = await import('@tauri-apps/api/core')
     await invoke('plugin:shell|open', { path: url })

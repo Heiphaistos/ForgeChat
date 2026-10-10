@@ -10,7 +10,7 @@
     "beforeBuildCommand": "cd ../client && npm run build"
   },
   "app": {
-    "withGlobalTauri": true,
+    "withGlobalTauri": false,
     "windows": [
       {
         "title": "ForgeChat",
@@ -42,7 +42,7 @@
       }
     },
     "shell": {
-      "open": "^((mailto:\\w+)|(tel:\\w+)|(https?://\\w+)|(ghosthanddesk://(share|connect)\\?)).+"
+      "open": "^((mailto:\\w+)|(https://\\w+)|(ghosthanddesk://(share|connect)\\?)).+"
     }
   },
   "bundle": {
