@@ -1,4 +1,4 @@
-# ForgeChat — Setup VPS (212.227.140.45)
+# ForgeChat — Setup VPS
 
 ## 1. Pré-requis sur le VPS
 
@@ -18,7 +18,7 @@ apt install -y git
 
 Ajoute un enregistrement A :
 ```
-forgechat.heiphaistos.org  →  212.227.140.45
+forgechat.heiphaistos.org  →  <IP publique du VPS>
 ```
 
 ## 3. Premier déploiement
@@ -90,11 +90,12 @@ docker compose exec postgres psql -U forgechat forgechat
 | `JWT_SECRET` | Secret JWT (min 64 chars) | `openssl rand -hex 32` |
 | `FRONTEND_URL` | URL du site | `https://forgechat.heiphaistos.org` |
 
-## CI/CD GitHub Actions (optionnel)
+## Déploiement continu
 
-Dans les Secrets GitHub du repo :
-- `VPS_HOST` = `212.227.140.45`
-- `VPS_USER` = `root`
-- `VPS_SSH_KEY` = contenu de `~/.ssh/id_rsa` (clé privée)
+Aucun accès SSH depuis une CI. Le minuteur `deployer-auto` du VPS aligne `/opt/forgechat` sur la
+branche par défaut de GitHub et lance `deploy/deploy.sh` (environ 2 min après un push). Les
+applications (APK, IPA, bureau) sont publiées par `deploy/forgechat_releases_sync.py` à partir des
+releases GitHub **signées** : voir `docs/PUBLICATION-SIGNEE.md`.
 
-Push sur `main` → déploiement automatique.
+Ne jamais mettre dans ce dépôt (il peut être public pendant les builds) : adresse du VPS, nom
+d'utilisateur SSH, clé privée ou mode d'emploi d'une clé.
