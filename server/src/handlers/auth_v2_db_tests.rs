@@ -85,7 +85,7 @@ async fn auth_v2_counters() {
     let db = db().await;
     let redis_url = std::env::var("FORGECHAT_TEST_REDIS_URL").expect("FORGECHAT_TEST_REDIS_URL");
     std::env::set_var("DATABASE_URL", "postgres://inutilise");
-    std::env::set_var("JWT_SECRET", "secret de test");
+    std::env::set_var("JWT_SECRET", "secret-de-test-assez-long-pour-demarrer-0123456789");
     let config = crate::config::Config::from_env().unwrap();
     let conn = redis::Client::open(redis_url).unwrap().get_connection_manager().await.unwrap();
     let state = AppState::new(db, conn, config).await;
