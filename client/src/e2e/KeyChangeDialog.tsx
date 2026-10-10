@@ -13,19 +13,20 @@ export default function KeyChangeDialog() {
   const t = useT()
   const alert = useKeyAlerts(s => s.alerts[0])
   const myPub = useAccountKey(s => s.pub)
-  const [code, setCode] = useState<string | null>(null)
+  // Code calculé pour l'empreinte `fp` (une autre alerte peut lui succéder).
+  const [safety, setSafety] = useState<{ fp: string; code: string } | null>(null)
   const [busy, setBusy] = useState(false)
 
   useEffect(() => {
     let alive = true
-    setCode(null)
     if (alert?.kind === 'user' && myPub) {
-      c.safetyCode(c.b64uDecode(myPub), c.b64uDecode(alert.pub)).then(v => { if (alive) setCode(v) }, () => {})
+      c.safetyCode(c.b64uDecode(myPub), c.b64uDecode(alert.pub)).then(v => { if (alive) setSafety({ fp: alert.fp, code: v }) }, () => {})
     }
     return () => { alive = false }
   }, [alert, myPub])
 
   if (!alert) return null
+  const code = safety?.fp === alert.fp ? safety.code : null
   const red = alert.verified || alert.kind === 'server'
   return (
     <div className="fixed inset-0 z-[10001] flex items-center justify-center bg-black/80 px-4 py-8 overflow-y-auto">

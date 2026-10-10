@@ -2,34 +2,20 @@
 // sécurité des membres et alerte « la clé de X a changé ».
 import { useQuery } from '@tanstack/react-query'
 import { useEffect, useState } from 'react'
-import { Alert, ScrollView, View } from 'react-native'
+import { ScrollView, View } from 'react-native'
 import { Sheet } from '@/components/Sheet'
 import { IconButton, T } from '@/components/ui'
 import { useT } from '@/i18n'
-import { secureStateStorage } from '@/lib/secureStorage'
 import { getMyId } from '@/stores/auth'
 import { colors, spacing } from '@/theme'
-import { getMembers, keyChanges, type ConvKind, type ConvMember } from './conversations'
+import { getMembers, type ConvKind } from './conversations'
+import { trustedMembers } from './keyPins'
 import { SafetyCode } from './E2ESettings'
 
 /** Membres et clés publiques (le chiffrement est obligatoire : toujours chiffré). */
 function useConvMembers(kind: ConvKind, id: string) {
   const { data } = useQuery({ queryKey: ['e2e_members', kind, id], queryFn: () => getMembers(kind, id), staleTime: 60_000 })
   return data ?? []
-}
-
-// Empreintes déjà vues, une entrée par personne (SecureStore limite la taille des valeurs).
-const seenKey = (me: string, user: string) => `fc_e2e_fp_${me}_${user}`
-async function readSeen(me: string, members: ConvMember[]) {
-  const seen: Record<string, string> = {}
-  for (const m of members) {
-    const v = await secureStateStorage.getItem(seenKey(me, m.user_id))
-    if (typeof v === 'string') seen[m.user_id] = v
-  }
-  return seen
-}
-async function acceptKeys(me: string, members: ConvMember[]) {
-  for (const m of members) if (m.fingerprint) await secureStateStorage.setItem(seenKey(me, m.user_id), m.fingerprint)
 }
 
 /** Cadenas toujours fermé ; membres sans clé signalés : ils liront après l'avoir créée. */
@@ -41,19 +27,9 @@ export function E2EBadge({ kind, id }: { kind: ConvKind; id: string }) {
   const others = members.filter((m) => m.user_id !== me)
   const missing = others.filter((m) => !m.public).map((m) => m.username).join(', ')
 
-  useEffect(() => {
-    if (!me || !members.length) return
-    let alive = true
-    void readSeen(me, members).then((seen) => {
-      if (!alive) return
-      const changed = keyChanges(members, seen, me)
-      if (!changed.length) return void acceptKeys(me, members)
-      Alert.alert(t('e2e.conv.title'), t('e2e.conv.keyChanged', { names: changed.map((m) => m.username).join(', ') }), [
-        { text: t('e2e.conv.keyChangedOk'), onPress: () => void acceptKeys(me, members) },
-      ])
-    })
-    return () => { alive = false }
-  }, [me, members, t])
+  // Empreintes recalculées et comparées aux épinglées dès l'ouverture : une clé changée ouvre
+  // la boîte de dialogue bloquante (KeyChangeDialog) avant tout envoi ; première vue = épinglée.
+  useEffect(() => { if (members.length) void trustedMembers(members) }, [members])
 
   return (
     <>

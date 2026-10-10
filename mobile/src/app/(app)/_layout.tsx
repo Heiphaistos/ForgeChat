@@ -1,6 +1,7 @@
 import { Stack } from 'expo-router'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import E2EGate from '@/e2e/E2EGate'
+import KeyChangeDialog from '@/e2e/KeyChangeDialog'
 import AiEngineHost from '@/features/ai/AiEngineHost'
 import { useAppearanceSync } from '@/features/appearance/sync'
 import { useT } from '@/i18n'
@@ -87,6 +88,7 @@ export default function AppLayout() {
         <Stack.Screen name="settings/delete-account" options={{ title: t('screen.deleteAccount'), presentation: 'modal' }} />
       </Stack>
       <E2EGate />
+      <KeyChangeDialog />
       <AiEngineHost />
     </>
   )
