@@ -55,7 +55,7 @@ jobs:
     needs: [client, server]
     services:
       postgres:
-        image: postgres:16
+        image: postgres:16@sha256:ca0bd484cb98bf4b24eb1010e73fb3fcbd6714d240fbc1a10eea5b7dbecb641d # postgres:16
         env:
           POSTGRES_USER: forgechat
           POSTGRES_PASSWORD: ci
@@ -64,7 +64,7 @@ jobs:
         options: >-
           --health-cmd "pg_isready -U forgechat" --health-interval 5s --health-timeout 5s --health-retries 10
       redis:
-        image: redis:7
+        image: redis:7@sha256:4fa24486b8bcca8eec45ee0eb166edc674795e53a2b53d1a9ef263eecebaac85 # redis:7
         ports: ['6379:6379']
     env:
       DATABASE_URL: postgres://forgechat:ci@127.0.0.1:5432/forgechat
