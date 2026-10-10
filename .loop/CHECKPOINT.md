@@ -249,11 +249,11 @@ voix/vidéo en prod si mal fait.
 ## Contexte technique (stable, ne change pas d'une itération à l'autre)
 
 - Repo : `C:\Users\Momo\ForgeChat` (client React/Vite/TS, server Rust/Axum, VPS
-  212.227.140.45). Remotes : `forgejo` (mydepot.heiphaistos.org, déclenche le CI) +
+  <vps>). Remotes : `forgejo` (mydepot.heiphaistos.org, déclenche le CI) +
   `github` — toujours pousser main ET main:master sur les deux.
 - Déploiement : push → CI Forgejo Actions auto (`.forgejo/workflows/deploy.yml`).
   Vérifier après un push important : `curl https://forgechat.heiphaistos.org/version.json`
-  et `ssh root@212.227.140.45 "cd /opt/forgechat && git rev-parse --short HEAD"`.
+  et `ssh root@<vps> "cd /opt/forgechat && git rev-parse --short HEAD"`.
 - Build local : client → `cd client && npx eslint src && npx tsc --noEmit && npm run
   build` ; server → `cd server && cargo check`. Après tout bump de version.toml,
   relancer `cargo check` pour resync Cargo.lock avant de committer.

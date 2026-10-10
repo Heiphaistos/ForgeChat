@@ -153,7 +153,7 @@ mod tests {
                   "::ffff:10.0.0.1", "224.0.0.1", "240.0.0.1"] {
             assert!(!is_public_ip(a.parse().unwrap()), "{a} devrait être refusée");
         }
-        for a in ["1.1.1.1", "212.227.140.45", "2606:4700::1111"] {
+        for a in ["1.1.1.1", "8.8.8.8", "2606:4700::1111"] {
             assert!(is_public_ip(a.parse().unwrap()), "{a} devrait être acceptée");
         }
     }
