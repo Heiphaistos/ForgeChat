@@ -94,6 +94,12 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
   const [showThreadSidebar, setShowThreadSidebar] = useState(false)
   const [showPinned, setShowPinned] = useState(false)
   const [showSearch, setShowSearch] = useState(false)
+  // « Fils actifs » du menu du serveur (ServerHeader).
+  useEffect(() => {
+    const open = () => { setShowThreadSidebar(true); setShowPinned(false); setShowSearch(false); setActiveThreadId(null); setActiveDirectThreadId(null) }
+    window.addEventListener('forgechat:open-threads', open)
+    return () => window.removeEventListener('forgechat:open-threads', open)
+  }, [])
   const [replyTo, setReplyTo] = useState<ReplyTarget | null>(null)
   const [hasMore, setHasMore] = useState(true)
   // Onglet actif mémorisé par canal (durée de vie de l'onglet navigateur)

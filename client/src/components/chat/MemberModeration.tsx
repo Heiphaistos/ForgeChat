@@ -273,5 +273,5 @@ export function useMemberModeration(serverId?: string) {
       : <SanctionDialog serverId={serverId} dialog={dialog as Dialog & { kind: 'ban' | 'timeout' }} canBanForever={perms.has(PERM.BAN_MEMBERS)} onClose={() => setDialog(null)} onDone={refresh} />
     : null
 
-  return { itemsFor, voiceItemsFor, canMove: perms.has(PERM.MOVE_MEMBERS), byId, node }
+  return { itemsFor, node }
 }

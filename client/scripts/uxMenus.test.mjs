@@ -77,9 +77,9 @@ test('vocal, mention et modération s’insèrent', () => {
 
 test('conversation : épingler, fermer, groupe muet / quitter', () => {
   const dm = labels(buildConvMenu({ group: false, pinned: true, muted: false, unread: false }, actions, t, [{ label: 'um.profile' }]))
-  assert.deepEqual(dm, ['channels.markRead', 'dml.unpin', '---', 'um.profile', '---', 'dml.close', '---', 'dml.copyId'])
+  assert.deepEqual(dm, ['channels.markRead', 'dml.unpin', '---', 'um.profile', '---', 'dms.archive', 'dml.close', '---', 'dml.copyId'])
   const g = labels(buildConvMenu({ group: true, pinned: false, muted: true, unread: true }, actions, t))
-  assert.deepEqual(g, ['channels.markRead', 'dml.pin', 'dml.unmuteGroup', '---', 'dml.closeGroup', 'dms.leaveGroup', '---', 'dml.copyId'])
+  assert.deepEqual(g, ['channels.markRead', 'dml.pin', 'dml.unmuteGroup', '---', 'dms.archive', 'dml.closeGroup', 'dms.leaveGroup', '---', 'dml.copyId'])
 })
 
 test('épinglées en tête, ordre conservé', () => {

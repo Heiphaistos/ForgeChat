@@ -62,9 +62,11 @@ interface Props {
   server: Server
   onClose: () => void
   isAdmin?: boolean
+  /** Onglet ouvert d'emblée (menu du serveur : rôles, bots, événements, profil, tags). */
+  initialTab?: ServerSettingsTab
 }
 
-type Tab = 'general' | 'profile' | 'e2e' | 'roles' | 'members' | 'bans' | 'tags' | 'emojis' | 'bots' | 'webhooks' | 'audit' | 'automod' | 'feeds' | 'stats' | 'events' | 'onboarding' | 'community'
+export type ServerSettingsTab = 'general' | 'profile' | 'e2e' | 'roles' | 'members' | 'bans' | 'tags' | 'emojis' | 'bots' | 'webhooks' | 'audit' | 'automod' | 'feeds' | 'stats' | 'events' | 'onboarding' | 'community'
 
 function BoostSection({ server }: { server: any }) {
   // Boost gratuit (un par membre et par serveur) : même appel que le bouton de la barre des salons.
@@ -123,13 +125,15 @@ function BoostSection({ server }: { server: any }) {
   )
 }
 
-export default function ServerSettingsModal({ server, onClose, isAdmin = false }: Props) {
+type Tab = ServerSettingsTab
+
+export default function ServerSettingsModal({ server, onClose, isAdmin = false, initialTab = 'general' }: Props) {
   const t = useT()
   useEscapeKey(onClose)
   // Liste des bans : bannir définitivement OU temporairement.
   const canSeeBans = useServerPerms(server.id).has(PERM.BAN_MEMBERS | PERM.BAN_TEMP)
-  const [tab, setTab] = useState<Tab>('general')
-  const [mobileShowContent, setMobileShowContent] = useState(false)
+  const [tab, setTab] = useState<Tab>(initialTab)
+  const [mobileShowContent, setMobileShowContent] = useState(initialTab !== 'general')
   const [name, setName] = useState(server.name)
   const [description, setDescription] = useState(server.description ?? '')
   const [welcomeMessage, setWelcomeMessage] = useState(server.welcome_message ?? '')

@@ -1,192 +1,39 @@
-import { useNavigate, useParams, useLocation } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
-  ChevronDown, Hash, Plus, Volume2, UserPlus, Settings,
+  Hash, Plus, Volume2, Settings,
   Video, Megaphone, MessagesSquare, Images, Radio, ChevronRight,
-  Mic, MicOff, VolumeX, Monitor, Clock, Lock, PlusCircle, Timer,
-  Users, X, GripVertical, Shield, Archive, EyeOff, BellOff, Pencil, Sparkles, Palette,
+  Clock, Lock, PlusCircle, Timer,
+  X, GripVertical, Archive, EyeOff, BellOff, Pencil,
 } from 'lucide-react'
-import { useState, useEffect, useCallback, useMemo, useRef, useDeferredValue } from 'react'
-import { useEscapeKey } from '../../hooks/useEscapeKey'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import OnboardingModal from '../modals/OnboardingModal'
-import api, { mediaUrl } from '../../api/client'
-import { useContextMenu } from '../ui/ContextMenu'
-import ServerBoostBanner from '../server/ServerBoostBanner'
-import { usePresence } from '../../store/presence'
+import api from '../../api/client'
+import { useContextMenu, longPress, type ContextMenuEntry } from '../ui/ContextMenu'
 import { useUnread } from '../../store/unread'
 import { useChannelNotif } from '../../store/channelNotif'
 import { useVoice } from '../../store/voice'
 import { useWs } from '../../store/ws'
 import { useAuth } from '../../store/auth'
-import { volumeMenuItem } from '../voice/UserVolumePopover'
 import { useDraft, useChat } from '../../store/chat'
 import { SplitContext } from '../../contexts/SplitContext'
 import { useContext } from 'react'
 import CreateChannelModal from '../modals/CreateChannelModal'
 import InviteModal from '../modals/InviteModal'
-import ServerSettingsModal from '../modals/ServerSettingsModal'
-import ServerMenuExtras from '../community/ServerMenuExtras'
+import ServerSettingsModal, { type ServerSettingsTab } from '../modals/ServerSettingsModal'
+import ServerHeader from './ServerHeader'
 import ChannelSettingsModal from '../modals/ChannelSettingsModal'
 import VoicePasswordPrompt from '../modals/VoicePasswordPrompt'
 import toast from 'react-hot-toast'
-import { confirm } from '../ui/ConfirmModal'
 import { deleteWithBackup } from '../../lib/deleteWithBackup'
-import { useServerPerms } from '../../hooks/useServerPerms'
-import { stripMarkdown } from '../../utils/mdShortcuts'
+import { useServerPerms, PERM } from '../../hooks/useServerPerms'
 import { useMobile } from '../../contexts/MobileContext'
-import { useMemberModeration } from '../chat/MemberModeration'
-import { useRemoteSupportItem } from '../chat/RemoteSupport'
-import { t as tr, useT } from '../../i18n'
+import { useT } from '../../i18n'
 import { openMessages, type RawMsg } from '../../e2e/conversations'
-import { fetchDmMessages } from '../../e2e/dmMessages'
-import AnimatedImg from '../ui/AnimatedImg'
-import UserName from '../ui/UserName'
 import ServerLookModal from '../modals/ServerLookModal'
-
-/** Type MIME du glisser-déposer d'un membre vers un autre salon vocal. */
-const VOICE_MEMBER_MIME = 'application/x-forgechat-voice-member'
-
-// Couleurs de présence enrichies (online/idle/dnd/invisible/offline)
-const PRESENCE_COLOR: Record<string, string> = {
-  online: 'bg-fc-green',
-  idle: 'bg-fc-yellow',
-  dnd: 'bg-fc-red',
-  invisible: 'bg-fc-muted',
-  offline: 'bg-fc-muted',
-}
-
-// Modal léger pour créer un groupe DM
-function CreateGroupModal({ onClose }: { onClose: () => void }) {
-  const t = useT()
-  const [search, setSearch] = useState('')
-  const deferredSearch = useDeferredValue(search)
-  const [selected, setSelected] = useState<{ id: string; username: string }[]>([])
-  const qc = useQueryClient()
-  const nav = useNavigate()
-  useEscapeKey(onClose)
-
-  const { data: friends = [] } = useQuery({
-    queryKey: ['friends-dm-search', deferredSearch],
-    queryFn: () => api.get('/friends', { params: { q: deferredSearch } }).then(r => r.data),
-    staleTime: 10_000,
-  })
-
-  const create = useMutation({
-    mutationFn: () =>
-      api.post('/dms/group', { user_ids: selected.map(u => u.id) }).then(r => r.data),
-    onSuccess: (dm: any) => {
-      qc.invalidateQueries({ queryKey: ['dms'] })
-      nav(`/dms/groups/${dm.dm_id ?? dm.id}`)
-      onClose()
-    },
-    onError: (e: any) => toast.error(e.response?.data?.error ?? t('group.createError')),
-  })
-
-  const toggle = (u: { id: string; username: string }) => {
-    setSelected(prev =>
-      prev.find(x => x.id === u.id)
-        ? prev.filter(x => x.id !== u.id)
-        : prev.length < 10 ? [...prev, u] : prev
-    )
-  }
-
-  return (
-    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50" onClick={onClose}>
-      <div role="dialog" aria-modal="true" aria-labelledby="create-group-title" className="bg-fc-channel rounded-xl w-80 shadow-2xl p-4" onClick={e => e.stopPropagation()}>
-        <div className="flex items-center justify-between mb-3">
-          <h2 id="create-group-title" className="font-semibold text-white text-sm">{t('group.title')}</h2>
-          <button onClick={onClose} aria-label={t('common.close')} title={t('common.close')} className="text-fc-muted hover:text-white p-1.5 min-w-[44px] min-h-[44px] flex items-center justify-center rounded hover:bg-fc-hover transition"><X size={16} aria-hidden /></button>
-        </div>
-
-        <input
-          className="w-full bg-fc-input text-sm text-white rounded-lg px-3 py-2 mb-3 outline-none placeholder:text-fc-muted"
-          placeholder={t('group.search')}
-          aria-label={t('group.search')}
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-          autoFocus
-          enterKeyHint="search"
-          inputMode="search"
-          autoCapitalize="none"
-          autoComplete="off"
-        />
-
-        {selected.length > 0 && (
-          <div className="flex flex-wrap gap-1 mb-3">
-            {selected.map(u => (
-              <span
-                key={u.id}
-                className="flex items-center gap-1 bg-fc-accent/20 text-fc-accent text-xs px-2 py-0.5 rounded-full"
-              >
-                {u.username}
-                <button onClick={() => toggle(u)} aria-label={t('group.remove', { name: u.username })} title={t('group.remove', { name: u.username })}><X size={10} /></button>
-              </span>
-            ))}
-          </div>
-        )}
-
-        <div className="max-h-40 overflow-y-auto overscroll-contain space-y-0.5 mb-3">
-          {(friends as any[]).map((f: any) => {
-            const uid: string = f.id ?? f.user_id
-            const uname: string = f.username
-            const isSelected = !!selected.find(x => x.id === uid)
-            return (
-              <button
-                key={uid}
-                onClick={() => toggle({ id: uid, username: uname })}
-                className={`w-full flex items-center gap-2 px-2 py-1.5 rounded transition text-left ${
-                  isSelected
-                    ? 'bg-fc-accent/20 text-white'
-                    : 'hover:bg-fc-hover text-fc-muted hover:text-white'
-                }`}
-              >
-                <div className="w-7 h-7 rounded-full bg-fc-accent flex items-center justify-center text-xs font-bold text-white flex-shrink-0">
-                  {uname.charAt(0).toUpperCase()}
-                </div>
-                <span className="text-sm">{uname}</span>
-              </button>
-            )
-          })}
-          {(friends as any[]).length === 0 && (
-            <p className="text-xs text-fc-muted text-center py-2">{t('group.noFriend')}</p>
-          )}
-        </div>
-
-        <button
-          onClick={() => create.mutate()}
-          disabled={selected.length < 2 || create.isPending}
-          className="w-full py-2 bg-fc-accent hover:bg-indigo-500 text-white text-sm font-medium rounded-lg transition disabled:opacity-40 disabled:cursor-not-allowed"
-        >
-          {create.isPending ? t('common.creating') : t('group.create', { n: selected.length })}
-        </button>
-      </div>
-    </div>
-  )
-}
-
-function BoostButton({ serverId }: { serverId: string }) {
-  const t = useT()
-  const qc = useQueryClient()
-  const boost = useMutation({
-    mutationFn: () => api.post(`/servers/${serverId}/boost`),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['server', serverId] })
-      qc.invalidateQueries({ queryKey: ['channels', serverId] })
-    },
-    onError: () => toast.error(t('channels.boostFailed')),
-  })
-  return (
-    <button
-      onClick={() => boost.mutate()}
-      disabled={boost.isPending}
-      className="mx-2 mb-1 flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg
-        text-xs font-semibold text-purple-300 border border-purple-500/30 bg-purple-500/10
-        hover:bg-purple-500/20 hover:border-purple-500/60 transition disabled:opacity-50"
-    >
-      {t('channels.boost')}
-    </button>
-  )
-}
+import DmList, { TypingDots } from './DmList'
+import VoicePeople, { VOICE_MEMBER_MIME } from './VoicePeople'
+import { useMyUxPrefs } from '../../store/uxPrefs'
 
 function ChannelIcon({ type, size = 16 }: { type: string; size?: number }) {
   switch (type) {
@@ -202,45 +49,20 @@ function ChannelIcon({ type, size = 16 }: { type: string; size?: number }) {
 
 const UNCATEGORIZED_KEY = '__uncategorized__'
 
-// Horodatage relatif compact style Discord : 5m, 2h, 3j, 2sem, 4mois
-function timeAgoShort(dateStr: string): string {
-  const diffMin = Math.floor((Date.now() - new Date(dateStr).getTime()) / 60000)
-  if (diffMin < 1) return tr('time.short.now')
-  if (diffMin < 60) return tr('time.short.min', { n: diffMin })
-  const h = Math.floor(diffMin / 60)
-  if (h < 24) return tr('time.short.hour', { n: h })
-  const d = Math.floor(h / 24)
-  if (d < 7) return tr('time.short.day', { n: d })
-  if (d < 30) return tr('time.short.week', { n: Math.floor(d / 7) })
-  return tr('time.short.month', { n: Math.floor(d / 30) })
-}
-
-function TypingDots() {
-  const t = useT()
-  return (
-    <span className="flex gap-0.5 items-center flex-shrink-0" role="status" aria-label={t('common.someoneTyping')}>
-      {[0, 150, 300].map(d => (
-        <span key={d} aria-hidden className="w-1 h-1 bg-fc-accent rounded-full animate-bounce" style={{ animationDelay: `${d}ms` }} />
-      ))}
-    </span>
-  )
-}
-
 export default function ChannelSidebar() {
   const { serverId, channelId } = useParams()
   const nav = useNavigate()
-  const { pathname } = useLocation()
   const { closeSidebar } = useMobile()
   const t = useT()
   const [showCreateChannel, setShowCreateChannel] = useState(false)
   const [createInCategory, setCreateInCategory] = useState<string | null>(null)
   const [showInvite, setShowInvite] = useState(false)
-  const [showSettings, setShowSettings] = useState(false)
+  const [settingsTab, setSettingsTab] = useState<ServerSettingsTab | null>(null)
   const [showLook, setShowLook] = useState(false)
   const [showOnboarding, setShowOnboarding] = useState(false)
   // Ouvrir la modale paramètres serveur depuis le menu contextuel du rail
   useEffect(() => {
-    const open = () => setShowSettings(true)
+    const open = () => setSettingsTab('general')
     // « Inviter » et « Créer un salon » du menu de la vignette de serveur (ServerSidebar).
     const panel = (e: Event) => {
       const what = (e as CustomEvent<string>).detail
@@ -254,9 +76,6 @@ export default function ChannelSidebar() {
       window.removeEventListener('forgechat:open-server-panel', panel)
     }
   }, [])
-  const [menuOpen, setMenuOpen] = useState(false)
-  const menuRef = useRef<HTMLDivElement>(null)
-  const [showCreateGroup, setShowCreateGroup] = useState(false)
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>(() => {
     try {
       const stored = localStorage.getItem('fc_collapsed_cats')
@@ -271,8 +90,6 @@ export default function ChannelSidebar() {
   const [dragOverChannelId, setDragOverChannelId] = useState<string | null>(null)
   const [showHidden, setShowHidden] = useState(false)
   const qc = useQueryClient()
-  const presenceStatuses = usePresence(s => s.statuses)
-  const getStatus = (id: string) => presenceStatuses[id] ?? 'offline'
   const unreadCounts = useUnread(s => s.counts)
   const markRead = useUnread(s => s.markRead)
   const isChannelMuted = useChannelNotif(s => s.isMuted)
@@ -309,13 +126,11 @@ export default function ChannelSidebar() {
   })
 
   const ctxMenu = useContextMenu()
-  const chLongPressRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const roomParticipants = useVoice(s => s.roomParticipants)
   // Modération vocale (P2-2) : menu contextuel sur un participant et
   // glisser-déposer vers un autre salon vocal (MOVE_MEMBERS).
-  const moderation = useMemberModeration(serverId)
-  const remoteSupportItem = useRemoteSupportItem()
+  const canMoveMembers = useServerPerms(serverId).has(PERM.MOVE_MEMBERS)
   const [voiceDropTarget, setVoiceDropTarget] = useState<string | null>(null)
   const isVoiceMemberDrag = (e: React.DragEvent) => e.dataTransfer.types.includes(VOICE_MEMBER_MIME)
   const dropVoiceMember = (e: React.DragEvent, channelId: string) => {
@@ -331,18 +146,6 @@ export default function ChannelSidebar() {
   const voiceChannelId = useVoice(s => s.channelId)
   const voiceJoin = useVoice(s => s.join)
   const { on: wsOn } = useWs()
-
-  // Fermer le dropdown serveur sur clic extérieur ou Escape
-  useEffect(() => {
-    if (!menuOpen) return
-    const onMouse = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuOpen(false)
-    }
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setMenuOpen(false) }
-    document.addEventListener('mousedown', onMouse)
-    document.addEventListener('keydown', onKey)
-    return () => { document.removeEventListener('mousedown', onMouse); document.removeEventListener('keydown', onKey) }
-  }, [menuOpen])
 
   // Écouter les erreurs de join vocal
   useEffect(() => {
@@ -382,27 +185,6 @@ export default function ChannelSidebar() {
       }
     })
     return () => { offCreate(); offUpdate(); offDelete(); offMember() }
-  }, [serverId])
-
-  const { data: dms = [], isLoading: dmsLoading } = useQuery({
-    queryKey: ['dms'],
-    // Dernier message chiffré : le serveur n'a pas le texte, on l'indique simplement.
-    queryFn: () => api.get('/dms').then(r => r.data.map((d: any) =>
-      d.last_message_encrypted && d.last_message_content == null ? { ...d, last_message_content: `🔒 ${t('e2e.conv.encrypted')}` } : d)),
-    enabled: !serverId,
-    staleTime: 30_000,
-  })
-
-  // Rafraîchir la liste DMs quand un GroupDM est créé/renommé/modifié
-  useEffect(() => {
-    if (serverId) return
-    const refresh = () => qc.invalidateQueries({ queryKey: ['dms'] })
-    const offCreate = wsOn('GROUP_DM_CREATE', refresh)
-    const offRename = wsOn('GROUP_DM_RENAME', refresh)
-    const offLeave = wsOn('GROUP_DM_MEMBER_LEAVE', refresh)
-    const offAdd = wsOn('GROUP_DM_MEMBER_ADD', refresh)
-    const offRemove = wsOn('GROUP_DM_MEMBER_REMOVE', refresh)
-    return () => { offCreate(); offRename(); offLeave(); offAdd(); offRemove() }
   }, [serverId])
 
   const reorderChannels = useMutation({
@@ -482,24 +264,9 @@ export default function ChannelSidebar() {
     setDragOverChannelId(null)
   }, [])
 
-  const [dmFilter, setDmFilter] = useState('')
   const [chFilter, setChFilter] = useState('')
   // Reset du filtre canaux quand on change de serveur
   useEffect(() => { setChFilter('') }, [serverId])
-  const dmMatches = useCallback((d: any) => {
-    if (!dmFilter.trim()) return true
-    const q = dmFilter.trim().toLowerCase()
-    return (d.username ?? d.name ?? '').toLowerCase().includes(q)
-  }, [dmFilter])
-  const groupDms = useMemo(() => (dms as any[]).filter(d => d.is_group && !d.is_archived && dmMatches(d)), [dms, dmMatches])
-  const individualDms = useMemo(() => (dms as any[]).filter(d => !d.is_group && !d.is_archived && dmMatches(d)), [dms, dmMatches])
-  const archivedDms = useMemo(() => (dms as any[]).filter(d => d.is_archived && dmMatches(d)), [dms, dmMatches])
-  const [showArchivedDms, setShowArchivedDms] = useState(false)
-  const unarchiveDm = (dmId: string) => {
-    api.patch(`/dms/${dmId}/settings`, { archived: false })
-      .then(() => { qc.invalidateQueries({ queryKey: ['dms'] }); toast.success(t('channels.unarchived')) })
-      .catch(() => toast.error(t('common.error')))
-  }
 
   // ⚠️ Ces useMemo DOIVENT rester avant le `if (!serverId) return` :
   // les avoir après causait React #310/#300 (nombre de hooks variable) à
@@ -534,321 +301,38 @@ export default function ChannelSidebar() {
     }
   }
 
+  // « Masquer les salons rendus muets » (menu du serveur) : le salon ouvert reste visible.
+  const hideMuted = useMyUxPrefs().hideMuted.includes(serverId ?? '')
+  const mutedChannels = useChannelNotif(s => s.mutedChannels)
+  const listed = hideMuted
+    ? channels.filter((c: any) => c.id === channelId || !(mutedChannels.has(c.id) && isChannelMuted(c.id)))
+    : channels
   // Construire les groupes dynamiques basés sur les catégories DB
   const categoryGroups = useMemo(() => {
     const groups: Array<{ key: string; label: string; channels: any[] }> = []
     for (const cat of categories) {
-      const catChannels = channels.filter((c: any) => c.category_id === cat.id)
+      const catChannels = listed.filter((c: any) => c.category_id === cat.id)
       // Catégorie vide (ex. modèle Jötunheim) : montrée à qui peut y créer un salon.
       if (catChannels.length > 0 || canCreate) {
         groups.push({ key: cat.id, label: cat.name, channels: catChannels })
       }
     }
     const knownCatIds = new Set(categories.map((c: any) => c.id))
-    const uncategorized = channels.filter(
+    const uncategorized = listed.filter(
       (c: any) => !c.category_id || !knownCatIds.has(c.category_id)
     )
-    if (categories.length === 0 && channels.length > 0) {
-      const textChannels = channels.filter((c: any) => ['text', 'announcement', 'forum', 'media'].includes(c.type))
-      const voiceChannels = channels.filter((c: any) => ['voice', 'video', 'stage'].includes(c.type))
+    if (categories.length === 0 && listed.length > 0) {
+      const textChannels = listed.filter((c: any) => ['text', 'announcement', 'forum', 'media'].includes(c.type))
+      const voiceChannels = listed.filter((c: any) => ['voice', 'video', 'stage'].includes(c.type))
       if (textChannels.length > 0) groups.push({ key: 'texte', label: t('channels.groupText'), channels: textChannels })
       if (voiceChannels.length > 0) groups.push({ key: 'vocal', label: t('channels.groupVoice'), channels: voiceChannels })
     } else if (uncategorized.length > 0) {
       groups.push({ key: UNCATEGORIZED_KEY, label: t('channels.uncategorized'), channels: uncategorized })
     }
     return groups
-  }, [channels, categories, t, canCreate])
+  }, [listed, categories, t, canCreate])
 
-  if (!serverId) {
-
-    return (
-      <div className="flex-1 overflow-y-auto overscroll-y-contain p-2">
-        {/* En-tête + bouton créer groupe */}
-        <div className="flex items-center justify-between px-2 py-2">
-          <span className="text-xs font-semibold text-fc-muted uppercase tracking-wide">
-            {t('dms.title')}
-          </span>
-          <button
-            onClick={() => setShowCreateGroup(true)}
-            aria-label={t('dms.newGroup')}
-            title={t('dms.newGroup')}
-            className="text-fc-muted hover:text-white transition p-1.5 min-w-[44px] min-h-[44px] flex items-center justify-center rounded hover:bg-fc-hover"
-          >
-            <Plus size={15} aria-hidden />
-          </button>
-        </div>
-
-        {/* Filtre rapide des conversations — sticky pour rester accessible en scrollant */}
-        <div className="px-2 pb-2 sticky top-0 z-10 bg-fc-channel">
-          <div className="relative">
-            <input
-              value={dmFilter}
-              onChange={e => setDmFilter(e.target.value)}
-              placeholder={t('dms.filter')}
-              aria-label={t('dms.filterLabel')}
-              enterKeyHint="search"
-              autoCapitalize="none"
-              className="w-full pl-2.5 pr-8 py-1.5 bg-fc-input rounded text-sm text-white placeholder:text-fc-muted outline-none focus:ring-1 focus:ring-fc-accent"
-            />
-            {dmFilter && (
-              <button
-                onClick={() => setDmFilter('')}
-                aria-label={t('common.clearFilter')}
-                className="absolute right-1 top-1/2 -translate-y-1/2 p-1 text-fc-muted hover:text-white transition"
-              >
-                <X size={13} aria-hidden />
-              </button>
-            )}
-          </div>
-        </div>
-
-        {/* Groupes DM */}
-        {groupDms.length > 0 && (
-          <>
-            <div className="px-2 py-1 text-[10px] font-semibold text-fc-muted uppercase tracking-wide">
-              {t('dms.groups')}
-            </div>
-            {groupDms.map((dm: any) => {
-              const unread = unreadCounts[dm.id] ?? 0
-              const toggleMuteGroup = () => {
-                api.patch(`/dms/${dm.id}/settings`, { muted: !dm.is_muted })
-                  .then(() => qc.invalidateQueries({ queryKey: ['dms'] }))
-                  .catch(() => toast.error(t('common.error')))
-              }
-              const leaveGroup = async () => {
-                if (!await confirm({ message: t('dms.leaveGroupConfirm', { name: dm.name ?? t('dms.group') }), danger: true, confirmLabel: t('servers.leave') })) return
-                try {
-                  await api.post(`/dms/groups/${dm.id}/leave`)
-                  qc.invalidateQueries({ queryKey: ['dms'] })
-                  nav('/friends')
-                } catch { toast.error(t('dms.leaveGroupFailed')) }
-              }
-              return (
-                <button
-                  key={dm.id}
-                  onClick={() => { nav(`/dms/groups/${dm.id}`); closeSidebar() }}
-                  onContextMenu={e => ctxMenu.open(e, [
-                    { label: dm.is_muted ? t('dms.unmute') : t('dms.mute'), onClick: toggleMuteGroup },
-                    { label: t('dms.leaveGroup'), onClick: leaveGroup },
-                  ])}
-                  onTouchStart={e => {
-                    const { clientX, clientY } = e.touches[0]
-                    chLongPressRef.current = setTimeout(() => {
-                      chLongPressRef.current = null
-                      if ('vibrate' in navigator) navigator.vibrate(20)
-                      ctxMenu.openAt(clientX, clientY, [
-                        { label: dm.is_muted ? t('dms.unmute') : t('dms.mute'), onClick: toggleMuteGroup },
-                        { label: t('dms.leaveGroup'), onClick: leaveGroup },
-                      ])
-                    }, 500)
-                  }}
-                  onTouchEnd={() => { if (chLongPressRef.current) { clearTimeout(chLongPressRef.current); chLongPressRef.current = null } }}
-                  onTouchCancel={() => { if (chLongPressRef.current) { clearTimeout(chLongPressRef.current); chLongPressRef.current = null } }}
-                  onTouchMove={() => { if (chLongPressRef.current) { clearTimeout(chLongPressRef.current); chLongPressRef.current = null } }}
-                  aria-current={pathname === `/dms/groups/${dm.id}` ? 'page' : undefined}
-                  className="flex items-center gap-2 w-full px-2 py-1.5 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition"
-                >
-                  <div className="relative flex-shrink-0">
-                    <div className="w-8 h-8 rounded-full bg-fc-hover flex items-center justify-center text-fc-muted">
-                      <Users size={16} />
-                    </div>
-                  </div>
-                  <div className="min-w-0 text-left flex-1">
-                    <div className="flex items-baseline justify-between gap-1.5">
-                      <span className={`text-sm truncate ${unread > 0 ? 'font-semibold text-white' : 'font-medium text-fc-text'}`}>
-                        {dm.name ?? dm.username ?? t('dms.group')}
-                      </span>
-                      {dm.last_message_at && (
-                        <span className="text-[10px] text-fc-muted flex-shrink-0" title={new Date(dm.last_message_at).toLocaleString()}>{timeAgoShort(dm.last_message_at)}</span>
-                      )}
-                    </div>
-                    <div className={`text-xs truncate ${unread > 0 && dm.last_message_content != null ? 'text-fc-text font-medium' : 'text-fc-muted'}`}>
-                      {dm.last_message_content != null
-                        ? `${dm.last_message_author ? `${dm.last_message_author} : ` : ''}${stripMarkdown(dm.last_message_content) || t('common.attachment')}`
-                        : t('dms.members', { n: dm.member_count ?? '?' })}
-                    </div>
-                  </div>
-                  {pathname !== `/dms/groups/${dm.id}` && isTypingIn(dm.id) && <TypingDots />}
-                  {!!drafts[dm.id] && pathname !== `/dms/groups/${dm.id}` && (
-                    <Pencil size={11} className="text-fc-muted flex-shrink-0" aria-label={t('common.draftPending')} />
-                  )}
-                  {dm.is_muted && !unread && (
-                    <BellOff size={13} className="flex-shrink-0 text-fc-muted/50" />
-                  )}
-                  {unread > 0 && (
-                    <span role="status" aria-label={t(unread > 1 ? 'common.unread.other' : 'common.unread.one', { n: unread > 99 ? '99+' : unread })} className="flex-shrink-0 min-w-[18px] h-[18px] bg-fc-red text-white text-[10px] font-bold rounded-full flex items-center justify-center px-1">
-                      <span aria-hidden>{unread > 99 ? '99+' : unread}</span>
-                    </span>
-                  )}
-                </button>
-              )
-            })}
-          </>
-        )}
-
-        {/* DMs individuels */}
-        {groupDms.length > 0 && individualDms.length > 0 && (
-          <div className="px-2 py-1 text-[10px] font-semibold text-fc-muted uppercase tracking-wide mt-1">
-            {t('dms.direct')}
-          </div>
-        )}
-        {individualDms.map((dm: any) => {
-          const liveStatus = getStatus(dm.other_user_id) || dm.status || 'offline'
-          const statusKey = liveStatus in PRESENCE_COLOR ? liveStatus : 'offline'
-          const unread = unreadCounts[dm.id] ?? 0
-          const toggleMuteDm = () => {
-            api.patch(`/dms/${dm.id}/settings`, { muted: !dm.is_muted })
-              .then(() => qc.invalidateQueries({ queryKey: ['dms'] }))
-              .catch(() => toast.error(t('common.error')))
-          }
-          const archiveDm = () => {
-            api.patch(`/dms/${dm.id}/settings`, { archived: true })
-              .then(() => qc.invalidateQueries({ queryKey: ['dms'] }))
-              .catch(() => toast.error(t('common.error')))
-          }
-          return (
-            <button
-              key={dm.id}
-              onClick={() => { nav(`/dms/${dm.id}`); closeSidebar() }}
-              onMouseEnter={() => {
-                qc.prefetchQuery({
-                  queryKey: ['dm_messages', dm.id, null],
-                  // Même forme que DMPage : déchiffrés (des messages bruts s'affichaient vides).
-                  queryFn: () => fetchDmMessages(dm.id),
-                  staleTime: 30_000,
-                })
-              }}
-              onContextMenu={e => ctxMenu.open(e, [
-                { label: dm.is_muted ? t('dms.unmute') : t('dms.mute'), onClick: toggleMuteDm },
-                { label: t('dms.archive'), onClick: archiveDm },
-                { label: t('dms.viewProfile'), onClick: () => nav(`/users/${dm.other_user_id}`) },
-              ])}
-              onTouchStart={e => {
-                const { clientX, clientY } = e.touches[0]
-                chLongPressRef.current = setTimeout(() => {
-                  chLongPressRef.current = null
-                  if ('vibrate' in navigator) navigator.vibrate(20)
-                  ctxMenu.openAt(clientX, clientY, [
-                    { label: dm.is_muted ? t('dms.unmute') : t('dms.mute'), onClick: toggleMuteDm },
-                    { label: t('dms.archive'), onClick: archiveDm },
-                    { label: t('dms.viewProfile'), onClick: () => nav(`/users/${dm.other_user_id}`) },
-                  ])
-                }, 500)
-              }}
-              onTouchEnd={() => { if (chLongPressRef.current) { clearTimeout(chLongPressRef.current); chLongPressRef.current = null } }}
-              onTouchCancel={() => { if (chLongPressRef.current) { clearTimeout(chLongPressRef.current); chLongPressRef.current = null } }}
-              onTouchMove={() => { if (chLongPressRef.current) { clearTimeout(chLongPressRef.current); chLongPressRef.current = null } }}
-              aria-current={pathname === `/dms/${dm.id}` ? 'page' : undefined}
-              className="flex items-center gap-2 w-full px-2 py-1.5 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition"
-            >
-              <div className="relative flex-shrink-0">
-                <div className="w-8 h-8 rounded-full bg-fc-accent flex items-center justify-center text-sm font-bold text-white overflow-hidden">
-                  {dm.avatar
-                    ? <AnimatedImg src={dm.avatar} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
-                    : dm.username.charAt(0).toUpperCase()}
-                </div>
-                {/* Indicateur de présence coloré (vert/jaune/rouge/gris) */}
-                <div className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-fc-channel ${PRESENCE_COLOR[statusKey]}`} />
-              </div>
-              <div className="min-w-0 text-left flex-1">
-                <div className="flex items-baseline justify-between gap-1.5">
-                  <UserName userId={dm.other_user_id} name={dm.username} className={`text-sm truncate ${unread > 0 ? 'font-semibold text-white' : 'font-medium text-fc-text'}`} />
-                  {dm.last_message_at && (
-                    <span className="text-[10px] text-fc-muted flex-shrink-0" title={new Date(dm.last_message_at).toLocaleString()}>{timeAgoShort(dm.last_message_at)}</span>
-                  )}
-                </div>
-                {dm.last_message_content != null ? (
-                  <div className={`text-xs truncate ${unread > 0 ? 'text-fc-text font-medium' : 'text-fc-muted'}`}>
-                    {stripMarkdown(dm.last_message_content) || t('common.attachment')}
-                  </div>
-                ) : (
-                  <div className={`text-xs ${statusKey === 'online' ? 'text-fc-green' : statusKey === 'idle' ? 'text-fc-yellow' : statusKey === 'dnd' ? 'text-fc-red' : 'text-fc-muted'}`}>
-                    {statusKey === 'online' ? t('presence.online')
-                      : statusKey === 'idle' ? t('presence.idle')
-                      : statusKey === 'dnd' ? t('presence.dnd')
-                      : t('presence.offline')}
-                  </div>
-                )}
-              </div>
-              {/* Quelqu'un écrit dans ce DM */}
-              {pathname !== `/dms/${dm.id}` && isTypingIn(dm.id) && <TypingDots />}
-              {/* Indicateur brouillon en attente */}
-              {!!drafts[dm.id] && pathname !== `/dms/${dm.id}` && (
-                <Pencil size={11} className="text-fc-muted flex-shrink-0" aria-label={t('common.draftPending')} />
-              )}
-              {/* Indicateur mute */}
-              {dm.is_muted && !unread && (
-                <BellOff size={13} className="flex-shrink-0 text-fc-muted/50" />
-              )}
-              {/* Badge non-lus */}
-              {unread > 0 && (
-                <span role="status" aria-label={t(unread > 1 ? 'common.unread.other' : 'common.unread.one', { n: unread > 99 ? '99+' : unread })} className="flex-shrink-0 min-w-[18px] h-[18px] bg-fc-red text-white text-[10px] font-bold rounded-full flex items-center justify-center px-1">
-                  <span aria-hidden>{unread > 99 ? '99+' : unread}</span>
-                </span>
-              )}
-            </button>
-          )
-        })}
-
-        {/* Skeleton au premier chargement de la liste */}
-        {dmsLoading && dms.length === 0 && (
-          <div className="space-y-2 px-2 py-2 animate-pulse motion-reduce:animate-none" aria-hidden>
-            {[70, 45, 60, 52].map((w, i) => (
-              <div key={i} className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-full bg-fc-hover flex-shrink-0" />
-                <div className="flex-1 space-y-1.5">
-                  <div className="h-2.5 rounded bg-fc-hover" style={{ width: `${w}%` }} />
-                  <div className="h-2 rounded bg-fc-hover/60" style={{ width: `${w - 15}%` }} />
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* Aucun résultat pour le filtre */}
-        {dmFilter.trim() && groupDms.length === 0 && individualDms.length === 0 && (
-          <div className="text-center text-fc-muted text-xs py-4">{t('dms.noMatch')}</div>
-        )}
-
-        {/* Conversations archivées — repliées par défaut, désarchivage en un clic */}
-        {archivedDms.length > 0 && (
-          <div className="mt-3">
-            <button
-              onClick={() => setShowArchivedDms(v => !v)}
-              className="flex items-center gap-1 px-2 py-1.5 w-full text-[10px] font-semibold text-fc-muted uppercase tracking-wide hover:text-white transition"
-              aria-expanded={showArchivedDms}
-            >
-              <ChevronRight size={12} className={`transition-transform ${showArchivedDms ? 'rotate-90' : ''}`} />
-              {t('dms.archived', { n: archivedDms.length })}
-            </button>
-            {showArchivedDms && archivedDms.map((dm: any) => (
-              <div key={dm.id} className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-fc-hover/50 transition group/arch">
-                <button
-                  onClick={() => { nav(dm.is_group ? `/dms/groups/${dm.id}` : `/dms/${dm.id}`); closeSidebar() }}
-                  className="flex-1 min-w-0 text-left text-sm text-fc-muted hover:text-white truncate transition"
-                >
-                  {dm.is_group ? (dm.name ?? t('dms.group')) : dm.username}
-                </button>
-                <button
-                  onClick={() => unarchiveDm(dm.id)}
-                  title={t('dms.unarchive')}
-                  aria-label={t('dms.unarchiveName', { name: dm.is_group ? (dm.name ?? t('dms.theGroup')) : dm.username })}
-                  className="opacity-100 md:opacity-0 md:group-hover/arch:opacity-100 p-1.5 min-w-[36px] min-h-[36px] flex items-center justify-center text-fc-muted hover:text-white rounded transition flex-shrink-0"
-                >
-                  <Archive size={13} aria-hidden />
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* Modal créer groupe */}
-        {showCreateGroup && (
-          <CreateGroupModal onClose={() => setShowCreateGroup(false)} />
-        )}
-      </div>
-    )
-  }
+  if (!serverId) return <DmList />
 
   const toggleGroup = (key: string) => {
     setCollapsed(prev => {
@@ -877,6 +361,30 @@ export default function ChannelSidebar() {
       queryFn: () => api.get(`/servers/${serverId}/channels/${chId}/messages`).then(r => openMessages('channel', chId, r.data as RawMsg[])),
       staleTime: 30_000,
     })
+  }
+
+  // Clic droit / appui long sur un salon.
+  const channelMenu = (ch: any): ContextMenuEntry[] => {
+    const channelMuted = isChannelMuted(ch.id)
+    return [
+      { label: t('channels.markRead'), onClick: () => markRead(ch.id, serverId) },
+      { label: channelMuted ? t('channels.notifOn') : t('channels.notifOff'), onClick: () => {
+        const next = !channelMuted
+        setChannelMuted(ch.id, next)
+        api.post(`/user/channel-notif/${ch.id}`, { level: next ? 'nothing' : 'inherit', muted: next })
+      }},
+      { label: t('channels.copyLink'), onClick: () => navigator.clipboard.writeText(`${window.location.origin}/servers/${serverId}/channels/${ch.id}`) },
+      { separator: true },
+      { label: t('channels.settings'), onClick: () => setChannelSettings(ch) },
+      ...(canEdit ? [
+        { label: ch.hidden ? t('channels.show') : t('channels.hide'), onClick: () => ch.hidden ? unhideChannelMutation.mutate(ch.id) : hideChannelMutation.mutate(ch.id) },
+        { label: ch.archived ? t('channels.restore') : t('channels.archive'), onClick: () => archiveChannel.mutate(ch.id) },
+      ] : []),
+      ...(canDeleteChannel(ch.created_by) ? [
+        { separator: true as const },
+        { label: t('channels.delete'), danger: true, onClick: () => removeWithBackup('channel', ch.id, ch.name) },
+      ] : []),
+    ]
   }
 
   const renderChannel = (ch: any, groupChannels: any[], extraClass = '', categoryKey = '') => {
@@ -916,54 +424,8 @@ export default function ChannelSidebar() {
         }}
         onDragEnd={canEdit ? handleChannelDragEnd : undefined}
         className={`${isDragOver ? 'border-t-2 border-fc-accent' : ''} ${voiceDropTarget === ch.id ? 'ring-1 ring-fc-accent rounded' : ''} ${isDragging ? 'opacity-50' : ''} ${extraClass}`}
-        onContextMenu={e => {
-          const channelMuted = isChannelMuted(ch.id)
-          ctxMenu.open(e, [
-            { label: t('channels.markRead'), onClick: () => markRead(ch.id, serverId) },
-            { label: channelMuted ? t('channels.notifOn') : t('channels.notifOff'), onClick: () => {
-              const next = !channelMuted
-              setChannelMuted(ch.id, next)
-              api.post(`/user/channel-notif/${ch.id}`, { level: next ? 'nothing' : 'inherit', muted: next })
-            }},
-            { label: t('channels.copyLink'), onClick: () => navigator.clipboard.writeText(`${window.location.origin}/servers/${serverId}/channels/${ch.id}`) },
-            { separator: true },
-            { label: t('channels.settings'), onClick: () => setChannelSettings(ch) },
-            ...(canEdit ? [
-              { label: ch.hidden ? t('channels.show') : t('channels.hide'), onClick: () => ch.hidden ? unhideChannelMutation.mutate(ch.id) : hideChannelMutation.mutate(ch.id) },
-              { label: ch.archived ? t('channels.restore') : t('channels.archive'), onClick: () => archiveChannel.mutate(ch.id) },
-            ] : []),
-            ...(canDeleteChannel(ch.created_by) ? [
-              { separator: true as const },
-              { label: t('channels.delete'), danger: true, onClick: () => removeWithBackup('channel', ch.id, ch.name) },
-            ] : []),
-          ])
-        }}
-        onTouchStart={e => {
-          const { clientX, clientY } = e.touches[0]
-          const channelMuted = isChannelMuted(ch.id)
-          chLongPressRef.current = setTimeout(() => {
-            chLongPressRef.current = null
-            if ('vibrate' in navigator) navigator.vibrate(20)
-            ctxMenu.openAt(clientX, clientY, [
-              { label: t('channels.markRead'), onClick: () => markRead(ch.id, serverId) },
-              { label: channelMuted ? t('channels.notifOn') : t('channels.notifOff'), onClick: () => {
-                const next = !channelMuted
-                setChannelMuted(ch.id, next)
-                api.post(`/user/channel-notif/${ch.id}`, { level: next ? 'nothing' : 'inherit', muted: next })
-              }},
-              { label: t('channels.copyLink'), onClick: () => navigator.clipboard.writeText(`${window.location.origin}/servers/${serverId}/channels/${ch.id}`) },
-              { separator: true },
-              { label: t('channels.settings'), onClick: () => setChannelSettings(ch) },
-              ...(canEdit ? [
-                { label: ch.hidden ? t('channels.show') : t('channels.hide'), onClick: () => ch.hidden ? unhideChannelMutation.mutate(ch.id) : hideChannelMutation.mutate(ch.id) },
-                { label: ch.archived ? t('channels.restore') : t('channels.archive'), onClick: () => archiveChannel.mutate(ch.id) },
-              ] : []),
-            ])
-          }, 500)
-        }}
-        onTouchEnd={() => { if (chLongPressRef.current) { clearTimeout(chLongPressRef.current); chLongPressRef.current = null } }}
-        onTouchCancel={() => { if (chLongPressRef.current) { clearTimeout(chLongPressRef.current); chLongPressRef.current = null } }}
-        onTouchMove={() => { if (chLongPressRef.current) { clearTimeout(chLongPressRef.current); chLongPressRef.current = null } }}
+        onContextMenu={e => ctxMenu.open(e, channelMenu(ch))}
+        {...longPress((x, y) => ctxMenu.openAt(x, y, channelMenu(ch)))}
       >
         <button
           onClick={() => { if (isVoiceCh) { handleVoiceChannelClick(ch) } else { nav(`/servers/${serverId}/channels/${ch.id}`); closeSidebar() } }}
@@ -1090,60 +552,8 @@ export default function ChannelSidebar() {
           </button>
         </button>
 
-        {/* Participants vocaux */}
-        {isVoiceCh && participants.length > 0 && (
-          <div className="ml-5 mb-0.5 space-y-0.5">
-            {participants.map(p => (
-              <div
-                key={p.userId}
-                className="flex items-center gap-1.5 px-2 py-0.5 rounded text-fc-muted/80 hover:bg-fc-hover/40"
-                draggable={moderation.canMove}
-                onDragStart={moderation.canMove ? e => {
-                  e.stopPropagation()
-                  e.dataTransfer.setData(VOICE_MEMBER_MIME, p.userId)
-                  e.dataTransfer.effectAllowed = 'move'
-                } : undefined}
-                onContextMenu={e => {
-                  const rs = remoteSupportItem(p.userId)
-                  const vol = volumeMenuItem(p.userId, p.username, e)
-                  const items = [...(vol ? [vol] : []), ...(rs ? [rs] : []), ...moderation.voiceItemsFor(p.userId).filter(i => !('separator' in i && i.separator))]
-                  if (items.length === 0) return
-                  e.preventDefault()
-                  e.stopPropagation()
-                  ctxMenu.open(e, items)
-                }}
-              >
-                <div className="w-5 h-5 rounded-full bg-fc-accent overflow-hidden flex-shrink-0 flex items-center justify-center text-[10px] font-bold text-white">
-                  {p.avatar
-                    ? <img src={mediaUrl(p.avatar)} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
-                    : p.username.charAt(0).toUpperCase()}
-                </div>
-                <UserName userId={p.userId} name={p.username} className="text-[11px] truncate flex-1" />
-                {p.serverDeafened && <VolumeX size={9} className="text-red-500 flex-shrink-0" aria-label={t('voice.serverDeafened')} />}
-                {p.muted && <MicOff size={9} className={`${p.serverMuted ? 'text-red-500' : 'text-red-400'} flex-shrink-0`} aria-label={p.serverMuted ? t('voice.serverMuted') : t('voice.micOff')} />}
-                {p.screen && <Monitor size={9} className="text-green-400 flex-shrink-0" />}
-                {p.video && !p.screen && <Video size={9} className="text-blue-400 flex-shrink-0" />}
-              </div>
-            ))}
-            {/* Streams Go Live actifs dans ce canal */}
-            {channelStreams.map(s => (
-              <button
-                key={s.userId}
-                onClick={() => {
-                  // Rejoint en écoute seule : regarder un live n'ouvre plus le micro
-                  // et ne demande plus l'autorisation du navigateur.
-                  if (serverId) voiceJoin(ch.id, serverId, false, undefined, ch.name, true)
-                  nav(`/servers/${serverId}/channels/${ch.id}`)
-                  closeSidebar()
-                }}
-                className="flex items-center gap-1.5 px-2 py-0.5 rounded hover:bg-red-500/10 w-full text-left transition"
-                title={t('channels.watchLive', { name: s.username })}
-              >
-                <span className="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse flex-shrink-0" />
-                <span className="text-[11px] text-red-400 truncate flex-1">{t('channels.isLive', { name: s.username })}</span>
-              </button>
-            ))}
-          </div>
+        {isVoiceCh && (participants.length > 0 || channelStreams.length > 0) && (
+          <VoicePeople serverId={serverId} channel={ch} participants={participants} streams={channelStreams} canMove={canMoveMembers} />
         )}
       </div>
     )
@@ -1152,112 +562,19 @@ export default function ChannelSidebar() {
   return (
     <>
       <div className="flex-1 overflow-y-auto overscroll-y-contain flex flex-col">
-        {/* Header serveur */}
-        <div className="relative">
-          <button
-            onClick={() => setMenuOpen(!menuOpen)}
-            className="w-full shadow-sm border-b border-fc-bg/50 hover:brightness-110 transition overflow-hidden"
-            aria-label={menuOpen ? t('channels.closeMenu') : t('channels.openMenu')}
-            aria-expanded={menuOpen}
-          >
-            {server?.banner ? (
-              <div className="relative">
-                {/* Bannière entière, à son format (jamais rognée) ; le nom passe sur un dégradé en bas. */}
-                <img src={mediaUrl(server.banner)} alt="" loading="lazy" decoding="async" className="w-full h-auto block" />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent" />
-                <div className="absolute inset-0 flex items-end justify-between px-4 py-2">
-                  <span className="font-semibold text-white text-sm truncate drop-shadow">{server.name}</span>
-                  <ChevronDown size={16} className="text-white/80 flex-shrink-0" />
-                </div>
-              </div>
-            ) : server?.icon ? (
-              <div className="relative h-16">
-                <img src={mediaUrl(server.icon)} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
-                <div className="absolute inset-0 bg-black/40" />
-                <div className="absolute inset-0 flex items-end justify-between px-4 py-2">
-                  <span className="font-semibold text-white text-sm truncate drop-shadow">{server.name}</span>
-                  <ChevronDown size={16} className="text-white/80 flex-shrink-0" />
-                </div>
-              </div>
-            ) : (
-              <div className="flex items-center gap-3 px-4 py-3">
-                <div className="w-8 h-8 rounded-full bg-fc-accent flex items-center justify-center flex-shrink-0">
-                  <span className="text-xs font-bold text-white uppercase">
-                    {(server?.name ?? '?').split(' ').map((w: string) => w[0]).slice(0, 2).join('')}
-                  </span>
-                </div>
-                <span className="font-semibold text-white truncate flex-1">{server?.name ?? '...'}</span>
-                <ChevronDown size={16} className="text-fc-muted flex-shrink-0" />
-              </div>
-            )}
-          </button>
-
-          <BoostButton serverId={serverId} />
-
-          {(data?.boost_level ?? 0) > 0 && (
-            <ServerBoostBanner
-              boostLevel={data?.boost_level ?? 0}
-              boostCount={data?.boost_count ?? 0}
-              memberCount={data?.member_count ?? 0}
-            />
-          )}
-
-          {menuOpen && (
-            <div
-              ref={menuRef}
-              className="absolute top-full left-0 right-0 bg-fc-bg border border-fc-hover rounded-lg shadow-2xl z-40 m-1 p-1"
-            >
-              <button
-                onClick={() => { setShowInvite(true); setMenuOpen(false) }}
-                className="w-full flex items-center gap-2 px-3 py-2 rounded hover:bg-fc-accent text-fc-text hover:text-white text-sm transition"
-              >
-                <UserPlus size={16} /> {t('channels.invite')}
-              </button>
-              {canCreate && (<>
-              <div className="border-t border-fc-hover my-1" />
-              <button
-                onClick={() => { setShowCreateChannel(true); setMenuOpen(false) }}
-                className="w-full flex items-center gap-2 px-3 py-2 rounded hover:bg-fc-hover text-fc-muted hover:text-white text-sm transition"
-              >
-                <Plus size={16} /> {t('channels.create')}
-              </button>
-              </>)}
-              <div className="border-t border-fc-hover my-1" />
-              <button
-                onClick={() => { setShowSettings(true); setMenuOpen(false) }}
-                className="w-full flex items-center gap-2 px-3 py-2 rounded hover:bg-fc-hover text-fc-muted hover:text-white text-sm transition"
-              >
-                <Settings size={16} /> {t('servers.settings')}
-              </button>
-              <button
-                onClick={() => { setShowLook(true); setMenuOpen(false) }}
-                className="w-full flex items-center gap-2 px-3 py-2 rounded hover:bg-fc-hover text-fc-muted hover:text-white text-sm transition"
-              >
-                <Palette size={16} /> {t('serverLook.title')}
-              </button>
-              <ServerMenuExtras serverId={serverId} lockdown={!!data?.lockdown} onDone={() => { setMenuOpen(false); closeSidebar() }} />
-              {data?.member?.has_onboarding && (
-                <button
-                  onClick={() => { setShowOnboarding(true); setMenuOpen(false) }}
-                  className="w-full flex items-center gap-2 px-3 py-2 rounded hover:bg-fc-hover text-fc-muted hover:text-white text-sm transition"
-                >
-                  <Sparkles size={16} /> {t('channels.onboarding')}
-                </button>
-              )}
-              {isOwnerOrAdmin && (
-                <>
-                  <div className="border-t border-fc-hover my-1" />
-                  <button
-                    onClick={() => { nav(`/servers/${serverId}/admin`); setMenuOpen(false); closeSidebar() }}
-                    className="w-full flex items-center gap-2 px-3 py-2 rounded hover:bg-fc-hover text-fc-muted hover:text-white text-sm transition"
-                  >
-                    <Shield size={16} /> {t('channels.admin')}
-                  </button>
-                </>
-              )}
-            </div>
-          )}
-        </div>
+        <ServerHeader
+          serverId={serverId}
+          data={data}
+          isAdmin={isOwnerOrAdmin}
+          canCreate={canCreate}
+          open={{
+            invite: () => setShowInvite(true),
+            createChannel: () => setShowCreateChannel(true),
+            settings: tab => setSettingsTab(tab),
+            look: () => setShowLook(true),
+            onboarding: () => setShowOnboarding(true),
+          }}
+        />
 
         {/* Filtre rapide des canaux — sticky au-dessus des headers de catégorie */}
         <div className="px-2 pt-2 sticky top-0 z-20 bg-fc-channel">
@@ -1427,8 +744,8 @@ export default function ChannelSidebar() {
       {showLook && server && (
         <ServerLookModal serverId={server.id} serverName={server.name} onClose={() => setShowLook(false)} />
       )}
-      {showSettings && server && (
-        <ServerSettingsModal server={server} onClose={() => setShowSettings(false)} isAdmin={isOwnerOrAdmin} />
+      {settingsTab && server && (
+        <ServerSettingsModal server={server} initialTab={settingsTab} onClose={() => setSettingsTab(null)} isAdmin={isOwnerOrAdmin} />
       )}
       {channelSettings && serverId && (
         <ChannelSettingsModal
@@ -1450,7 +767,6 @@ export default function ChannelSidebar() {
         />
       )}
       {ctxMenu.node}
-      {moderation.node}
     </>
   )
 }

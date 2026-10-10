@@ -127,6 +127,7 @@ export interface ConvActions {
   pin(on: boolean): void
   mute(minutes: number): void
   unmute(): void
+  archive(): void
   close(): void
   leave(): void
   copyId(): void
@@ -146,6 +147,7 @@ export function buildConvMenu(c: ConvFacts, a: ConvActions, t: Tr, userEntries: 
     SEP,
     ...userEntries,
     SEP,
+    { label: t('dms.archive'), onClick: a.archive },
     { label: t(c.group ? 'dml.closeGroup' : 'dml.close'), hint: t('dml.closeHint'), onClick: a.close },
     ...(c.group ? [{ label: t('dms.leaveGroup'), danger: true, onClick: a.leave }] : []),
     SEP,

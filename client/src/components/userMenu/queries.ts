@@ -13,6 +13,10 @@ export interface DmRow {
   is_muted: boolean
   is_pinned?: boolean
   is_archived: boolean
+  status?: string
+  member_count?: number
+  last_message_at?: string | null
+  last_message_author?: string | null
   last_message_content?: string | null
   last_message_encrypted?: boolean
 }
