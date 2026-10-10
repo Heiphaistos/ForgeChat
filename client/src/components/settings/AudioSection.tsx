@@ -6,6 +6,7 @@ import { useCallStore } from '../../store/call'
 import { NOISE_ENGINES, getNoiseEngine, type NoiseEngine } from '../../lib/audio'
 import { useT } from '../../i18n'
 import { useSpatial } from '../../store/spatial'
+import { setAudioOutput } from '../../lib/voicePlayback'
 
 export default function AudioSection() {
   const t = useT()
@@ -112,12 +113,7 @@ export default function AudioSection() {
 
   const handleOutputChange = (id: string) => {
     setSelectedOutput(id)
-    localStorage.setItem('fc_audio_output', id)
-    // Ne rediriger QUE les éléments d'appel : ce balayage touchait aussi les
-    // lecteurs de pièces jointes et les vidéos des messages affichés.
-    document.querySelectorAll('audio[data-fc-call], video[data-fc-call]').forEach(el => {
-      if ('setSinkId' in el) (el as any).setSinkId(id).catch(() => {})
-    })
+    setAudioOutput(id)
   }
 
   const inputDevices = devices.filter(d => d.kind === 'audioinput')

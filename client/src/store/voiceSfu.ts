@@ -18,6 +18,7 @@ import {
 import type { VoicePeer } from './voice'
 import api from '../api/client'
 import { maybeBlur } from '../utils/backgroundBlur'
+import { screenCaptureConstraints } from '../lib/voiceDock'
 import {
   isNativeVoice, nativeConnect, nativeDisconnect, nativeSetMic,
   type NativeTrackEvent, type NativeStateEvent,
@@ -177,7 +178,8 @@ export async function refreshAllSenderQuality() {
       .catch(e => warn('contraintes vidéo', e))
   }
   fit(_camTrack, 'fc_cam_height', 720, q.camFps)
-  fit(_screenVideoTrack, 'fc_screen_height', 1080, q.screenFps)
+  _screenVideoTrack?.applyConstraints(screenCaptureConstraints(localStorage.getItem('fc_screen_height'), q.screenFps))
+    .catch(e => warn('contraintes vidéo', e))
   if (_screenVideoTrack) _screenVideoTrack.contentHint = q.screenContentHint
   await apply(_camPub, q.camMaxBitrate, q.camFps)
   await apply(_screenPub, q.screenMaxBitrate, q.screenFps)
@@ -590,6 +592,22 @@ export async function startScreenTracks(video: MediaStreamTrack, audio: MediaStr
   _screenAudioTrack = audio
   if (_room?.state === 'connected') await publishScreen(_room)
 }
+
+/** Ce que le partage d'écran diffuse vraiment (encodeur) ; null hors SFU ou avant les premières images. */
+export async function getScreenSendStats(): Promise<{ width?: number; height?: number; frameRate?: number } | null> {
+  const sender = _screenPub?.track?.sender
+  if (!sender) return null
+  try {
+    let out: { width?: number; height?: number; frameRate?: number } | null = null
+    ;(await sender.getStats()).forEach((r: { type: string; frameWidth?: number; frameHeight?: number; framesPerSecond?: number }) => {
+      if (r.type === 'outbound-rtp' && r.frameHeight) out = { width: r.frameWidth, height: r.frameHeight, frameRate: r.framesPerSecond }
+    })
+    return out
+  } catch { return null }
+}
+
+/** Son du partage en cours (null : rien de capté, par exemple une fenêtre). */
+export const getScreenAudioTrack = () => _screenAudioTrack
 
 export async function stopScreenTracks() {
   const room = _room

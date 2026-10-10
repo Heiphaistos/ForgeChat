@@ -265,6 +265,7 @@ export default function VideoSection() {
             <option value="1080">{`1080p (${rec})`}</option>
             <option value="1440">1440p</option>
             <option value="2160">2160p (4K)</option>
+            <option value="source">{t('dock.stream.source')}</option>
           </select>
           <select value={screenFps} onChange={e => savePref('fc_screen_fps', e.target.value, setScreenFps)}
             className="bg-fc-channel border border-fc-hover rounded-lg px-3 py-2 text-sm text-white">

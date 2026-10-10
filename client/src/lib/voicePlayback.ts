@@ -95,3 +95,16 @@ export function routeAudio(el: HTMLAudioElement, key: string, stream: MediaStrea
     sinkable.setSinkId(savedOut).catch(() => {})
   }
 }
+
+/**
+ * Sortie audio choisie (Réglages ou menu du casque) : mémorisée, puis appliquée tout de suite
+ * aux seuls éléments d'appel (pas aux lecteurs de pièces jointes ni aux vidéos des messages).
+ */
+export function setAudioOutput(id: string) {
+  localStorage.setItem('fc_audio_output', id)
+  document.querySelectorAll<HTMLMediaElement & { _fcSink?: string }>('audio[data-fc-call], video[data-fc-call]').forEach(el => {
+    if (!('setSinkId' in el)) return
+    el._fcSink = id
+    el.setSinkId(id).catch(() => {})
+  })
+}

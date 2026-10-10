@@ -23,6 +23,7 @@ import { initVoiceWaiting, useVoiceWaiting } from './voiceWaiting'
 import { t } from '../i18n'
 import { e2eeClaim } from '../e2e/media'
 import { playJoinSound } from '../lib/joinSound'
+import { screenCaptureConstraints, screenAudioWanted } from '../lib/voiceDock'
 
 export { getRoom } from './voiceSfu'
 export type { MediaStatus }
@@ -214,13 +215,12 @@ function camConstraints(): MediaTrackConstraints {
 }
 
 function screenConstraints() {
-  const height = Number(localStorage.getItem('fc_screen_height') ?? '1080') || 1080
   const fps = Number(localStorage.getItem('fc_screen_fps') ?? '30') || 30
   return {
-    video: { width: { ideal: Math.round((height * 16) / 9) }, height: { ideal: height }, frameRate: { ideal: fps } },
+    video: screenCaptureConstraints(localStorage.getItem('fc_screen_height'), fps),
     // systemAudio/selfBrowserSurface : sans eux, partager une fenêtre ne transmet
     // aucun son et rien n'empêche de partager l'onglet ForgeChat lui-même (miroir).
-    audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
+    audio: screenAudioWanted() ? { echoCancellation: false, noiseSuppression: false, autoGainControl: false } : false,
     systemAudio: 'include',
     selfBrowserSurface: 'exclude',
     surfaceSwitching: 'include',
@@ -892,7 +892,7 @@ export const useVoice = create<VoiceStore>((set, get) => {
           localScreenStream: localScreen,
           // Partager UNE FENÊTRE ne transmet jamais le son (limite navigateur) :
           // le dire, au lieu de laisser croire que le retour audio est cassé.
-          notice: sat ? null : 'Aucun son capté : partagez un onglet ou l\'écran entier pour transmettre le son du jeu.',
+          notice: sat || !screenAudioWanted() ? null : 'Aucun son capté : partagez un onglet ou l\'écran entier pour transmettre le son du jeu.',
         })
         broadcastState()
 
