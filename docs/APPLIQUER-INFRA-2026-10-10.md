@@ -21,6 +21,27 @@ chmod 600 .env
 docker compose config -q && echo "compose OK"
 ```
 
+Les clés ont été tirées le 2026-10-10 sur le PC (copie de secours) : `D:\MDP\forgechat-server-keys\cles-2026-10-10.env`
+(`TOTP_ENC_KEY`, `EMAIL_ENC_KEY`, `TURN_STATIC_AUTH_SECRET`). Les reprendre plutôt que d'en générer d'autres,
+pour que la sauvegarde corresponde à la prod.
+
+## 0 bis. coturn : identifiants éphémères seulement (en même temps que le nouveau serveur)
+
+Le serveur ne distribue plus le compte TURN statique (`TURN_USERNAME`/`TURN_PASSWORD`) : seulement des
+identifiants HMAC éphémères signés avec `TURN_STATIC_AUTH_SECRET` (même valeur dans `.env` et coturn).
+À faire juste après le déploiement du nouveau serveur (avant, l'ancien distribue encore le compte statique) :
+
+```bash
+S=$(grep -E '^TURN_STATIC_AUTH_SECRET=' /opt/forgechat/.env | cut -d= -f2-)
+[ ${#S} -ge 32 ] || { echo "TURN_STATIC_AUTH_SECRET absent"; exit 1; }
+cp -p /etc/turnserver.conf /root/turnserver-$(date +%Y%m%d%H%M%S).bak
+sed -i -E 's/^[[:space:]]*(lt-cred-mech|user=)/#&/' /etc/turnserver.conf
+grep -q '^use-auth-secret' /etc/turnserver.conf || printf '\nuse-auth-secret\nstatic-auth-secret=%s\n' "$S" >> /etc/turnserver.conf
+chmod 640 /etc/turnserver.conf && chgrp turnserver /etc/turnserver.conf 2>/dev/null || true
+systemctl restart coturn && systemctl is-active coturn
+# Puis retirer TURN_USERNAME / TURN_PASSWORD du .env (le serveur ne les lit plus).
+```
+
 ## 1. nginx (site forgechat)
 
 `nginx.conf` du dépôt est maintenant la copie de référence de `/etc/nginx/sites-enabled/forgechat`.
