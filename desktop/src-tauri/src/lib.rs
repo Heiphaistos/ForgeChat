@@ -25,6 +25,8 @@ pub mod updater;
 mod compat;
 mod diagnostic;
 mod presence;
+/// Jetons de session dans le trousseau de l'OS (audit M10).
+mod session;
 
 /// Vocal natif de l'application Linux (WebKitGTK sans WebRTC).
 pub mod native_voice;
@@ -445,7 +447,15 @@ pub fn run() {
             native_voice::nv_set_screen,
             native_voice::nv_popout,
             compat::app_ready,
-            diagnostic::read_desktop_log
+            diagnostic::read_desktop_log,
+            session::session_store,
+            session::session_access,
+            session::session_refresh,
+            session::session_clear,
+            session::session_stash,
+            session::session_switch,
+            session::session_forget,
+            session::session_import_account
         ]);
 
     builder
