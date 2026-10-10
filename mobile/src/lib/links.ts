@@ -22,6 +22,19 @@ export function parseSafeUrl(raw: string): URL | null {
   }
 }
 
+/**
+ * Adresse d'un fichier de /uploads sans sa signature (`?exp=…&sig=…`, fichiers non publics signés
+ * par le serveur) : pour comparer, reconnaître un type ou servir de clé de cache. Le téléchargement
+ * garde l'adresse signée reçue telle quelle. Toute autre adresse est rendue inchangée.
+ */
+export function uploadPath(url: string): string {
+  const i = url.indexOf('?')
+  return i >= 0 && url.slice(0, i).includes('/uploads/') && /[?&]sig=/.test(url.slice(i)) ? url.slice(0, i) : url
+}
+
+/** Source expo-image : cache indexé sans la signature (pas de rechargement à chaque renouvellement). */
+export const imageSource = (uri: string) => ({ uri, cacheKey: uploadPath(uri) })
+
 /** Résout une URL de média renvoyée par le serveur (souvent relative : /uploads/…). */
 export function resolveMediaUrl(url: string | null | undefined): string | null {
   if (!url) return null

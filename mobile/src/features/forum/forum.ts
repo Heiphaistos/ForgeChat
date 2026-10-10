@@ -1,3 +1,4 @@
+import { uploadPath } from '@/lib/links'
 import { isUuid } from '@/lib/params'
 import { fileEntries, type FileEntry } from '@/e2e/crypto'
 
@@ -35,7 +36,7 @@ export function mediaExtension(mime: string | null | undefined): string | null {
 }
 
 /** Vidéo d'après l'extension (forum_upload n'accepte que images et vidéos). */
-export const isVideoMedia = (url: string) => /\.(mp4|webm|mov)$/i.test(url)
+export const isVideoMedia = (url: string) => /\.(mp4|webm|mov)$/i.test(uploadPath(url))
 
 const obj = (v: unknown): Record<string, unknown> => (v && typeof v === 'object' ? (v as Record<string, unknown>) : {})
 const str = (v: unknown): string | null => (typeof v === 'string' ? v : null)

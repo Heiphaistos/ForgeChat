@@ -9,7 +9,7 @@ import { useAuth } from '../../store/auth'
 import { useWs } from '../../store/ws'
 import toast from 'react-hot-toast'
 import { confirm } from '../ui/ConfirmModal'
-import MediaContent, { EncMedia, isEncUrl } from '../chat/MediaContent'
+import MediaContent, { EncMedia, isEncUrl, uploadPath } from '../chat/MediaContent'
 import LightboxModal from '../chat/LightboxModal'
 import EmojiPicker from '../chat/EmojiPicker'
 import LinkPreview, { extractFirstUrl } from '../chat/LinkPreview'
@@ -54,7 +54,7 @@ export interface ForumPost {
   media_url?: string | null
 }
 
-export const isVideoUrl = (u: string) => /\.(mp4|webm|mov)$/i.test(u)
+export const isVideoUrl = (u: string) => /\.(mp4|webm|mov)$/i.test(uploadPath(u))
 
 /** Média d'une publication de salon média, en grand (image : plein écran au clic). */
 function PostMedia({ url, files }: { url: string; files: FileEntry[] }) {
@@ -136,8 +136,10 @@ export default function PostView({ serverId, channelId, post, onBack, canManageM
       const cmid = data?.post?.client_msg_id ?? post.client_msg_id
       if (!cmid) return void await api.patch(url, { content: editPostContent.trim() })
       // Médias chiffrés encore cités (texte ou couverture) : leurs clés restent dans la publication.
+      // Couverture servie signée (?exp&sig) : comparée sans sa signature.
       const media = data?.post?.media_url ?? post.media_url
-      const kept = fileEntries(data?.post?.e2e_body).filter(e => e.u && (editPostContent.includes(e.u) || e.u === media))
+      const cover = media ? uploadPath(media) : null
+      const kept = fileEntries(data?.post?.e2e_body).filter(e => e.u && (editPostContent.includes(e.u) || e.u === cover))
       await sealPost(serverId, channelId, localPost.title, editPostContent.trim(),
         body => api.patch(url, body.enc ? { enc: body.enc } : { content: body.content ?? '' }), { clientMsgId: cmid },
         kept.length ? { f: kept } : undefined)

@@ -12,7 +12,7 @@ import { isVideoMedia, nextPostsCursor, type ForumPost } from '@/features/forum/
 import { TagChips } from '@/features/forum/TagChips'
 import { formatRelative } from '@/lib/format'
 import { errorMessage } from '@/lib/http'
-import { resolveMediaUrl } from '@/lib/links'
+import { imageSource, resolveMediaUrl, uploadPath } from '@/lib/links'
 import { useT } from '@/i18n'
 import { useRouteParams } from '@/lib/params'
 import { qk } from '@/lib/queryClient'
@@ -79,13 +79,13 @@ export default function ForumScreen() {
             >
               {p.mediaUrl && encryptedMedia(p.mediaUrl, p.files) ? (
                 // Média chiffré : miniature embarquée dans la publication (déchiffrée), sinon un cadenas.
-                thumbUri(p.files?.find((f) => f.u === p.mediaUrl)) ? (
-                  <Image source={{ uri: thumbUri(p.files?.find((f) => f.u === p.mediaUrl)) }} style={StyleSheet.absoluteFill} contentFit="cover" />
+                thumbUri(p.files?.find((f) => !!p.mediaUrl && f.u === uploadPath(p.mediaUrl))) ? (
+                  <Image source={{ uri: thumbUri(p.files?.find((f) => !!p.mediaUrl && f.u === uploadPath(p.mediaUrl))) }} style={StyleSheet.absoluteFill} contentFit="cover" />
                 ) : (
                   <Ionicons name="lock-closed" size={30} color={colors.text} />
                 )
               ) : p.mediaUrl && !isVideoMedia(p.mediaUrl) ? (
-                <Image source={{ uri: resolveMediaUrl(p.mediaUrl) ?? undefined }} style={StyleSheet.absoluteFill} contentFit="cover" />
+                <Image source={imageSource(resolveMediaUrl(p.mediaUrl) ?? '')} style={StyleSheet.absoluteFill} contentFit="cover" />
               ) : (
                 <Ionicons name="play-circle" size={36} color={colors.text} />
               )}

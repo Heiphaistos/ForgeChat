@@ -7,6 +7,7 @@ import { withPreparedUploads } from '@/e2e/files'
 import { fromThreadMessage } from '@/features/chat/adapters'
 import { normalizePost, normalizePosts, type ForumPost } from '@/features/forum/forum'
 import { http, path } from '@/lib/http'
+import { uploadPath } from '@/lib/links'
 import type { Attachment, ChatMessage } from '@/types/models'
 import type { UploadFile } from './messages'
 import { uploadForm } from './threads'
@@ -51,7 +52,9 @@ export const forumApi = {
   /** Nouveau texte d'une publication (créateur) : chiffré avec son id client (titre compris) dès que j'ai une clé. */
   async editPost(serverId: string, channelId: string, post: ForumPost, content: string) {
     // Le média chiffré garde sa clé dans la publication modifiée.
-    const sealed = post.clientMsgId ? await sealPost(channelId, post.title, content, post.clientMsgId, post.files?.filter((f) => f.u === post.mediaUrl)) : null
+    // Couverture servie signée (?exp&sig) : comparée sans sa signature.
+    const cover = post.mediaUrl ? uploadPath(post.mediaUrl) : null
+    const sealed = post.clientMsgId ? await sealPost(channelId, post.title, content, post.clientMsgId, post.files?.filter((f) => f.u === cover)) : null
     return http.patch(base(serverId, channelId) + path`/${post.id}`, sealed ? { enc: sealed.enc } : { content })
   },
   /** Image ou vidéo d'une publication de salon média (uploads.rs::forum_upload) ; renvoie son URL. */

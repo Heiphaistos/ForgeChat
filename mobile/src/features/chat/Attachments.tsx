@@ -5,7 +5,7 @@ import { Alert, Modal, Pressable, StyleSheet, Text, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useT } from '@/i18n'
 import { formatBytes } from '@/lib/format'
-import { openExternalUrl, resolveMediaUrl } from '@/lib/links'
+import { imageSource, openExternalUrl, resolveMediaUrl } from '@/lib/links'
 import type { Attachment } from '@/types/models'
 import { colors, font, radius, spacing } from '@/theme'
 import { isVoiceAttachment } from '@/features/composer/formats'
@@ -99,7 +99,7 @@ export function Attachments({ items: raw, files: entries, pending, onLongPress }
                 accessibilityLabel={t('panel.att.image', { name: a.filename })}
               >
                 <Image
-                  source={{ uri: src }}
+                  source={imageSource(src)}
                   style={[styles.image, images.length > 1 && styles.imageSmall, pending && { opacity: 0.5 }]}
                   contentFit="cover"
                   cachePolicy="memory-disk"
@@ -204,7 +204,7 @@ function Lightbox({ uri, onClose }: { uri: string | null; onClose: () => void })
   return (
     <Modal visible={!!uri} transparent animationType="fade" onRequestClose={onClose} statusBarTranslucent>
       <View style={styles.lightbox}>
-        {uri ? <Image source={{ uri }} style={StyleSheet.absoluteFill} contentFit="contain" /> : null}
+        {uri ? <Image source={imageSource(uri)} style={StyleSheet.absoluteFill} contentFit="contain" /> : null}
         <Pressable
           onPress={onClose}
           style={[styles.close, { top: insets.top + spacing.md }]}

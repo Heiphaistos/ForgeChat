@@ -69,14 +69,20 @@ export function useMediaUpload(serverId: string, channelId: string) {
 
 /** Média chiffré cité par son adresse (couverture, contenu d'une publication). */
 export function EncMedia({ url, files, className }: { url: string; files?: FileEntry[]; className?: string }) {
-  const e = files?.find(f => f.u === url)
+  const e = files?.find(f => f.u === uploadPath(url))
   const att: DisplayAttachment = e
     ? { id: e.id, url, filename: e.n, content_type: e.m, size: e.s, e2e: e }
     : { id: url, url, filename: '', content_type: 'application/octet-stream', size: 0, e2eLocked: true }
   return <E2EAttachment att={att} mediaClass={className} />
 }
 
-export const isEncUrl = (url: string | null | undefined) => !!url && /\.enc$/.test(url)
+/**
+ * Chemin d'un fichier sans sa signature (`/uploads/x.enc?exp=…&sig=…` → `/uploads/x.enc`) : pour
+ * comparer ou reconnaître un type. Le téléchargement garde l'adresse signée reçue telle quelle.
+ */
+export const uploadPath = (url: string) => url.split('?')[0] ?? url
+
+export const isEncUrl = (url: string | null | undefined) => !!url && /\.enc$/.test(uploadPath(url))
 
 // Rendu de texte avec médias inline : les URLs /uploads/*.{img} deviennent des
 // images cliquables (lightbox) et *.{vid} des lecteurs vidéo natifs.

@@ -18,7 +18,7 @@ import { useServerPerms } from '@/features/servers/menus'
 import { TagChips } from '@/features/forum/TagChips'
 import { isVideoMedia } from '@/features/forum/forum'
 import { VideoAttachment } from '@/features/chat/MediaPlayers'
-import { resolveMediaUrl } from '@/lib/links'
+import { imageSource, resolveMediaUrl } from '@/lib/links'
 import { formatShort } from '@/lib/format'
 import { useT } from '@/i18n'
 import { errorMessage } from '@/lib/http'
@@ -195,7 +195,7 @@ function PostMedia({ url, files }: { url: string; files?: FileEntry[] }) {
   return isVideoMedia(url) ? (
     <VideoAttachment src={src} label={t('social.post.video')} />
   ) : (
-    <Image source={{ uri: src }} style={styles.media} contentFit="contain" accessibilityLabel={t('social.post.image')} />
+    <Image source={imageSource(src)} style={styles.media} contentFit="contain" accessibilityLabel={t('social.post.image')} />
   )
 }
 
