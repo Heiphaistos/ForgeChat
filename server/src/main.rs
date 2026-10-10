@@ -649,6 +649,7 @@ fn protected_routes(state: AppState) -> Router<AppState> {
         // Clés de conversation des MP et groupes chiffrés (docs/CHIFFREMENT-E2E.md §4.1)
         .route("/e2e/conversations/:kind/:id/keys", get(handlers::e2e_conv::get_my_envelopes).post(handlers::e2e_conv::post_envelopes).layer(DefaultBodyLimit::max(SMALL_JSON_LIMIT)))
         .route("/e2e/conversations/:kind/:id/keys/request", post(handlers::e2e_conv::request_keys))
+        .route("/e2e/conversations/:kind/:id/keys/unreadable", post(handlers::e2e_conv::report_unreadable))
         .route("/e2e/conversations/:kind/:id/members", get(handlers::e2e_conv::get_members))
         .route("/e2e/legacy", get(handlers::e2e_conv::my_legacy_messages))
         // Salons chiffrés : rechiffrement de l'historique, clé de récupération du serveur (§10, §11)

@@ -125,7 +125,8 @@ pub async fn extend_keys(db: &PgPool, channel: Uuid, me: Uuid, out: &mut Value) 
         out["server_missing"] = json!([]);
         return Ok(());
     };
-    let server_missing: Vec<i32> = sqlx::query_scalar(
+    // Seuls le propriétaire et MANAGE_SERVER complètent les époques passées (store_envelopes).
+    let server_missing: Vec<i32> = if !server_key_rights(db, channel, me).await?.0 { vec![] } else { sqlx::query_scalar(
         "SELECT ck.epoch FROM conversation_keys ck
          WHERE ck.conv_kind='channel' AND ck.conv_id=$1 AND ck.member_id=$2 AND NOT EXISTS(
              SELECT 1 FROM server_epoch_keys s WHERE s.channel_id=$1 AND s.epoch=ck.epoch AND s.server_fp=$3)
@@ -135,7 +136,7 @@ pub async fn extend_keys(db: &PgPool, channel: Uuid, me: Uuid, out: &mut Value) 
     .bind(me)
     .bind(&fp)
     .fetch_all(db)
-    .await?;
+    .await? };
     out["server_key"] = json!({ "server_id": server_id, "public": public, "fingerprint": fp });
     out["server_missing"] = json!(server_missing);
     Ok(())
@@ -169,6 +170,7 @@ pub async fn store_server_envelope(
     user: Uuid,
     my_pub: &str,
     se: &ServerEnvelope,
+    owner: bool,
 ) -> Result<()> {
     se.wrapped.validate()?;
     let fp: Option<String> = sqlx::query_scalar(
@@ -188,7 +190,7 @@ pub async fn store_server_envelope(
          ON CONFLICT (channel_id, epoch) DO UPDATE
            SET server_fp=EXCLUDED.server_fp, wrapped=EXCLUDED.wrapped, wrapped_by=EXCLUDED.wrapped_by,
                wrapped_by_pub=EXCLUDED.wrapped_by_pub, created_at=NOW()
-         WHERE server_epoch_keys.server_fp <> EXCLUDED.server_fp",
+         WHERE server_epoch_keys.server_fp <> EXCLUDED.server_fp OR $7",
     )
     .bind(channel)
     .bind(epoch)
@@ -196,9 +198,37 @@ pub async fn store_server_envelope(
     .bind(se.wrapped.to_json())
     .bind(user)
     .bind(my_pub)
+    // Le propriétaire (seul à pouvoir ouvrir la clé du serveur) remplace une enveloppe invalide.
+    .bind(owner)
     .execute(&mut **tx)
     .await?;
     Ok(())
+}
+
+/// (gère la clé du serveur, propriétaire) sur le serveur du salon : propriétaire,
+/// ADMINISTRATOR ou MANAGE_SERVER. Seuls eux complètent `server_missing`.
+pub async fn server_key_rights(db: &PgPool, channel: Uuid, user: Uuid) -> Result<(bool, bool)> {
+    use crate::models::role::Permissions;
+    let row: Option<(bool, i64)> = sqlx::query_as(
+        "SELECT (sm.is_owner OR fc_is_god(sm.user_id)),
+                COALESCE(BIT_OR(r.permissions), 0)
+                | COALESCE((SELECT permissions FROM roles WHERE server_id=sm.server_id AND is_everyone), 0)
+         FROM channels c
+         JOIN server_members sm ON sm.server_id = c.server_id AND sm.user_id = $2
+         LEFT JOIN member_roles mr ON mr.user_id = sm.user_id AND mr.server_id = sm.server_id
+         LEFT JOIN roles r ON r.id = mr.role_id
+         WHERE c.id = $1
+         GROUP BY sm.is_owner, sm.user_id, sm.server_id",
+    )
+    .bind(channel)
+    .bind(user)
+    .fetch_optional(db)
+    .await?;
+    Ok(match row {
+        Some((true, _)) => (true, true),
+        Some((false, p)) => (p & (Permissions::ADMINISTRATOR | Permissions::MANAGE_SERVER) != 0, false),
+        None => (false, false),
+    })
 }
 
 /// Quelques détenteurs connectés d'une clé du salon, qui le voient encore.

@@ -158,10 +158,16 @@ pub fn plan_envelopes(current: Option<(i32, bool)>, epoch: i32, create: bool) ->
     }
 }
 
-/// Nouvelle époque d'un salon : le créateur s'inclut ; les autres membres munis
-/// d'une clé reçoivent la clé par lots (redistribution) ou à leur demande.
-pub fn channel_epoch_ok(creator: Uuid, given: &[Uuid]) -> bool {
-    given.contains(&creator)
+/// Premier lot minimal d'une nouvelle époque de salon (mobile : FIRST_BATCH = 50).
+const CHANNEL_FIRST_BATCH: usize = 50;
+
+/// Nouvelle époque d'un salon : le créateur s'inclut et couvre tous les membres
+/// munis d'une clé (`keyed`, enveloppes déjà vérifiées comme en faisant partie) ;
+/// au-delà du premier lot (grands salons), au moins CHANNEL_FIRST_BATCH d'entre
+/// eux, le reste suivant par lots ou par `missing`. Avant : l'enveloppe du seul
+/// créateur suffisait, il pouvait garder l'époque pour lui.
+pub fn channel_epoch_ok(creator: Uuid, keyed: &[Uuid], given: &[Uuid]) -> bool {
+    given.contains(&creator) && (covers(keyed, given) || given.len() >= CHANNEL_FIRST_BATCH.min(keyed.len()))
 }
 
 /// Une nouvelle époque doit être enveloppée pour exactement les membres munis d'une clé.
@@ -472,12 +478,35 @@ pub async fn store_envelopes(db: &PgPool, conv: Conv, user: Uuid, body: &PostEnv
     .fetch_optional(&mut *tx)
     .await?;
     let plan = plan_envelopes(current, body.epoch, body.create)?;
+    // Enveloppe de serveur hors création d'époque (compléter `server_missing`) :
+    // propriétaire ou MANAGE_SERVER seulement ; avant, n'importe quel membre
+    // pouvait déposer le premier une enveloppe invalide, jamais remplacée.
+    // (gère la clé du serveur, propriétaire)
+    let (server_manager, server_owner) = match (conv, &body.server_envelope) {
+        (Conv::Channel(c), Some(_)) => crate::handlers::e2e_channel::server_key_rights(db, c, user).await?,
+        _ => (false, false),
+    };
+    if body.server_envelope.is_some() && plan != Plan::NewEpoch && !server_manager {
+        return Err(AppError::Forbidden);
+    }
+    // Enveloppes déjà signalées illisibles par leur destinataire : cet auteur ne les redonne plus.
+    let reported: HashSet<Uuid> = sqlx::query_scalar(
+        "SELECT member_id FROM conversation_key_reports WHERE conv_kind=$1 AND conv_id=$2 AND epoch=$3 AND wrapped_by=$4",
+    )
+    .bind(conv.kind())
+    .bind(conv.id())
+    .bind(body.epoch)
+    .bind(user)
+    .fetch_all(&mut *tx)
+    .await?
+    .into_iter()
+    .collect();
     if plan == Plan::NewEpoch {
         let keyed: Vec<Uuid> = fps.keys().copied().collect();
         let ok = match conv {
             Conv::Channel(c) => {
                 crate::handlers::e2e_channel::require_server_envelope(db, c, body.server_envelope.as_ref()).await?;
-                channel_epoch_ok(user, &given)
+                channel_epoch_ok(user, &keyed, &given)
             }
             _ => covers(&keyed, &given),
         };
@@ -499,7 +528,7 @@ pub async fn store_envelopes(db: &PgPool, conv: Conv, user: Uuid, body: &PostEnv
             return Err(AppError::Conflict("EPOCH_STALE".into()));
         }
     }
-    for e in &body.envelopes {
+    for e in body.envelopes.iter().filter(|e| !reported.contains(&e.member_id)) {
         // Une enveloppe existante n'est remplacée que si elle visait une ancienne clé du membre.
         sqlx::query(
             "INSERT INTO conversation_keys (conv_kind, conv_id, epoch, member_id, member_fp, wrapped, wrapped_by, wrapped_by_pub)
@@ -521,7 +550,7 @@ pub async fn store_envelopes(db: &PgPool, conv: Conv, user: Uuid, body: &PostEnv
         .await?;
     }
     if let (Conv::Channel(c), Some(se)) = (conv, &body.server_envelope) {
-        crate::handlers::e2e_channel::store_server_envelope(&mut tx, c, body.epoch, user, &my_pub, se).await?;
+        crate::handlers::e2e_channel::store_server_envelope(&mut tx, c, body.epoch, user, &my_pub, se, server_owner).await?;
     }
     tx.commit().await?;
     Ok(())
@@ -562,6 +591,69 @@ pub async fn request_keys(
     };
     key_request(&state, conv, claims.sub, &asked).await;
     Ok(Json(json!({ "ok": true })))
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct UnreadableBody {
+    epoch: i32,
+}
+
+/// POST /e2e/conversations/:kind/:id/keys/unreadable {epoch} — « mon enveloppe de
+/// cette époque ne s'ouvre pas ». Elle est supprimée (un autre détenteur la redonne,
+/// via `missing` et KEY_REQUEST) et son auteur ne peut plus en redéposer pour moi.
+/// Avant : une enveloppe invalide déposée par un membre n'était jamais remplacée.
+pub async fn report_unreadable(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+    Path((kind, id)): Path<(String, Uuid)>,
+    Json(body): Json<UnreadableBody>,
+) -> Result<Json<Value>> {
+    let conv = Conv::parse(&kind, id)?;
+    let members = require_member(&state.db, conv, claims.sub).await?;
+    if over_limit(&state, &format!("e2e_unreadable:{}:{}", claims.sub, conv.id()), 10, 3600).await {
+        return Err(AppError::TooManyRequests);
+    }
+    let removed = forget_unreadable(&state.db, conv, claims.sub, body.epoch).await?;
+    if removed {
+        let asked = match conv {
+            Conv::Channel(c) => crate::handlers::e2e_channel::key_holders_online(&state, c, claims.sub).await?,
+            _ => members,
+        };
+        key_request(&state, conv, claims.sub, &asked).await;
+    }
+    Ok(Json(json!({ "ok": true, "removed": removed })))
+}
+
+/// Supprime l'enveloppe de `member` pour `epoch` et retient son auteur.
+pub async fn forget_unreadable(db: &PgPool, conv: Conv, member: Uuid, epoch: i32) -> Result<bool> {
+    let mut tx = db.begin().await?;
+    let by: Option<Option<Uuid>> = sqlx::query_scalar(
+        "DELETE FROM conversation_keys WHERE conv_kind=$1 AND conv_id=$2 AND epoch=$3 AND member_id=$4 RETURNING wrapped_by",
+    )
+    .bind(conv.kind())
+    .bind(conv.id())
+    .bind(epoch)
+    .bind(member)
+    .fetch_optional(&mut *tx)
+    .await?;
+    let Some(by) = by else { return Ok(false) };
+    // Sa propre enveloppe (créateur de l'époque) : rien à retenir.
+    if let Some(by) = by.filter(|b| *b != member) {
+        sqlx::query(
+            "INSERT INTO conversation_key_reports (conv_kind, conv_id, epoch, member_id, wrapped_by)
+             VALUES ($1, $2, $3, $4, $5) ON CONFLICT DO NOTHING",
+        )
+        .bind(conv.kind())
+        .bind(conv.id())
+        .bind(epoch)
+        .bind(member)
+        .bind(by)
+        .execute(&mut *tx)
+        .await?;
+    }
+    tx.commit().await?;
+    Ok(true)
 }
 
 #[derive(Deserialize)]
@@ -759,9 +851,24 @@ mod tests {
     #[test]
     fn channel_epoch_includes_its_creator() {
         let (a, b) = (Uuid::new_v4(), Uuid::new_v4());
-        assert!(channel_epoch_ok(a, &[a]));
-        assert!(channel_epoch_ok(a, &[b, a]));
-        assert!(!channel_epoch_ok(a, &[b]));
+        assert!(channel_epoch_ok(a, &[a], &[a]));
+        assert!(channel_epoch_ok(a, &[a, b], &[b, a]));
+        assert!(!channel_epoch_ok(a, &[a, b], &[b]));
+    }
+
+    #[test]
+    fn channel_epoch_cannot_be_kept_by_its_creator() {
+        let a = Uuid::new_v4();
+        let small: Vec<Uuid> = std::iter::once(a).chain((0..9).map(|_| Uuid::new_v4())).collect();
+        // Petit salon : tous les membres munis d'une clé, pas seulement le créateur.
+        assert!(!channel_epoch_ok(a, &small, &[a]));
+        assert!(!channel_epoch_ok(a, &small, &small[..9]));
+        assert!(channel_epoch_ok(a, &small, &small));
+        // Grand salon : premier lot d'au moins CHANNEL_FIRST_BATCH, le reste par lots.
+        let big: Vec<Uuid> = std::iter::once(a).chain((0..499).map(|_| Uuid::new_v4())).collect();
+        assert!(channel_epoch_ok(a, &big, &big[..CHANNEL_FIRST_BATCH]));
+        assert!(!channel_epoch_ok(a, &big, &big[..CHANNEL_FIRST_BATCH - 1]));
+        assert!(!channel_epoch_ok(a, &big, &big[1..CHANNEL_FIRST_BATCH + 1])); // sans le créateur
     }
 
     #[test]
