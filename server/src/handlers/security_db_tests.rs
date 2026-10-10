@@ -305,3 +305,49 @@ async fn security_invite_code_hash() {
         .fetch_one(&db).await.unwrap();
     assert_eq!(cols, 0, "plus de colonne en clair");
 }
+
+/// Date d'anniversaire chiffrée au repos : migration rejouable, réglage, lecture selon la
+/// visibilité, profil, et fête du jour (balayage + déchiffrement).
+#[tokio::test]
+#[ignore]
+async fn security_birthday_at_rest() {
+    use axum::{extract::State, Extension, Json};
+    use chrono::Datelike;
+    use crate::handlers::birthdays;
+    crate::email_crypto::init_for_tests();
+    let (state, db) = setup().await;
+    let (a, b) = (user(&db).await, user(&db).await);
+    let today = chrono::Utc::now().date_naive();
+    let born = chrono::NaiveDate::from_ymd_opt(1990, today.month(), today.day()).unwrap_or(chrono::NaiveDate::from_ymd_opt(1990, 2, 28).unwrap());
+    sqlx::query("UPDATE users SET birthday=$2, birthday_visibility='friends' WHERE id=$1").bind(a).bind(born).execute(&db).await.unwrap();
+    birthdays::migrate_at_rest(&db).await.unwrap();
+    birthdays::migrate_at_rest(&db).await.unwrap();
+    let left: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM users WHERE birthday IS NOT NULL").fetch_one(&db).await.unwrap();
+    assert_eq!(left, 0, "plus de date en clair");
+    let enc: String = sqlx::query_scalar("SELECT birthday_enc FROM users WHERE id=$1").bind(a).fetch_one(&db).await.unwrap();
+    assert_eq!(birthdays::open(a, &enc), Some(born));
+    assert_eq!(birthdays::open(b, &enc), None, "AAD liée au compte");
+
+    // Visible par soi et par un ami, pas par un inconnu (jamais l'année).
+    assert_eq!(birthdays::for_viewer(&state, a, a, false).await, Some(serde_json::json!({ "month": born.month(), "day": born.day() })));
+    assert!(birthdays::for_viewer(&state, a, b, true).await.is_some());
+    assert_eq!(birthdays::for_viewer(&state, a, b, false).await, None);
+    let me: crate::models::user::User = sqlx::query_as("SELECT * FROM users WHERE id=$1").bind(a).fetch_one(&db).await.unwrap();
+    assert_eq!(me.into_self_public().birthday, Some(born), "profil : date déchiffrée");
+
+    // Fête du jour : trouvée malgré le chiffrement, une seule fois.
+    birthdays::run(&state).await;
+    let year: Option<i32> = sqlx::query_scalar("SELECT birthday_celebrated_year FROM users WHERE id=$1").bind(a).fetch_one(&db).await.unwrap();
+    if birthdays::is_today(born.month(), born.day(), today) {
+        assert_eq!(year, Some(today.year()));
+    }
+
+    // Réglage par l'API : chiffré, relu.
+    let claims = crate::middleware::auth::Claims { sub: b, exp: i64::MAX, iss: "forgechat".into(), iat: 0, sid: None };
+    let body: birthdays::BirthdayBody = serde_json::from_value(serde_json::json!({ "birthday": { "month": 3, "day": 14 }, "visibility": "friends" })).unwrap();
+    let Json(r) = birthdays::set_my_birthday(State(state.clone()), Extension(claims), Json(body)).await.unwrap();
+    assert_eq!(r["birthday"], serde_json::json!({ "month": 3, "day": 14, "year": null }));
+    let (clear, enc): (Option<chrono::NaiveDate>, String) = sqlx::query_as("SELECT birthday, birthday_enc FROM users WHERE id=$1").bind(b).fetch_one(&db).await.unwrap();
+    assert_eq!(clear, None);
+    assert!(!enc.contains("2000"));
+}

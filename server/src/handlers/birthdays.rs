@@ -1,7 +1,8 @@
 //! Anniversaires (lot « Profil et social »).
 //!
 //! Date = jour et mois ; l'année est facultative et n'est JAMAIS montrée à personne
-//! (`users.birthday` en 2000 quand elle est absente). Visibilité : personne, amis, ou
+//! (stockée en 2000 quand elle est absente). Chiffrée au repos : `users.birthday_enc`
+//! (migration 117, `seal` / `open`), `users.birthday` reste NULL. Visibilité : personne, amis, ou
 //! amis + membres des serveurs choisis (`birthday_servers`). Le jour J (UTC) : les amis
 //! qui la voient sont prévenus, et chaque serveur choisi qui a activé le message
 //! automatique (`servers.birthday_channel_id`) le poste dans son salon, une seule fois
@@ -26,6 +27,32 @@ const NO_YEAR: i32 = 2000;
 const MAX_SERVERS: usize = 100;
 
 pub const VISIBILITIES: [&str; 3] = ["nobody", "friends", "servers"];
+
+const AT_REST_INFO: &str = "forgechat birthday v1";
+
+/// Date chiffrée pour `users.birthday_enc` (AES-256-GCM, clé HKDF de EMAIL_ENC_KEY, AAD = compte).
+pub fn seal(user_id: Uuid, date: NaiveDate) -> String {
+    crate::email_crypto::seal_with(AT_REST_INFO, &user_id.to_string(), &date.to_string())
+}
+
+pub fn open(user_id: Uuid, stored: &str) -> Option<NaiveDate> {
+    crate::email_crypto::open_with(AT_REST_INFO, &user_id.to_string(), stored)?.parse().ok()
+}
+
+/// Au démarrage : chiffre les dates encore en clair puis les efface. Idempotent.
+pub async fn migrate_at_rest(db: &sqlx::PgPool) -> anyhow::Result<u64> {
+    let rows: Vec<(Uuid, NaiveDate)> = sqlx::query_as("SELECT id, birthday FROM users WHERE birthday IS NOT NULL")
+        .fetch_all(db)
+        .await?;
+    for (id, date) in &rows {
+        sqlx::query("UPDATE users SET birthday_enc=$2, birthday=NULL WHERE id=$1")
+            .bind(id)
+            .bind(seal(*id, *date))
+            .execute(db)
+            .await?;
+    }
+    Ok(rows.len() as u64)
+}
 
 /// `viewer` voit-il l'anniversaire ? (soi-même : toujours)
 pub fn visible(visibility: &str, is_self: bool, is_friend: bool, in_chosen_server: bool) -> bool {
@@ -70,11 +97,11 @@ impl BirthdayDate {
 
 async fn my_birthday(state: &AppState, me: Uuid) -> Result<serde_json::Value> {
     use sqlx::Row;
-    let r = sqlx::query("SELECT birthday, birthday_has_year, birthday_visibility FROM users WHERE id=$1")
+    let r = sqlx::query("SELECT birthday_enc, birthday_has_year, birthday_visibility FROM users WHERE id=$1")
         .bind(me)
         .fetch_one(&state.db)
         .await?;
-    let date: Option<NaiveDate> = r.get("birthday");
+    let date = r.get::<Option<String>, _>("birthday_enc").and_then(|s| open(me, &s));
     let has_year: bool = r.get("birthday_has_year");
     let servers: Vec<Uuid> = sqlx::query_scalar(
         "SELECT bs.server_id FROM birthday_servers bs
@@ -140,12 +167,12 @@ pub async fn set_my_birthday(
     let mut tx = state.db.begin().await?;
     if let Some(stored) = stored {
         let (date, has_year) = match stored {
-            Some((d, y)) => (Some(d), y),
+            Some((d, y)) => (Some(seal(claims.sub, d)), y),
             None => (None, true),
         };
         // Nouvelle date : elle pourra être fêtée cette année si le jour n'est pas passé.
         sqlx::query(
-            "UPDATE users SET birthday=$2, birthday_has_year=$3, birthday_celebrated_year=NULL WHERE id=$1",
+            "UPDATE users SET birthday_enc=$2, birthday_has_year=$3, birthday_celebrated_year=NULL WHERE id=$1",
         )
         .bind(claims.sub)
         .bind(date)
@@ -185,12 +212,12 @@ pub async fn set_my_birthday(
 pub async fn for_viewer(state: &AppState, owner: Uuid, viewer: Uuid, is_friend: bool) -> Option<serde_json::Value> {
     use sqlx::Row;
     let r = sqlx::query(
-        "SELECT u.birthday, u.birthday_visibility,
+        "SELECT u.birthday_enc, u.birthday_visibility,
                 EXISTS(SELECT 1 FROM birthday_servers bs
                        JOIN server_members a ON a.server_id = bs.server_id AND a.user_id = bs.user_id
                        JOIN server_members b ON b.server_id = bs.server_id AND b.user_id = $2
                        WHERE bs.user_id = u.id) AS shared
-         FROM users u WHERE u.id=$1 AND u.birthday IS NOT NULL",
+         FROM users u WHERE u.id=$1 AND u.birthday_enc IS NOT NULL",
     )
     .bind(owner)
     .bind(viewer)
@@ -202,7 +229,7 @@ pub async fn for_viewer(state: &AppState, owner: Uuid, viewer: Uuid, is_friend: 
     if !visible(&vis, owner == viewer, is_friend, r.get("shared")) {
         return None;
     }
-    let d: NaiveDate = r.get("birthday");
+    let d = open(owner, &r.get::<String, _>("birthday_enc"))?;
     Some(serde_json::json!({ "month": d.month(), "day": d.day() }))
 }
 
@@ -265,14 +292,15 @@ pub async fn run(state: &AppState) {
     use sqlx::Row;
     let today = chrono::Utc::now().date_naive();
     let year = today.year();
+    // ponytail: dates chiffrées, donc balayage de tous les comptes qui en ont une (déchiffrement
+    // en mémoire, une fois par heure) ; au-delà de ~100 000 comptes, garder à part le (mois, jour)
+    // sous forme d'empreinte HMAC pour filtrer en SQL.
     let rows = sqlx::query(
-        "SELECT id, birthday FROM users
-         WHERE birthday IS NOT NULL AND birthday_visibility <> 'nobody'
-           AND (birthday_celebrated_year IS NULL OR birthday_celebrated_year < $1)
-           AND EXTRACT(MONTH FROM birthday)::INT = $2",
+        "SELECT id, birthday_enc FROM users
+         WHERE birthday_enc IS NOT NULL AND birthday_visibility <> 'nobody'
+           AND (birthday_celebrated_year IS NULL OR birthday_celebrated_year < $1)",
     )
     .bind(year)
-    .bind(today.month() as i32)
     .fetch_all(&state.db)
     .await;
     let rows = match rows {
@@ -281,11 +309,11 @@ pub async fn run(state: &AppState) {
     };
     let mut count = 0usize;
     for r in rows {
-        let d: NaiveDate = r.get("birthday");
+        let id: Uuid = r.get("id");
+        let Some(d) = open(id, &r.get::<String, _>("birthday_enc")) else { continue };
         if !is_today(d.month(), d.day(), today) {
             continue;
         }
-        let id: Uuid = r.get("id");
         // Réservation atomique : une seule instance fête un anniversaire donné.
         let claimed = sqlx::query_scalar::<_, Uuid>(
             "UPDATE users SET birthday_celebrated_year=$2 WHERE id=$1
