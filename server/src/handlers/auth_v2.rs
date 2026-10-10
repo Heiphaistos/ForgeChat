@@ -248,3 +248,7 @@ mod tests {
         assert_eq!(check_proof(NO_PASSWORD, None, None, Some(NO_PASSWORD)), ProofCheck::Wrong);
     }
 }
+
+#[cfg(test)]
+#[path = "auth_v2_db_tests.rs"]
+mod db_tests;
