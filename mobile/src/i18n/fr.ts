@@ -541,9 +541,8 @@ export const fr = {
 
   // --- Vocal et appels ---
   'voice.mute': 'Couper le son',
-  'voice.vol50': 'Volume 50 %',
-  'voice.vol100': 'Volume normal (100 %)',
-  'voice.vol200': 'Volume fort (200 %)',
+  'call.volume': 'Volume',
+  'voice.volPct': 'Volume {n} %',
   'voice.weak': 'Connexion faible',
   'voice.lost': 'Connexion perdue',
   'voice.invalid': 'Lien de salon vocal invalide.',

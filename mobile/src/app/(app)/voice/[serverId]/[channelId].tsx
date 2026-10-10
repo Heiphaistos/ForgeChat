@@ -9,6 +9,8 @@ import { PipView } from '@/components/call/PipView'
 import { VideoStage } from '@/components/call/VideoStage'
 import type { CallTile } from '@/components/call/VideoTile'
 import { Sheet, type SheetAction } from '@/components/Sheet'
+import { PeerVolumeSheet } from '@/components/call/PeerVolumeSheet'
+import { usePeerVolumes } from '@/stores/peerVolumes'
 import { Button, ErrorState, PasswordField, type IconName } from '@/components/ui'
 import { errorMessage } from '@/lib/http'
 import { useRouteParams } from '@/lib/params'
@@ -33,12 +35,6 @@ import { VoiceLotBanners } from '@/features/voice/VoiceLotBanners'
 import { openDmWith } from '@/features/friends/openDm'
 
 const REACTIONS = ['👍', '😂', '🎉', '❤️', '😮', '👏']
-const VOLUMES: { label: Key; value: number }[] = [
-  { label: 'voice.mute', value: 0 },
-  { label: 'voice.vol50', value: 0.5 },
-  { label: 'voice.vol100', value: 1 },
-  { label: 'voice.vol200', value: 2 },
-]
 const QUALITY_LABEL: Record<string, Key> = { poor: 'voice.weak', lost: 'voice.lost' }
 
 export default function VoiceScreen() {
@@ -52,6 +48,7 @@ export default function VoiceScreen() {
   const [open, setOpen] = useState<string | null>(null)
   const [pinned, setPinned] = useState<string | null>(null)
   const [volumeOf, setVolumeOf] = useState<VoicePeer | null>(null)
+  const volumes = usePeerVolumes((s) => s.volumes)
   const [more, setMore] = useState(false)
   const [sounds, setSounds] = useState(false)
   const [watching, setWatching] = useState(false)
@@ -91,7 +88,7 @@ export default function VoiceScreen() {
       muted: p.muted,
       speaking: v.speaking.includes(p.userId),
       quality: v.qualities[p.userId] ?? null,
-      badges: <TileBadges handRaised={p.handRaised} recording={p.recording} reaction={v.reactions[p.userId]} volume={v.volumes[p.userId]} />,
+      badges: <TileBadges handRaised={p.handRaised} recording={p.recording} reaction={v.reactions[p.userId]} volume={volumes[p.userId]} />,
     })
     if (p.screenStream?.getVideoTracks().length) {
       tiles.push({
@@ -167,17 +164,9 @@ export default function VoiceScreen() {
           ? QUALITY_LABEL[v.quality] && t(QUALITY_LABEL[v.quality]!)
           : undefined
 
-  const volumeActions: SheetAction[] = volumeOf
-    ? [
-        ...VOLUMES.map((o): SheetAction => ({
-          label: t(o.label),
-          icon: o.value === 0 ? 'volume-mute' : 'volume-high',
-          selected: (v.volumes[volumeOf.userId] ?? 1) === o.value,
-          onPress: () => v.setPeerVolume(volumeOf.userId, o.value),
-        })),
-        // Support à distance avec ce participant : son MP, menu déplié (on reste dans le salon).
-        { label: t('rs.button'), icon: 'help-buoy-outline', onPress: () => void openDmWith(volumeOf.userId, volumeOf.username, true) },
-      ]
+  // Support à distance avec ce participant : son MP, menu déplié (on reste dans le salon).
+  const volumeExtra: SheetAction[] = volumeOf
+    ? [{ label: t('rs.button'), icon: 'help-buoy-outline', onPress: () => void openDmWith(volumeOf.userId, volumeOf.username, true) }]
     : []
   const moreActions: SheetAction[] = [
     { label: t(v.handRaised ? 'voice.lowerHand' : 'voice.raiseHand'), icon: 'hand-left-outline', onPress: v.toggleHand },
@@ -240,7 +229,7 @@ export default function VoiceScreen() {
     <View style={{ flex: 1, backgroundColor: colors.bgDeep }}>
       {header}
       {route.sheet}
-      <Sheet visible={!!volumeOf} onClose={() => setVolumeOf(null)} title={volumeOf ? t('voice.volumeOf', { name: volumeOf.username }) : undefined} actions={volumeActions} />
+      <PeerVolumeSheet peer={volumeOf ? { userId: volumeOf.userId, name: volumeOf.username } : null} onClose={() => setVolumeOf(null)} extra={volumeExtra} />
       <Sheet visible={more} onClose={() => setMore(false)} actions={moreActions} />
       {here ? <SoundboardSheet serverId={ids.serverId} canManage={perms.has(PERM.MANAGE_SERVER)} visible={sounds} onClose={() => setSounds(false)} /> : null}
       {!here ? (

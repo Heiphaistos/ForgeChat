@@ -10,6 +10,7 @@ import { t } from '@/i18n'
 import { registerSignOutHook } from './auth'
 import { E2EE_CLAIM, enableMediaE2EE, mediaE2EEError, openMediaE2EE, watchOutdated, type MediaE2EE } from '@/e2e/media'
 import { audioCaptureDefaults, watchCameraEffect } from '@/services/voiceFx'
+import { applyPeerVolumes, peerVolume, usePeerVolumes } from './peerVolumes'
 
 /**
  * Appels vocaux/vidéo de groupe privé — server/src/handlers/group_calls.rs et le client web
@@ -63,6 +64,8 @@ interface GroupCallState {
 }
 
 let room: Room | null = null
+// Volume par personne réglé ailleurs (salon, MP, groupe) : appliqué tout de suite ici aussi.
+usePeerVolumes.subscribe(() => applyPeerVolumes(room))
 let mySessionId: string | null = null
 let ringTimer: ReturnType<typeof setTimeout> | null = null
 /** Incrémenté à chaque leave() : détecte une continuation async périmée. */
@@ -135,7 +138,10 @@ export const useGroupCall = create<GroupCallState>((set, get) => {
       await enableMediaE2EE(r, e2ee)
       watchOutdated(r, (ids) => set({ e2eeOutdated: ids }))
     }
-    r.on(RoomEvent.TrackSubscribed, (_t, _pub, p) => refresh(p))
+    r.on(RoomEvent.TrackSubscribed, (_t, _pub, p) => {
+      p.setVolume(peerVolume(p.identity))
+      refresh(p)
+    })
       .on(RoomEvent.TrackUnsubscribed, (_t, _pub, p) => refresh(p))
       .on(RoomEvent.TrackMuted, (_pub, p) => p !== r.localParticipant && refresh(p as RemoteParticipant))
       .on(RoomEvent.TrackUnmuted, (_pub, p) => p !== r.localParticipant && refresh(p as RemoteParticipant))

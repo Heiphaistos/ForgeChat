@@ -16,6 +16,7 @@ import { useGroupCall } from './groupCall'
 import { useVoice } from './voice'
 import { E2EE_CLAIM, enableMediaE2EE, mediaE2EEError, openMediaE2EE, watchOutdated, type MediaE2EE } from '@/e2e/media'
 import { audioCaptureDefaults, watchCameraEffect } from '@/services/voiceFx'
+import { applyPeerVolumes, peerVolume, usePeerVolumes } from './peerVolumes'
 
 /**
  * Appels privés 1:1 (audio/vidéo) — protocole du serveur ForgeChat ≥ 3.251 et du client web
@@ -92,6 +93,8 @@ interface CallState {
 }
 
 let room: Room | null = null
+// Volume par personne réglé ailleurs (salon, MP, groupe) : appliqué tout de suite ici aussi.
+usePeerVolumes.subscribe(() => applyPeerVolumes(room))
 let ringTimeout: ReturnType<typeof setTimeout> | null = null
 /** Sonnerie d'un appel entrant : minuteur distinct, un appel entrant peut arriver pendant un appel. */
 let incomingTimeout: ReturnType<typeof setTimeout> | null = null
@@ -242,7 +245,10 @@ export const useCall = create<CallState>((set, get) => {
       watchOutdated(r, (ids) => set({ e2eeOutdated: ids }))
     }
     const isPartner = (p: RemoteParticipant) => p.identity === get().partnerId
-    r.on(RoomEvent.TrackSubscribed, (_t, _p, p) => isPartner(p) && refreshRemote())
+    r.on(RoomEvent.TrackSubscribed, (_t, _p, p) => {
+      p.setVolume(peerVolume(p.identity))
+      if (isPartner(p)) refreshRemote()
+    })
       .on(RoomEvent.TrackUnsubscribed, (_t, _p, p) => isPartner(p) && refreshRemote())
       .on(RoomEvent.TrackMuted, () => refreshRemote())
       .on(RoomEvent.TrackUnmuted, () => refreshRemote())
