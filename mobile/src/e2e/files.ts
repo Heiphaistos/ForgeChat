@@ -10,6 +10,7 @@ import { requireOptionalNativeModule } from 'expo'
 import * as Crypto from 'expo-crypto'
 import type { UploadFile } from '@/api/messages'
 import { resolveMediaUrl, uploadPath } from '@/lib/links'
+import { signUpload } from '@/lib/useSignedUrl'
 import type { Attachment } from '@/types/models'
 import { mustEncrypt, type ConvKind } from './conversations'
 import * as c from './crypto'
@@ -207,7 +208,8 @@ export function decryptToCache(url: string, e: c.FileEntry): Promise<string> {
 }
 
 async function fetchDecrypted(url: string, e: c.FileEntry): Promise<string> {
-  const src = resolveMediaUrl(url)
+  // Adresse signée (?exp&sig) : déjà signée par l'API, ou brute tirée d'un contenu chiffré (forum).
+  const src = resolveMediaUrl(await signUpload(url))
   if (!fs || !src) throw new Error('E2E_FILES_UNAVAILABLE')
   const blob = cacheFile(`${e.id}.dl`)
   const out = cacheFile(`${e.id}.${extOf(e.n)}`)

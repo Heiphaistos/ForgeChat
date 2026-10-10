@@ -11,7 +11,7 @@ import { createPostBody, isVideoMedia, mediaExtension, MAX_TAGS, normalizeTag, t
 import { TagChips } from '@/features/forum/TagChips'
 import { useT } from '@/i18n'
 import { errorMessage } from '@/lib/http'
-import { resolveMediaUrl } from '@/lib/links'
+import { SignedImage } from '@/components/SignedImage'
 import { ensurePhotoAccess } from '@/lib/photoAccess'
 import { useRouteParams } from '@/lib/params'
 import { qk, queryClient } from '@/lib/queryClient'
@@ -76,7 +76,11 @@ export default function NewPostScreen() {
       {media ? (
         <>
           {mediaUrl && !isVideoMedia(mediaUrl) ? (
-            <Image source={{ uri: localUri ?? resolveMediaUrl(mediaUrl) ?? undefined }} style={styles.preview} contentFit="contain" accessibilityLabel={t('social.newPost.chosenMedia')} />
+            localUri ? (
+              <Image source={{ uri: localUri }} style={styles.preview} contentFit="contain" accessibilityLabel={t('social.newPost.chosenMedia')} />
+            ) : (
+              <SignedImage url={mediaUrl} style={styles.preview} contentFit="contain" accessibilityLabel={t('social.newPost.chosenMedia')} />
+            )
           ) : mediaUrl ? (
             <Text style={styles.label}>{t('social.newPost.videoReady')}</Text>
           ) : null}

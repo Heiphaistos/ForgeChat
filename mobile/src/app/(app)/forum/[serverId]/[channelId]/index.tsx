@@ -12,7 +12,8 @@ import { isVideoMedia, nextPostsCursor, type ForumPost } from '@/features/forum/
 import { TagChips } from '@/features/forum/TagChips'
 import { formatRelative } from '@/lib/format'
 import { errorMessage } from '@/lib/http'
-import { imageSource, resolveMediaUrl, uploadPath } from '@/lib/links'
+import { uploadPath } from '@/lib/links'
+import { SignedImage } from '@/components/SignedImage'
 import { useT } from '@/i18n'
 import { useRouteParams } from '@/lib/params'
 import { qk } from '@/lib/queryClient'
@@ -85,7 +86,7 @@ export default function ForumScreen() {
                   <Ionicons name="lock-closed" size={30} color={colors.text} />
                 )
               ) : p.mediaUrl && !isVideoMedia(p.mediaUrl) ? (
-                <Image source={imageSource(resolveMediaUrl(p.mediaUrl) ?? '')} style={StyleSheet.absoluteFill} contentFit="cover" />
+                <SignedImage url={p.mediaUrl} style={StyleSheet.absoluteFill} contentFit="cover" />
               ) : (
                 <Ionicons name="play-circle" size={36} color={colors.text} />
               )}

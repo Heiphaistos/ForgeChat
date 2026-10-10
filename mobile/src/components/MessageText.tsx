@@ -8,7 +8,8 @@ import { safeEmojiUrl, useCustomEmojis } from '@/features/chat/customEmojis'
 import { cachedChannel, cachedRole, cachedUsername, roleColor } from '@/features/chat/tokens'
 import { t, useLang, useT } from '@/i18n'
 import { cachedDisplayName } from './UserName'
-import { openExternalUrl, resolveMediaUrl } from '@/lib/links'
+import { openExternalUrl } from '@/lib/links'
+import { SignedImage } from './SignedImage'
 import { deceptiveHost } from '@/lib/safeUrl'
 import { formatTimestamp, parseMarkdown, type InlineNode } from '@/lib/markdown'
 import { queryClient } from '@/lib/queryClient'
@@ -159,8 +160,7 @@ export const MessageText = memo(function MessageText({ content, myName }: { cont
       <View style={{ gap: 4 }}>
         {parts.map((p, i) => {
           if (i % 2 === 1) {
-            const src = resolveMediaUrl(p)
-            return src ? <Image key={i} source={{ uri: src }} style={styles.inlineImage} contentFit="contain" accessibilityLabel={t('social.post.image')} /> : null
+            return <SignedImage key={i} url={p} style={styles.inlineImage} contentFit="contain" accessibilityLabel={t('social.post.image')} />
           }
           return p.trim() ? <MessageText key={i} content={p.trim()} myName={myName} /> : null
         })}

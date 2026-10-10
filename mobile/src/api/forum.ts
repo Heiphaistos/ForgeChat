@@ -8,6 +8,7 @@ import { fromThreadMessage } from '@/features/chat/adapters'
 import { normalizePost, normalizePosts, type ForumPost } from '@/features/forum/forum'
 import { http, path } from '@/lib/http'
 import { uploadPath } from '@/lib/links'
+import { primeSignedUpload } from '@/lib/useSignedUrl'
 import type { Attachment, ChatMessage } from '@/types/models'
 import type { UploadFile } from './messages'
 import { uploadForm } from './threads'
@@ -61,8 +62,10 @@ export const forumApi = {
   async uploadMedia(serverId: string, channelId: string, file: UploadFile): Promise<string | null> {
     // Auteur muni d'une clé : média chiffré ici, sa clé ira dans la publication chiffrée (§12).
     return withPreparedUploads('channel', channelId, [file], async (p) => {
-      const r = await http.upload<{ url?: unknown }>(path`/servers/${serverId}/channels/${channelId}/forum-uploads`, uploadForm(p.uploads))
+      const r = await http.upload<{ url?: unknown; signed_url?: unknown }>(path`/servers/${serverId}/channels/${channelId}/forum-uploads`, uploadForm(p.uploads))
       const url = typeof r?.url === 'string' ? r.url : null
+      // Aperçu : adresse signée de l'envoi ; la publication (chiffrée) garde l'adresse brute.
+      if (url && typeof r?.signed_url === 'string') primeSignedUpload(url, r.signed_url)
       if (url && p.entries?.[0]) sealedMedia.set(url, { ...p.entries[0], u: url })
       return url
     })
