@@ -29,15 +29,33 @@ pub fn pseudonym(value: &str) -> String {
     mac.finalize().into_bytes().iter().map(|b| format!("{b:02x}")).collect()
 }
 
-/// Pseudonyme de l'IP du client (derrière nginx : X-Real-IP, sinon X-Forwarded-For).
+/// Pseudonyme de l'IP du client. Seul X-Real-IP compte : nginx l'écrase avec `$remote_addr`.
+/// X-Forwarded-For est choisi par le client (une IP différente à chaque essai) : ignoré.
 pub fn client_key(headers: &HeaderMap, addr: &SocketAddr) -> String {
-    let ip = headers
+    pseudonym(&client_ip(headers, addr))
+}
+
+fn client_ip(headers: &HeaderMap, addr: &SocketAddr) -> String {
+    headers
         .get("x-real-ip")
-        .or_else(|| headers.get("x-forwarded-for"))
         .and_then(|v| v.to_str().ok())
-        .map(|s| s.split(',').next().unwrap_or(s).trim().to_string())
-        .unwrap_or_else(|| addr.ip().to_string());
-    pseudonym(&ip)
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(str::to_string)
+        .unwrap_or_else(|| addr.ip().to_string())
+}
+
+#[cfg(test)]
+mod client_ip_tests {
+    #[test]
+    fn forwarded_for_is_ignored() {
+        let addr: std::net::SocketAddr = "10.0.0.9:1234".parse().unwrap();
+        let mut h = axum::http::HeaderMap::new();
+        h.insert("x-forwarded-for", "1.2.3.4".parse().unwrap());
+        assert_eq!(super::client_ip(&h, &addr), "10.0.0.9");
+        h.insert("x-real-ip", "5.6.7.8".parse().unwrap());
+        assert_eq!(super::client_ip(&h, &addr), "5.6.7.8");
+    }
 }
 
 /// Étiquette d'appareil tirée du user-agent (« Chrome · Windows », « ForgeChat Android »…),

@@ -47,16 +47,26 @@ pub fn admin_email() -> String {
         .unwrap_or_else(|| "heiphaistos44@gmail.com".to_string())
 }
 
-/// Propriétaire du site : le compte de `FORGECHAT_ADMIN_EMAIL`.
+/// Propriétaire du site : le COMPTE (UUID `owner_user_id`, migration 300) qui a prouvé l'adresse
+/// `FORGECHAT_ADMIN_EMAIL` en premier. Un compte recréé avec la même adresse n'en hérite pas.
 pub async fn is_owner(state: &AppState, user_id: Uuid) -> bool {
-    sqlx::query_scalar::<_, bool>("SELECT lower(email) = $2 AND NOT is_bot FROM users WHERE id=$1")
+    sqlx::query_scalar::<_, bool>(
+        "SELECT NOT is_bot AND id::text = (SELECT value FROM site_settings WHERE key = 'owner_user_id') FROM users WHERE id=$1",
+    )
         .bind(user_id)
-        .bind(admin_email())
         .fetch_optional(&state.db)
         .await
         .ok()
         .flatten()
         .unwrap_or(false)
+}
+
+async fn owner_user_id(state: &AppState) -> Option<String> {
+    sqlx::query_scalar("SELECT value FROM site_settings WHERE key = 'owner_user_id'")
+        .fetch_optional(&state.db)
+        .await
+        .ok()
+        .flatten()
 }
 
 /// Détient le rôle « El Patron » (le propriétaire l'a d'office) : accès à l'administration et pleins
@@ -254,7 +264,7 @@ pub async fn list_users(
 
     let rows = sqlx::query(
         "SELECT u.id, u.username, u.discriminator, u.email, u.avatar, u.created_at, u.is_bot,
-                (lower(u.email) = $6) AS is_owner,
+                (u.id::text = $6) AS is_owner,
                 EXISTS(SELECT 1 FROM site_role_members r WHERE r.user_id = u.id AND r.role = 'el-patron') AS is_patron,
                 u.site_banned_at, u.site_ban_reason,
                 inv.username AS invited_by_name, ri.note AS invite_note,
@@ -270,8 +280,7 @@ pub async fn list_users(
            AND (CASE $2
                   WHEN 'online'  THEN u.id = ANY($3)
                   WHEN 'banned'  THEN u.site_banned_at IS NOT NULL
-                  WHEN 'patrons' THEN lower(u.email) = $6
-                                      OR EXISTS(SELECT 1 FROM site_role_members r WHERE r.user_id = u.id AND r.role = 'el-patron')
+                  WHEN 'patrons' THEN fc_is_god(u.id)
                   WHEN 'recent'  THEN u.created_at > NOW() - INTERVAL '7 days'
                   ELSE TRUE END)
          ORDER BY u.created_at DESC
@@ -282,7 +291,7 @@ pub async fn list_users(
     .bind(&online_ids)
     .bind(limit)
     .bind(offset)
-    .bind(admin_email())
+    .bind(owner_user_id(&state).await.unwrap_or_default())
     .fetch_all(&state.db)
     .await?;
 

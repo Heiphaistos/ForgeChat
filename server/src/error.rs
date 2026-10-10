@@ -29,6 +29,12 @@ pub enum AppError {
     SlowMode(i64),
     #[error("totp_required")]
     TotpRequired,
+    /// 426 : appli trop ancienne pour ce compte (connexion v2), message lisible.
+    #[error("{0}")]
+    UpgradeRequired(String),
+    /// 503 : dépendance indisponible (Redis des compteurs anti-force brute) : on refuse.
+    #[error("{0}")]
+    Unavailable(String),
     #[error("Erreur interne: {0}")]
     Internal(#[from] anyhow::Error),
     #[error("DB: {0}")]
@@ -54,6 +60,8 @@ impl IntoResponse for AppError {
                 ).into_response();
             }
             AppError::TotpRequired => (StatusCode::FORBIDDEN, "totp_required".into()),
+            AppError::UpgradeRequired(m) => (StatusCode::UPGRADE_REQUIRED, m.clone()),
+            AppError::Unavailable(m) => (StatusCode::SERVICE_UNAVAILABLE, m.clone()),
             AppError::Internal(e) => {
                 tracing::error!("Internal error: {e:?}");
                 (StatusCode::INTERNAL_SERVER_ERROR, "Erreur serveur".into())

@@ -60,6 +60,11 @@ async fn main() -> anyhow::Result<()> {
 
     sqlx::migrate!("./migrations").run(&db).await?;
     tracing::info!("Migrations OK");
+    handlers::totp::init_enc_key()?;
+    let sealed = handlers::totp::migrate_at_rest(&db).await?;
+    if sealed > 0 {
+        tracing::info!("2FA : {sealed} compte(s) passé(s) au secret chiffré / codes de secours hachés");
+    }
 
     let redis_client = redis::Client::open(config.redis_url.clone())?;
     let redis_conn = redis_client.get_multiplexed_async_connection().await?;
@@ -235,6 +240,7 @@ async fn main() -> anyhow::Result<()> {
         .route("/api/auth/registration-info", get(handlers::site_admin::registration_info))
         .route("/api/auth/verify-email", post(handlers::auth::verify_email).layer(DefaultBodyLimit::max(SMALL_JSON_LIMIT)))
         .route("/api/auth/login", post(handlers::auth::login).layer(DefaultBodyLimit::max(SMALL_JSON_LIMIT)))
+        .route("/api/auth/prelogin", post(handlers::auth_v2::prelogin).layer(DefaultBodyLimit::max(SMALL_JSON_LIMIT)))
         .route("/api/auth/refresh", post(handlers::auth::refresh).layer(DefaultBodyLimit::max(SMALL_JSON_LIMIT)))
         // Plusieurs comptes dans le même navigateur : jetons des autres comptes en cookies HttpOnly.
         .route("/api/auth/accounts", get(handlers::accounts::list))
@@ -641,6 +647,7 @@ fn protected_routes(state: AppState) -> Router<AppState> {
         // E2E encrypted DMs
         // E2E Public Key Management
         // Clé de compte E2E (docs/CHIFFREMENT-E2E.md §3)
+        .route("/users/me/kdf", get(handlers::auth_v2::my_kdf))
         .route("/users/me/keys", get(handlers::user_keys::get_my_keys).put(handlers::user_keys::create_my_keys).layer(DefaultBodyLimit::max(SMALL_JSON_LIMIT)))
         .route("/users/me/keys/wrapped", put(handlers::user_keys::rewrap_my_key).layer(DefaultBodyLimit::max(SMALL_JSON_LIMIT)))
         .route("/users/me/keys/backup", put(handlers::user_keys::put_my_backup).delete(handlers::user_keys::delete_my_backup).layer(DefaultBodyLimit::max(SMALL_JSON_LIMIT)))

@@ -7,7 +7,6 @@ use axum::{
     http::HeaderMap,
     Json,
 };
-use bcrypt::{hash, DEFAULT_COST};
 use rand::Rng;
 use redis::AsyncCommands;
 use std::net::SocketAddr;
@@ -15,8 +14,9 @@ use uuid::Uuid;
 
 use crate::{
     error::{AppError, Result},
+    handlers::auth_v2::{account_key, check_salt, hash_auth, hit, NO_PASSWORD, UPGRADE_MSG},
     middleware::auth::{hash_token, revoke_all_tokens},
-    privacy::{client_key, pseudonym},
+    privacy::client_key,
     state::AppState,
 };
 
@@ -53,14 +53,11 @@ pub async fn forgot_password(
     if email.is_empty() || email.len() > 254 || !email.contains('@') {
         return Err(AppError::BadRequest("Email invalide".into()));
     }
-    let ip = client_key(&headers, &addr);
-    if over_limit(&state, &format!("pwreset_ip:{ip}"), 5, 900).await {
-        return Err(AppError::TooManyRequests);
-    }
+    hit(&state, &format!("pwreset_ip:{}", client_key(&headers, &addr)), 5, 900).await?;
     let ok = Json(serde_json::json!({ "ok": true }));
     // Par e-mail : 3 demandes / heure. Au-delà on répond pareil sans rien envoyer,
     // pour ne pas révéler l'existence du compte ni permettre d'inonder une boîte.
-    if over_limit(&state, &format!("pwreset_mail:{}", pseudonym(&email)), 3, 3600).await {
+    if hit(&state, &account_key("pwreset_mail", &email), 3, 3600).await.is_err() {
         return Ok(ok);
     }
 
@@ -120,22 +117,26 @@ pub async fn forgot_password(
     Ok(ok)
 }
 
-/// POST /api/auth/reset-password { token, new_password }
+/// POST /api/auth/reset-password { token, new_auth, new_kdf_salt }
+/// Connexion v2 : le nouveau mot de passe ne quitte pas l'appareil. L'enveloppe E2E (scellée par
+/// l'ancienne wrapKey) devient illisible : l'appli propose le code de récupération, sinon une
+/// nouvelle clé.
 pub async fn reset_password(
     State(state): State<AppState>,
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
     headers: HeaderMap,
     Json(body): Json<serde_json::Value>,
 ) -> Result<Json<serde_json::Value>> {
-    let ip = client_key(&headers, &addr);
-    if over_limit(&state, &format!("pwreset_try:{ip}"), 10, 900).await {
-        return Err(AppError::TooManyRequests);
-    }
+    hit(&state, &format!("pwreset_try:{}", client_key(&headers, &addr)), 10, 900).await?;
     let token = body["token"].as_str().unwrap_or("");
-    let new_pw = body["new_password"].as_str().unwrap_or("");
-    if new_pw.len() < 8 || new_pw.len() > 128 {
-        return Err(AppError::BadRequest("Le mot de passe doit faire 8 à 128 caractères".into()));
-    }
+    let (Some(new_auth), Some(new_salt)) = (body["new_auth"].as_str(), body["new_kdf_salt"].as_str()) else {
+        if body.get("new_password").is_some() {
+            return Err(AppError::UpgradeRequired(UPGRADE_MSG.into()));
+        }
+        return Err(AppError::BadRequest("new_auth et new_kdf_salt requis".into()));
+    };
+    check_salt(new_salt)?;
+    let new_hash = hash_auth(new_auth)?;
     let invalid = || AppError::BadRequest("Lien invalide ou expiré".into());
     if token.len() != 64 || !token.chars().all(|c| c.is_ascii_alphanumeric()) {
         return Err(invalid());
@@ -157,11 +158,12 @@ pub async fn reset_password(
         .and_then(|s| Uuid::parse_str(&s).ok())
         .ok_or_else(invalid)?;
 
-    let new_hash = hash(new_pw, DEFAULT_COST).map_err(|e| AppError::Internal(e.into()))?;
     let mut tx = state.db.begin().await?;
-    sqlx::query("UPDATE users SET password_hash=$2, updated_at=NOW() WHERE id=$1")
+    sqlx::query("UPDATE users SET auth_hash=$2, kdf_salt=$3, password_hash=$4, updated_at=NOW() WHERE id=$1")
         .bind(user_id)
         .bind(&new_hash)
+        .bind(new_salt)
+        .bind(NO_PASSWORD)
         .execute(&mut *tx)
         .await?;
     sqlx::query("DELETE FROM refresh_tokens WHERE user_id=$1")

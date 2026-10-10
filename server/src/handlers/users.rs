@@ -332,21 +332,12 @@ pub async fn delete_account(
         }
     }
 
-    // Exiger la confirmation du mot de passe pour éviter la suppression accidentelle/CSRF
-    let password = body["password"]
-        .as_str()
-        .ok_or_else(|| AppError::BadRequest("Mot de passe requis pour confirmer la suppression".into()))?;
-
-    let pw_hash = sqlx::query_scalar::<_, String>(
-        "SELECT password_hash FROM users WHERE id=$1"
-    )
-    .bind(claims.sub)
-    .fetch_one(&state.db)
-    .await?;
-
-    if !bcrypt::verify(password, &pw_hash).unwrap_or(false) {
-        return Err(AppError::BadRequest("Mot de passe incorrect".into()));
+    // Confirmation par la preuve du mot de passe (`auth`, connexion v2 ; `password` pour un
+    // compte pas encore migré) contre la suppression accidentelle / CSRF.
+    if body["auth"].as_str().is_none() && body["password"].as_str().is_none() {
+        return Err(AppError::BadRequest("Mot de passe requis pour confirmer la suppression".into()));
     }
+    crate::handlers::auth_v2::verify_proof(&state, claims.sub, body["auth"].as_str(), body["password"].as_str()).await?;
 
     // servers.owner_id REFERENCES users(id) SANS ON DELETE CASCADE (par design --
     // contrairement aux groupes DM, on ne réassigne pas silencieusement la propriété

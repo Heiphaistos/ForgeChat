@@ -494,7 +494,7 @@ pub async fn reorder_roles(
     Ok(Json(serde_json::json!({ "ok": true })))
 }
 
-/// POST /servers/:server_id/transfer { user_id, password }
+/// POST /servers/:server_id/transfer { user_id, auth } (`password` : compte pas encore migré)
 /// Réservé au propriétaire, mot de passe exigé (comme Discord exige la 2FA) ;
 /// la cible doit être un membre humain du serveur.
 pub async fn transfer_ownership(
@@ -509,12 +509,7 @@ pub async fn transfer_ownership(
     if target == claims.sub {
         return Err(AppError::BadRequest("Vous êtes déjà propriétaire".into()));
     }
-    let password = body["password"].as_str().unwrap_or("");
-    let pw_hash: String = sqlx::query_scalar("SELECT password_hash FROM users WHERE id=$1")
-        .bind(claims.sub).fetch_one(&state.db).await?;
-    if !bcrypt::verify(password, &pw_hash).unwrap_or(false) {
-        return Err(AppError::BadRequest("Mot de passe incorrect".into()));
-    }
+    crate::handlers::auth_v2::verify_proof(&state, claims.sub, body["auth"].as_str(), body["password"].as_str()).await?;
     let target_name: Option<String> = sqlx::query_scalar(
         "SELECT u.username FROM server_members sm JOIN users u ON u.id = sm.user_id
          WHERE sm.server_id=$1 AND sm.user_id=$2 AND NOT u.is_bot",
