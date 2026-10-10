@@ -3,7 +3,7 @@
 // de test du serveur (FORGECHAT_TEST_MAILBOX : un fichier JSON {to, subject, body} par e-mail ; la base
 // n'en garde qu'une empreinte). Chaque fonction prend l'`api(method, path, opts)` du script ; `opts`
 // (ex. { ip }) est relayé.
-import { readdirSync, readFileSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { deriveSecrets, newKdfSalt } from '../src/e2e/authKdf.ts'
 
@@ -18,7 +18,8 @@ export function authFor(kdfSalt, password = PASSWORD) {
   return derived.get(key)
 }
 
-const mails = () => readdirSync(MAILBOX).filter(f => f.endsWith('.json'))
+// Dossier absent tant que le serveur n'a écrit aucun e-mail : vide, pas une erreur.
+const mails = () => existsSync(MAILBOX) ? readdirSync(MAILBOX).filter(f => f.endsWith('.json')) : []
 
 /** Code du premier e-mail arrivé pour `email` hors de `seen` (envoi en tâche de fond : 10 s au plus). */
 async function mailedCode(email, seen) {

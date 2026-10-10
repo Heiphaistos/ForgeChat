@@ -91,7 +91,7 @@ jobs:
       - name: Construire et démarrer le serveur
         working-directory: server
         run: |
-          mkdir -p /tmp/uploads
+          mkdir -p /tmp/uploads "$FORGECHAT_TEST_MAILBOX"
           cargo build --locked
           ./target/debug/forgechat > /tmp/server.log 2>&1 &
           for i in $(seq 1 60); do curl -sf "$FORGECHAT_API_URL/api/health" >/dev/null && exit 0; sleep 1; done
