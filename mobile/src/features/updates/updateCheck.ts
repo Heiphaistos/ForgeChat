@@ -3,9 +3,11 @@
  *
  * Vie privée : une seule requête GET anonyme vers le serveur déjà utilisé par l'app (aucun
  * identifiant, aucun cookie) à l'ouverture de l'app, au plus toutes les 3 heures, et seulement si
- * l'utilisateur ne l'a pas désactivée. L'app télécharge l'APK depuis ce même serveur, en vérifie
- * l'empreinte SHA-256 (installer.ts), puis Android demande confirmation et refuse tout APK qui n'est
- * pas signé avec la même clé que l'app installée.
+ * l'utilisateur ne l'a pas désactivée. Le navigateur télécharge l'APK depuis ce même serveur (seul
+ * l'hôte est contrôlé ici) ; l'app NE vérifie PAS son empreinte SHA-256 (le champ du manifeste ne
+ * sert qu'à reconnaître une nouvelle publication). Seule protection : Android demande confirmation
+ * et refuse tout APK qui n'est pas signé avec la même clé que l'app installée. iOS : l'IPA est
+ * ouverte par AltStore/SideStore sans aucun contrôle de l'app.
  */
 
 /**
@@ -20,7 +22,7 @@ export interface AvailableUpdate {
   version: string
   /** APK sur le serveur ForgeChat (même origine que le manifeste, dossier /desktop/). */
   url: string
-  /** Empreinte SHA-256 annoncée (hexadécimal minuscule), comparée à celle du fichier téléchargé. */
+  /** Empreinte SHA-256 annoncée (hexadécimal minuscule) : identifie la publication, JAMAIS comparée au fichier téléchargé. */
   sha256: string
 }
 
@@ -104,7 +106,10 @@ export async function fetchAvailableUpdate(
   }
 }
 
-/** L'APK téléchargé est-il bien celui annoncé ? (empreintes hexadécimales de 64 caractères, casse ignorée) */
+/**
+ * Comparaison d'empreintes (hexadécimal de 64 caractères, casse ignorée). Aujourd'hui appelée nulle part
+ * dans l'app : le téléchargement passe par le navigateur, l'APK n'est pas vérifié par ForgeChat.
+ */
 export function shaMatches(expected: string, actual: string): boolean {
   return /^[0-9a-f]{64}$/i.test(expected) && expected.toLowerCase() === actual.toLowerCase()
 }

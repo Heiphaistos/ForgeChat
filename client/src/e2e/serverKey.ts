@@ -7,6 +7,7 @@ import { useAuth } from '../store/auth'
 import { useAccountKey } from './accountKey'
 import * as c from './crypto'
 import { forgetConv } from './conversations'
+import { pinOwnServerKey } from './keyPins'
 
 export interface ServerKeyResponse {
   exists: boolean
@@ -44,6 +45,8 @@ export async function createServerKey(serverId: string): Promise<string> {
   } finally {
     kp.priv.fill(0)
   }
+  // Ma propre clé de serveur : épinglée d'office (pas d'alerte « clé changée » chez moi).
+  await pinOwnServerKey(serverId, c.b64uEncode(kp.pub))
   // Les prochaines époques devront l'inclure : états des salons rechargés.
   forgetConv()
   return code

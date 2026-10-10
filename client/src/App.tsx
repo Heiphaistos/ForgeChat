@@ -2,6 +2,7 @@ import { useEffect, useState, useRef, useCallback, lazy, Suspense, type ReactNod
 import { BrowserRouter, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from './store/auth'
 import E2EGate from './e2e/E2EGate'
+import KeyChangeDialog from './e2e/KeyChangeDialog'
 import type { EncPayload } from './e2e/crypto'
 import { openText } from './e2e/conversations'
 import { channelPreview } from './e2e/channels'
@@ -1090,6 +1091,7 @@ function AppInner() {
         {user && <FloatingCallPiP />}
         {user && <VoiceHotkeys />}
         {user && <E2EGate />}
+        {user && <KeyChangeDialog />}
         {showQuickSwitcher && <QuickSwitcher onClose={() => setShowQuickSwitcher(false)} />}
         <CommandPalette isOpen={showCommandPalette} onClose={() => setShowCommandPalette(false)} />
         {showKeyboardShortcuts && <KeyboardShortcutsModal onClose={() => setShowKeyboardShortcuts(false)} />}

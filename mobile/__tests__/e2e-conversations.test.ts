@@ -22,12 +22,20 @@ jest.mock('@/e2e/accountKey', () => {
   // Fabrique exécutée avant le corps du fichier : relit les vecteurs elle-même.
   const { b64uDecode } = jest.requireActual('@/e2e/crypto')
   const v = JSON.parse(require('fs').readFileSync(require('path').join(__dirname, '../../docs/e2e-vectors.json'), 'utf8'))
-  const state = { status: 'ready', priv: b64uDecode(v.ecdh.privB), userId: v.convKey.member }
+  const state = { status: 'ready', priv: b64uDecode(v.ecdh.privB), pub: v.ecdh.pubB, userId: v.convKey.member }
   return { useAccountKey: { getState: () => state } }
 })
 jest.mock('@/i18n', () => ({ t: (k: string) => k }))
+const mockPins = new Map<string, string>()
+jest.mock('@/lib/secureStorage', () => ({
+  secureStateStorage: {
+    getItem: async (k: string) => mockPins.get(k) ?? null,
+    setItem: async (k: string, v: string) => { mockPins.set(k, v) },
+    removeItem: async (k: string) => { mockPins.delete(k) },
+  },
+}))
 
-import { forgetConv, keyChanges, openRaw, seal, sealBody } from '@/e2e/conversations'
+import { forgetConv, openRaw, seal, sealBody } from '@/e2e/conversations'
 
 beforeEach(() => {
   forgetConv()
@@ -86,6 +94,22 @@ test('chiffrement obligatoire : un membre sans clé ne bloque pas, l\'époque es
   expect(back.content).toBe('Salut')
 })
 
+test("clé d'un membre changée depuis son épinglage : aucune enveloppe pour elle, nouvelle époque refusée", async () => {
+  // Empreinte épinglée d'une AUTRE clé pour A (le serveur sert maintenant pubA).
+  mockPins.set(`fc_e2e_fp_${mockIds.b}_${mockIds.a}`, JSON.stringify({ fp: 'ancienne-empreinte' }))
+  mockGet.mockImplementation(async (url: string) => url.endsWith('/members')
+    ? [
+        { user_id: mockIds.b, username: 'moi', public: mockV.ecdh.pubB, fingerprint: 'menteur' },
+        { user_id: mockIds.a, username: 'a', public: mockV.ecdh.pubA, fingerprint: 'menteur' },
+      ]
+    : { current_epoch: null, rotate_needed: false, all_keyed: true, encrypt: true, envelopes: [] })
+  await expect(seal('dm', groupId, 'Salut')).rejects.toThrow('E2E_KEY_CHANGED')
+  expect(mockPost).not.toHaveBeenCalled()
+  const { useKeyAlerts } = jest.requireActual('@/e2e/keyPins')
+  expect(useKeyAlerts.getState().alerts.map((x: { subject: string }) => x.subject)).toEqual([mockIds.a])
+  mockPins.clear()
+})
+
 test("rechiffrement de l'ancien texte d'un autre membre : l'AAD garde son auteur d'origine", async () => {
   const sealed = await sealBody('group', groupId, { t: 'ancien' }, { author: mockIds.a })
   const raw = { id: 'old', client_msg_id: sealed.client_msg_id, enc: sealed.enc }
@@ -94,11 +118,3 @@ test("rechiffrement de l'ancien texte d'un autre membre : l'AAD garde son auteur
   expect((await openRaw('group', groupId, { ...raw, sender_id: mockIds.b })).e2e).toBe('locked')
 })
 
-test('alerte de changement de clé', () => {
-  const members = [
-    { user_id: mockIds.a, username: 'a', public: 'p', fingerprint: 'nouvelle' },
-    { user_id: mockIds.b, username: 'moi', public: 'p', fingerprint: 'x' },
-  ]
-  expect(keyChanges(members, { [mockIds.a]: 'ancienne', [mockIds.b]: 'y' }, mockIds.b).map((m) => m.username)).toEqual(['a'])
-  expect(keyChanges(members, {}, mockIds.b)).toEqual([])
-})

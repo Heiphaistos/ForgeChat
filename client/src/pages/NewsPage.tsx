@@ -7,6 +7,7 @@ import { useCallback, useEffect, useMemo, useState, type ComponentType, type Rea
 import { createPortal } from 'react-dom'
 import { ExternalLink, ListTree, Newspaper, Search, Settings2, X } from 'lucide-react'
 import api from '../api/client'
+import { safeHref } from '../utils/safeUrl'
 import { intlLocale, useT } from '../i18n'
 import { clean, groupOf, key, mergePages, moveWithin, orderCategories, short, type GroupId } from './newsOrder'
 import { hue, viewId, type Group, type Nav, type Rubric, type Site, type View } from './news/shared'
@@ -197,7 +198,7 @@ function Card({ a, seen, big, showSite, onSite }: { a: Article; seen: number; bi
   const label = a.site ?? host(a.link)
   return (
     <article className={`group rounded-xl overflow-hidden bg-fc-channel border border-fc-hover hover:border-fc-accent/60 transition flex ${big ? 'flex-col md:flex-row' : 'flex-col'}`}>
-      <a href={a.link} target="_blank" rel="noopener noreferrer nofollow" className={`relative block flex-shrink-0 bg-black ${big ? 'md:w-1/2 aspect-video md:aspect-auto md:min-h-[260px]' : 'aspect-video'}`} tabIndex={-1} aria-hidden>
+      <a href={safeHref(a.link)} target="_blank" rel="noopener noreferrer nofollow" className={`relative block flex-shrink-0 bg-black ${big ? 'md:w-1/2 aspect-video md:aspect-auto md:min-h-[260px]' : 'aspect-video'}`} tabIndex={-1} aria-hidden>
         {a.image && !broken
           ? <img src={a.image} alt="" loading="lazy" decoding="async" referrerPolicy="no-referrer" onError={() => setBroken(true)} className="absolute inset-0 w-full h-full object-cover group-hover:scale-[1.02] transition-transform duration-300" />
           : <div className="absolute inset-0 flex items-center justify-center text-4xl font-black text-white/80" style={{ background: `linear-gradient(135deg, hsl(${hue(label)} 55% 30%), hsl(${(hue(label) + 50) % 360} 55% 18%))` }}>{label.charAt(0).toUpperCase()}</div>}
@@ -208,11 +209,11 @@ function Card({ a, seen, big, showSite, onSite }: { a: Article; seen: number; bi
           {showSite && a.site_id ? <button onClick={() => onSite(a.site_id!)} className="font-semibold text-fc-accent hover:underline">{label}</button> : <span className="font-semibold">{label}</span>}
           <span aria-hidden>·</span><time dateTime={a.published_at}>{when(a.published_at, t)}</time>
         </p>
-        <a href={a.link} target="_blank" rel="noopener noreferrer nofollow" className="block">
+        <a href={safeHref(a.link)} target="_blank" rel="noopener noreferrer nofollow" className="block">
           <h3 className={`font-bold text-white group-hover:underline leading-snug ${big ? 'text-xl md:text-2xl' : 'text-base line-clamp-3'}`}>{a.title}</h3>
         </a>
         {a.summary && <p className={`text-sm text-fc-text leading-relaxed whitespace-pre-line ${big ? 'line-clamp-[10]' : 'line-clamp-6'}`}>{a.summary}</p>}
-        <a href={a.link} target="_blank" rel="noopener noreferrer nofollow" className="mt-auto inline-flex items-center gap-1 text-xs text-fc-muted hover:text-white">
+        <a href={safeHref(a.link)} target="_blank" rel="noopener noreferrer nofollow" className="mt-auto inline-flex items-center gap-1 text-xs text-fc-muted hover:text-white">
           {host(a.link)} <ExternalLink size={11} aria-hidden />
         </a>
       </div>

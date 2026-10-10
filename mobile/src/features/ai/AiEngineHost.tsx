@@ -33,7 +33,7 @@ export default function AiEngineHost() {
           <WebView
             ref={web}
             source={{ uri: page }}
-            originWhitelist={['https://*', 'http://*']}
+            originWhitelist={__DEV__ ? ['https://*', 'http://*'] : ['https://*']}
             onShouldStartLoadWithRequest={allow}
             onMessage={(e: WebViewMessageEvent) => onEngineMessage(e.nativeEvent.data)}
             onRenderProcessGone={onGone}

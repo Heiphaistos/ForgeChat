@@ -9,6 +9,7 @@ import { cachedChannel, cachedRole, cachedUsername, roleColor } from '@/features
 import { t, useLang, useT } from '@/i18n'
 import { cachedDisplayName } from './UserName'
 import { openExternalUrl, resolveMediaUrl } from '@/lib/links'
+import { deceptiveHost } from '@/lib/safeUrl'
 import { formatTimestamp, parseMarkdown, type InlineNode } from '@/lib/markdown'
 import { queryClient } from '@/lib/queryClient'
 import { colors, font, isLight, radius, spacing } from '@/theme'
@@ -101,6 +102,8 @@ function renderInline(nodes: InlineNode[], myName: string | undefined, emojis: R
             accessibilityHint={n.label ? `Ouvre ${n.url}` : undefined}
           >
             {n.label ?? n.url}
+            {/* Texte qui imite une autre adresse que la cible : l'hôte réel est affiché à côté. */}
+            {n.label && deceptiveHost(n.label, n.url) ? <Text style={{ color: colors.warning }}>{` (${deceptiveHost(n.label, n.url)})`}</Text> : null}
           </Text>
         )
       case 'emoji': {

@@ -51,7 +51,8 @@ export default function TwoFactorScreen() {
     })
 
   const openAuthenticator = async () => {
-    if (!setup) return
+    // Seulement un lien d'application d'authentification (jamais un schéma quelconque venu du serveur).
+    if (!setup || !setup.qr_url.startsWith('otpauth://')) return
     try {
       await Linking.openURL(setup.qr_url)
     } catch {

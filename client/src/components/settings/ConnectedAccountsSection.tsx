@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Plus, Trash2, Check, ExternalLink } from 'lucide-react'
 import api from '../../api/client'
+import { safeHref } from '../../utils/safeUrl'
 import toast from 'react-hot-toast'
 import { useT, type Key } from '../../i18n'
 
@@ -106,9 +107,9 @@ export default function ConnectedAccountsSection() {
               </div>
 
               <div className="flex items-center gap-2">
-                {connected?.platform_url && (
+                {connected && safeHref(connected.platform_url) && (
                   <a
-                    href={connected.platform_url}
+                    href={safeHref(connected.platform_url)}
                     target="_blank"
                     rel="noopener noreferrer"
                     aria-label={t('settings.connected.open', { name: platform.label })}
