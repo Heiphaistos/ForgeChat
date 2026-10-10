@@ -7,7 +7,9 @@ import { create } from 'zustand'
 import { ApiError, http } from '@/lib/http'
 import * as c from './crypto'
 import { type AccountSecrets, type AnyWrapped, deriveSecrets, newKdfSalt, passwordProblem, unwrapAny, wrapKeyV2 } from './authKdf'
-import { guardPrelogin, markMigrated } from './authGuard'
+import { guardKdf, guardPrelogin, markMigrated } from './authGuard'
+import { tokens } from '@/lib/tokens'
+import { t } from '@/i18n'
 
 interface KeysResponse { public: string; fingerprint: string; wrapped: AnyWrapped; backup: c.WrappedKey | null }
 
@@ -69,10 +71,18 @@ export async function prelogin(email: string): Promise<KdfInfo> {
   return k
 }
 
-/** auth + wrapKey du compte connecté pour ce mot de passe ; null = compte pas encore migré. */
+/**
+ * auth + wrapKey du compte connecté pour ce mot de passe ; null = compte pas encore migré.
+ * `legacy` pour un compte vu migré sur cet appareil : AUTH_DOWNGRADE, le mot de passe ne part pas.
+ */
 async function secretsFor(password: string): Promise<AccountSecrets | null> {
   if (typed?.password === password && typed.secrets) return typed.secrets
   const k = await http.get<KdfInfo>('/users/me/kdf')
+  // Message affiché tel quel par les écrans (errorMessage) ; `code` pour qui veut le reconnaître.
+  const refuse = () => Object.assign(new Error(t('auth.proofDowngrade')), { code: 'AUTH_DOWNGRADE' })
+  const userId = await tokens.getUserId()
+  if (userId) await guardKdf(userId, k).catch(() => { throw refuse() })
+  else if (k.legacy) throw refuse() // jamais de mot de passe en clair sans compte identifié
   if (k.legacy || !k.kdf_salt) return null
   return deriveSecrets(password, k.kdf_salt)
 }

@@ -20,3 +20,15 @@ export async function guardPrelogin(email: string, info: { legacy: boolean }) {
 
 /** Après une connexion v2 réussie (ou la migration du compte). */
 export const markMigrated = async (email: string) => { await secureStateStorage.setItem(key(email), '1') }
+
+// Même principe par identifiant de compte, pour les actions sensibles (connecté : `GET /users/me/kdf`).
+const userKey = (userId: string) => `fc_v2_account_${accountTag(`user|${userId}`)}`
+
+/** Après une connexion v2 (ou la création d'un compte v2). */
+export const markUserMigrated = async (userId: string) => { await secureStateStorage.setItem(userKey(userId), '1') }
+
+/** Avant une preuve de mot de passe : mémorise l'état migré, lève `AUTH_DOWNGRADE` sur un retour arrière. */
+export async function guardKdf(userId: string, info: { legacy: boolean }) {
+  if (!info.legacy) return markUserMigrated(userId)
+  if ((await secureStateStorage.getItem(userKey(userId))) === '1') throw new Error('AUTH_DOWNGRADE')
+}
