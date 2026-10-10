@@ -432,7 +432,15 @@ pub async fn search_users(
         .await?
     };
 
-    Ok(Json(users.into_iter().map(Into::into).collect()))
+    // Fiches d'autres comptes : même masquage que get_user (date de naissance, 2FA),
+    // et pas d'activité (son réglage de visibilité n'est pas évalué ici).
+    Ok(Json(users.into_iter().map(|u| {
+        let mut p = UserPublic::from(u).for_others();
+        p.activity_type = None;
+        p.activity_name = None;
+        p.activity_detail = None;
+        p
+    }).collect()))
 }
 
 pub async fn get_login_history(
