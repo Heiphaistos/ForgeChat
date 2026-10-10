@@ -1,6 +1,7 @@
 ﻿import { useState, useEffect } from 'react'
 import { useQuery, useMutation } from '@tanstack/react-query'
-import { Moon, Bell, BellOff, Volume2 } from 'lucide-react'
+import { Moon, Bell, BellOff, Volume2, ChevronRight } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
 import { Toggle } from './shared'
 import api from '../../api/client'
 import toast from 'react-hot-toast'
@@ -97,6 +98,7 @@ function DesktopNotifBlock() {
 
 export default function NotificationsSection() {
   const t = useT()
+  const nav = useNavigate()
   const { enabled: audioEnabled, setEnabled: setAudioEnabled, playMention } = useAudioNotifications()
 
   const { data: settings, refetch } = useQuery({
@@ -124,6 +126,17 @@ export default function NotificationsSection() {
 
   return (
     <div className="space-y-6">
+      <button
+        onClick={() => nav('/notifications')}
+        className="w-full flex items-center justify-between gap-3 p-4 bg-fc-channel hover:bg-fc-hover rounded-xl border border-fc-hover text-left transition"
+      >
+        <span>
+          <span className="block text-sm font-medium text-white">{t('notifCenter.open')}</span>
+          <span className="block text-xs text-fc-muted mt-0.5">{t('notifCenter.openDesc')}</span>
+        </span>
+        <ChevronRight size={16} className="text-fc-muted flex-shrink-0" aria-hidden />
+      </button>
+
       <DesktopNotifBlock />
 
       {/* Sons de notification */}

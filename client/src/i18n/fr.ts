@@ -4,6 +4,7 @@ import { communityFr } from './community.ts'
 import * as messaging from './parts/messaging.ts'
 import * as chrome from './parts/chrome.ts'
 import * as ai from './parts/ai.ts'
+import * as notifCenter from './parts/notifCenter.ts'
 import { profileFr } from './profileFr.ts'
 import { socialFr } from './socialFr.ts'
 import { comfortFr } from './comfort.ts'
@@ -19,6 +20,7 @@ export const fr = {
   ...chrome.fr,
   ...remoteSupportFr,
   ...ai.fr,
+  ...notifCenter.fr,
   // --- Connexion, inscription, mot de passe oublié ---
   'auth.email': 'Email',
   'auth.password': 'Mot de passe',

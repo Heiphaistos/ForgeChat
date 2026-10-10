@@ -17,6 +17,7 @@ import { useVoice } from './store/voice'
 import { useAudioNotifications } from './hooks/useAudioNotifications'
 import { usePushNotifications, sendNativeNotification } from './hooks/usePushNotifications'
 import { useThreadNotifications } from './hooks/useThreadNotifications'
+import { useForumPostNotifications } from './hooks/useForumPostNotifications'
 import { useUpdateNotifier } from './hooks/useUpdateNotifier'
 import { useGlobalShortcuts } from './hooks/useShortcuts'
 import api from './api/client'
@@ -72,6 +73,7 @@ const UserProfilePage = lazy(() => import('./pages/UserProfilePage'))
 const QuickSwitcher = lazy(() => import('./components/QuickSwitcher'))
 const CommandPalette = lazy(() => import('./components/CommandPalette'))
 const SavedPage = lazy(() => import('./pages/SavedPage'))
+const NotificationsPage = lazy(() => import('./pages/NotificationsPage'))
 const NewsPage = lazy(() => import('./pages/NewsPage'))
 const ScheduledPage = lazy(() => import('./pages/ScheduledPage'))
 const ExplorePage = lazy(() => import('./pages/ExplorePage'))
@@ -154,6 +156,7 @@ function AppInner() {
   const { playJoin, playLeave, playMessage, playMention, playRing } = useAudioNotifications()
   const { requestPermission } = usePushNotifications()
   useThreadNotifications()
+  useForumPostNotifications()
   // Compte suspendu ou déconnecté de force par un administrateur : retour à l'écran de connexion.
   useEffect(() => {
     const end = (message: string) => () => {
@@ -1062,6 +1065,7 @@ function AppInner() {
             <Route path="users/:userId" element={<UserProfilePage />} />
             <Route path="saved" element={<SavedPage />} />
             <Route path="news" element={<NewsPage />} />
+            <Route path="notifications" element={<NotificationsPage />} />
             <Route path="scheduled" element={<ScheduledPage />} />
             <Route path="explore" element={<ExplorePage />} />
             <Route path="discovery" element={<ServerDiscoveryPage />} />
