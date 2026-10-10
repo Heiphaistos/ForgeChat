@@ -51,7 +51,10 @@ fi
 # ── Docker Compose ──────────────────────────────────────────────────
 log "Démarrage des services..."
 docker compose pull --quiet 2>/dev/null || true
-docker compose up -d --build --remove-orphans
+# --pull : l'image de base du serveur est retirée à chaque build (correctifs de sécurité Debian),
+# le Dockerfile ne fait plus d'apt-get upgrade.
+docker compose build --pull
+docker compose up -d --remove-orphans
 
 log "Attente de la DB (max 30s)..."
 for i in $(seq 1 30); do
@@ -113,29 +116,8 @@ turn_healthcheck() {
 }
 turn_healthcheck
 
-# ── CSP nginx de l'hôte : lecteur « Regarder ensemble » (YouTube) ─────────
-# La CSP servie vient de /etc/nginx/sites-enabled/forgechat (pas du nginx.conf du dépôt).
-# Ajout idempotent de YouTube à script-src et d'un frame-src, sur CE site seulement ;
-# sauvegarde, nginx -t avant rechargement, et retour arrière si le test échoue.
-watch_csp() {
-    local conf=/etc/nginx/sites-enabled/forgechat
-    [[ -f "$conf" ]] || { log "CSP : $conf absent, étape sautée"; return 0; }
-    grep -q "youtube-nocookie" "$conf" && return 0
-    grep -q "script-src 'self' 'unsafe-inline' 'unsafe-eval';" "$conf" || { log "⚠️  CSP : format inattendu, étape sautée"; return 0; }
-    local bak="/root/forgechat-nginx-$(date +%Y%m%d%H%M%S).bak"
-    cp -p "$conf" "$bak"
-    sed -i "s#script-src 'self' 'unsafe-inline' 'unsafe-eval';#script-src 'self' 'unsafe-inline' 'unsafe-eval' https://www.youtube.com https://s.ytimg.com; frame-src https://www.youtube-nocookie.com https://www.youtube.com;#" "$conf"
-    if nginx -t 2>/dev/null; then
-        systemctl reload nginx && log "✅ CSP : lecteur YouTube autorisé (sauvegarde $bak)"
-    else
-        cp -p "$bak" "$conf"
-        log "❌ CSP : nginx -t a échoué, configuration restaurée"
-    fi
-}
-watch_csp
-
 # ── Journaux minimaux : ni accès nginx (IP, URL) ni journal coturn ─────────
-# Même prudence que watch_csp : idempotent (marqueur), sauvegarde, test avant
+# Prudence : idempotent (marqueur), sauvegarde, test avant
 # rechargement, retour arrière si échec. Seul le site forgechat est touché.
 anon_logs() {
     local conf=/etc/nginx/sites-enabled/forgechat mark="# forgechat-anonymat"

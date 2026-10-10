@@ -1,14 +1,21 @@
 /**
  * Vérification des mises à jour, publiées par le serveur ForgeChat lui-même (`/desktop/mobile.json`).
  *
- * Vie privée : une seule requête GET anonyme vers le serveur déjà utilisé par l'app (aucun
- * identifiant, aucun cookie) à l'ouverture de l'app, au plus toutes les 3 heures, et seulement si
- * l'utilisateur ne l'a pas désactivée. Le navigateur télécharge l'APK depuis ce même serveur (seul
- * l'hôte est contrôlé ici) ; l'app NE vérifie PAS son empreinte SHA-256 (le champ du manifeste ne
- * sert qu'à reconnaître une nouvelle publication). Seule protection : Android demande confirmation
- * et refuse tout APK qui n'est pas signé avec la même clé que l'app installée. iOS : l'IPA est
- * ouverte par AltStore/SideStore sans aucun contrôle de l'app.
+ * Vie privée : des requêtes GET anonymes vers le serveur déjà utilisé par l'app (aucun identifiant,
+ * aucun cookie) — le manifeste, puis, si une version plus récente est annoncée, SHA256SUMS.txt et sa
+ * signature — à l'ouverture de l'app, au plus toutes les 3 heures, et seulement si l'utilisateur ne
+ * l'a pas désactivée.
+ *
+ * Ce que l'app vérifie : la signature Ed25519 hors ligne de SHA256SUMS.txt (clé publique dans
+ * releaseKey.ts), et que l'empreinte annoncée pour l'APK/IPA est bien celle de la ligne SIGNÉE.
+ * Sinon la mise à jour n'est pas proposée.
+ *
+ * Ce qu'elle NE vérifie PAS : le fichier lui-même. Il est téléchargé par le navigateur (installer.ts),
+ * hors de portée de l'app. Pour l'APK, c'est Android qui protège ensuite : il refuse tout APK signé
+ * avec une autre clé que l'app installée. L'utilisateur peut comparer l'empreinte à la main.
  */
+import { ed25519 } from '@noble/curves/ed25519.js'
+import { RELEASE_PUBLIC_KEY } from './releaseKey'
 
 /**
  * Intervalle minimal entre deux vérifications automatiques. Court : le service de premier plan
@@ -22,7 +29,7 @@ export interface AvailableUpdate {
   version: string
   /** APK sur le serveur ForgeChat (même origine que le manifeste, dossier /desktop/). */
   url: string
-  /** Empreinte SHA-256 annoncée (hexadécimal minuscule) : identifie la publication, JAMAIS comparée au fichier téléchargé. */
+  /** Empreinte SHA-256 (hexadécimal minuscule), identique à la ligne signée de SHA256SUMS.txt. */
   sha256: string
 }
 
@@ -86,6 +93,7 @@ export async function fetchAvailableUpdate(
   currentVersion: string,
   fetchImpl: typeof fetch = fetch,
   platform: UpdatePlatform = 'android',
+  publicKey: string = RELEASE_PUBLIC_KEY,
 ): Promise<AvailableUpdate | null> {
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS)
@@ -100,16 +108,66 @@ export async function fetchAvailableUpdate(
     if (res.status === 404) return null
     if (!res.ok) throw new Error(`le serveur a répondu ${res.status}`)
     const update = parseManifest(await res.json(), manifestUrl, platform)
-    return update && compareVersions(update.version, currentVersion) > 0 ? update : null
+    if (!update || compareVersions(update.version, currentVersion) <= 0) return null
+    await verifySignedUpdate(update, manifestUrl, fetchImpl, controller.signal, publicKey)
+    return update
   } finally {
     clearTimeout(timer)
   }
 }
 
+function base64ToBytes(b64: string): Uint8Array {
+  const bin = atob(b64.trim())
+  return Uint8Array.from(bin, (c) => c.charCodeAt(0))
+}
+
+const SUMS_LINE = /^([0-9a-f]{64}) [ *](.+)$/i
+
 /**
- * Comparaison d'empreintes (hexadécimal de 64 caractères, casse ignorée). Aujourd'hui appelée nulle part
- * dans l'app : le téléchargement passe par le navigateur, l'APK n'est pas vérifié par ForgeChat.
+ * Lève une erreur si la liste signée ne confirme pas `update` : signature Ed25519 de SHA256SUMS.txt
+ * invalide, fichier absent de la liste, ou empreinte différente de celle du manifeste.
+ * Le nom du fichier doit porter la version annoncée (pas de resservice d'une ancienne release signée).
  */
+export function checkSignedSums(update: AvailableUpdate, sums: Uint8Array, signatureB64: string, publicKeyB64: string): void {
+  let valid = false
+  try {
+    valid = ed25519.verify(base64ToBytes(signatureB64), sums, base64ToBytes(publicKeyB64))
+  } catch {
+    valid = false
+  }
+  if (!valid) throw new Error('signature de la mise à jour invalide')
+  const name = new URL(update.url).pathname.split('/').pop() ?? ''
+  if (name !== `ForgeChat-${update.version}.apk` && name !== `ForgeChat-${update.version}.ipa`) {
+    throw new Error('nom de fichier inattendu : ' + name)
+  }
+  const line = new TextDecoder()
+    .decode(sums)
+    .split(/\r?\n/)
+    .map((l) => l.match(SUMS_LINE))
+    .find((m) => m?.[2] === name)
+  if (!line) throw new Error(name + ' absent de la liste signée')
+  if (line[1]?.toLowerCase() !== update.sha256) throw new Error(name + ' : empreinte différente de la liste signée')
+}
+
+async function verifySignedUpdate(
+  update: AvailableUpdate,
+  manifestUrl: string,
+  fetchImpl: typeof fetch,
+  signal: AbortSignal,
+  publicKey: string,
+): Promise<void> {
+  const sumsUrl = new URL(`/desktop/mobile-v${update.version}.SHA256SUMS.txt`, manifestUrl).href
+  const get = async (url: string) => {
+    const res = await fetchImpl(url, { method: 'GET', credentials: 'omit', signal, headers: { 'Cache-Control': 'no-cache' } })
+    if (!res.ok) throw new Error(`liste signée indisponible (${res.status})`)
+    return res
+  }
+  const sums = new Uint8Array(await (await get(sumsUrl)).arrayBuffer())
+  const signature = await (await get(sumsUrl + '.sig')).text()
+  checkSignedSums(update, sums, signature, publicKey)
+}
+
+/** L'APK téléchargé est-il bien celui annoncé ? (empreintes hexadécimales de 64 caractères, casse ignorée) */
 export function shaMatches(expected: string, actual: string): boolean {
   return /^[0-9a-f]{64}$/i.test(expected) && expected.toLowerCase() === actual.toLowerCase()
 }

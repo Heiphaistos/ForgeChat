@@ -1,9 +1,11 @@
-import { compareVersions, fetchAvailableUpdate, isDue, parseManifest, parseVersion, shaMatches, CHECK_INTERVAL_MS } from '@/features/updates/updateCheck'
+import { ed25519 } from '@noble/curves/ed25519.js'
+import { checkSignedSums, compareVersions, fetchAvailableUpdate, isDue, parseManifest, parseVersion, shaMatches, CHECK_INTERVAL_MS } from '@/features/updates/updateCheck'
 
 /**
  * Vérification des mises à jour (manifeste publié par le serveur ForgeChat) : format des versions,
- * validation du manifeste, une seule requête anonyme, désactivable, au plus toutes les 3 h ;
- * téléchargement dans l'app avec vérification de l'empreinte avant d'ouvrir l'installeur Android.
+ * validation du manifeste, requêtes anonymes, désactivable, au plus toutes les 3 h ; signature
+ * Ed25519 de SHA256SUMS.txt vérifiée avant de proposer la mise à jour (le fichier lui-même est
+ * téléchargé par le navigateur, hors de portée de l'app).
  */
 
 const MANIFEST = 'https://chat.exemple.org/desktop/mobile.json'
@@ -16,6 +18,22 @@ const manifest = (android: Record<string, unknown> = {}, over: Record<string, un
 const APK = 'https://chat.exemple.org/desktop/ForgeChat-1.2.0.apk'
 const response = (status: number, body: unknown = {}) =>
   ({ ok: status >= 200 && status < 300, status, json: async () => body }) as Response
+
+// Clé de TEST (graine fixe), jamais la clé de production.
+const SK = new Uint8Array(32).fill(7)
+const PUB = Buffer.from(ed25519.getPublicKey(SK)).toString('base64')
+const SUMS = new TextEncoder().encode(`${SHA}  ForgeChat-1.2.0.apk\n${SHA} *ForgeChat-1.2.0.ipa\n`)
+const sign = (bytes: Uint8Array) => Buffer.from(ed25519.sign(bytes, SK)).toString('base64')
+const bytesResponse = (bytes: Uint8Array) =>
+  ({ ok: true, status: 200, arrayBuffer: async () => bytes.slice().buffer, text: async () => new TextDecoder().decode(bytes) }) as Response
+/** Serveur simulé : manifeste, liste d'empreintes et signature. */
+const server = (body: unknown = manifest(), sums = SUMS, sig = sign(SUMS)) =>
+  jest.fn(async (input: RequestInfo | URL) => {
+    if (String(input).endsWith('/desktop/mobile.json')) return response(200, body)
+    if (String(input).endsWith('/desktop/mobile-v1.2.0.SHA256SUMS.txt')) return bytesResponse(sums)
+    if (String(input).endsWith('/desktop/mobile-v1.2.0.SHA256SUMS.txt.sig')) return bytesResponse(new TextEncoder().encode(sig))
+    return response(404)
+  })
 
 describe('versions', () => {
   it('lit X.Y.Z avec ou sans « v »', () => {
@@ -73,16 +91,29 @@ describe('manifeste du serveur', () => {
 })
 
 describe('requête vers le serveur', () => {
-  it('une seule requête GET anonyme, sans corps ni identifiant', async () => {
-    const fetchMock = jest.fn().mockResolvedValue(response(200, manifest()))
-    await expect(fetchAvailableUpdate(MANIFEST, '1.0.0', fetchMock)).resolves.toEqual({ version: '1.2.0', url: APK, sha256: SHA })
-    expect(fetchMock).toHaveBeenCalledTimes(1)
-    const [url, init] = fetchMock.mock.calls[0]
-    expect(url).toBe(MANIFEST)
-    expect(init.method).toBe('GET')
-    expect(init.credentials).toBe('omit')
-    expect(init.body).toBeUndefined()
-    expect(init.headers.Authorization).toBeUndefined()
+  it('requêtes GET anonymes (manifeste, liste signée, signature), sans corps ni identifiant', async () => {
+    const fetchMock = server()
+    await expect(fetchAvailableUpdate(MANIFEST, '1.0.0', fetchMock, 'android', PUB)).resolves.toEqual({ version: '1.2.0', url: APK, sha256: SHA })
+    expect(fetchMock.mock.calls.map((c) => c[0])).toEqual([
+      MANIFEST,
+      'https://chat.exemple.org/desktop/mobile-v1.2.0.SHA256SUMS.txt',
+      'https://chat.exemple.org/desktop/mobile-v1.2.0.SHA256SUMS.txt.sig',
+    ])
+    for (const [, init] of fetchMock.mock.calls as unknown as [string, RequestInit & { headers: Record<string, string> }][]) {
+      expect(init.method).toBe('GET')
+      expect(init.credentials).toBe('omit')
+      expect(init.body).toBeUndefined()
+      expect(init.headers.Authorization).toBeUndefined()
+    }
+  })
+
+  it('liste signée par une autre clé que celle embarquée : refus', async () => {
+    await expect(fetchAvailableUpdate(MANIFEST, '1.0.0', server())).rejects.toThrow('signature')
+  })
+
+  it('liste signée absente (release non signée) : refus', async () => {
+    const fetchMock = jest.fn(async (input: RequestInfo | URL) => (String(input) === MANIFEST ? response(200, manifest()) : response(404)))
+    await expect(fetchAvailableUpdate(MANIFEST, '1.0.0', fetchMock, 'android', PUB)).rejects.toThrow('404')
   })
 
   it('rien à proposer : même version, version plus ancienne, aucune publication (404)', async () => {
@@ -104,6 +135,7 @@ describe('vérification automatique (démarrage et retour au premier plan)', () 
     jest.doMock('react-native', () => ({ Alert: { alert: jest.fn() }, AppState: { addEventListener: jest.fn() } }))
     jest.doMock('@/lib/logger', () => ({ logger: { debug: jest.fn(), warn: jest.fn() } }))
     jest.doMock('@/config/env', () => env)
+    jest.doMock('@/features/updates/releaseKey', () => ({ RELEASE_PUBLIC_KEY: PUB }))
     jest.doMock('@/i18n', () => ({ t: (key: string) => key }))
     const settings: Record<string, unknown> = { updateCheck: true, updateLastCheckAt: 0, updateSkippedVersion: null }
     settings.set = (patch: Record<string, unknown>) => Object.assign(settings, patch)
@@ -121,20 +153,20 @@ describe('vérification automatique (démarrage et retour au premier plan)', () 
 
   it('affiche la bannière, puis ne revérifie qu’après 3 h', async () => {
     const { run, settings, useUpdate } = load()
-    const fetchMock = jest.fn().mockResolvedValue(response(200, manifest()))
+    const fetchMock = server()
     const now = 1_800_000_000_000
     await expect(run(now, fetchMock)).resolves.toMatchObject({ version: '1.2.0' })
     expect(useUpdate.getState()).toMatchObject({ update: { version: '1.2.0', sha256: SHA }, phase: 'available', dismissed: false })
     expect(settings.updateLastCheckAt).toBe(now)
     await run(now + 3600_000, fetchMock)
-    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(fetchMock).toHaveBeenCalledTimes(3)
     await run(now + CHECK_INTERVAL_MS, fetchMock)
-    expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect(fetchMock).toHaveBeenCalledTimes(6)
   })
 
   it('« Plus tard » : la bannière revient à la vérification suivante', async () => {
     const { run, useUpdate } = load()
-    const fetchMock = jest.fn().mockResolvedValue(response(200, manifest()))
+    const fetchMock = server()
     await run(1_000, fetchMock)
     useUpdate.setState({ dismissed: true })
     await run(1_000 + CHECK_INTERVAL_MS, fetchMock)
@@ -145,8 +177,7 @@ describe('vérification automatique (démarrage et retour au premier plan)', () 
     const { run, settings } = load()
     await expect(run(5_000, jest.fn().mockRejectedValue(new Error('hors ligne')))).resolves.toBeNull()
     expect(settings.updateLastCheckAt).toBe(0)
-    const fetchMock = jest.fn().mockResolvedValue(response(200, manifest()))
-    await expect(run(6_000, fetchMock)).resolves.toMatchObject({ version: '1.2.0' })
+    await expect(run(6_000, server())).resolves.toMatchObject({ version: '1.2.0' })
   })
 
   it('à jour : pas de bannière', async () => {
@@ -172,11 +203,47 @@ describe('vérification automatique (démarrage et retour au premier plan)', () 
     expect(fetchMock).not.toHaveBeenCalled()
   })
 
+  it('signature invalide : pas de bannière, nouvel essai plus tard', async () => {
+    const { run, settings, useUpdate } = load()
+    await expect(run(7_000, server(manifest(), SUMS, sign(new Uint8Array([1]))))).resolves.toBeNull()
+    expect(useUpdate.getState().update).toBeNull()
+    expect(settings.updateLastCheckAt).toBe(0)
+  })
+
   it('version ignorée : pas de bannière', async () => {
     const { run, settings, useUpdate } = load()
     settings.updateSkippedVersion = '1.2.0'
     await expect(run(Date.now(), jest.fn().mockResolvedValue(response(200, manifest())))).resolves.toBeNull()
     expect(useUpdate.getState().update).toBeNull()
+  })
+})
+
+describe('liste d’empreintes signée', () => {
+  const UPDATE = { version: '1.2.0', url: APK, sha256: SHA }
+
+  it('signature valide et ligne signée identique : accepté', () => {
+    expect(() => checkSignedSums(UPDATE, SUMS, sign(SUMS), PUB)).not.toThrow()
+    const ipa = { ...UPDATE, url: 'https://chat.exemple.org/desktop/ForgeChat-1.2.0.ipa' }
+    expect(() => checkSignedSums(ipa, SUMS, sign(SUMS), PUB)).not.toThrow()
+  })
+
+  it('liste falsifiée après signature, signature tronquée ou illisible : refus', () => {
+    const forged = new TextEncoder().encode(`${'b'.repeat(64)}  ForgeChat-1.2.0.apk\n`)
+    expect(() => checkSignedSums({ ...UPDATE, sha256: 'b'.repeat(64) }, forged, sign(SUMS), PUB)).toThrow('signature')
+    for (const bad of ['', 'AAAA', 'pas du base64 !', sign(SUMS).slice(0, 40)]) {
+      expect(() => checkSignedSums(UPDATE, SUMS, bad, PUB)).toThrow('signature')
+    }
+  })
+
+  it('APK absent de la liste signée, ou empreinte du manifeste différente : refus', () => {
+    const other = new TextEncoder().encode(`${SHA}  ForgeChat-9.9.9.apk\n`)
+    expect(() => checkSignedSums(UPDATE, other, sign(other), PUB)).toThrow('absent de la liste signée')
+    expect(() => checkSignedSums({ ...UPDATE, sha256: 'c'.repeat(64) }, SUMS, sign(SUMS), PUB)).toThrow('empreinte différente')
+  })
+
+  it('nom de fichier sans la version annoncée (ancienne release resservie) : refus', () => {
+    const old = { ...UPDATE, url: 'https://chat.exemple.org/desktop/ForgeChat-1.1.0.apk' }
+    expect(() => checkSignedSums(old, SUMS, sign(SUMS), PUB)).toThrow('nom de fichier inattendu')
   })
 })
 

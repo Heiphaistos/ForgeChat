@@ -7,7 +7,9 @@ x-logging: &logging
 
 services:
   postgres:
-    image: postgres:16-alpine
+    # Images épinglées par empreinte (celles qui tournaient en production le 2026-10-10) : une mise à jour
+    # est un changement explicite de cette ligne, jamais une surprise au redémarrage.
+    image: postgres:16-alpine@sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea
     logging: *logging
     environment:
       POSTGRES_DB: forgechat
@@ -23,7 +25,7 @@ services:
       retries: 10
 
   redis:
-    image: redis:7-alpine
+    image: redis:7-alpine@sha256:858f009f9709ce576febc734aa78b8f6d624b82571f9ddb6bda4377c833b3499
     logging: *logging
     restart: unless-stopped
     # Aucune persistance : compteurs anti-abus et jetons éphémères ne survivent pas à un redémarrage.
@@ -76,8 +78,9 @@ services:
       # Import de serveurs Discord (exports ArchiveForge) — server/src/handlers/discord_import
       ARCHIVEFORGE_URL: ${ARCHIVEFORGE_URL:-https://forgearchive.heiphaistos.org}
       DISCORD_IMPORT_MAX_BYTES: ${DISCORD_IMPORT_MAX_BYTES:-21474836480}
-      # Proprietaire du site : seul a pouvoir attribuer le role El Patron (administration, rapports d'erreurs, signalements)
-      FORGECHAT_ADMIN_EMAIL: ${FORGECHAT_ADMIN_EMAIL:-heiphaistos44@gmail.com}
+      # Proprietaire du site : seul a pouvoir attribuer le role El Patron (administration, rapports d'erreurs, signalements).
+      # Obligatoire, aucune valeur par defaut dans le depot.
+      FORGECHAT_ADMIN_EMAIL: ${FORGECHAT_ADMIN_EMAIL:?FORGECHAT_ADMIN_EMAIL requis (e-mail du proprietaire du site)}
       # GIF : GIPHY, sinon KLIPY, sinon Wikimedia Commons (sans clé)
       GIPHY_API_KEY: ${GIPHY_API_KEY:-}
       GIPHY_RATING: ${GIPHY_RATING:-pg-13}
@@ -95,7 +98,8 @@ services:
         condition: service_healthy
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "curl -s http://localhost:8080/health > /dev/null 2>&1"]
+      # /api/health (il n'existe pas de route /health) ; -f : un code d'erreur HTTP rend le conteneur malade.
+      test: ["CMD", "curl", "-fsS", "-o", "/dev/null", "http://127.0.0.1:8080/api/health"]
       interval: 10s
       retries: 5
       start_period: 30s
@@ -103,7 +107,7 @@ services:
   # Serveur média (SFU) : tout le son et la vidéo transitent par lui, plus aucun
   # pair-à-pair. Signalisation derrière nginx (/livekit/), média en UDP direct.
   livekit:
-    image: livekit/livekit-server:v1.13.7
+    image: livekit/livekit-server:v1.13.7@sha256:6fd3b7088874c4d119160dd688798dfec852bc014786d392caad15f6f63912a3
     logging: *logging
     # Pas de root : aucun volume, ports tous au-dessus de 1024.
     user: "65534:65534"

@@ -28,7 +28,7 @@ EOF
   fi
   mkdir -p "$(dirname "$out")"
   tmp="$out.part"
-  curl -fsSL --retry 3 -o "$tmp" "$src"
+  curl -fsSL --proto =https --proto-redir =https --tlsv1.2 --retry 3 -o "$tmp" "$src"
   if echo "$sha  $tmp" | sha256sum -c --status && [[ "$(stat -c %s "$tmp")" == "$size" ]]; then
     mv -f "$tmp" "$out"
     echo "déposé  $path"

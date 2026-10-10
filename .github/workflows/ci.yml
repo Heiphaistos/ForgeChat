@@ -1,5 +1,5 @@
 # Vérifications à chaque push et pull request : client web, serveur Rust, application mobile.
-# Aucune action tierce : seul `checkout` (épinglé comme dans applications.yml) ; Node et Rust
+# Aucune action tierce : seul `checkout` (épinglé par SHA, sans jeton persistant) ; Node et Rust
 # sont préinstallés sur les runners ubuntu-24.04.
 name: CI
 
@@ -24,6 +24,8 @@ jobs:
         working-directory: client
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - run: npm ci --no-audit --no-fund
       - run: npx tsc --noEmit
       - run: npx eslint src --quiet
@@ -41,6 +43,8 @@ jobs:
         working-directory: server
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - run: cargo check --locked
       - run: cargo test --locked
 
@@ -74,6 +78,8 @@ jobs:
       FORGECHAT_EMAIL_DOMAINS: '*'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - name: Construire et démarrer le serveur
         working-directory: server
         run: |
@@ -108,6 +114,8 @@ jobs:
         working-directory: mobile
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - run: npm ci --ignore-scripts --no-audit --no-fund
       - run: npm run typecheck
       - run: npx eslint src --quiet

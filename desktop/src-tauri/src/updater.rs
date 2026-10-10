@@ -17,17 +17,20 @@
 //!
 //! ## Ce qui protège l'utilisateur
 //!
-//! **L'empreinte SHA-256 annoncée par le manifeste est vérifiée avant que quoi
-//! que ce soit ne soit installé.** Le manifeste vient de l'API
-//! (`/api/desktop/latest`, en HTTPS), le binaire vient du dossier statique : un
-//! artefact corrompu, tronqué ou remplacé dans ce dossier est refusé et n'est
-//! jamais exécuté.
+//! **Rien n'est installé sans une empreinte SIGNÉE.** Chaque release porte
+//! `SHA256SUMS.txt` et sa signature Ed25519 `SHA256SUMS.txt.sig`, faite hors
+//! ligne par `scripts/release-sign.mjs` : la clé privée n'est ni sur GitHub ni
+//! sur le VPS. La clé publique est codée en dur ci-dessous ([`CLE_PUBLIQUE`]).
 //!
-//! ponytail: l'authenticité repose sur HTTPS vers forgechat.heiphaistos.org —
-//! quelqu'un qui contrôle le serveur contrôle aussi l'empreinte. Passer à une
-//! signature minisign hors-ligne (clé jamais sur le VPS) si le modèle de menace
-//! doit couvrir la compromission du serveur ; le champ à ajouter au manifeste
-//! est `signature`, à vérifier ici juste après le SHA-256.
+//! Le client télécharge ces deux fichiers depuis [`BASE_TELECHARGEMENT`],
+//! vérifie la signature, puis compare le SHA-256 du binaire téléchargé à la
+//! ligne SIGNÉE qui porte son nom. L'empreinte du manifeste n'est qu'un
+//! indice : un serveur compromis peut la changer, pas la signature. Le nom du
+//! fichier doit porter la version annoncée, ce qui empêche de resservir une
+//! ancienne release signée sous un numéro plus récent.
+//!
+//! L'URL de l'artefact doit commencer par [`BASE_TELECHARGEMENT`] ; la variable
+//! `FORGECHAT_UPDATE_ENDPOINT` n'existe qu'en build de debug (audit M9).
 //!
 //! ## Aucune version codée en dur
 //!
@@ -42,9 +45,22 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use tauri::{AppHandle, Emitter};
 
-/// Manifeste interrogé par défaut. Surchargeable par `FORGECHAT_UPDATE_ENDPOINT`
-/// pour tester contre un serveur local sans reconstruire.
+/// Manifeste interrogé. Surchargeable par `FORGECHAT_UPDATE_ENDPOINT` en debug
+/// seulement, pour tester contre un serveur local.
 const ENDPOINT: &str = "https://forgechat.heiphaistos.org/api/desktop/latest";
+
+/// Seul dossier d'où un artefact ou ses empreintes peuvent être téléchargés.
+const BASE_TELECHARGEMENT: &str = "https://forgechat.heiphaistos.org/desktop/";
+
+/// Clé publique Ed25519 de signature des releases (`deploy/release-signing-public.pem`).
+/// Empreinte SHA-256 : e43061229a0116ef3f024c6b72fa26bb9e74c01834782e9f3229cf154ae7c2b6
+const CLE_PUBLIQUE: [u8; 32] = [
+    0x5e, 0x48, 0xbc, 0xa5, 0xdb, 0xe6, 0x27, 0x88, 0x3a, 0x0a, 0xc0, 0x1f, 0xfc, 0xf4, 0xc1, 0x9d,
+    0x99, 0x57, 0x1b, 0x74, 0xfb, 0xb7, 0xb0, 0x4e, 0x5d, 0x40, 0xe3, 0x60, 0xb2, 0xf8, 0x4e, 0xc8,
+];
+
+/// SHA256SUMS.txt et sa signature font quelques centaines d'octets.
+const TAILLE_MAX_SOMMES: u64 = 64 * 1024;
 
 /// L'installeur NSIS pèse ~12 Mo, l'AppImage ~90 Mo. Au-delà de 300 Mo ce n'est
 /// pas un artefact ForgeChat : on s'arrête avant de remplir le disque.
@@ -230,7 +246,79 @@ fn client() -> Result<reqwest::Client, String> {
 }
 
 fn endpoint() -> String {
-    std::env::var("FORGECHAT_UPDATE_ENDPOINT").unwrap_or_else(|_| ENDPOINT.into())
+    #[cfg(debug_assertions)]
+    if let Ok(e) = std::env::var("FORGECHAT_UPDATE_ENDPOINT") {
+        return e;
+    }
+    ENDPOINT.into()
+}
+
+// ──────────────────────────── Signature ────────────────────────────
+
+/// Nom du fichier visé par `url`, à condition qu'il soit servi depuis
+/// [`BASE_TELECHARGEMENT`], sans sous-dossier, et qu'il porte `version`.
+fn nom_artefact<'a>(url: &'a str, version: &str) -> Result<&'a str, String> {
+    let nom = url
+        .strip_prefix(BASE_TELECHARGEMENT)
+        .ok_or_else(|| format!("artefact hors de {BASE_TELECHARGEMENT} : mise à jour refusée"))?;
+    let valide = !nom.is_empty()
+        && nom.len() <= 120
+        && !nom.starts_with('.')
+        && nom.bytes().all(|b| b.is_ascii_alphanumeric() || b"._-".contains(&b));
+    if !valide {
+        return Err("nom d'artefact refusé".into());
+    }
+    if !(nom.contains(&format!("v{version}-")) || nom.contains(&format!("v{version}."))) {
+        return Err(format!(
+            "l'artefact {nom} ne porte pas la version {version} : mise à jour refusée"
+        ));
+    }
+    Ok(nom)
+}
+
+/// ── La garde qui compte ──────────────────────────────────────────
+/// Vérifie la signature Ed25519 de `sommes` (SHA256SUMS.txt) par `cle`, puis
+/// rend l'empreinte que la ligne SIGNÉE attribue à `nom`.
+fn empreinte_signee(
+    sommes: &[u8],
+    signature_b64: &str,
+    nom: &str,
+    cle: &[u8; 32],
+) -> Result<String, String> {
+    use base64::Engine as _;
+    use ed25519_dalek::{Signature, VerifyingKey};
+
+    let refus = || {
+        "signature de la mise à jour invalide : ce fichier n'a pas été publié par ForgeChat. \
+         Mise à jour annulée."
+            .to_string()
+    };
+    let octets = base64::engine::general_purpose::STANDARD
+        .decode(signature_b64.trim())
+        .map_err(|_| refus())?;
+    let signature = Signature::from_slice(&octets).map_err(|_| refus())?;
+    VerifyingKey::from_bytes(cle)
+        .and_then(|k| k.verify_strict(sommes, &signature))
+        .map_err(|_| refus())?;
+
+    let texte = std::str::from_utf8(sommes).map_err(|_| refus())?;
+    texte
+        .lines()
+        .filter_map(|l| l.split_once(' '))
+        .find(|(_, n)| n.trim_start_matches([' ', '*']) == nom)
+        .map(|(h, _)| h.to_ascii_lowercase())
+        .filter(|h| h.len() == 64 && h.bytes().all(|b| b.is_ascii_hexdigit()))
+        .ok_or_else(|| format!("{nom} absent de la liste signée : mise à jour refusée"))
+}
+
+/// Télécharge SHA256SUMS.txt et sa signature pour `version`, et rend
+/// l'empreinte signée de `nom`.
+async fn empreinte_publiee(version: &str, nom: &str) -> Result<String, String> {
+    let sommes_url = format!("{BASE_TELECHARGEMENT}desktop-v{version}.SHA256SUMS.txt");
+    let sommes = telecharger(&sommes_url, TAILLE_MAX_SOMMES, |_, _| {}).await?;
+    let signature = telecharger(&format!("{sommes_url}.sig"), TAILLE_MAX_SOMMES, |_, _| {}).await?;
+    let signature = String::from_utf8(signature).map_err(|_| "signature illisible".to_string())?;
+    empreinte_signee(&sommes, &signature, nom, &CLE_PUBLIQUE)
 }
 
 // ──────────────────────────── Commandes ────────────────────────────
@@ -284,6 +372,7 @@ fn choisir_artefact(
             "l'artefact {target} est publié sans empreinte SHA-256 : mise à jour refusée"
         ));
     }
+    nom_artefact(&artefact.url, &manifeste.version)?;
 
     Ok(Some(UpdateInfo {
         version: manifeste.version.clone(),
@@ -321,10 +410,14 @@ fn verifier_dossier_inscriptible(fichier: &Path) -> Result<(), String> {
     }
 }
 
-/// Télécharge l'artefact en mémoire, en signalant l'avancement à `progres`.
-/// Ne vérifie rien : la garde est `verifier_empreinte`, jamais appelée ailleurs
-/// qu'immédiatement après cette fonction.
-async fn telecharger(url: &str, mut progres: impl FnMut(u64, u64)) -> Result<Vec<u8>, String> {
+/// Télécharge `url` en mémoire (au plus `taille_max` octets), en signalant
+/// l'avancement à `progres`. Ne vérifie rien : les gardes sont
+/// `empreinte_signee` et `verifier_empreinte`.
+async fn telecharger(
+    url: &str,
+    taille_max: u64,
+    mut progres: impl FnMut(u64, u64),
+) -> Result<Vec<u8>, String> {
     let mut reponse = client()?
         .get(url)
         .send()
@@ -334,7 +427,7 @@ async fn telecharger(url: &str, mut progres: impl FnMut(u64, u64)) -> Result<Vec
         .map_err(|e| format!("téléchargement refusé : {e}"))?;
 
     let total = reponse.content_length().unwrap_or(0);
-    if total > TAILLE_MAX {
+    if total > taille_max {
         return Err(format!("artefact annoncé à {total} octets : refusé"));
     }
 
@@ -345,7 +438,7 @@ async fn telecharger(url: &str, mut progres: impl FnMut(u64, u64)) -> Result<Vec
         .map_err(|e| format!("téléchargement interrompu : {e}"))?
     {
         octets.extend_from_slice(&morceau);
-        if octets.len() as u64 > TAILLE_MAX {
+        if octets.len() as u64 > taille_max {
             return Err("artefact trop gros : refusé".into());
         }
         progres(octets.len() as u64, total);
@@ -370,15 +463,24 @@ fn verifier_empreinte(octets: &[u8], attendu: &str) -> Result<(), String> {
     Ok(())
 }
 
-/// Télécharge en émettant la progression, puis VÉRIFIE l'empreinte.
-/// Rien n'est écrit à destination tant que l'empreinte n'est pas confirmée.
+/// Vérifie la liste signée, télécharge en émettant la progression, puis
+/// VÉRIFIE l'empreinte signée. Rien n'est écrit à destination avant.
+///
+/// `info` revient du front : rien n'y est cru sur parole. URL, version et
+/// empreinte sont recontrôlées ici, et seule l'empreinte SIGNÉE fait foi.
 async fn telecharger_et_verifier(app: &AppHandle, info: &UpdateInfo) -> Result<Vec<u8>, String> {
-    let octets = telecharger(&info.url, |downloaded, total| {
+    if !plus_recente(&info.version, env!("CARGO_PKG_VERSION")) {
+        return Err("version proposée non plus récente : mise à jour refusée".into());
+    }
+    let nom = nom_artefact(&info.url, &info.version)?;
+    let attendu = empreinte_publiee(&info.version, nom).await?;
+
+    let octets = telecharger(&info.url, TAILLE_MAX, |downloaded, total| {
         let _ = app.emit(EVT_PROGRES, Progres { downloaded, total });
     })
     .await?;
 
-    verifier_empreinte(&octets, &info.sha256)?;
+    verifier_empreinte(&octets, &attendu)?;
 
     Ok(octets)
 }
@@ -699,7 +801,7 @@ mod tests {
     fn manifeste(sha: &str) -> Manifeste {
         serde_json::from_str(&format!(
             r#"{{"version":"3.25.0","notes":"n","pub_date":"d","platforms":{{
-                 "windows-portable":{{"url":"https://x/f.exe","sha256":"{sha}","size":1}}}}}}"#
+                 "windows-portable":{{"url":"https://forgechat.heiphaistos.org/desktop/ForgeChat-Portable-v3.25.0.exe","sha256":"{sha}","size":1}}}}}}"#
         ))
         .expect("manifeste de test illisible")
     }
@@ -757,7 +859,9 @@ mod tests {
                 .expect("windows-portable absent du manifeste");
             println!("manifeste {} → {} ({})", m.version, a.url, a.sha256);
 
-            let mut octets = telecharger(&a.url, |_, _| {}).await.expect("téléchargement");
+            let mut octets = telecharger(&a.url, TAILLE_MAX, |_, _| {})
+                .await
+                .expect("téléchargement");
             println!("{} octets téléchargés", octets.len());
 
             verifier_empreinte(&octets, &a.sha256)
@@ -772,6 +876,91 @@ mod tests {
             println!("refus attendu : {e}");
             assert!(e.contains(a.sha256.trim()));
         });
+    }
+
+    // ── La signature ────────────────────────────────────────────────
+
+    /// Clé de TEST (graine fixe), jamais la clé de production.
+    fn cle_de_test() -> ed25519_dalek::SigningKey {
+        ed25519_dalek::SigningKey::from_bytes(&[7u8; 32])
+    }
+
+    const SOMMES: &str = concat!(
+        "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad  ForgeChat-Portable-v3.25.0.exe\n",
+        "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 *ForgeChat-Setup-v3.25.0.exe\n",
+    );
+
+    fn signer(octets: &[u8]) -> String {
+        use base64::Engine as _;
+        use ed25519_dalek::Signer as _;
+        base64::engine::general_purpose::STANDARD.encode(cle_de_test().sign(octets).to_bytes())
+    }
+
+    #[test]
+    fn signature_valide_rend_l_empreinte_de_la_ligne_signee() {
+        let cle = cle_de_test().verifying_key().to_bytes();
+        let sig = signer(SOMMES.as_bytes());
+        assert_eq!(
+            empreinte_signee(SOMMES.as_bytes(), &sig, "ForgeChat-Portable-v3.25.0.exe", &cle),
+            Ok(SHA_ABC.to_string())
+        );
+        // Format binaire de sha256sum (`*nom`) reconnu aussi.
+        assert_eq!(
+            empreinte_signee(SOMMES.as_bytes(), &sig, "ForgeChat-Setup-v3.25.0.exe", &cle),
+            Ok("e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855".to_string())
+        );
+        // Le binaire « abc » passe la garde avec l'empreinte signée.
+        assert!(verifier_empreinte(ABC, SHA_ABC).is_ok());
+    }
+
+    #[test]
+    fn liste_falsifiee_ou_mauvaise_cle_refusee() {
+        let cle = cle_de_test().verifying_key().to_bytes();
+        let sig = signer(SOMMES.as_bytes());
+        // Un seul caractère de l'empreinte changé après signature.
+        let falsifie = SOMMES.replacen("ba78", "ba79", 1);
+        let e = empreinte_signee(falsifie.as_bytes(), &sig, "ForgeChat-Portable-v3.25.0.exe", &cle)
+            .expect_err("liste modifiée acceptée");
+        assert!(e.contains("signature de la mise à jour invalide"), "{e}");
+        // Bonne liste, mais signée par une autre clé que celle embarquée.
+        assert!(empreinte_signee(SOMMES.as_bytes(), &sig, "ForgeChat-Portable-v3.25.0.exe", &CLE_PUBLIQUE)
+            .is_err());
+        // Signature tronquée ou illisible.
+        for s in ["", "AAAA", "pas du base64 !", &sig[..40]] {
+            assert!(empreinte_signee(SOMMES.as_bytes(), s, "ForgeChat-Portable-v3.25.0.exe", &cle).is_err());
+        }
+    }
+
+    #[test]
+    fn artefact_absent_de_la_liste_signee_refuse() {
+        let cle = cle_de_test().verifying_key().to_bytes();
+        let sig = signer(SOMMES.as_bytes());
+        let e = empreinte_signee(SOMMES.as_bytes(), &sig, "ForgeChat-v3.25.0-amd64.AppImage", &cle)
+            .expect_err("ligne absente acceptée");
+        assert!(e.contains("absent de la liste signée"), "{e}");
+        // Un nom qui n'est qu'un suffixe d'une ligne ne compte pas.
+        assert!(empreinte_signee(SOMMES.as_bytes(), &sig, "v3.25.0.exe", &cle).is_err());
+    }
+
+    #[test]
+    fn l_url_doit_venir_du_dossier_officiel_et_porter_la_version() {
+        let b = BASE_TELECHARGEMENT;
+        assert_eq!(
+            nom_artefact(&format!("{b}ForgeChat-Setup-v3.25.0.exe"), "3.25.0"),
+            Ok("ForgeChat-Setup-v3.25.0.exe")
+        );
+        assert!(nom_artefact(&format!("{b}ForgeChat-v3.25.0-amd64.deb"), "3.25.0").is_ok());
+        for url in [
+            "https://evil.example/desktop/ForgeChat-Setup-v3.25.0.exe".to_string(),
+            "http://forgechat.heiphaistos.org/desktop/ForgeChat-Setup-v3.25.0.exe".to_string(),
+            "https://forgechat.heiphaistos.org.evil.example/desktop/ForgeChat-Setup-v3.25.0.exe".to_string(),
+            format!("{b}../ForgeChat-Setup-v3.25.0.exe"),
+            format!("{b}sous/ForgeChat-Setup-v3.25.0.exe"),
+            format!("{b}ForgeChat-Setup-v3.24.0.exe"), // ancienne release signée resservie
+            b.to_string(),
+        ] {
+            assert!(nom_artefact(&url, "3.25.0").is_err(), "{url} accepté");
+        }
     }
 
     #[test]

@@ -99,7 +99,7 @@ rtc:
   # Option B : mux UDP sur un seul port. Ne pas définir port_range_* dans ce cas.
   # udp_port: 7882          # ou une plage courte "7882-7892" (>= nombre de vCPU recommandé)
   use_external_ip: true    # découvre l'IP publique par STUN
-  # node_ip: 212.227.140.45 # à utiliser si la découverte STUN se trompe (mettre alors use_external_ip: false)
+  # node_ip: <IP publique du VPS> # à utiliser si la découverte STUN se trompe (mettre alors use_external_ip: false)
   # turn_servers:           # TURN externe (coturn existant), secret partagé
   #   - host: turn.example.org
   #     port: 443

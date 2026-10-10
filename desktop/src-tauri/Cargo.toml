@@ -31,6 +31,9 @@ serde_json = "1"
 # l'artefact, puis verification de son empreinte AVANT installation.
 reqwest = { version = "0.13", default-features = false, features = ["rustls", "charset", "http2"] }
 sha2 = "0.10"
+# Signature Ed25519 hors ligne de SHA256SUMS.txt (audit H4), verifiee avant installation.
+ed25519-dalek = "2"
+base64 = "0.22"
 # Activite « joue a » : liste des processus (chemin de l'executable) seulement.
 sysinfo = { version = "0.39", default-features = false, features = ["system"] }
 

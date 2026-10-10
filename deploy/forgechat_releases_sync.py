@@ -11,12 +11,25 @@ et de façon atomique, les manifestes lus par les applications :
   altstore.json source AltStore / SideStore : mise à jour automatique de l'app iOS
 
 Un fichier dont l'empreinte ne correspond pas fait abandonner toute la release : les manifestes
-continuent de pointer vers la version précédente. Bibliothèque standard uniquement.
+continuent de pointer vers la version précédente.
+
+Signature (audit H4) : SHA256SUMS.txt doit être accompagné de SHA256SUMS.txt.sig, signature Ed25519
+faite HORS LIGNE par scripts/release-sign.mjs (la clé privée n'est ni sur GitHub ni sur ce VPS).
+Elle est vérifiée avec la clé publique ci-dessous AVANT toute lecture des empreintes ; une release
+non signée n'est pas publiée (« en attente de signature »). Les deux fichiers sont copiés à côté des
+binaires sous <famille>-v<version>.SHA256SUMS.txt(.sig) et référencés dans les manifestes : les
+applications revérifient elles-mêmes la signature, le VPS n'est pas une autorité.
+
+Vérification par `openssl pkeyutl -verify -rawin` (OpenSSL >= 3.0, présent sur le VPS) : aucune
+dépendance Python hors bibliothèque standard.
 """
 import hashlib
 import json
 import os
+import base64
+import binascii
 import re
+import subprocess
 import sys
 import tempfile
 import urllib.error
@@ -41,12 +54,45 @@ DESKTOP = {
 }
 MOBILE = {"android": "ForgeChat-{v}.apk", "ios": "ForgeChat-{v}.ipa"}
 
+# Clé publique de signature des releases (copie de deploy/release-signing-public.pem).
+# Empreinte SHA-256 de la clé brute : e43061229a0116ef3f024c6b72fa26bb9e74c01834782e9f3229cf154ae7c2b6
+SIGNING_PUBLIC_KEY = """-----BEGIN PUBLIC KEY-----
+MCowBQYDK2VwAyEAXki8pdvmJ4g6CsAf/PTBnZlXG3T7t7BOXUDjYLL4Tsg=
+-----END PUBLIC KEY-----
+"""
+
+
+class Unsigned(Exception):
+    """Release sans SHA256SUMS.txt.sig : pas une erreur, elle attend la signature hors ligne."""
+
+
+def verify_signature(data, sig_b64, public_key=SIGNING_PUBLIC_KEY):
+    """Vrai seulement si sig_b64 est la signature Ed25519 de data par public_key."""
+    try:
+        sig = base64.b64decode(sig_b64.strip(), validate=True)
+    except (binascii.Error, ValueError):
+        return False
+    if len(sig) != 64:
+        return False
+    with tempfile.TemporaryDirectory() as d:
+        paths = {}
+        for name, content in (("pub.pem", public_key.encode()), ("data", data), ("sig", sig)):
+            paths[name] = os.path.join(d, name)
+            with open(paths[name], "wb") as f:
+                f.write(content)
+        r = subprocess.run(
+            ["openssl", "pkeyutl", "-verify", "-pubin", "-inkey", paths["pub.pem"], "-rawin",
+             "-in", paths["data"], "-sigfile", paths["sig"]],
+            capture_output=True, timeout=30, check=False,
+        )
+    return r.returncode == 0
+
 
 def log(msg):
     print(msg, flush=True)
 
 
-# Dépôt privé : jeton GitHub en lecture seule (Contents: read, ce seul dépôt), fichier root 600.
+# Dépôt privé : jeton GitHub en lecture seule (Contents: read, ce seul dépôt), fichier root:forgechat-sync 640.
 TOKEN_FILE = os.environ.get("FORGECHAT_GITHUB_TOKEN_FILE", "/etc/forgechat/releases-token")
 
 
@@ -119,25 +165,43 @@ def download(url, path):
     return h.hexdigest(), size
 
 
-def write_json(name, data):
+def write_file(name, data):
     tmp = os.path.join(DEST, "." + name + ".tmp")
-    with open(tmp, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
+    with open(tmp, "wb") as f:
+        f.write(data)
     os.chmod(tmp, 0o644)
     os.replace(tmp, os.path.join(DEST, name))
 
 
-def fetch_release(rel, version, wanted):
-    """Télécharge et vérifie les fichiers attendus. Rend {cible: {url, sha256, size}}."""
+def write_json(name, data):
+    write_file(name, json.dumps(data, ensure_ascii=False, indent=2).encode("utf-8"))
+
+
+def read_asset(asset):
+    with get(asset_location(asset["url"]), "application/octet-stream") as r:
+        data = r.read(1 << 20)
+        if r.read(1):
+            raise ValueError(asset["name"] + " : trop gros")
+    return data
+
+
+def fetch_release(rel, kind, version, wanted):
+    """Vérifie la signature, télécharge et vérifie les fichiers attendus. Rend
+    ({cible: {url, sha256, size}}, {sums, sums_sig}) : URL publiques de SHA256SUMS.txt et .sig."""
     assets = {a["name"]: a for a in rel.get("assets", [])}
     if "SHA256SUMS.txt" not in assets:
         raise ValueError("SHA256SUMS.txt absent")
-    with get(asset_location(assets["SHA256SUMS.txt"]["url"]), "application/octet-stream") as r:
-        sums = {}
-        for line in r.read().decode().splitlines():
-            parts = line.split()
-            if len(parts) == 2 and re.fullmatch(r"[0-9a-f]{64}", parts[0]):
-                sums[parts[1].lstrip("*")] = parts[0]
+    if "SHA256SUMS.txt.sig" not in assets:
+        raise Unsigned("SHA256SUMS.txt.sig absent")
+    sums_bytes = read_asset(assets["SHA256SUMS.txt"])
+    sig_bytes = read_asset(assets["SHA256SUMS.txt.sig"])
+    if not verify_signature(sums_bytes, sig_bytes.decode("ascii", "replace")):
+        raise ValueError("signature de SHA256SUMS.txt INVALIDE")
+    sums = {}
+    for line in sums_bytes.decode().splitlines():
+        parts = line.split()
+        if len(parts) == 2 and re.fullmatch(r"[0-9a-f]{64}", parts[0]):
+            sums[parts[1].lstrip("*")] = parts[0]
     out = {}
     with tempfile.TemporaryDirectory(dir=DEST, prefix=".sync-") as tmp:
         for target, pattern in wanted.items():
@@ -161,11 +225,14 @@ def fetch_release(rel, version, wanted):
                 os.replace(part, final)
             out[target] = {"url": name, "sha256": digest, "size": size}
             log("  " + name + " OK (" + str(size) + " octets)")
-    return out
+    sums_name = kind + "-v" + version + ".SHA256SUMS.txt"
+    write_file(sums_name, sums_bytes)
+    write_file(sums_name + ".sig", sig_bytes)
+    return out, {"sums": BASE_URL + "/" + sums_name, "sums_sig": BASE_URL + "/" + sums_name + ".sig"}
 
 
 def sync_desktop(version, rel):
-    platforms = fetch_release(rel, version, DESKTOP)
+    platforms, signed = fetch_release(rel, "desktop", version, DESKTOP)
     if not platforms:
         raise ValueError("aucun fichier de bureau dans la release")
     write_json("latest.json", {
@@ -173,18 +240,19 @@ def sync_desktop(version, rel):
         "notes": rel.get("body") or "",
         "pub_date": rel.get("published_at") or "",
         "platforms": platforms,
+        **signed,
     })
 
 
 def sync_mobile(version, rel):
-    platforms = fetch_release(rel, version, MOBILE)
+    platforms, signed = fetch_release(rel, "mobile", version, MOBILE)
     if not platforms:
         raise ValueError("aucun fichier mobile dans la release")
     notes = rel.get("body") or ""
     date = rel.get("published_at") or ""
     for p in platforms.values():
         p["url"] = BASE_URL + "/" + p["url"]
-    write_json("mobile.json", {"version": version, "notes": notes, "pub_date": date, "platforms": platforms})
+    write_json("mobile.json", {"version": version, "notes": notes, "pub_date": date, "platforms": platforms, **signed})
     ios = platforms.get("ios")
     if ios:
         write_json("altstore.json", {
@@ -224,11 +292,17 @@ def main():
     failed = False
     for kind, (version, rel) in latest_releases().items():
         tag = rel["tag_name"]
-        if state.get(kind) == tag:
+        signed_here = os.path.exists(os.path.join(DEST, kind + "-v" + version + ".SHA256SUMS.txt.sig"))
+        if state.get(kind) == tag and signed_here:
             continue
-        log(tag + " : publication")
         try:
             (sync_desktop if kind == "desktop" else sync_mobile)(version, rel)
+        except Unsigned as e:
+            # Release publiée avant la signature, ou .sig pas encore uploadé : les manifestes restent
+            # tels quels et on réessaie au passage suivant. Pas un échec du service.
+            if state.get(kind) != tag:
+                log(tag + " : en attente de signature (" + str(e) + ")")
+            continue
         except Exception as e:  # une release défectueuse ne doit pas bloquer l'autre famille
             log(tag + " : ABANDON (" + str(e) + ")")
             failed = True

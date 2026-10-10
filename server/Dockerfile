@@ -1,6 +1,6 @@
 FROM rust:slim-bookworm AS builder
 WORKDIR /app
-RUN apt-get update && apt-get upgrade -y && apt-get install -y pkg-config libssl-dev curl && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y --no-install-recommends pkg-config libssl-dev curl && rm -rf /var/lib/apt/lists/*
 COPY Cargo.toml ./
 RUN mkdir src && echo "fn main(){}" > src/main.rs && cargo build --release && rm src/main.rs
 COPY src ./src
@@ -14,8 +14,10 @@ COPY migrations ./migrations
 ARG GIT_SHA=unknown
 RUN echo "Building commit ${GIT_SHA}" && find /app/src -name "*.rs" -exec touch {} + && cargo build --release
 
+# Pas d'apt-get upgrade (non reproductible) : les correctifs viennent de l'image de base, tirée à
+# chaque déploiement (docker compose build --pull).
 FROM debian:bookworm-slim
-RUN apt-get update && apt-get upgrade -y && apt-get install -y libssl3 ca-certificates curl && rm -rf /var/lib/apt/lists/* \
+RUN apt-get update && apt-get install -y --no-install-recommends libssl3 ca-certificates curl && rm -rf /var/lib/apt/lists/* \
     && groupadd -r forgechat && useradd -r -g forgechat -d /app -s /sbin/nologin forgechat
 WORKDIR /app
 COPY --from=builder /app/target/release/forgechat .
