@@ -3,7 +3,8 @@ import { CalendarPlus, Download, Repeat, Bell } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../../api/client'
 import { useT, type Key } from '../../i18n'
-import { downloadText, googleCalendarUrl } from './format'
+import { googleCalendarUrl } from './format'
+import { saveFile } from '../../lib/saveFile'
 
 const RECURRENCES = ['none', 'daily', 'weekly', 'monthly'] as const
 const REMINDERS = [5, 15, 30, 60, 1440]
@@ -51,8 +52,7 @@ export function RecurrenceBadge({ recurrence, reminder }: { recurrence?: string;
 async function downloadIcs(path: string, filename: string, okText: string, errText: string) {
   try {
     const { data } = await api.get<string>(path, { responseType: 'text' })
-    downloadText(filename, data, 'text/calendar')
-    toast.success(okText)
+    if (await saveFile(data, filename, 'text/calendar')) toast.success(okText)
   } catch {
     toast.error(errText)
   }

@@ -9,6 +9,7 @@ import { socialFr } from './socialFr.ts'
 import { comfortFr } from './comfort.ts'
 import { voiceLotFr } from './voiceLotFr.ts'
 import { remoteSupportFr } from './remoteSupport.ts'
+import { systemDeskFr } from './systemDesk.ts'
 
 export const fr = {
   ...profileFr,
@@ -19,6 +20,7 @@ export const fr = {
   ...chrome.fr,
   ...remoteSupportFr,
   ...ai.fr,
+  ...systemDeskFr,
   // --- Connexion, inscription, mot de passe oublié ---
   'auth.email': 'Email',
   'auth.password': 'Mot de passe',
@@ -1133,7 +1135,7 @@ export const fr = {
   'settings.keywords.account': 'email mot de passe pseudo nom utilisateur supprimer compte',
   'settings.keywords.profile': 'avatar photo bannière bio à propos couleur',
   'settings.keywords.connected': 'github google spotify comptes liés oauth liaison',
-  'settings.keywords.appearance': 'thème sombre clair couleur accent apparence fond',
+  'settings.keywords.appearance': 'thème sombre clair couleur accent apparence fond icône logo barre des tâches',
   'settings.keywords.text_display': 'taille police texte compact horodatage heure aperçus liens emoji markdown',
   'settings.keywords.notifications': 'sons push mentions badge notification silencieux',
   'settings.keywords.notifications_email': 'email courriel résumé newsletter',

@@ -5,6 +5,7 @@
 // déchiffrement en flux, affichage par une adresse blob: (jamais de copie en clair ailleurs).
 import { mediaUrl } from '../api/client'
 import { signUpload } from '../lib/useSignedUrl'
+import { saveFile } from '../lib/saveFile'
 import { postWithUploadProgress } from '../utils/uploadProgress'
 import { mustEncrypt, type ConvKind } from './conversations'
 import * as c from './crypto'
@@ -202,11 +203,5 @@ async function fetchDecrypted(url: string, e: c.FileEntry): Promise<Blob> {
 
 /** Enregistre le fichier déchiffré sur l'appareil sous son vrai nom. */
 export async function saveDecrypted(url: string, e: c.FileEntry) {
-  const a = document.createElement('a')
-  a.href = await decryptedUrl(url, e)
-  a.download = e.n
-  a.rel = 'noopener'
-  document.body.appendChild(a)
-  a.click()
-  a.remove()
+  await saveFile(await decryptedBlob(url, e), e.n)
 }

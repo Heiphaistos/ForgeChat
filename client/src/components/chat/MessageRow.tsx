@@ -1,4 +1,5 @@
 import { mediaUrl } from '../../api/client'
+import { desktopDownloadClick } from '../../lib/saveFile'
 import { RoleIcon, type RoleDecor } from '../../hooks/useRoleDecor'
 import { memo, useEffect, useRef, useState, useContext } from 'react'
 import { Pencil, Trash2, SmilePlus, MessagesSquare, Check, X, Pin, CornerUpLeft, Bot, Clock, Bookmark, Forward, Bell, Languages, Flag, Copy, Link, Loader2, Megaphone, Sparkles } from 'lucide-react'
@@ -395,6 +396,7 @@ function MessageRow({
                     <a
                       href={mediaUrl(att.url)}
                       download={att.filename}
+                      onClick={desktopDownloadClick(mediaUrl(att.url), att.filename)}
                       className="flex items-center gap-2 bg-fc-input px-3 py-2 rounded max-w-full sm:max-w-xs hover:bg-fc-hover transition"
                     >
                       <span className="text-fc-accent text-sm">{att.filename}</span>

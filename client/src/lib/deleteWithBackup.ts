@@ -1,6 +1,7 @@
 import toast from 'react-hot-toast'
 import api from '../api/client'
 import { confirmChoice } from '../components/ui/ConfirmModal'
+import { saveFile } from './saveFile'
 
 interface Target {
   kind: 'channel' | 'category'
@@ -12,18 +13,6 @@ interface Target {
 
 const slug = (s: string) =>
   s.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-zA-Z0-9_-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'x'
-
-function downloadJson(data: unknown, filename: string) {
-  const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }))
-  const a = document.createElement('a')
-  a.href = url
-  a.download = filename
-  // Ancre dans le DOM : sinon Firefox ne télécharge rien.
-  document.body.appendChild(a)
-  a.click()
-  document.body.removeChild(a)
-  setTimeout(() => URL.revokeObjectURL(url), 10_000)
-}
 
 /**
  * Confirmation à trois choix avant suppression d'un salon ou d'une catégorie :
@@ -49,7 +38,9 @@ export async function deleteWithBackup(t: Target): Promise<boolean> {
       const url = isCat ? `/servers/${t.serverId}/categories/${t.id}/backup` : `/channels/${t.id}/backup`
       const { data } = await api.get(url)
       const date = new Date().toISOString().slice(0, 10)
-      downloadJson(data, `forgechat-${slug(t.serverName ?? 'serveur')}-${slug(t.name)}-${date}.json`)
+      const name = `forgechat-${slug(t.serverName ?? 'serveur')}-${slug(t.name)}-${date}.json`
+      // Annulé ou échec d'écriture : rien n'est supprimé.
+      if (!await saveFile(JSON.stringify(data, null, 2), name, 'application/json')) return false
       if (data?.truncated || data?.channels?.some((c: any) => c?.truncated)) {
         toast('Sauvegarde limitée aux 50 000 derniers messages par salon.')
       }
