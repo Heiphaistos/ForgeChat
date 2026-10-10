@@ -29,6 +29,9 @@ pub enum AppError {
     SlowMode(i64),
     #[error("totp_required")]
     TotpRequired,
+    /// 503 : dépendance indispensable (Redis) injoignable : refuser plutôt que laisser passer.
+    #[error("Service momentanément indisponible")]
+    Unavailable,
     #[error("Erreur interne: {0}")]
     Internal(#[from] anyhow::Error),
     #[error("DB: {0}")]
@@ -54,6 +57,7 @@ impl IntoResponse for AppError {
                 ).into_response();
             }
             AppError::TotpRequired => (StatusCode::FORBIDDEN, "totp_required".into()),
+            AppError::Unavailable => (StatusCode::SERVICE_UNAVAILABLE, self.to_string()),
             AppError::Internal(e) => {
                 tracing::error!("Internal error: {e:?}");
                 (StatusCode::INTERNAL_SERVER_ERROR, "Erreur serveur".into())

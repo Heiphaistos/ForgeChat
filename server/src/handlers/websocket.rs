@@ -12,66 +12,98 @@ use uuid::Uuid;
 use crate::{models::role::Permissions, state::{AppState, VoiceStateData}};
 // bcrypt est importé via le crate root (Cargo.toml)
 
+/// Taille maximale d'un message (et d'une trame) WebSocket reçu.
+const WS_MAX_MESSAGE: usize = 64 * 1024;
+/// WebSocket simultanées par compte et par adresse.
+const WS_MAX_PER_USER: usize = 10;
+const WS_MAX_PER_IP: usize = 50;
+/// Revérification périodique du compte (révocation, bannissement) d'une socket ouverte.
+const WS_RECHECK: std::time::Duration = std::time::Duration::from_secs(60);
+
 pub async fn ws_handler(
     ws: WebSocketUpgrade,
     State(state): State<AppState>,
+    axum::extract::ConnectInfo(addr): axum::extract::ConnectInfo<std::net::SocketAddr>,
+    headers: axum::http::HeaderMap,
     axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>,
 ) -> Response {
-    let ticket = params.get("ticket").cloned();
-    let token = params.get("token").cloned().unwrap_or_default();
-    let config_secret = state.config.jwt_secret.clone();
-    let config_issuer = state.config.jwt_issuer.clone();
-    ws.on_upgrade(move |socket| handle_socket(socket, state, ticket, token, config_secret, config_issuer))
+    use axum::{http::StatusCode, response::IntoResponse};
+    // Ticket éphémère à usage unique seulement (POST /auth/ws-ticket) : le JWT brut
+    // dans l'URL (`?token=`) finissait dans les journaux des proxys ; plus aucune
+    // appli ne l'utilise (web, bureau et mobile passent par le ticket).
+    let Some(ticket) = params.get("ticket") else {
+        return StatusCode::UNAUTHORIZED.into_response();
+    };
+    let user_id = match consume_ticket(&state, ticket).await {
+        Ok(Some(id)) => id,
+        Ok(None) => {
+            tracing::warn!("WebSocket: ticket invalide ou expiré");
+            return StatusCode::UNAUTHORIZED.into_response();
+        }
+        Err(()) => return StatusCode::SERVICE_UNAVAILABLE.into_response(),
+    };
+    if state.conn_counts.read().await.get(&user_id).copied().unwrap_or(0) >= WS_MAX_PER_USER {
+        return StatusCode::TOO_MANY_REQUESTS.into_response();
+    }
+    let ip = crate::privacy::client_key(&headers, &addr);
+    {
+        let mut ips = state.ws_ip_counts.lock().await;
+        let n = ips.entry(ip.clone()).or_insert(0);
+        if *n >= WS_MAX_PER_IP {
+            return StatusCode::TOO_MANY_REQUESTS.into_response();
+        }
+        *n += 1;
+    }
+    let opened_at = chrono::Utc::now().timestamp();
+    let ip_state = state.clone();
+    let ip_key = ip.clone();
+    // Compteur par adresse rendu même si la mise à niveau échoue (callback jamais appelé).
+    let guard = IpSlot { state: ip_state, ip: ip_key };
+    ws.max_message_size(WS_MAX_MESSAGE)
+        .max_frame_size(WS_MAX_MESSAGE)
+        .on_upgrade(move |socket| async move {
+            handle_socket(socket, state, user_id, opened_at).await;
+            drop(guard);
+        })
 }
 
-async fn handle_socket(
-    socket: WebSocket,
+/// Place occupée dans `ws_ip_counts`, rendue à la destruction.
+struct IpSlot {
     state: AppState,
-    ticket: Option<String>,
-    token: String,
-    secret: String,
-    issuer: String,
-) {
-    // Priorité 1 : ticket éphémère Redis (web — ne logue pas le JWT)
-    // Priorité 2 : JWT direct (Tauri)
-    let user_id: Uuid = if let Some(t) = ticket {
-        let key = format!("ws_ticket:{}", t);
-        let uid_str: Option<String> = {
-            let mut redis = state.redis.lock().await;
-            use redis::AsyncCommands;
-            // Single-use : supprimer le ticket immédiatement après validation
-            let val: Option<String> = redis.get(&key).await.unwrap_or(None);
-            if val.is_some() {
-                let _: () = redis.del(&key).await.unwrap_or(());
+    ip: String,
+}
+
+impl Drop for IpSlot {
+    fn drop(&mut self) {
+        let state = self.state.clone();
+        let ip = std::mem::take(&mut self.ip);
+        tokio::spawn(async move {
+            let mut ips = state.ws_ip_counts.lock().await;
+            if let Some(n) = ips.get_mut(&ip) {
+                *n = n.saturating_sub(1);
+                if *n == 0 {
+                    ips.remove(&ip);
+                }
             }
-            val
-        };
-        match uid_str.and_then(|s| Uuid::parse_str(&s).ok()) {
-            Some(id) => id,
-            None => {
-                tracing::warn!("WebSocket: ticket invalide ou expiré");
-                return;
-            }
-        }
-    } else {
-        // Mêmes contrôles que l'API : un jeton révoqué (déconnexion, mot de passe
-        // changé) ouvrait encore la WebSocket et recevait tous les DM pendant 24 h.
-        let Some(c) = crate::middleware::auth::verify_token(&token, &secret, &issuer) else {
-            tracing::warn!("WebSocket: token invalide");
-            return;
-        };
-        let blocked: Option<String> = {
-            use redis::AsyncCommands;
-            let key = format!("jwtblock:{}", crate::middleware::auth::hash_token(&token));
-            let mut redis = state.redis.lock().await;
-            redis.get(&key).await.unwrap_or(None)
-        };
-        if blocked.is_some() || crate::middleware::auth::is_revoked(&state, &c).await || crate::handlers::site_admin::is_banned(&state, c.sub).await {
-            tracing::warn!("WebSocket: token révoqué");
-            return;
-        }
-        c.sub
-    };
+        });
+    }
+}
+
+/// Ticket à usage unique (lu puis supprimé atomiquement). Err : Redis injoignable.
+async fn consume_ticket(state: &AppState, ticket: &str) -> std::result::Result<Option<Uuid>, ()> {
+    if ticket.is_empty() || ticket.len() > 64 {
+        return Ok(None);
+    }
+    let mut redis = state.redis.lock().await;
+    let val: Option<String> = redis::cmd("GETDEL")
+        .arg(format!("ws_ticket:{ticket}"))
+        .query_async(&mut *redis)
+        .await
+        .map_err(|e| tracing::error!("WebSocket: Redis injoignable ({e})"))?;
+    Ok(val.and_then(|s| Uuid::parse_str(&s).ok()))
+}
+
+async fn handle_socket(socket: WebSocket, state: AppState, user_id: Uuid, opened_at: i64) {
 
     // N5 — identité de CONNEXION, distincte de l'identité d'utilisateur.
     // Plusieurs onglets partagent le même `user_id` mais ont chacun leur
@@ -181,9 +213,26 @@ async fn handle_socket(
     // P1-8 — rappels échus pendant l'absence : livrés dès la reconnexion.
     crate::handlers::reminders::deliver_due(&state, Some(user_id)).await;
 
+    let check_state = state.clone();
     let send_task = tokio::spawn(async move {
+        let mut recheck = tokio::time::interval(WS_RECHECK);
+        recheck.tick().await; // premier tick immédiat : déjà vérifié à l'ouverture
         loop {
-            match rx.recv().await {
+            let next = tokio::select! {
+                m = rx.recv() => m,
+                _ = recheck.tick() => {
+                    // Jetons révoqués depuis l'ouverture (déconnexion partout, mot de passe
+                    // changé, bannissement) : la socket se ferme, l'appli devra se réauthentifier.
+                    if crate::middleware::auth::token_state(&check_state, user_id, opened_at, None).await
+                        == crate::middleware::auth::TokenState::Revoked
+                    {
+                        break;
+                    }
+                    continue;
+                }
+            };
+            match next {
+                Ok(msg) if msg == crate::state::WS_CLOSE => break,
                 Ok(msg) => {
                     // Compte banni ou déconnecté de force : le client est prévenu, puis la socket se ferme.
                     let terminal = msg.starts_with(r#"{"type":"ACCOUNT_BANNED""#) || msg.starts_with(r#"{"type":"FORCE_LOGOUT""#);
@@ -206,8 +255,8 @@ async fn handle_socket(
         while let Some(Ok(msg)) = receiver.next().await {
             match msg {
                 Message::Text(text) => {
-                    // Limite de taille pour éviter les attaques DoS
-                    if text.len() > 64 * 1024 {
+                    // Limite de taille pour éviter les attaques DoS (aussi bornée à la lecture : max_message_size)
+                    if text.len() > WS_MAX_MESSAGE {
                         tracing::warn!("WS: message trop grand ({} bytes) de {}", text.len(), user_id);
                         break;
                     }

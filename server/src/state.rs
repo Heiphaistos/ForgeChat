@@ -29,6 +29,9 @@ pub type WsSender = broadcast::Sender<String>;
 pub type ClientMap = Arc<RwLock<HashMap<Uuid, WsSender>>>;
 pub type ConnCountMap = Arc<RwLock<HashMap<Uuid, usize>>>;
 
+/// Signal interne (pas du JSON, jamais transmis au client) qui ferme les WebSocket d'un compte.
+pub const WS_CLOSE: &str = "!ws-close";
+
 #[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct VoiceStateData {
     pub channel_id: Uuid,
@@ -60,6 +63,8 @@ pub struct AppState {
     pub config: Config,
     pub clients: ClientMap,
     pub conn_counts: ConnCountMap,
+    /// WebSocket ouvertes par adresse (pseudonyme `privacy::client_key`).
+    pub ws_ip_counts: Arc<Mutex<HashMap<String, usize>>>,
     // Salons vocaux : channel_id → {user_id}
     pub voice_rooms: Arc<RwLock<HashMap<Uuid, HashSet<Uuid>>>>,
     // Utilisateur courant dans quel salon : user_id → channel_id
@@ -120,6 +125,7 @@ impl AppState {
             config,
             clients: Arc::new(RwLock::new(HashMap::new())),
             conn_counts: Arc::new(RwLock::new(HashMap::new())),
+            ws_ip_counts: Arc::new(Mutex::new(HashMap::new())),
             voice_rooms: Arc::new(RwLock::new(HashMap::new())),
             user_voice: Arc::new(RwLock::new(HashMap::new())),
             voice_states: Arc::new(RwLock::new(HashMap::new())),
@@ -237,6 +243,13 @@ impl AppState {
         );
     }
 
+
+    /// Ferme toutes les WebSocket du compte (jetons révoqués : déconnexion, mot de
+    /// passe changé, session révoquée…). Les applis légitimes se reconnectent avec
+    /// un nouveau ticket ; un jeton révoqué n'en obtient plus.
+    pub async fn disconnect_user_sockets(&self, user_id: Uuid) {
+        self.broadcast_to_user(user_id, WS_CLOSE.to_string()).await;
+    }
 
     pub async fn broadcast_to_user(&self, user_id: Uuid, event: String) {
         let read = self.clients.read().await;
