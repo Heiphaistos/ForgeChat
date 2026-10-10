@@ -194,6 +194,31 @@ async fn security_upload_sign_access() {
     assert!(!can_read_upload(&state, b, &forum_media).await.unwrap());
     assert!(!can_read_upload(&state, a, "/uploads/inconnu.enc").await.unwrap());
 
+    // Médias sans salon (avant la migration 109) : la 114 rattache ceux d'une publication ;
+    // les autres ne sont signés que pour leur auteur, sauf blob chiffré.
+    let orphan = |ext: &'static str| {
+        let db = db.clone();
+        async move {
+            let url = format!("/uploads/{}.{ext}", Uuid::new_v4());
+            sqlx::query("INSERT INTO attachments (filename, content_type, size, url, uploader_id) VALUES ('f', 'image/png', 1, $1, $2)")
+                .bind(&url).bind(a).execute(&db).await.expect("orphan");
+            url
+        }
+    };
+    let posted = orphan("png").await;
+    sqlx::query("INSERT INTO forum_posts (channel_id, title, creator_id, media_url) VALUES ($1, 't', $2, $3)")
+        .bind(chan).bind(a).bind(&posted).execute(&db).await.expect("post");
+    let plain = orphan("png").await;
+    let sealed = orphan("enc").await;
+    sqlx::raw_sql(include_str!("../../migrations/114_forum_media_channel.sql")).execute(&db).await.expect("114");
+    let ch: Option<Uuid> = sqlx::query_scalar("SELECT channel_id FROM attachments WHERE url=$1").bind(&posted).fetch_one(&db).await.unwrap();
+    assert_eq!(ch, Some(chan), "rattaché au salon de la publication");
+    assert!(can_read_upload(&state, owner, &posted).await.unwrap());
+    assert!(!can_read_upload(&state, b, &posted).await.unwrap(), "salon masqué");
+    assert!(can_read_upload(&state, a, &plain).await.unwrap(), "auteur");
+    assert!(!can_read_upload(&state, owner, &plain).await.unwrap(), "fichier en clair sans salon : auteur seul");
+    assert!(can_read_upload(&state, b, &sealed).await.unwrap(), "blob chiffré");
+
     let (u1, u2) = if a < owner { (a, owner) } else { (owner, a) };
     let dm: Uuid = sqlx::query_scalar("INSERT INTO dm_channels (user1_id, user2_id) VALUES ($1, $2) RETURNING id")
         .bind(u1).bind(u2).fetch_one(&db).await.expect("dm");
@@ -202,4 +227,127 @@ async fn security_upload_sign_access() {
     let in_dm = att("dm_message_id", dm_msg).await;
     assert!(can_read_upload(&state, owner, &in_dm).await.unwrap());
     assert!(!can_read_upload(&state, b, &in_dm).await.unwrap(), "hors du MP");
+}
+
+/// Secret du webhook GitHub chiffré au repos : l'ancien clair est migré (rejouable), le nouveau
+/// est chiffré à l'enregistrement, et la signature GitHub se vérifie toujours avec lui.
+#[tokio::test]
+#[ignore]
+async fn security_github_token_at_rest() {
+    use axum::{body::Bytes, extract::{Path, Query, State}, http::HeaderMap, Extension, Json};
+    use hmac::Mac;
+    crate::email_crypto::init_for_tests();
+    let (state, db) = setup().await;
+    let owner = user(&db).await;
+    let s: Uuid = sqlx::query_scalar("INSERT INTO servers (name, owner_id) VALUES ('gh', $1) RETURNING id")
+        .bind(owner).fetch_one(&db).await.expect("server");
+    sqlx::query("INSERT INTO server_members (user_id, server_id, is_owner) VALUES ($1, $2, TRUE)")
+        .bind(owner).bind(s).execute(&db).await.expect("member");
+    let old = "ancien-secret-en-clair-0001";
+    let chan: Uuid = sqlx::query_scalar("INSERT INTO channels (server_id, name, github_webhook_token) VALUES ($1, 'gh', $2) RETURNING id")
+        .bind(s).bind(old).fetch_one(&db).await.expect("channel");
+    crate::handlers::webhooks::migrate_github_tokens(&db).await.expect("migration");
+    crate::handlers::webhooks::migrate_github_tokens(&db).await.expect("migration rejouée");
+    let (clear, enc): (Option<String>, String) =
+        sqlx::query_as("SELECT github_webhook_token, github_webhook_token_enc FROM channels WHERE id=$1")
+            .bind(chan).fetch_one(&db).await.unwrap();
+    assert_eq!(clear, None);
+    assert!(enc.starts_with("v1:") && !enc.contains("ancien"));
+
+    let deliver = |secret: &'static str, query: Option<&'static str>| {
+        let state = state.clone();
+        async move {
+            let body = br#"{"zen":"ok"}"#;
+            let mut m = crate::crypto::HmacSha256::new_from_slice(secret.as_bytes()).unwrap();
+            m.update(body);
+            let mut h = HeaderMap::new();
+            h.insert("X-Hub-Signature-256", format!("sha256={}", data_encoding::HEXLOWER.encode(&m.finalize().into_bytes())).parse().unwrap());
+            h.insert("X-GitHub-Event", "ping".parse().unwrap());
+            let q = query.map(|t| std::collections::HashMap::from([("token".to_string(), t.to_string())])).unwrap_or_default();
+            crate::handlers::webhooks::receive_github_webhook(State(state), Path(chan), Query(q), h, Bytes::from_static(body)).await.is_ok()
+        }
+    };
+    assert!(deliver(old, None).await, "secret migré : signature acceptée");
+    assert!(deliver(old, Some(old)).await, "ancien ?token= toléré");
+    assert!(!deliver("autre-secret-du-salon-xx", None).await);
+
+    let new = "nouveau-secret-de-salon-0002";
+    let claims = crate::middleware::auth::Claims { sub: owner, exp: i64::MAX, iss: "forgechat".into(), iat: 0, sid: None };
+    let _ = crate::handlers::channels::set_github_webhook_token(State(state.clone()), Extension(claims), Path((s, chan)),
+        Json(crate::handlers::channels::SetGithubTokenBody { token: Some(new.into()) })).await.expect("set");
+    let enc: String = sqlx::query_scalar("SELECT github_webhook_token_enc FROM channels WHERE id=$1").bind(chan).fetch_one(&db).await.unwrap();
+    assert!(!enc.contains("nouveau"));
+    assert!(deliver(new, None).await);
+    assert!(!deliver(old, None).await, "ancien secret remplacé");
+}
+
+/// Codes d'invitation au site : seule l'empreinte est en base (même calcul que la migration 116),
+/// le code se saisit en minuscules / avec espaces, et un ancien code de 12 caractères reste valable.
+#[tokio::test]
+#[ignore]
+async fn security_invite_code_hash() {
+    use crate::handlers::site_admin::{consume_invite, invite_code_hash};
+    let (_state, db) = setup().await;
+    let old = Uuid::new_v4().simple().to_string().to_uppercase().replace(['0', '1'], "Z")[..12].to_string();
+    let sql_hash: String = sqlx::query_scalar("SELECT encode(sha256(convert_to($1, 'UTF8')), 'hex')")
+        .bind(&old).fetch_one(&db).await.unwrap();
+    assert_eq!(sql_hash, invite_code_hash(&old).unwrap(), "empreinte identique à la migration");
+    let id: Uuid = sqlx::query_scalar("INSERT INTO registration_invites (code_hash, code_preview, max_uses) VALUES ($1, $2, 1) RETURNING id")
+        .bind(&sql_hash).bind(&old[8..]).fetch_one(&db).await.unwrap();
+    let typed = format!(" {}-{} {} ", &old[..4], &old[4..8], &old[8..]).to_lowercase();
+    let mut tx = db.begin().await.unwrap();
+    assert_eq!(consume_invite(&mut tx, &invite_code_hash(&typed).unwrap()).await.unwrap().0, id);
+    tx.commit().await.unwrap();
+    let mut tx = db.begin().await.unwrap();
+    assert!(consume_invite(&mut tx, &sql_hash).await.is_err(), "usage unique");
+    tx.rollback().await.unwrap();
+    let cols: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM information_schema.columns WHERE table_name='registration_invites' AND column_name='code'")
+        .fetch_one(&db).await.unwrap();
+    assert_eq!(cols, 0, "plus de colonne en clair");
+}
+
+/// Date d'anniversaire chiffrée au repos : migration rejouable, réglage, lecture selon la
+/// visibilité, profil, et fête du jour (balayage + déchiffrement).
+#[tokio::test]
+#[ignore]
+async fn security_birthday_at_rest() {
+    use axum::{extract::State, Extension, Json};
+    use chrono::Datelike;
+    use crate::handlers::birthdays;
+    crate::email_crypto::init_for_tests();
+    let (state, db) = setup().await;
+    let (a, b) = (user(&db).await, user(&db).await);
+    let today = chrono::Utc::now().date_naive();
+    let born = chrono::NaiveDate::from_ymd_opt(1990, today.month(), today.day()).unwrap_or(chrono::NaiveDate::from_ymd_opt(1990, 2, 28).unwrap());
+    sqlx::query("UPDATE users SET birthday=$2, birthday_visibility='friends' WHERE id=$1").bind(a).bind(born).execute(&db).await.unwrap();
+    birthdays::migrate_at_rest(&db).await.unwrap();
+    birthdays::migrate_at_rest(&db).await.unwrap();
+    let left: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM users WHERE birthday IS NOT NULL").fetch_one(&db).await.unwrap();
+    assert_eq!(left, 0, "plus de date en clair");
+    let enc: String = sqlx::query_scalar("SELECT birthday_enc FROM users WHERE id=$1").bind(a).fetch_one(&db).await.unwrap();
+    assert_eq!(birthdays::open(a, &enc), Some(born));
+    assert_eq!(birthdays::open(b, &enc), None, "AAD liée au compte");
+
+    // Visible par soi et par un ami, pas par un inconnu (jamais l'année).
+    assert_eq!(birthdays::for_viewer(&state, a, a, false).await, Some(serde_json::json!({ "month": born.month(), "day": born.day() })));
+    assert!(birthdays::for_viewer(&state, a, b, true).await.is_some());
+    assert_eq!(birthdays::for_viewer(&state, a, b, false).await, None);
+    let me: crate::models::user::User = sqlx::query_as("SELECT * FROM users WHERE id=$1").bind(a).fetch_one(&db).await.unwrap();
+    assert_eq!(me.into_self_public().birthday, Some(born), "profil : date déchiffrée");
+
+    // Fête du jour : trouvée malgré le chiffrement, une seule fois.
+    birthdays::run(&state).await;
+    let year: Option<i32> = sqlx::query_scalar("SELECT birthday_celebrated_year FROM users WHERE id=$1").bind(a).fetch_one(&db).await.unwrap();
+    if birthdays::is_today(born.month(), born.day(), today) {
+        assert_eq!(year, Some(today.year()));
+    }
+
+    // Réglage par l'API : chiffré, relu.
+    let claims = crate::middleware::auth::Claims { sub: b, exp: i64::MAX, iss: "forgechat".into(), iat: 0, sid: None };
+    let body: birthdays::BirthdayBody = serde_json::from_value(serde_json::json!({ "birthday": { "month": 3, "day": 14 }, "visibility": "friends" })).unwrap();
+    let Json(r) = birthdays::set_my_birthday(State(state.clone()), Extension(claims), Json(body)).await.unwrap();
+    assert_eq!(r["birthday"], serde_json::json!({ "month": 3, "day": 14, "year": null }));
+    let (clear, enc): (Option<chrono::NaiveDate>, String) = sqlx::query_as("SELECT birthday, birthday_enc FROM users WHERE id=$1").bind(b).fetch_one(&db).await.unwrap();
+    assert_eq!(clear, None);
+    assert!(!enc.contains("2000"));
 }

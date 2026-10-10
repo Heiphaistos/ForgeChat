@@ -101,6 +101,7 @@ fn now() -> u64 {
 }
 
 fn sign(cfg: &LiveKitConfig, claims: &Claims) -> Option<String> {
+    crate::jwt::ready();
     jsonwebtoken::encode(
         &jsonwebtoken::Header::new(jsonwebtoken::Algorithm::HS256),
         claims,
@@ -160,6 +161,7 @@ pub fn verify_webhook(cfg: &LiveKitConfig, authorization: &str, body: &[u8]) -> 
     use base64::Engine;
     use sha2::{Digest, Sha256};
     let token = authorization.trim().trim_start_matches("Bearer ").trim();
+    crate::jwt::ready();
     let mut v = jsonwebtoken::Validation::new(jsonwebtoken::Algorithm::HS256);
     v.set_issuer(&[cfg.api_key.as_str()]);
     v.set_required_spec_claims(&["iss"]);
@@ -267,6 +269,7 @@ mod tests {
     }
 
     fn lire(tok: &str) -> serde_json::Value {
+        crate::jwt::ready();
         let mut v = Validation::new(Algorithm::HS256);
         v.set_issuer(&["APIkey"]);
         v.validate_nbf = true;
@@ -302,6 +305,7 @@ mod tests {
             "exp": now() + 60,
             "sha256": base64::engine::general_purpose::STANDARD.encode(Sha256::digest(body)),
         });
+        crate::jwt::ready();
         jsonwebtoken::encode(&jsonwebtoken::Header::new(jsonwebtoken::Algorithm::HS256), &claims,
             &jsonwebtoken::EncodingKey::from_secret(secret.as_bytes())).unwrap()
     }

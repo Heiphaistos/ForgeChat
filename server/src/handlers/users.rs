@@ -159,13 +159,14 @@ pub async fn update_me(
         return Err(AppError::TooManyRequests);
     }
 
-    let (birthday_val, birthday_clear): (Option<chrono::NaiveDate>, bool) = match &body.birthday {
+    // Chiffrée au repos (birthdays::seal).
+    let (birthday_val, birthday_clear): (Option<String>, bool) = match &body.birthday {
         None => (None, false),
         Some(serde_json::Value::Null) => (None, true),
         Some(serde_json::Value::String(s)) => {
             let d = chrono::NaiveDate::parse_from_str(s, "%Y-%m-%d")
                 .map_err(|_| crate::error::AppError::BadRequest("Format date invalide (YYYY-MM-DD)".into()))?;
-            (Some(d), false)
+            (Some(crate::handlers::birthdays::seal(claims.sub, d)), false)
         }
         _ => return Err(crate::error::AppError::BadRequest("birthday invalide".into())),
     };
@@ -180,8 +181,8 @@ pub async fn update_me(
             activity_type = CASE WHEN $7::VARCHAR IS NOT NULL THEN NULLIF($7, '') ELSE activity_type END,
             activity_name = CASE WHEN $7::VARCHAR IS NOT NULL THEN NULLIF($8, '') ELSE activity_name END,
             activity_detail = CASE WHEN $7::VARCHAR IS NOT NULL THEN NULLIF($9, '') ELSE activity_detail END,
-            birthday = CASE WHEN $11 THEN NULL WHEN $10::DATE IS NOT NULL THEN $10 ELSE birthday END,
-            birthday_has_year = CASE WHEN $10::DATE IS NOT NULL THEN TRUE ELSE birthday_has_year END,
+            birthday_enc = CASE WHEN $11 THEN NULL WHEN $10::TEXT IS NOT NULL THEN $10 ELSE birthday_enc END,
+            birthday_has_year = CASE WHEN $10::TEXT IS NOT NULL THEN TRUE ELSE birthday_has_year END,
             pronouns = COALESCE($12, pronouns),
             avatar_decoration = CASE WHEN $13::VARCHAR IS NOT NULL THEN NULLIF($13, '') ELSE avatar_decoration END,
             profile_color_primary = CASE WHEN $14::INT IS NULL THEN profile_color_primary WHEN $14 < 0 THEN NULL ELSE $14 END,

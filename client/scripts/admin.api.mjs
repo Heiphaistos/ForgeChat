@@ -67,7 +67,7 @@ const stranger = await register('stranger')
 ok((await api('GET', '/api/admin/overview', { token: stranger.token })).status === 401 || stranger.status === 403, 'un inconnu n’a aucun accès admin')
 
 const inv = await api('POST', '/api/admin/invites', { token: adminToken, body: { note: 'Cousine Léa', max_uses: 1, expires_in_days: 7 } })
-ok(inv.status === 200 && /^[A-Z2-9]{4}-[A-Z2-9]{4}-[A-Z2-9]{4}$/.test(inv.body?.code ?? ''), 'code d’invitation généré (XXXX-XXXX-XXXX)', JSON.stringify(inv.body))
+ok(inv.status === 200 && /^[A-Z2-9]{4}(-[A-Z2-9]{4}){4}$/.test(inv.body?.code ?? ''), 'code d’invitation généré (5 groupes de 4, ~99 bits)', JSON.stringify(inv.body))
 const code = inv.body.code
 
 const nonAdmin = await register('lea', code.toLowerCase().replace(/-/g, ' '))
@@ -100,6 +100,7 @@ ok(list.total === 1 && row?.invited_by && row.email === nonAdmin.email.toLowerCa
 const invs = (await api('GET', '/api/admin/invites', { token: adminToken })).body.invites
 const used = invs.find(i => i.id === inv.body.id)
 ok(used.status === 'used' && used.used_by?.[0]?.username === nonAdmin.username, 'invitation : statut « utilisée » et utilisateur lié', JSON.stringify(used))
+ok(invs.every(i => /^••••[A-Z2-9]{4}$/.test(i.code)) && used.code === `••••${code.slice(-4)}`, 'liste : codes masqués (montrés seulement à la création)', JSON.stringify(invs.map(i => i.code)))
 
 // ── Bannissement
 ok((await api('GET', '/api/users/me', { token: nonAdmin.token })).status === 200, 'avant bannissement : accès normal')

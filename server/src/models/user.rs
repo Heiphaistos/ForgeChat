@@ -21,7 +21,10 @@ pub struct User {
     pub is_bot: bool,
     pub focus_mode: bool,
     pub is_verified: bool,
-    pub birthday: Option<chrono::NaiveDate>,
+    /// Date chiffrée (handlers::birthdays::open) ; `users.birthday` reste NULL.
+    #[sqlx(default)]
+    #[serde(skip)]
+    pub birthday_enc: Option<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     #[sqlx(default)]
@@ -128,7 +131,7 @@ impl From<User> for UserPublic {
             focus_mode: u.focus_mode,
             verified: u.is_verified,
             totp_enabled: u.totp_enabled,
-            birthday: u.birthday,
+            birthday: u.birthday_enc.as_deref().and_then(|s| crate::handlers::birthdays::open(u.id, s)),
             created_at: u.created_at,
             pronouns: u.pronouns,
             avatar_decoration: u.avatar_decoration,

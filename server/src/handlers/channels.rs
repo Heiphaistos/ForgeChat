@@ -890,13 +890,14 @@ pub async fn set_github_webhook_token(
         }
     }
 
-    sqlx::query("UPDATE channels SET github_webhook_token=$1 WHERE id=$2")
-        .bind(body.token.as_deref().and_then(|t| if t.trim().is_empty() { None } else { Some(t) }))
+    // Chiffré au repos (webhooks::seal_github_token) ; jamais relu par l'API.
+    sqlx::query("UPDATE channels SET github_webhook_token_enc=$1, github_webhook_token=NULL WHERE id=$2")
+        .bind(token.map(|t| crate::handlers::webhooks::seal_github_token(channel_id, t)))
         .bind(channel_id)
         .execute(&state.db)
         .await?;
 
-    Ok(Json(serde_json::json!({ "ok": true, "active": body.token.is_some() })))
+    Ok(Json(serde_json::json!({ "ok": true, "active": token.is_some() })))
 }
 
 // ─── Tags de forum ──────────────────────────────────────────────────────────────

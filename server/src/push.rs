@@ -3,7 +3,9 @@
 //! Crate `web-push-native` (Rust pur) plutôt que `web-push` : cette dernière
 //! dépend de `ece`, donc d'openssl, ce qui casse la compilation Windows et
 //! alourdit l'image Docker. La requête HTTP est construite par la crate puis
-//! envoyée avec reqwest (rustls), sans suivre de redirection.
+//! envoyée avec reqwest (rustls), sans suivre de redirection. Le jeton VAPID (JWT
+//! ES256) est signé ici avec p256 : la fonctionnalité `vapid` de la crate tirait
+//! jwt-simple, donc la crate `rsa` (RUSTSEC-2023-0071).
 //!
 //! Désactivé proprement si `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` /
 //! `VAPID_SUBJECT` manquent : les routes répondent `enabled: false` et rien
@@ -16,7 +18,8 @@ use axum::{extract::State, Extension, Json};
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
 use serde::Deserialize;
 use uuid::Uuid;
-use web_push_native::{jwt_simple::algorithms::ES256KeyPair, p256, Auth, WebPushBuilder};
+use p256::ecdsa::{signature::Signer, Signature, SigningKey};
+use web_push_native::{Auth, WebPushBuilder};
 
 use crate::{error::{AppError, Result}, middleware::auth::Claims, state::AppState};
 
@@ -24,7 +27,7 @@ use crate::{error::{AppError, Result}, middleware::auth::Claims, state::AppState
 const MAX_SUBSCRIPTIONS_PER_USER: i64 = 20;
 
 pub struct PushConfig {
-    key_pair: ES256KeyPair,
+    key: SigningKey,
     /// Clé publique (point P-256 non compressé, base64url) donnée aux navigateurs.
     pub public_key: String,
     subject: String,
@@ -36,7 +39,7 @@ impl PushConfig {
         let get = |k: &str| std::env::var(k).ok().map(|v| v.trim().to_string()).filter(|v| !v.is_empty());
         let (public, private, subject) = (get("VAPID_PUBLIC_KEY")?, get("VAPID_PRIVATE_KEY")?, get("VAPID_SUBJECT")?);
         let raw = URL_SAFE_NO_PAD.decode(private.trim_end_matches('=')).ok()?;
-        let key_pair = ES256KeyPair::from_bytes(&raw).ok()?;
+        let key = SigningKey::from_slice(&raw).ok()?;
         let derived = public_key_b64(&raw)?;
         if derived != public.trim_end_matches('=') {
             tracing::error!("VAPID_PUBLIC_KEY ne correspond pas à VAPID_PRIVATE_KEY : Web Push désactivé");
@@ -47,7 +50,7 @@ impl PushConfig {
             .timeout(Duration::from_secs(10))
             .build()
             .ok()?;
-        Some(Arc::new(Self { key_pair, public_key: derived, subject, http }))
+        Some(Arc::new(Self { key, public_key: derived, subject, http }))
     }
 }
 
@@ -55,6 +58,22 @@ fn public_key_b64(private_raw: &[u8]) -> Option<String> {
     use p256::elliptic_curve::sec1::ToEncodedPoint;
     let secret = p256::SecretKey::from_slice(private_raw).ok()?;
     Some(URL_SAFE_NO_PAD.encode(secret.public_key().to_encoded_point(false).as_bytes()))
+}
+
+/// Durée de validité du jeton VAPID (RFC 8292 : 24 h au plus).
+const VAPID_TTL_SECS: i64 = 12 * 3600;
+
+/// En-tête `Authorization: vapid t=<JWT ES256>, k=<clé publique>` (RFC 8292) pour `endpoint`.
+fn vapid_header(cfg: &PushConfig, endpoint: &str, now: i64) -> anyhow::Result<String> {
+    let aud = reqwest::Url::parse(endpoint)?.origin().ascii_serialization();
+    let b64 = |v: serde_json::Value| URL_SAFE_NO_PAD.encode(v.to_string());
+    let input = format!(
+        "{}.{}",
+        b64(serde_json::json!({ "typ": "JWT", "alg": "ES256" })),
+        b64(serde_json::json!({ "aud": aud, "exp": now + VAPID_TTL_SECS, "sub": cfg.subject })),
+    );
+    let sig: Signature = cfg.key.sign(input.as_bytes());
+    Ok(format!("vapid t={input}.{}, k={}", URL_SAFE_NO_PAD.encode(sig.to_bytes()), cfg.public_key))
 }
 
 /// `forgechat generate-vapid-keys` : imprime une paire prête pour le `.env`.
@@ -236,11 +255,14 @@ async fn deliver(cfg: &PushConfig, endpoint: &str, p256dh: &str, auth: &str, bod
     if auth_bytes.len() != 16 { anyhow::bail!("secret auth invalide"); }
     let request = WebPushBuilder::new(endpoint.parse()?, ua_public, Auth::clone_from_slice(&auth_bytes))
         .with_valid_duration(Duration::from_secs(24 * 3600))
-        .with_vapid(&cfg.key_pair, &cfg.subject)
         .build(body.as_bytes().to_vec())
         .map_err(|e| anyhow::anyhow!("{e}"))?;
     let mut request = reqwest::Request::try_from(request)?;
     request.headers_mut().insert("Urgency", reqwest::header::HeaderValue::from_static("high"));
+    request.headers_mut().insert(
+        reqwest::header::AUTHORIZATION,
+        vapid_header(cfg, endpoint, chrono::Utc::now().timestamp())?.parse()?,
+    );
     Ok(cfg.http.execute(request).await?.status().as_u16())
 }
 
@@ -266,8 +288,34 @@ mod tests {
     fn generated_keys_roundtrip() {
         let secret = p256::SecretKey::random(&mut p256::elliptic_curve::rand_core::OsRng);
         let raw = secret.to_bytes();
-        assert!(ES256KeyPair::from_bytes(&raw).is_ok());
+        assert!(SigningKey::from_slice(&raw).is_ok());
         let public = public_key_b64(&raw).unwrap();
         assert_eq!(URL_SAFE_NO_PAD.decode(public).unwrap().len(), 65);
+    }
+
+    /// Jeton VAPID : JWT ES256 vérifiable avec la clé publique annoncée, `aud` = origine.
+    #[test]
+    fn vapid_jwt_verifies() {
+        use p256::ecdsa::{signature::Verifier, VerifyingKey};
+        let secret = p256::SecretKey::random(&mut p256::elliptic_curve::rand_core::OsRng);
+        let raw = secret.to_bytes();
+        let cfg = PushConfig {
+            key: SigningKey::from_slice(&raw).unwrap(),
+            public_key: public_key_b64(&raw).unwrap(),
+            subject: "mailto:admin@example.com".into(),
+            http: reqwest::Client::new(),
+        };
+        let h = vapid_header(&cfg, "https://fcm.googleapis.com/fcm/send/abc", 1_000).unwrap();
+        let (t, k) = h.strip_prefix("vapid t=").unwrap().split_once(", k=").unwrap();
+        assert_eq!(k, cfg.public_key);
+        let (input, sig) = t.rsplit_once('.').unwrap();
+        let vk = VerifyingKey::from_sec1_bytes(&URL_SAFE_NO_PAD.decode(k).unwrap()).unwrap();
+        let sig = Signature::from_slice(&URL_SAFE_NO_PAD.decode(sig).unwrap()).unwrap();
+        assert!(vk.verify(input.as_bytes(), &sig).is_ok());
+        let claims: serde_json::Value =
+            serde_json::from_slice(&URL_SAFE_NO_PAD.decode(input.split('.').nth(1).unwrap()).unwrap()).unwrap();
+        assert_eq!(claims["aud"], "https://fcm.googleapis.com");
+        assert_eq!(claims["exp"], 1_000 + VAPID_TTL_SECS);
+        assert_eq!(claims["sub"], "mailto:admin@example.com");
     }
 }

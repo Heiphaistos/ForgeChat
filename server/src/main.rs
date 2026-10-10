@@ -14,6 +14,7 @@ mod privacy;
 mod crypto;
 mod email_crypto;
 mod upload_sign;
+mod jwt;
 
 use axum::{
     middleware as axum_middleware,
@@ -68,6 +69,14 @@ async fn main() -> anyhow::Result<()> {
     let sealed = email_crypto::migrate_at_rest(&db).await?;
     if sealed > 0 {
         tracing::info!("E-mails : {sealed} adresse(s) chiffrée(s) au repos");
+    }
+    let sealed = handlers::birthdays::migrate_at_rest(&db).await?;
+    if sealed > 0 {
+        tracing::info!("Anniversaires : {sealed} date(s) chiffrée(s) au repos");
+    }
+    let sealed = handlers::webhooks::migrate_github_tokens(&db).await?;
+    if sealed > 0 {
+        tracing::info!("GitHub : {sealed} secret(s) de webhook chiffré(s) au repos");
     }
     let sealed = handlers::totp::migrate_at_rest(&db).await?;
     if sealed > 0 {

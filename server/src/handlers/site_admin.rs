@@ -34,7 +34,9 @@ pub const NO_REAL_USERS_SQL: &str = "SELECT NOT EXISTS(SELECT 1 FROM users WHERE
 
 /// Alphabet sans caractères ambigus (ni 0/O, ni 1/I/L).
 const CODE_ALPHABET: &[u8] = b"ABCDEFGHJKMNPQRSTUVWXYZ23456789";
-const CODE_LEN: usize = 12;
+/// 20 caractères sur 31 ≈ 99 bits. Les codes de 12 (≈ 59 bits, avant la migration 116) restent valables.
+const CODE_LEN: usize = 20;
+const OLD_CODE_LEN: usize = 12;
 
 // ─── Droits ────────────────────────────────────────────────────────────────
 
@@ -143,20 +145,32 @@ fn pretty_code(code: &str) -> String {
     code.as_bytes().chunks(4).map(|c| String::from_utf8_lossy(c).into_owned()).collect::<Vec<_>>().join("-")
 }
 
-/// Consomme une utilisation du code, dans la transaction d'inscription : si le compte n'est
-/// finalement pas créé (pseudo pris), la transaction est annulée et le code n'est pas brûlé.
-pub async fn consume_invite(tx: &mut Transaction<'_, Postgres>, raw_code: &str) -> Result<(Uuid, Option<Uuid>)> {
+fn bad_invite() -> AppError {
+    AppError::ForbiddenMsg("Code d'invitation invalide, expiré ou déjà utilisé".into())
+}
+
+/// Empreinte SHA-256 (hex) du code saisi, seule forme gardée en base (migration 116) ; refuse
+/// un code de longueur impossible.
+pub fn invite_code_hash(raw_code: &str) -> Result<String> {
+    use sha2::{Digest, Sha256};
     let code = normalize_code(raw_code);
-    let bad = || AppError::ForbiddenMsg("Code d'invitation invalide, expiré ou déjà utilisé".into());
-    if code.len() != CODE_LEN {
-        return Err(bad());
+    if code.len() != CODE_LEN && code.len() != OLD_CODE_LEN {
+        return Err(bad_invite());
     }
+    Ok(data_encoding::HEXLOWER.encode(&Sha256::digest(code.as_bytes())))
+}
+
+/// Consomme une utilisation du code (par son empreinte, `invite_code_hash`), dans la transaction
+/// d'inscription : si le compte n'est finalement pas créé (pseudo pris), la transaction est
+/// annulée et le code n'est pas brûlé.
+pub async fn consume_invite(tx: &mut Transaction<'_, Postgres>, code_hash: &str) -> Result<(Uuid, Option<Uuid>)> {
+    let bad = bad_invite;
     let row = sqlx::query(
         "UPDATE registration_invites SET uses = uses + 1
-         WHERE code=$1 AND revoked_at IS NULL AND uses < max_uses AND (expires_at IS NULL OR expires_at > NOW())
+         WHERE code_hash=$1 AND revoked_at IS NULL AND uses < max_uses AND (expires_at IS NULL OR expires_at > NOW())
          RETURNING id, created_by",
     )
-    .bind(&code)
+    .bind(code_hash)
     .fetch_optional(&mut **tx)
     .await?
     .ok_or_else(bad)?;
@@ -674,7 +688,7 @@ pub async fn delete_server_admin(
 pub async fn list_invites(State(state): State<AppState>, Extension(claims): Extension<Claims>) -> Result<Json<Value>> {
     require_site_admin(&state, &claims).await?;
     let rows = sqlx::query(
-        "SELECT i.id, i.code, i.note, i.max_uses, i.uses, i.expires_at, i.revoked_at, i.created_at, u.username AS creator,
+        "SELECT i.id, i.code_preview, i.note, i.max_uses, i.uses, i.expires_at, i.revoked_at, i.created_at, u.username AS creator,
                 COALESCE((SELECT json_agg(json_build_object('id', x.id, 'username', x.username, 'at', iu.used_at) ORDER BY iu.used_at)
                           FROM registration_invite_uses iu JOIN users x ON x.id = iu.user_id WHERE iu.invite_id = i.id), '[]'::json) AS used_by
          FROM registration_invites i LEFT JOIN users u ON u.id = i.created_by
@@ -692,7 +706,8 @@ pub async fn list_invites(State(state): State<AppState>, Extension(claims): Exte
             let status = if revoked.is_some() { "revoked" } else if expires.is_some_and(|e| e <= now) { "expired" } else if uses >= max { "used" } else { "active" };
             json!({
                 "id": r.get::<Uuid, _>("id"),
-                "code": pretty_code(&r.get::<String, _>("code")),
+                // Le code n'est montré qu'à la création ; ici ses 4 derniers caractères.
+                "code": format!("••••{}", r.get::<String, _>("code_preview")),
                 "note": r.get::<Option<String>, _>("note"),
                 "max_uses": max, "uses": uses, "status": status,
                 "expires_at": expires, "created_at": r.get::<DateTime<Utc>, _>("created_at"),
@@ -720,14 +735,14 @@ pub async fn create_invite(
     let max_uses = body.max_uses.unwrap_or(1).clamp(1, 1000);
     let expires = body.expires_in_days.filter(|d| *d > 0).map(|d| Utc::now() + Duration::days(d.min(365)));
     let note = body.note.map(|n| n.trim().chars().take(100).collect::<String>()).filter(|n| !n.is_empty());
-    // Collision improbable (60 bits) mais la contrainte UNIQUE tranche : on réessaie.
+    // Collision improbable (99 bits) mais l'index UNIQUE tranche : on réessaie.
     for _ in 0..5 {
         let code = generate_code();
         let res = sqlx::query_scalar::<_, Uuid>(
-            "INSERT INTO registration_invites (code, created_by, note, max_uses, expires_at) VALUES ($1,$2,$3,$4,$5)
-             ON CONFLICT (code) DO NOTHING RETURNING id",
+            "INSERT INTO registration_invites (code_hash, code_preview, created_by, note, max_uses, expires_at) VALUES ($1,$2,$3,$4,$5,$6)
+             ON CONFLICT (code_hash) DO NOTHING RETURNING id",
         )
-        .bind(&code).bind(claims.sub).bind(&note).bind(max_uses).bind(expires)
+        .bind(invite_code_hash(&code)?).bind(&code[CODE_LEN - 4..]).bind(claims.sub).bind(&note).bind(max_uses).bind(expires)
         .fetch_optional(&state.db)
         .await?;
         if let Some(id) = res {
@@ -814,5 +829,13 @@ mod tests {
             assert!(c.bytes().all(|b| CODE_ALPHABET.contains(&b)));
             assert_eq!(normalize_code(&pretty_code(&c)), c);
         }
+    }
+
+    #[test]
+    fn invite_hashes() {
+        assert_eq!(invite_code_hash("abcd-efgh-jkmn").unwrap(), invite_code_hash("ABCDEFGHJKMN").unwrap());
+        assert_eq!(invite_code_hash("ABCDEFGHJKMN").unwrap().len(), 64);
+        assert!(invite_code_hash(&generate_code()).is_ok());
+        assert!(invite_code_hash("ABCD-EFGH").is_err());
     }
 }

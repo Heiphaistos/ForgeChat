@@ -353,8 +353,6 @@ function InvitesTab() {
               subtitle={`${STATUS[i.status]} · ${i.uses}/${i.max_uses}${i.note ? ` · ${i.note}` : ''}${i.used_by.length ? `\n→ ${i.used_by.map((u) => u.username).join(', ')}` : ''}\n${i.expires_at ? `expire le ${fmt(i.expires_at)}` : 'sans expiration'}`}
               onPress={() =>
                 Alert.alert(i.code, STATUS[i.status], [
-                  { text: 'Copier le lien', onPress: () => void Clipboard.setStringAsync(inviteLink(apiOrigin(), i.code)) },
-                  { text: 'Partager', onPress: () => void Share.share({ message: `Rejoins ForgeChat : ${inviteLink(apiOrigin(), i.code)}` }) },
                   ...(i.status === 'active' ? [{ text: 'Révoquer', style: 'destructive' as const, onPress: () => revoke.mutate(i.id) }] : []),
                   { text: 'Fermer', style: 'cancel' as const },
                 ])

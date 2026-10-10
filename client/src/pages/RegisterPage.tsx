@@ -98,7 +98,7 @@ export default function RegisterPage() {
                 autoCapitalize="characters"
                 autoCorrect="off"
                 spellCheck={false}
-                placeholder="XXXX-XXXX-XXXX"
+                placeholder="XXXX-XXXX-XXXX-XXXX-XXXX"
                 className="w-full px-3 py-2 bg-fc-input rounded text-white text-base font-mono tracking-widest outline-none focus:ring-2 focus:ring-fc-accent"
               />
               <p className="text-xs text-fc-muted mt-1">ForgeChat est un cercle privé : demande ton code à la personne qui t’invite.</p>

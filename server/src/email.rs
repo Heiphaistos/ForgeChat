@@ -8,6 +8,9 @@ use crate::config::Config;
 
 /// Envoi générique d'un email HTML. Retourne `Ok(true)` si envoyé, `Ok(false)` si SMTP non configuré.
 pub async fn send_email(config: &Config, to: &str, subject: &str, html_body: String) -> anyhow::Result<bool> {
+    if let Some(dir) = &config.test_mailbox {
+        return write_test_mail(dir, to, subject, &html_body).await.map(|_| true);
+    }
     let (Some(host), Some(user), Some(pass)) = (
         &config.smtp_host,
         &config.smtp_user,
@@ -30,51 +33,20 @@ pub async fn send_email(config: &Config, to: &str, subject: &str, html_body: Str
         AsyncSmtpTransport::<Tokio1Executor>::relay(host)?
             .port(config.smtp_port)
             .credentials(creds)
+            .timeout(Some(std::time::Duration::from_secs(30)))
             .build();
 
     mailer.send(email).await?;
     Ok(true)
 }
 
-/// Retourne `Ok(true)` si l'email a été envoyé, `Ok(false)` si SMTP non configuré.
-#[allow(dead_code)]
-pub async fn send_verification_email(config: &Config, to: &str, code: &str) -> anyhow::Result<bool> {
-    let (Some(host), Some(user), Some(pass)) = (
-        &config.smtp_host,
-        &config.smtp_user,
-        &config.smtp_pass,
-    ) else {
-        tracing::warn!("SMTP non configuré — e-mail de vérification non envoyé");
-        return Ok(false);
-    };
-
-    let body = format!(
-        r#"<!DOCTYPE html><html><body style="font-family:sans-serif;background:#1e1f22;color:#dbdee1;padding:32px">
-<div style="max-width:480px;margin:auto;background:#313338;border-radius:12px;padding:32px">
-  <h2 style="color:#5865f2;margin-top:0">Vérification ForgeChat</h2>
-  <p>Voici ton code de vérification :</p>
-  <div style="font-size:36px;font-weight:bold;letter-spacing:8px;color:#fff;background:#1e1f22;
-              border-radius:8px;padding:16px;text-align:center;margin:24px 0">{}</div>
-  <p style="color:#949ba4;font-size:13px">Ce code expire dans 15 minutes.</p>
-</div></body></html>"#,
-        code
-    );
-
-    let email = Message::builder()
-        .from(config.smtp_from.parse()?)
-        .to(to.parse()?)
-        .subject("Code de vérification ForgeChat")
-        .header(ContentType::TEXT_HTML)
-        .body(body)?;
-
-    let creds = Credentials::new(user.clone(), pass.clone());
-
-    let mailer: AsyncSmtpTransport<Tokio1Executor> =
-        AsyncSmtpTransport::<Tokio1Executor>::relay(host)?
-            .port(config.smtp_port)
-            .credentials(creds)
-            .build();
-
-    mailer.send(email).await?;
-    Ok(true)
+/// Tests de bout en bout (FORGECHAT_TEST_MAILBOX, voir config.rs) : un fichier JSON par e-mail.
+async fn write_test_mail(dir: &str, to: &str, subject: &str, html_body: &str) -> anyhow::Result<()> {
+    let path = std::path::Path::new(dir).join(format!("{}-{}", chrono::Utc::now().timestamp_millis(), uuid::Uuid::new_v4()));
+    let mail = serde_json::json!({ "to": to, "subject": subject, "body": html_body });
+    tokio::fs::create_dir_all(dir).await?;
+    // Écrit puis renommé : le lecteur ne voit jamais un fichier à moitié écrit.
+    tokio::fs::write(path.with_extension("tmp"), mail.to_string()).await?;
+    tokio::fs::rename(path.with_extension("tmp"), path.with_extension("json")).await?;
+    Ok(())
 }

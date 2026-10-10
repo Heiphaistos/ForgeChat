@@ -65,7 +65,7 @@ export default function RegisterScreen() {
                 onChangeText={setInviteCode}
                 autoCapitalize="characters"
                 autoCorrect={false}
-                placeholder="XXXX-XXXX-XXXX"
+                placeholder="XXXX-XXXX-XXXX-XXXX-XXXX"
                 error={errors.invite}
               />
             ) : null}

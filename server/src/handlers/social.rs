@@ -72,8 +72,8 @@ pub async fn enrich_friends(state: &AppState, me: Uuid, rows: &mut [serde_json::
         .unwrap_or_default()
         .into_iter()
         .collect();
-    let birthdays: std::collections::HashMap<Uuid, chrono::NaiveDate> = sqlx::query_as(
-        "SELECT id, birthday FROM users WHERE id = ANY($1) AND birthday IS NOT NULL
+    let birthdays: std::collections::HashMap<Uuid, chrono::NaiveDate> = sqlx::query_as::<_, (Uuid, String)>(
+        "SELECT id, birthday_enc FROM users WHERE id = ANY($1) AND birthday_enc IS NOT NULL
            AND birthday_visibility IN ('friends','servers')",
     )
     .bind(&ids)
@@ -81,6 +81,7 @@ pub async fn enrich_friends(state: &AppState, me: Uuid, rows: &mut [serde_json::
     .await
     .unwrap_or_default()
     .into_iter()
+    .filter_map(|(id, enc)| Some((id, birthdays::open(id, &enc)?)))
     .collect();
     for r in rows.iter_mut().filter(|r| r["status"] == "accepted") {
         let Some(id) = r["friend_id"].as_str().and_then(|s| s.parse::<Uuid>().ok()) else { continue };

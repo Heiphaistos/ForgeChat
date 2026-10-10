@@ -41,6 +41,7 @@ export interface AdminUser {
 }
 export interface Invite {
   id: string
+  /** Aperçu « ••••ABCD » : le code complet n'est montré (et copié) qu'à la création. */
   code: string
   note: string | null
   max_uses: number

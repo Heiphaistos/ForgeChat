@@ -52,9 +52,9 @@ En-têtes HTTP de prod vérifiés par curl : HSTS, X-Frame-Options, nosniff, Ref
 - Lien Markdown dont le texte affiché diffère de la cible (phishing).
 - Ouverture via le shell Tauri : `http://` en clair et `ghosthanddesk://` sans confirmation.
 - Mobile : `WatchPlayer.tsx:37` openURL sans filtre https ; `originWhitelist` http sur AiEngineHost ; mot de passe gardé en mémoire en cas d'échec.
-- `cargo audit` : serveur `rsa` (Marvin, inatteignable en HS256) ; desktop quick-xml, event-listener, glib (dépendances transitives de Tauri).
+- `cargo audit` : serveur `rsa` (Marvin, inatteignable en HS256 ; retirée de la compilation en phase 4) ; desktop quick-xml, event-listener, glib (dépendances transitives de Tauri).
 - `npm audit` mobile : 37 alertes, toutes dans l'outillage Expo/RN, pas dans l'APK.
-- Infra : healthcheck `curl -s localhost` toujours vrai ; images non pinnées par digest ; service releases-sync en root ; IP du VPS et `VPS_USER=root` dans SETUP_VPS.md, alors que le dépôt passe en public pendant les builds ; email personnel par défaut dans `FORGECHAT_ADMIN_EMAIL`.
+- Infra : healthcheck `curl -s localhost` toujours vrai ; images non pinnées par digest (corrigé en phase 4) ; service releases-sync en root ; IP du VPS et `VPS_USER=root` dans SETUP_VPS.md, alors que le dépôt passe en public pendant les builds ; email personnel par défaut dans `FORGECHAT_ADMIN_EMAIL`.
 - `nginx.conf` du dépôt périmé : headers non hérités et 1100M global. La prod est correcte pour les headers ; la limite de taille reste à vérifier.
 
 ## Phase 2 serveur (branche `sec2-srv`)
@@ -65,3 +65,16 @@ En-têtes HTTP de prod vérifiés par curl : HSTS, X-Frame-Options, nosniff, Ref
 - **Webhooks entrants** : `webhooks.token_hash` (SHA-256 hex), jeton montré seulement à la création, `token_preview` = `••••` + 4 derniers caractères (migration 110).
 - **E-mails chiffrés au repos** : `users.email_hmac` + `users.email_enc` (clé `EMAIL_ENC_KEY`, obligatoire), `pending_registrations.email_hmac` ; `email` vidée au démarrage, `owner_email` retirée de `site_settings` (migration 111, `src/email_crypto.rs`). Recherche admin par adresse : exacte (empreinte).
 - **Jetons hors du corps JSON** : `X-ForgeChat-Tokens: cookie` sur login / verify-email / refresh → pas de `access_token` / `refresh_token` dans le corps (refresh renvoie `{ok:true}`).
+
+## Phase 4 serveur (branche `sec4-srv`)
+
+Clés dérivées : `HKDF-SHA256(EMAIL_ENC_KEY, info)` (`email_crypto::seal_with` / `open_with` / `mac_with`), format chiffré `v1:` + base64url(iv 12 o ‖ AES-256-GCM), AAD `<info>|<id de la ligne>`. Aucune nouvelle variable d'environnement obligatoire.
+
+- **Code de vérification d'inscription** (migration 113) : `pending_registrations.code` = HMAC-SHA256 hex de `"<email_hmac>|<code>"` (info "forgechat verify code v1"), comparé en temps constant ; `attempts` : au 5e mauvais code la demande est supprimée (en plus de la limite Redis 5 / 15 min). Demandes en cours purgées.
+- **Boîte aux lettres de test** : `FORGECHAT_TEST_MAILBOX=<dossier>` → chaque e-mail est écrit dans `<dossier>/<ms>-<uuid>.json` (`{to, subject, body}`) au lieu d'être envoyé ; le serveur refuse de démarrer si elle est définie avec un `FRONTEND_URL` en `https://`. Les parcours `client/scripts/*.api.mjs` y lisent le code (`_auth.mjs`) ; le job CI `api` la définit (`/tmp/mails`).
+- **Médias de forum sans salon** (migration 114) : `attachments.channel_id` repris de `forum_posts.media_url` ; pour les autres, `POST /api/uploads/sign` ne signe que pour l'auteur de l'envoi, ou pour tous si c'est un blob chiffré `.enc`.
+- **Secret du webhook GitHub** (migration 115) : `channels.github_webhook_token_enc` (info "forgechat github token v1", AAD salon) ; l'ancienne colonne en clair est chiffrée puis vidée au démarrage. L'API ne le renvoie jamais (FeedsTab le génère et l'affiche une fois).
+- **Codes d'invitation au site** (migration 116) : `registration_invites.code_hash` (SHA-256 hex du code normalisé) + `code_preview` ; colonne `code` supprimée. Nouveaux codes : 20 caractères (≈ 99 bits, `XXXX-XXXX-XXXX-XXXX-XXXX`) ; les anciens de 12 (≈ 59 bits) restent valables. `GET /api/admin/invites` renvoie `code: "••••ABCD"` : le code complet n'est montré qu'à la création (web et mobile ne proposent plus de le copier depuis la liste). `pending_registrations.invite_code` = empreinte.
+- **Date d'anniversaire** (migration 117) : `users.birthday_enc` (info "forgechat birthday v1", AAD compte) ; `users.birthday` chiffrée puis vidée au démarrage. La tâche horaire déchiffre les comptes qui ont une date (balayage, `ponytail:` dans birthdays.rs).
+- **Images Docker** : `server/Dockerfile` et services du job CI `api` épinglés par digest (tag en commentaire). `--pull` ne les met plus à jour : remplacer le digest pour prendre les correctifs de l'image de base.
+- **`rsa` (RUSTSEC-2023-0071)** : plus compilée. JWT HS256 par un `CryptoProvider` jsonwebtoken maison (`src/jwt.rs`, tout autre algorithme refusé) au lieu de `rust_crypto` ; jeton VAPID ES256 signé dans `push.rs` avec p256 au lieu de la fonctionnalité `vapid` (jwt-simple → superboring → rsa). `cargo audit` la signale encore : elle reste listée dans `Cargo.lock` comme dépendance optionnelle de `sqlx-mysql`, qui n'est pas compilé (`cargo tree -i rsa --target all` vide).
