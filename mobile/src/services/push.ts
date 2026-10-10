@@ -113,6 +113,8 @@ export function routeFromNotification(data: Record<string, unknown> | undefined)
   else if (kind === 'group' && isId(data.group_id)) router.push(`/group/${data.group_id}`)
   else if (kind === 'channel' && isId(data.server_id) && isId(data.channel_id))
     router.push(`/channel/${data.server_id}/${data.channel_id}`)
+  else if (kind === 'forum' && isId(data.server_id) && isId(data.channel_id) && isId(data.post_id))
+    router.push(`/forum/${data.server_id}/${data.channel_id}/${data.post_id}`)
   else if (kind === 'friend_request') router.push('/friends')
   else if (kind === 'event' && isId(data.server_id)) router.push(`/server/${data.server_id}/events`)
   // kind === 'call' : appel MANQUÉ sans conversation connue. Le serveur ne rejoue pas un appel en

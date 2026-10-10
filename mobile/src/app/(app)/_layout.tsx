@@ -83,6 +83,7 @@ export default function AppLayout() {
         <Stack.Screen name="settings/security" options={{ title: t('screen.security') }} />
         <Stack.Screen name="settings/sessions" options={{ title: t('you.sessions') }} />
         <Stack.Screen name="settings/notifications" options={{ title: t('you.notifications') }} />
+        <Stack.Screen name="notifications" options={{ title: t('ux.nc.title') }} />
         <Stack.Screen name="settings/appearance" options={{ title: t('you.appearance') }} />
         <Stack.Screen name="settings/password" options={{ title: t('screen.password'), presentation: 'modal' }} />
         <Stack.Screen name="settings/delete-account" options={{ title: t('screen.deleteAccount'), presentation: 'modal' }} />

@@ -14,6 +14,7 @@ import * as messaging from './parts/messaging'
 import * as comfort from './parts/comfort'
 import * as remoteSupport from './parts/remoteSupport'
 import * as ai from './parts/ai'
+import * as uxMobile from './parts/uxMobile'
 
 export const en: Partial<Record<Key, string>> = {
   ...settings.en,
@@ -30,6 +31,7 @@ export const en: Partial<Record<Key, string>> = {
   ...comfort.en,
   ...remoteSupport.en,
   ...ai.en,
+  ...uxMobile.en,
 
   // --- Commun ---
   'common.cancel': 'Cancel',
