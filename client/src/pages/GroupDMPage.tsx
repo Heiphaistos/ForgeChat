@@ -34,6 +34,8 @@ import E2EAttachment from '../e2e/E2EAttachment'
 import { AvatarDecoration } from '../components/ui/ProfileDecor'
 import AnimatedImg from '../components/ui/AnimatedImg'
 import UserName from '../components/ui/UserName'
+import { openUserMenu } from '../components/userMenu/store'
+import { useMyUxPrefs } from '../store/uxPrefs'
 import { gifMessage, GifMessage } from '../components/chat/gif-utils'
 import { isQueued } from '../lib/offline'
 
@@ -159,6 +161,9 @@ export default function GroupDMPage() {
   const kbDismissRef = useRef<{ x: number; y: number } | null>(null)
   // Popup profil au clic sur un avatar (harmonisation avec les canaux)
   const [userPopup, setUserPopup] = useState<{ userId: string; x: number; y: number } | null>(null)
+  // Utilisateurs ignorés : messages repliés, dépliables un par un.
+  const ignoredUsers = useMyUxPrefs().ignored
+  const [revealed, setRevealed] = useState<ReadonlySet<string>>(() => new Set())
   const bottomRef = useRef<HTMLDivElement>(null)
   const messagesContainerRef = useRef<HTMLDivElement>(null)
   const initialized = useRef(false)
@@ -902,6 +907,15 @@ export default function GroupDMPage() {
             const dateLabel = isToday(msgDate) ? t('saved.today')
               : isYesterday(msgDate) ? t('gdm.yesterday')
               : format(msgDate, t('gdm.dateFormat'), { locale: dateLocale() })
+            if (ignoredUsers.includes(msg.sender_id) && !revealed.has(msg.id)) {
+              return (
+                <div key={msg.id} className="px-2 py-1 text-xs text-fc-muted italic flex items-center gap-2">
+                  {t('um.ignoredMsg')}
+                  <button onClick={() => setRevealed(r => new Set(r).add(msg.id))} className="not-italic text-fc-accent hover:underline">{t('um.ignoredShow')}</button>
+                </div>
+              )
+            }
+            const authorMenu = (e: React.MouseEvent) => openUserMenu(e, { userId: msg.sender_id, username: msg.sender_username, avatar: msg.sender_avatar })
             return (
               <div key={msg.id}>
               {showDateDivider && (
@@ -952,6 +966,7 @@ export default function GroupDMPage() {
                 <AvatarDecoration id={msg.sender_avatar_decoration} size={32}>
                 <button
                   onClick={e => { e.stopPropagation(); setUserPopup({ userId: msg.sender_id, x: e.clientX, y: e.clientY }) }}
+                  onContextMenu={authorMenu}
                   aria-label={t('gdm.profileOf', { name: msg.sender_username })}
                   className="w-8 h-8 rounded-full bg-fc-channel flex-shrink-0 flex items-center justify-center text-xs font-bold text-white overflow-hidden hover:ring-2 hover:ring-fc-accent/60 transition cursor-pointer"
                 >
@@ -963,7 +978,7 @@ export default function GroupDMPage() {
                 </AvatarDecoration>
                 <div className={`max-w-xs ${isMe ? 'items-end' : 'items-start'} flex flex-col`}>
                   {!isMe && (
-                    <span className="text-xs text-fc-muted mb-0.5 ml-1"><UserName userId={msg.sender_id} name={msg.sender_username} withTag /></span>
+                    <span className="text-xs text-fc-muted mb-0.5 ml-1" onContextMenu={authorMenu}><UserName userId={msg.sender_id} name={msg.sender_username} withTag /></span>
                   )}
                   {editingMsgId === msg.id ? (
                     <div className="flex items-end gap-1 w-full max-w-xs">

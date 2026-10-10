@@ -6,6 +6,7 @@ import { useQuery } from '@tanstack/react-query'
 import { cachedChannel, cachedRole, cachedUsername } from './mentions'
 import { deceptiveHost } from './safeUrl'
 import UserName from '../components/ui/UserName'
+import { userMenuProps } from '../components/userMenu/store'
 import { intlLocale } from '../i18n'
 
 function highlightCode(code: string, lang: string): string {
@@ -338,7 +339,8 @@ function MentionChip({ raw }: { raw: string }) {
   const name = known ?? data?.username ?? (isRole ? 'rôle-supprimé' : 'utilisateur')
   const color = role?.color ? `#${role.color.toString(16).padStart(6, '0')}` : undefined
   return (
-    <span className="mention" style={color ? { color, background: `${color}26` } : undefined}>
+    <span className="mention" style={color ? { color, background: `${color}26` } : undefined}
+      {...(isRole ? {} : userMenuProps({ userId: id, username: name }))}>
       @{isRole ? name : <UserName userId={id} name={name} />}
     </span>
   )

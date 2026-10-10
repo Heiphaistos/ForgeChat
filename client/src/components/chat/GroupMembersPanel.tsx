@@ -5,6 +5,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Crown, UserMinus } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api, { mediaUrl } from '../../api/client'
+import { userMenuProps } from '../userMenu/store'
 
 interface Member { id: string; username: string; avatar: string | null; status: string }
 type Pending = { kind: 'remove' | 'owner'; member: Member } | null
@@ -35,7 +36,8 @@ export default function GroupMembersPanel({ groupId, ownerId, members, meId }: {
         Membres ({members.length})
       </p>
       {members.map(m => (
-        <div key={m.id} className="group flex items-center gap-2 px-3 py-1.5 hover:bg-fc-hover/40 transition">
+        <div key={m.id} className="group flex items-center gap-2 px-3 py-1.5 hover:bg-fc-hover/40 transition"
+          {...userMenuProps({ userId: m.id, username: m.username, avatar: m.avatar })}>
           <div className="relative flex-shrink-0">
             <div className="w-7 h-7 rounded-full bg-fc-channel flex items-center justify-center text-xs font-bold text-white overflow-hidden">
               {m.avatar

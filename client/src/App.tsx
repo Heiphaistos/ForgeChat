@@ -36,6 +36,7 @@ import MainLayout from './components/layout/MainLayout'
 import PersistentVoiceAudio from './components/voice/PersistentVoiceAudio'
 import PersistentDmCallAudio from './components/voice/PersistentDmCallAudio'
 import UserVolumePopover from './components/voice/UserVolumePopover'
+import UserMenuHost from './components/userMenu/UserMenuHost'
 import FloatingCallPiP from './components/voice/FloatingCallPiP'
 import VoiceHotkeys from './components/voice/VoiceHotkeys'
 import AppLockOverlay from './components/AppLockOverlay'
@@ -1089,6 +1090,7 @@ function AppInner() {
         {user && <PersistentVoiceAudio />}
         {user && <PersistentDmCallAudio />}
         {user && <UserVolumePopover />}
+        {user && <UserMenuHost />}
         {user && <GroupCallRinger />}
         {user && <FloatingCallPiP />}
         {user && <VoiceHotkeys />}

@@ -10,6 +10,7 @@ import { PeerTile } from './CallTiles'
 import FullscreenVideo, { type FullscreenSource } from './FullscreenVideo'
 import { E2ECallBadge } from '../../e2e/E2ECallBadge'
 import { openUserVolume } from './UserVolumePopover'
+import { openUserMenu } from '../userMenu/store'
 
 interface Member { id: string; username: string; avatar?: string | null }
 
@@ -59,7 +60,7 @@ export default function GroupCallPanel({ groupId, members }: { groupId: string; 
       speaking={!t.isLocal && t.userId === activeSpeakerId}
       onExpand={o.expand && t.stream ? () => setFullscreen({ stream: t.stream, label: t.username }) : undefined}
       onVolume={t.isLocal ? undefined : e => openUserVolume(t.userId, t.username, e)}
-      onContextMenu={t.isLocal ? undefined : e => { e.preventDefault(); openUserVolume(t.userId, t.username, e) }}
+      onContextMenu={e => openUserMenu(e, { userId: t.userId, username: t.username, voice: true })}
     />
   )
 
