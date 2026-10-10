@@ -4,7 +4,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import {
   User, Palette, Bell, Mic, Shield, Cpu, LogOut, X, ChevronLeft,
   Camera, Globe, Accessibility, Link, Keyboard, Film, Monitor, Video, BarChart3, Mail, Clock,
-  Search, Sparkles,
+  Search, Sparkles, Settings2,
 } from 'lucide-react'
 import { useAuth } from '../store/auth'
 import AppearanceSection from '../components/settings/AppearanceSection'
@@ -27,16 +27,18 @@ import StatsSection from '../components/settings/StatsSection'
 import NotificationsEmailSection from '../components/settings/NotificationsEmailSection'
 import LoginHistorySection from '../components/settings/LoginHistorySection'
 import AiSection from '../components/settings/AiSection'
+import SystemSection from '../components/settings/SystemSection'
+import { isDesktop } from '../lib/desktop'
 import { useT, type Key } from '../i18n'
 
 type Section =
   | 'account' | 'profile' | 'appearance' | 'text_display'
   | 'notifications' | 'notifications_email' | 'audio' | 'video' | 'privacy' | 'language'
   | 'accessibility' | 'streamer' | 'connected' | 'keybindings' | 'advanced' | 'security' | 'sessions'
-  | 'stats' | 'login_history' | 'ai'
+  | 'stats' | 'login_history' | 'ai' | 'system'
 
 // Libellés = clés de traduction (traduits au rendu)
-const NAV: { id: Section; label: Key; icon: React.ReactNode; group?: Key }[] = [
+const ALL_NAV: { id: Section; label: Key; icon: React.ReactNode; group?: Key }[] = [
   { id: 'account', label: 'settings.section.account', icon: <User size={16} />, group: 'settings.group.account' },
   { id: 'profile', label: 'settings.section.profile', icon: <Camera size={16} /> },
   { id: 'connected', label: 'settings.section.connected', icon: <Link size={16} /> },
@@ -57,7 +59,10 @@ const NAV: { id: Section; label: Key; icon: React.ReactNode; group?: Key }[] = [
   { id: 'streamer', label: 'settings.section.streamer', icon: <Film size={16} /> },
   { id: 'advanced', label: 'settings.section.advanced', icon: <Cpu size={16} />, group: 'settings.group.advanced' },
   { id: 'stats', label: 'settings.section.stats', icon: <BarChart3 size={16} /> },
+  { id: 'system', label: 'settings.section.system', icon: <Settings2 size={16} /> },
 ]
+// « Système » n'existe que dans l'application de bureau.
+const NAV = isDesktop ? ALL_NAV : ALL_NAV.filter(n => n.id !== 'system')
 
 // Mots-clés de recherche par section (contenu des réglages, pas seulement le titre) :
 // clés settings.keywords.<section> du dictionnaire.
@@ -252,6 +257,7 @@ export default function SettingsPage() {
           {section === 'login_history' && <LoginHistorySection />}
           {section === 'stats' && <StatsSection />}
           {section === 'ai' && <AiSection />}
+          {section === 'system' && <SystemSection onOpenKeybindings={() => handleSelectSection('keybindings')} />}
         </div>
       </div>
     </div>

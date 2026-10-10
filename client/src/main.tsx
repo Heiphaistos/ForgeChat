@@ -7,6 +7,8 @@ import { Toaster } from 'react-hot-toast'
 import App from './App'
 import './index.css'
 import { initFaviconAnimation } from './faviconAnimator'
+import { initAppIcon } from './lib/appIcon'
+import { installDragDropGuard } from './lib/dragDropGuard'
 
 // Exporté pour permettre à des utilitaires hors-composant (ex. sendNativeNotification)
 // de lire le cache sans avoir à traverser le contexte React.
@@ -39,6 +41,8 @@ if ('serviceWorker' in navigator && import.meta.env.PROD) {
 }
 
 initFaviconAnimation()
+initAppIcon()
+if (isTauri) installDragDropGuard()
 
 // App de bureau Linux : signale le premier rendu. Sans ce signal, le lancement
 // suivant passe tout seul en mode compatibilité (fenêtre blanche selon le GPU).
