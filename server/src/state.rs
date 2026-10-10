@@ -1,5 +1,5 @@
 use std::{collections::{HashMap, HashSet}, sync::Arc, time::{Duration, Instant}};
-use redis::aio::MultiplexedConnection;
+use redis::aio::ConnectionManager;
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
 use tokio::sync::{broadcast, Mutex, RwLock};
@@ -64,7 +64,7 @@ struct VoiceSnapshot {
 #[derive(Clone)]
 pub struct AppState {
     pub db: PgPool,
-    pub redis: Arc<Mutex<MultiplexedConnection>>,
+    pub redis: Arc<Mutex<ConnectionManager>>,
     pub config: Config,
     pub clients: ClientMap,
     pub conn_counts: ConnCountMap,
@@ -116,7 +116,7 @@ impl AppState {
     /// et lance le rafraîchisseur de TTL.
     pub async fn new(
         db: PgPool,
-        redis: MultiplexedConnection,
+        redis: ConnectionManager,
         config: Config,
     ) -> Self {
         crate::upload_sign::init(&config.jwt_secret);

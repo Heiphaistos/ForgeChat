@@ -87,7 +87,7 @@ async fn auth_v2_counters() {
     std::env::set_var("DATABASE_URL", "postgres://inutilise");
     std::env::set_var("JWT_SECRET", "secret de test");
     let config = crate::config::Config::from_env().unwrap();
-    let conn = redis::Client::open(redis_url).unwrap().get_multiplexed_async_connection().await.unwrap();
+    let conn = redis::Client::open(redis_url).unwrap().get_connection_manager().await.unwrap();
     let state = AppState::new(db, conn, config).await;
 
     // Par compte : 10 échecs passent, le 11e est refusé (429), quelle que soit l'IP.
@@ -147,7 +147,7 @@ async fn auth_v2_email_at_rest() {
     std::env::set_var("DATABASE_URL", "postgres://inutilise");
     std::env::set_var("JWT_SECRET", "secret-de-test-assez-long-pour-demarrer-0123456789");
     let config = crate::config::Config::from_env().unwrap();
-    let conn = redis::Client::open(redis_url).unwrap().get_multiplexed_async_connection().await.unwrap();
+    let conn = redis::Client::open(redis_url).unwrap().get_connection_manager().await.unwrap();
     let state = AppState::new(db.clone(), conn, config).await;
     sqlx::query("INSERT INTO site_settings (key, value) VALUES ('registration_mode', 'open') ON CONFLICT (key) DO UPDATE SET value='open'")
         .execute(&db).await.unwrap();

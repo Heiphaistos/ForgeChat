@@ -15,7 +15,7 @@ async fn setup() -> (AppState, PgPool) {
     let config = crate::config::Config::from_env().expect("config");
     let db = PgPool::connect(&db_url).await.expect("db");
     sqlx::migrate!("./migrations").run(&db).await.expect("migrations");
-    let redis = redis::Client::open(redis_url).expect("redis url").get_multiplexed_async_connection().await.expect("redis");
+    let redis = redis::Client::open(redis_url).expect("redis url").get_connection_manager().await.expect("redis");
     (AppState::new(db.clone(), redis, config).await, db)
 }
 

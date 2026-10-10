@@ -1,6 +1,6 @@
 [package]
 name = "forgechat-server"
-version = "3.301.0"
+version = "3.302.0"
 edition = "2021"
 
 [[bin]]
@@ -20,7 +20,7 @@ uuid = { version = "1", features = ["v4", "serde"] }
 chrono = { version = "0.4", features = ["serde"] }
 bcrypt = "0.15"
 jsonwebtoken = { version = "10.3", default-features = false, features = ["rust_crypto"] }
-redis = { version = "0.24", features = ["tokio-comp", "aio"] }
+redis = { version = "0.24", features = ["tokio-comp", "aio", "connection-manager"] }
 futures-util = "0.3"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }

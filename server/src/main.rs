@@ -75,7 +75,7 @@ async fn main() -> anyhow::Result<()> {
     }
 
     let redis_client = redis::Client::open(config.redis_url.clone())?;
-    let redis_conn = redis_client.get_multiplexed_async_connection().await?;
+    let redis_conn = redis::aio::ConnectionManager::new(redis_client).await?; // se reconnecte seul après une coupure (auth fail-closed : sinon 503 jusqu au redémarrage)
     tracing::info!("Redis OK");
 
     let state = AppState::new(db, redis_conn, config.clone()).await;
