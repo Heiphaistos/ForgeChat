@@ -234,13 +234,17 @@ pub async fn get_dms(
                CASE WHEN dc.user1_id=$1 THEN dc.user2_id ELSE dc.user1_id END AS other_user_id,
                u.username, u.discriminator, u.avatar, u.status,
                lm.last_message_at, lm.last_message_content, COALESCE(lm.last_message_encrypted, FALSE) AS last_message_encrypted,
-               COALESCE(dus.muted, FALSE) AS is_muted,
+               (COALESCE(dus.muted, FALSE) AND (dus.muted_until IS NULL OR dus.muted_until > NOW())) AS is_muted,
+               CASE WHEN dus.muted THEN dus.muted_until END AS muted_until,
+               COALESCE(dus.pinned, FALSE) AS is_pinned,
                COALESCE(dus.archived, FALSE) AS is_archived
              FROM dm_channels dc
              JOIN users u ON u.id = CASE WHEN dc.user1_id=$1 THEN dc.user2_id ELSE dc.user1_id END
              LEFT JOIN last_msg lm ON lm.dm_channel_id = dc.id
              LEFT JOIN dm_user_settings dus ON dus.dm_channel_id = dc.id AND dus.user_id = $1
-             WHERE dc.user1_id=$1 OR dc.user2_id=$1
+             WHERE (dc.user1_id=$1 OR dc.user2_id=$1)
+               -- Fermée : masquée jusqu'au prochain message (ou réouverture par open_dm).
+               AND (dus.closed_at IS NULL OR lm.last_message_at > dus.closed_at)
              ORDER BY COALESCE(lm.last_message_at, dc.created_at) DESC"
         )
         .bind(claims.sub)
@@ -261,13 +265,16 @@ pub async fn get_dms(
              )
              SELECT g.id, g.name, mc.cnt AS member_count, lgm.last_message_at, lgm.last_message_content, lgm.last_message_author,
                     COALESCE(lgm.last_message_encrypted, FALSE) AS last_message_encrypted,
-                    COALESCE(dus.muted, FALSE) AS is_muted,
+                    (COALESCE(dus.muted, FALSE) AND (dus.muted_until IS NULL OR dus.muted_until > NOW())) AS is_muted,
+                    CASE WHEN dus.muted THEN dus.muted_until END AS muted_until,
+                    COALESCE(dus.pinned, FALSE) AS is_pinned,
                     COALESCE(dus.archived, FALSE) AS is_archived
              FROM group_dm_channels g
              JOIN group_dm_members gm ON gm.dm_id = g.id AND gm.user_id = $1
              LEFT JOIN last_gdm lgm ON lgm.dm_id = g.id
              LEFT JOIN member_counts mc ON mc.dm_id = g.id
              LEFT JOIN dm_user_settings dus ON dus.dm_channel_id = g.id AND dus.user_id = $1
+             WHERE dus.closed_at IS NULL OR lgm.last_message_at > dus.closed_at
              ORDER BY COALESCE(lgm.last_message_at, g.created_at) DESC"
         )
         .bind(claims.sub)
@@ -285,6 +292,8 @@ pub async fn get_dms(
         "last_message_content": r.get::<Option<String>, _>("last_message_content"),
         "last_message_encrypted": r.get::<bool, _>("last_message_encrypted"),
         "is_muted": r.get::<bool, _>("is_muted"),
+        "muted_until": r.get::<Option<chrono::DateTime<chrono::Utc>>, _>("muted_until"),
+        "is_pinned": r.get::<bool, _>("is_pinned"),
         "is_archived": r.get::<bool, _>("is_archived"),
         "is_group": false,
     })).collect();
@@ -299,6 +308,8 @@ pub async fn get_dms(
             "last_message_author": r.get::<Option<String>, _>("last_message_author"),
             "last_message_encrypted": r.get::<bool, _>("last_message_encrypted"),
             "is_muted": r.get::<bool, _>("is_muted"),
+            "muted_until": r.get::<Option<chrono::DateTime<chrono::Utc>>, _>("muted_until"),
+            "is_pinned": r.get::<bool, _>("is_pinned"),
             "is_archived": r.get::<bool, _>("is_archived"),
             "is_group": true,
         }));
@@ -375,7 +386,14 @@ pub async fn open_dm(
     .await?;
 
     use sqlx::Row;
-    Ok(Json(serde_json::json!({ "dm_id": dm.get::<Uuid, _>("id") })))
+    let dm_id: Uuid = dm.get("id");
+    // Ouvrir une conversation fermée la remet dans la liste.
+    sqlx::query("UPDATE dm_user_settings SET closed_at = NULL WHERE user_id=$1 AND dm_channel_id=$2 AND closed_at IS NOT NULL")
+        .bind(claims.sub)
+        .bind(dm_id)
+        .execute(&state.db)
+        .await?;
+    Ok(Json(serde_json::json!({ "dm_id": dm_id })))
 }
 
 pub async fn get_dm_messages(
@@ -1461,6 +1479,15 @@ pub async fn get_call_history(
 }
 
 
+/// Durées proposées par le menu « Rendre muet » (minutes) ; absente, nulle ou 0 = illimitée.
+fn dm_mute_minutes(v: &serde_json::Value) -> Result<i32> {
+    match v.as_i64() {
+        None if v.is_null() => Ok(0),
+        Some(m @ (0 | 15 | 60 | 180 | 480 | 1440)) => Ok(m as i32),
+        _ => Err(AppError::BadRequest("Durée de sourdine invalide".into())),
+    }
+}
+
 pub async fn patch_dm_settings(
     State(state): State<AppState>,
     Extension(claims): Extension<Claims>,
@@ -1483,19 +1510,32 @@ pub async fn patch_dm_settings(
 
     let muted = body["muted"].as_bool();
     let archived = body["archived"].as_bool();
+    let pinned = body["pinned"].as_bool();
+    let closed = body["closed"].as_bool();
+    // Sourdine temporaire (menu « Rendre muet ») : absente ou 0 = jusqu'à réactivation.
+    let mute_minutes = dm_mute_minutes(&body["mute_minutes"])?;
 
     sqlx::query(
-        "INSERT INTO dm_user_settings (user_id, dm_channel_id, muted, archived)
-         VALUES ($1, $2, COALESCE($3, FALSE), COALESCE($4, FALSE))
+        "INSERT INTO dm_user_settings (user_id, dm_channel_id, muted, archived, pinned, muted_until, closed_at)
+         VALUES ($1, $2, COALESCE($3, FALSE), COALESCE($4, FALSE), COALESCE($5, FALSE),
+                 CASE WHEN $3 AND $6 > 0 THEN NOW() + make_interval(mins => $6) END,
+                 CASE WHEN $7 THEN NOW() END)
          ON CONFLICT (user_id, dm_channel_id) DO UPDATE SET
            muted    = COALESCE($3, dm_user_settings.muted),
+           muted_until = CASE WHEN $3 IS NULL THEN dm_user_settings.muted_until
+                              WHEN $3 AND $6 > 0 THEN NOW() + make_interval(mins => $6) END,
            archived = COALESCE($4, dm_user_settings.archived),
+           pinned   = COALESCE($5, dm_user_settings.pinned),
+           closed_at = CASE WHEN $7 IS NULL THEN dm_user_settings.closed_at WHEN $7 THEN NOW() END,
            updated_at = NOW()"
     )
     .bind(claims.sub)
     .bind(dm_id)
     .bind(muted)
     .bind(archived)
+    .bind(pinned)
+    .bind(mute_minutes)
+    .bind(closed)
     .execute(&state.db)
     .await?;
 
@@ -1995,3 +2035,7 @@ pub async fn search_dm_messages(
 
     Ok(Json(serde_json::json!(results)))
 }
+
+#[cfg(test)]
+#[path = "dm_settings_db_tests.rs"]
+mod dm_settings_db_tests;

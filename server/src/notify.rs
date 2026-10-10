@@ -410,7 +410,7 @@ pub fn push_direct(
         for uid in recipients {
             if state.clients.read().await.contains_key(&uid) { continue; }
             let silenced: bool = sqlx::query_scalar(
-                "SELECT u.status = 'dnd' OR COALESCE(ds.muted, FALSE)
+                "SELECT u.status = 'dnd' OR COALESCE(ds.muted AND (ds.muted_until IS NULL OR ds.muted_until > NOW()), FALSE)
                  FROM users u
                  LEFT JOIN dm_user_settings ds ON ds.user_id = u.id AND ds.dm_channel_id = $2
                  WHERE u.id = $1"
