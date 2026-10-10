@@ -180,7 +180,11 @@ pub struct LoginRequest {
 
 #[derive(Debug, Serialize)]
 pub struct AuthResponse {
+    /// Absents (vides) quand la requête porte `X-ForgeChat-Tokens: cookie` : appli web, jetons
+    /// en cookies HttpOnly seulement, jamais lisibles par le JavaScript.
+    #[serde(skip_serializing_if = "String::is_empty")]
     pub access_token: String,
+    #[serde(skip_serializing_if = "String::is_empty")]
     pub refresh_token: String,
     pub user: UserPublic,
 }

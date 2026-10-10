@@ -231,6 +231,8 @@ async fn main() -> anyhow::Result<()> {
             axum::http::header::AUTHORIZATION,
             axum::http::header::CONTENT_TYPE,
             axum::http::header::ACCEPT,
+            // Appli web : jetons en cookies HttpOnly seulement (auth.rs, cookie_only).
+            axum::http::HeaderName::from_static("x-forgechat-tokens"),
         ])
         .allow_credentials(true);
 

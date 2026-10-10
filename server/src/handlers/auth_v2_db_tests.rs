@@ -167,7 +167,7 @@ async fn auth_v2_email_at_rest() {
     assert_eq!(clear, None);
 
     // Vérification : compte créé avec empreinte et adresse chiffrée.
-    let (_, Json(created)) = crate::handlers::auth::verify_email(State(state.clone()), Json(json!({ "email": norm, "code": code })))
+    let (_, Json(created)) = crate::handlers::auth::verify_email(State(state.clone()), HeaderMap::new(), Json(json!({ "email": norm, "code": code })))
         .await
         .unwrap();
     let id = created.user.id;

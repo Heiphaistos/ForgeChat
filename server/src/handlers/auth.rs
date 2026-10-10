@@ -57,6 +57,25 @@ fn auth_cookie_headers(auth: &AuthResponse, secure: bool) -> HeaderMap {
     session_cookie_headers(&auth.access_token, &auth.refresh_token, secure)
 }
 
+/// `X-ForgeChat-Tokens: cookie` : l'appli (web) ne veut ses jetons qu'en cookies HttpOnly ; le
+/// corps JSON ne les contient pas. Sans l'en-tête (bureau, mobile) : jetons aussi dans le corps.
+pub(crate) fn cookie_only(headers: &HeaderMap) -> bool {
+    headers
+        .get("x-forgechat-tokens")
+        .and_then(|v| v.to_str().ok())
+        .is_some_and(|v| v.trim().eq_ignore_ascii_case("cookie"))
+}
+
+/// Cookies de session posés, puis jetons retirés du corps si l'appli ne veut que les cookies.
+fn auth_reply(req_headers: &HeaderMap, mut auth: AuthResponse, secure: bool) -> (HeaderMap, Json<AuthResponse>) {
+    let headers = auth_cookie_headers(&auth, secure);
+    if cookie_only(req_headers) {
+        auth.access_token.clear();
+        auth.refresh_token.clear();
+    }
+    (headers, Json(auth))
+}
+
 /// Cookies HttpOnly de session (accès + rafraîchissement).
 pub(crate) fn session_cookie_headers(access_token: &str, refresh_token: &str, secure: bool) -> HeaderMap {
     let flag = if secure { "; Secure" } else { "" };
@@ -208,6 +227,7 @@ pub async fn register(
 /// POST /api/auth/verify-email {email, code} : crée le compte (et consomme l'invitation).
 pub async fn verify_email(
     State(state): State<AppState>,
+    req_headers: HeaderMap,
     Json(body): Json<serde_json::Value>,
 ) -> Result<(HeaderMap, Json<AuthResponse>)> {
     let email = body["email"]
@@ -294,8 +314,7 @@ pub async fn verify_email(
     store_refresh_token(&state, user.id, &refresh_token).await?;
 
     let auth = AuthResponse { access_token, refresh_token, user: user.into_self_public() };
-    let headers = auth_cookie_headers(&auth, is_secure(&state));
-    Ok((headers, Json(auth)))
+    Ok(auth_reply(&req_headers, auth, is_secure(&state)))
 }
 
 /// Vérifie la preuve de connexion selon l'état du compte (voir LoginRequest). `Ok(None)` = refus.
@@ -404,8 +423,7 @@ pub async fn login(
         .map_err(AppError::Internal)?;
 
     let auth = AuthResponse { access_token, refresh_token, user: user.into_self_public() };
-    let resp_headers = auth_cookie_headers(&auth, is_secure(&state));
-    Ok((resp_headers, Json(auth)))
+    Ok(auth_reply(&headers, auth, is_secure(&state)))
 }
 
 pub async fn refresh(
@@ -427,6 +445,9 @@ pub async fn refresh(
 
     let (_, new_refresh_token, access_token) = rotate_refresh_token(&state, &token).await?;
     let resp_headers = session_cookie_headers(&access_token, &new_refresh_token, is_secure(&state));
+    if cookie_only(&req_headers) {
+        return Ok((resp_headers, Json(serde_json::json!({ "ok": true }))));
+    }
     Ok((resp_headers, Json(serde_json::json!({
         "access_token": access_token,
         "refresh_token": new_refresh_token,
@@ -759,4 +780,42 @@ async fn store_refresh_token(state: &AppState, user_id: Uuid, token: &str) -> Re
     .execute(&state.db)
     .await?;
     Ok(())
+}
+
+#[cfg(test)]
+mod cookie_only_tests {
+    use super::*;
+
+    fn reply(header: Option<&str>) -> (HeaderMap, serde_json::Value) {
+        let mut req = HeaderMap::new();
+        if let Some(h) = header {
+            req.insert("x-forgechat-tokens", HeaderValue::from_str(h).unwrap());
+        }
+        let user: crate::models::user::User = serde_json::from_value(serde_json::json!({
+            "id": Uuid::nil(), "username": "u", "discriminator": "0001", "password_hash": "x",
+            "avatar": null, "banner": null, "bio": null, "status": "online", "custom_status": null,
+            "custom_status_emoji": null, "activity_type": null, "activity_name": null, "activity_detail": null,
+            "is_bot": false, "focus_mode": false, "is_verified": true, "birthday": null,
+            "created_at": Utc::now(), "updated_at": Utc::now(), "totp_enabled": false, "pronouns": null,
+        })).unwrap();
+        let auth = AuthResponse { access_token: "acc".into(), refresh_token: "ref".into(), user: user.into_self_public() };
+        let (h, Json(body)) = auth_reply(&req, auth, true);
+        (h, serde_json::to_value(body).unwrap())
+    }
+
+    #[test]
+    fn tokens_left_out_of_the_body_for_cookie_apps() {
+        let (h, body) = reply(Some("cookie"));
+        assert!(body.get("access_token").is_none() && body.get("refresh_token").is_none());
+        assert_eq!(body["user"]["username"], "u");
+        let cookies: Vec<_> = h.get_all(SET_COOKIE).iter().map(|v| v.to_str().unwrap().to_string()).collect();
+        assert!(cookies.iter().any(|c| c.starts_with("access_token=acc;")), "cookies toujours posés");
+        assert!(cookies.iter().any(|c| c.starts_with("refresh_token=ref;")));
+        // Sans l'en-tête (bureau, mobile) : inchangé.
+        let (_, body) = reply(None);
+        assert_eq!(body["access_token"], "acc");
+        assert_eq!(body["refresh_token"], "ref");
+        let (_, body) = reply(Some("bearer"));
+        assert_eq!(body["access_token"], "acc");
+    }
 }
