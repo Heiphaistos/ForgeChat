@@ -69,7 +69,10 @@ impl Permissions {
     pub const MUTE_MEMBERS: i64 = 1 << 15;
     pub const DEAFEN_MEMBERS: i64 = 1 << 16;
     pub const MOVE_MEMBERS: i64 = 1 << 17;
-    pub const PRIORITY_SPEAKER: i64 = 1 << 18;
+    /// Ancien « orateur prioritaire » (atténuait les autres voix), retiré le 2026-10-10.
+    /// Bit 18 RÉSERVÉ : ne jamais le réattribuer ; ignoré s'il est encore stocké
+    /// (migration 118 le retire des rôles et des surcharges).
+    pub const RETIRED_PRIORITY_SPEAKER: i64 = 1 << 18;
     /// Créer des salons et des catégories.
     pub const CREATE_CHANNELS: i64 = 1 << 19;
     /// Modifier les salons : nom, sujet, réglages, ordre, déplacement, archivage,
@@ -94,7 +97,7 @@ impl Permissions {
         | Self::MENTION_EVERYONE | Self::ATTACH_FILES | Self::EMBED_LINKS
         | Self::ADD_REACTIONS | Self::CONNECT_VOICE | Self::SPEAK_VOICE
         | Self::MUTE_MEMBERS | Self::DEAFEN_MEMBERS | Self::MOVE_MEMBERS
-        | Self::PRIORITY_SPEAKER | Self::CREATE_CHANNELS | Self::EDIT_CHANNELS
+        | Self::CREATE_CHANNELS | Self::EDIT_CHANNELS
         | Self::DELETE_CHANNELS | Self::DELETE_OWN_CHANNELS | Self::BAN_TEMP
         | Self::STREAM | Self::ADMINISTRATOR;
 }

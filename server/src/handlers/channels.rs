@@ -584,6 +584,8 @@ async fn actor_channel_perms(state: &AppState, actor: Uuid, channel_id: Uuid) ->
 /// Une surcharge ne peut accorder ni refuser qu'un bit que l'acteur possède lui-même
 /// sur le salon (même règle que create_role/assign_role), jamais ADMINISTRATOR.
 fn check_override_bits(actor_perms: i64, allow: i64, deny: i64) -> Result<(i64, i64)> {
+    // Bit retiré : une ancienne appli qui le renvoie ne doit pas voir sa surcharge refusée.
+    let (allow, deny) = (allow & !Permissions::RETIRED_PRIORITY_SPEAKER, deny & !Permissions::RETIRED_PRIORITY_SPEAKER);
     if allow < 0 || deny < 0 || (allow | deny) & !Permissions::ALL != 0 {
         return Err(AppError::BadRequest("Permissions inconnues".into()));
     }
@@ -1012,5 +1014,8 @@ mod override_tests {
         assert!(check_override_bits(i64::MAX, -1, 0).is_err());
         assert_eq!(check_override_bits(editor, Permissions::SEND_MESSAGES, 0).ok(), Some((Permissions::SEND_MESSAGES, 0)));
         assert!(check_override_bits(i64::MAX, Permissions::VIEW_CHANNEL, Permissions::SEND_MESSAGES).is_ok());
+        // Orateur prioritaire retiré : ignoré, jamais refusé ni conservé.
+        assert_eq!(check_override_bits(editor, Permissions::SEND_MESSAGES | Permissions::RETIRED_PRIORITY_SPEAKER, Permissions::RETIRED_PRIORITY_SPEAKER).ok(), Some((Permissions::SEND_MESSAGES, 0)));
+        assert_eq!(Permissions::ALL & Permissions::RETIRED_PRIORITY_SPEAKER, 0);
     }
 }
