@@ -22,6 +22,15 @@ use crate::models::role::Permissions as P;
 /// Messages insérés par transaction.
 const BATCH: usize = 500;
 const ICON_MAX: u64 = 8 * 1024 * 1024;
+/// Pièce jointe décompressée (zip bomb) : au plus 512 Mio chacune.
+const ATTACHMENT_MAX: u64 = 512 * 1024 * 1024;
+/// export.json décompressé : au plus 1 Gio.
+const EXPORT_JSON_MAX: u64 = 1024 * 1024 * 1024;
+/// Total décompressé autorisé : 2 x la taille de l'archive + 1 Gio (export.json
+/// compresse très bien), plafonné à 64 Gio.
+fn extract_budget(archive_len: u64) -> u64 {
+    archive_len.saturating_mul(2).saturating_add(1 << 30).min(64 << 30)
+}
 
 type Zip = Arc<Mutex<ZipArchive<std::fs::File>>>;
 
@@ -31,27 +40,44 @@ fn user_err(msg: impl Into<String>) -> anyhow::Error {
 
 /// Copie des entrées du ZIP vers des fichiers générés par nous (jamais le chemin
 /// du ZIP sur disque : pas de zip-slip). `None` = entrée absente, trop grosse ou illisible.
-fn copy_entries(zip: &Zip, jobs: Vec<(String, PathBuf, u64)>) -> Vec<Option<u64>> {
-    let Ok(mut z) = zip.lock() else { return jobs.iter().map(|_| None).collect() };
-    jobs.into_iter()
-        .map(|(entry, dest, max)| {
-            let mut f = z.by_name(&entry).ok()?;
-            if f.size() > max { return None; }
-            let res = (|| -> std::io::Result<u64> {
-                if let Some(parent) = dest.parent() { std::fs::create_dir_all(parent)?; }
-                let mut out = std::fs::File::create(&dest)?;
-                std::io::copy(&mut (&mut f).take(max), &mut out)
-            })();
-            match res {
-                Ok(n) => Some(n),
-                Err(e) => {
-                    tracing::warn!("Import Discord : copie de {entry} impossible : {e}");
-                    let _ = std::fs::remove_file(&dest);
-                    None
-                }
+/// Les octets réellement décompressés (pas la taille annoncée dans l'en-tête, falsifiable)
+/// sont comptés et décomptés de `budget` ; Err quand le total de l'archive le dépasse.
+fn copy_entries<R: Read + std::io::Seek>(
+    z: &mut ZipArchive<R>,
+    jobs: Vec<(String, PathBuf, u64)>,
+    budget: &mut u64,
+) -> anyhow::Result<Vec<Option<u64>>> {
+    let mut out = Vec::with_capacity(jobs.len());
+    for (entry, dest, max) in jobs {
+        let max = max.min(ATTACHMENT_MAX);
+        let Ok(mut f) = z.by_name(&entry) else { out.push(None); continue };
+        if f.size() > max { out.push(None); continue; }
+        let limit = max.min(*budget);
+        let res = (|| -> std::io::Result<u64> {
+            if let Some(parent) = dest.parent() { std::fs::create_dir_all(parent)?; }
+            let mut file = std::fs::File::create(&dest)?;
+            std::io::copy(&mut (&mut f).take(limit + 1), &mut file)
+        })();
+        match res {
+            Ok(n) if n <= limit => {
+                *budget -= n;
+                out.push(Some(n));
             }
-        })
-        .collect()
+            Ok(_) => {
+                let _ = std::fs::remove_file(&dest);
+                if limit < max {
+                    return Err(user_err("Archive refusée : son contenu décompressé est bien plus gros que le ZIP (archive piégée ?)."));
+                }
+                out.push(None); // ce fichier dépasse la taille maximale, il est ignoré
+            }
+            Err(e) => {
+                tracing::warn!("Import Discord : copie de {entry} impossible : {e}");
+                let _ = std::fs::remove_file(&dest);
+                out.push(None);
+            }
+        }
+    }
+    Ok(out)
 }
 
 /// Un message prêt à insérer.
@@ -82,11 +108,14 @@ pub struct Importer {
     server_id: Option<Uuid>,
     done: u64,
     total: u64,
+    /// Octets décompressés encore autorisés (zip bomb).
+    budget: u64,
 }
 
 /// Point d'entrée : renvoie l'id du serveur créé. Nettoie tout en cas d'échec.
 pub async fn run(db: &PgPool, upload_dir: &str, user_id: Uuid, import_id: Uuid, zip_path: &Path) -> anyhow::Result<Uuid> {
     let path = zip_path.to_path_buf();
+    let archive_len = tokio::fs::metadata(zip_path).await?.len();
     let (archive, entries) = tokio::task::spawn_blocking(move || -> anyhow::Result<_> {
         let file = std::fs::File::open(&path)?;
         let archive = ZipArchive::new(file)
@@ -109,6 +138,7 @@ pub async fn run(db: &PgPool, upload_dir: &str, user_id: Uuid, import_id: Uuid, 
         server_id: None,
         done: 0,
         total: 0,
+        budget: extract_budget(archive_len),
     };
     match imp.import().await {
         Ok(id) => Ok(id),
@@ -145,7 +175,15 @@ impl Importer {
     async fn copy(&mut self, jobs: Vec<(String, PathBuf, u64)>) -> anyhow::Result<Vec<Option<u64>>> {
         let dests: Vec<PathBuf> = jobs.iter().map(|j| j.1.clone()).collect();
         let zip = self.zip.clone();
-        let res = tokio::task::spawn_blocking(move || copy_entries(&zip, jobs)).await?;
+        let mut budget = self.budget;
+        let (res, budget) = tokio::task::spawn_blocking(move || -> anyhow::Result<_> {
+            let mut z = zip.lock().map_err(|_| anyhow!("verrou ZIP empoisonné"))?;
+            let res = copy_entries(&mut z, jobs, &mut budget);
+            Ok((res, budget))
+        })
+        .await??;
+        self.budget = budget;
+        let res = res?;
         for (d, r) in dests.into_iter().zip(&res) {
             if r.is_some() { self.written.push(d); }
         }
@@ -165,8 +203,9 @@ impl Importer {
             let mut z = zip.lock().map_err(|_| anyhow!("verrou ZIP empoisonné"))?;
             let f = z.by_name("export.json")?;
             // ponytail: export.json entièrement en mémoire (~2-3x sa taille). Parser
-            // en flux si des exports de plusieurs Go apparaissent.
-            serde_json::from_reader(BufReader::new(f)).map_err(|e| {
+            // en flux si des exports de plusieurs Go apparaissent. Lecture bornée (zip bomb) :
+            // au-delà de EXPORT_JSON_MAX le JSON tronqué est refusé.
+            serde_json::from_reader(BufReader::new(f.take(EXPORT_JSON_MAX))).map_err(|e| {
                 tracing::warn!("Import Discord : export.json illisible : {e}");
                 user_err("export.json est illisible ou n'a pas le format attendu d'un export ArchiveForge.")
             })
@@ -711,5 +750,41 @@ impl Importer {
         .await?;
         self.progress(&format!("Post « {} »", truncate(&t.name, 60))).await;
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod bomb_tests {
+    use super::*;
+    use std::io::Write;
+
+    fn zip_with(entries: &[(&str, usize)]) -> ZipArchive<std::io::Cursor<Vec<u8>>> {
+        let mut w = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
+        for (name, len) in entries {
+            w.start_file(*name, zip::write::SimpleFileOptions::default()).unwrap();
+            w.write_all(&vec![0u8; *len]).unwrap();
+        }
+        ZipArchive::new(std::io::Cursor::new(w.finish().unwrap().into_inner())).unwrap()
+    }
+
+    #[test]
+    fn decompressed_total_is_capped() {
+        let dir = std::env::temp_dir().join(format!("fc-bomb-{}", Uuid::new_v4()));
+        let mut z = zip_with(&[("a", 1000), ("b", 1000), ("c", 1000)]);
+        let job = |e: &str| (e.to_string(), dir.join(e), u64::MAX);
+        // Budget de 2500 octets : a et b passent, c dépasse le total -> archive refusée.
+        let mut budget = 2500;
+        let ok = copy_entries(&mut z, vec![job("a"), job("b")], &mut budget).unwrap();
+        assert_eq!(ok, vec![Some(1000), Some(1000)]);
+        assert_eq!(budget, 500);
+        assert!(copy_entries(&mut z, vec![job("c")], &mut budget).is_err());
+        assert!(!dir.join("c").exists());
+        // Fichier au-delà de son plafond propre : ignoré, budget intact.
+        let mut budget = 10_000;
+        let r = copy_entries(&mut z, vec![("a".into(), dir.join("a2"), 10)], &mut budget).unwrap();
+        assert_eq!(r, vec![None]);
+        assert_eq!(budget, 10_000);
+        assert!(extract_budget(u64::MAX) == 64 << 30);
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }
