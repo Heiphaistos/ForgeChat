@@ -160,7 +160,7 @@ async fn auth_v2_email_at_rest() {
     let reg: crate::models::user::RegisterRequest = serde_json::from_value(json!({
         "username": &tag[..20], "email": email, "auth": AUTH, "kdf_salt": SALT,
     })).unwrap();
-    crate::handlers::auth::register(State(state.clone()), ip(), HeaderMap::new(), Json(reg)).await.unwrap();
+    let _ = crate::handlers::auth::register(State(state.clone()), ip(), HeaderMap::new(), Json(reg)).await.unwrap();
     let h = crate::email_crypto::hmac(&email);
     let (code, clear): (String, Option<String>) =
         sqlx::query_as("SELECT code, email FROM pending_registrations WHERE email_hmac=$1").bind(&h).fetch_one(&db).await.unwrap();
@@ -186,7 +186,7 @@ async fn auth_v2_email_at_rest() {
     assert_eq!(logged.user.id, id);
 
     // Mot de passe oublié : le jeton est émis pour ce compte.
-    crate::handlers::password_reset::forgot_password(State(state.clone()), ip(), HeaderMap::new(), Json(json!({ "email": norm })))
+    let _ = crate::handlers::password_reset::forgot_password(State(state.clone()), ip(), HeaderMap::new(), Json(json!({ "email": norm })))
         .await
         .unwrap();
     {
