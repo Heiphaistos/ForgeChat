@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { authApi } from '@/api/auth'
-import { ApiError, ensureAccessToken, onSessionExpired } from '@/lib/http'
+import { ApiError, backoffMs, ensureAccessToken, onSessionExpired } from '@/lib/http'
 import { logger } from '@/lib/logger'
 import { queryClient } from '@/lib/queryClient'
 import { realtime } from '@/lib/realtime'
@@ -65,6 +65,9 @@ interface AuthState {
   switchAccount: (id: string) => Promise<boolean>
 }
 
+/** Nouveaux essais automatiques du démarrage après un 503 (backoff). */
+let bootRetries = 0
+
 /** `keep` : changement de compte, la clé E2E et les données hors ligne du compte restent. */
 async function wipeLocal(keep = false) {
   const uid = useAuth.getState().user?.id ?? (await tokens.getUserId())
@@ -107,16 +110,22 @@ export const useAuth = create<AuthState>((set, get) => {
       try {
         await setOfflineOwner(await tokens.getUserId())
         // Sans réseau : la session continue sur les données gardées (lib/offline) si elles existent.
+        // 503 (le serveur refuse par sécurité) : pareil, jamais de déconnexion.
         await ensureAccessToken().catch((e: unknown) => {
-          if (!(e instanceof ApiError && e.isNetwork)) throw e
+          if (!(e instanceof ApiError && (e.isNetwork || e.status === 503))) throw e
         })
         const me = await authApi.me()
         queryClient.setQueryData(['me'], me)
+        bootRetries = 0
         set({ status: 'signedIn', user: me })
         realtime.start()
       } catch (e) {
         if (classifyBootstrapFailure(e) === 'retry') {
           set({ status: 'offline' })
+          // 503 : nouvel essai automatique avec backoff (5 s → 60 s), jetons et clé gardés.
+          if (e instanceof ApiError && e.status === 503) {
+            setTimeout(() => { if (get().status === 'offline') void get().bootstrap() }, Math.max(5000, backoffMs(bootRetries++)))
+          }
         } else {
           logger.warn('auth', 'bootstrap refusé', e)
           await wipeLocal()

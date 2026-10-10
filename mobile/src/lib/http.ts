@@ -1,4 +1,5 @@
 import type { ZodType } from 'zod'
+import { create } from 'zustand'
 import { APP_VERSION, apiBase } from '@/config/env'
 import { t } from '@/i18n'
 import { logger } from './logger'
@@ -123,7 +124,49 @@ async function parseError(res: Response): Promise<ApiError> {
     /* corps non-JSON : garder le message générique */
   }
   if (res.status === 429 && !code) code = 'rate_limited'
+  if (res.status === 426) code = 'update_required'
   return new ApiError(res.status, message, code, retryAfter)
+}
+
+// ─── Santé de l'API : 503 (refus par sécurité, Redis indisponible) et 426 (appli trop ancienne) ──
+
+/**
+ * `unavailable` : le serveur répond 503 → bandeau discret, jamais de déconnexion (jetons et clé
+ * gardés), nouvel essai avec backoff. `updateRequired` : 426 → bandeau « Mets à jour ForgeChat ».
+ */
+export const useApiHealth = create<{ unavailable: boolean; updateRequired: boolean }>(() => ({ unavailable: false, updateRequired: false }))
+
+/** Délai du n-ième nouvel essai après un 503 : 1 s, 2 s, 4 s… plafonné à 60 s. */
+export const backoffMs = (attempt: number) => Math.min(60_000, 1000 * 2 ** attempt)
+const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms))
+/** GET retentés dans la même requête après un 503 (1 s puis 2 s). */
+const GET_RETRIES_503 = 2
+
+function noteStatus(status: number) {
+  if (status === 426) useApiHealth.setState({ updateRequired: true })
+  if (status !== 503) {
+    if (useApiHealth.getState().unavailable) useApiHealth.setState({ unavailable: false })
+    return
+  }
+  if (useApiHealth.getState().unavailable) return
+  useApiHealth.setState({ unavailable: true })
+  void probeUntilBack()
+}
+
+let probing = false
+/** Sonde la session avec backoff (4 s → 60 s) jusqu'à une réponse autre que 503 ; s'arrête sans session. */
+async function probeUntilBack() {
+  if (probing) return
+  probing = true
+  try {
+    for (let i = 2; useApiHealth.getState().unavailable; i++) {
+      await sleep(backoffMs(i))
+      if (!(await tokens.getRefreshToken())) return void useApiHealth.setState({ unavailable: false })
+      await sendOnline('GET', '/users/me', {}).catch(() => undefined)
+    }
+  } finally {
+    probing = false
+  }
 }
 
 // ─── Refresh single-flight ────────────────────────────────────────────────────
@@ -152,6 +195,7 @@ async function doRefresh(): Promise<string> {
     },
     DEFAULT_TIMEOUT,
   )
+  noteStatus(res.status)
 
   if (res.status === 401 || res.status === 400 || res.status === 403) {
     // Refresh révoqué/expiré/déjà consommé : la session est terminée.
@@ -159,7 +203,7 @@ async function doRefresh(): Promise<string> {
     sessionExpiredListeners.forEach((l) => l())
     throw new SessionExpiredError()
   }
-  if (!res.ok) throw await parseError(res) // 5xx/429 : on garde le refresh token, on réessaiera
+  if (!res.ok) throw await parseError(res) // 5xx (503 compris)/429 : on garde le refresh token, on réessaiera
 
   const data = (await res.json()) as { access_token?: unknown; refresh_token?: unknown }
   if (typeof data.access_token !== 'string' || typeof data.refresh_token !== 'string') {
@@ -206,6 +250,11 @@ async function send<T>(method: string, p: string, opts: RequestOptions<T>): Prom
     if (key) remember(key, res)
     return res
   } catch (e) {
+    // 503 : lecture gardée resservie comme hors ligne (rien n'est mis en file : le serveur a refusé).
+    if (e instanceof ApiError && e.status === 503) {
+      const hit = key ? recall<T>(key) : undefined
+      if (hit !== undefined) return hit
+    }
     if (!(e instanceof ApiError) || !e.isNetwork) throw e
     const hit = key ? recall<T>(key) : undefined
     if (hit !== undefined) return hit
@@ -216,7 +265,7 @@ async function send<T>(method: string, p: string, opts: RequestOptions<T>): Prom
   }
 }
 
-async function sendOnline<T>(method: string, p: string, opts: RequestOptions<T>, retried = false): Promise<T> {
+async function sendOnline<T>(method: string, p: string, opts: RequestOptions<T>, retried = false, attempt = 0): Promise<T> {
   const auth = opts.auth ?? true
   const headers: Record<string, string> = { Accept: 'application/json', 'X-Client': CLIENT_HEADER }
   if (auth) headers.Authorization = `Bearer ${await ensureAccessToken()}`
@@ -234,12 +283,17 @@ async function sendOnline<T>(method: string, p: string, opts: RequestOptions<T>,
     { method, headers, body, signal: opts.signal },
     opts.timeoutMs ?? (opts.formData ? 120_000 : DEFAULT_TIMEOUT),
   )
+  noteStatus(res.status)
 
   if (res.status === 401 && auth && !retried) {
     // Token révoqué côté serveur (blocklist, changement de mot de passe…) : un refresh, puis un seul retry.
     tokens.setAccessToken(null)
     await refreshAccessToken()
-    return sendOnline(method, p, opts, true)
+    return sendOnline(method, p, opts, true, attempt)
+  }
+  if (res.status === 503 && method === 'GET' && attempt < GET_RETRIES_503) {
+    await sleep(backoffMs(attempt))
+    return sendOnline(method, p, opts, retried, attempt + 1)
   }
   if (!res.ok) throw await parseError(res)
   if (res.status === 204) return undefined as T
