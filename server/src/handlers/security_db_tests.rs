@@ -194,6 +194,31 @@ async fn security_upload_sign_access() {
     assert!(!can_read_upload(&state, b, &forum_media).await.unwrap());
     assert!(!can_read_upload(&state, a, "/uploads/inconnu.enc").await.unwrap());
 
+    // Médias sans salon (avant la migration 109) : la 114 rattache ceux d'une publication ;
+    // les autres ne sont signés que pour leur auteur, sauf blob chiffré.
+    let orphan = |ext: &'static str| {
+        let db = db.clone();
+        async move {
+            let url = format!("/uploads/{}.{ext}", Uuid::new_v4());
+            sqlx::query("INSERT INTO attachments (filename, content_type, size, url, uploader_id) VALUES ('f', 'image/png', 1, $1, $2)")
+                .bind(&url).bind(a).execute(&db).await.expect("orphan");
+            url
+        }
+    };
+    let posted = orphan("png").await;
+    sqlx::query("INSERT INTO forum_posts (channel_id, title, creator_id, media_url) VALUES ($1, 't', $2, $3)")
+        .bind(chan).bind(a).bind(&posted).execute(&db).await.expect("post");
+    let plain = orphan("png").await;
+    let sealed = orphan("enc").await;
+    sqlx::raw_sql(include_str!("../../migrations/114_forum_media_channel.sql")).execute(&db).await.expect("114");
+    let ch: Option<Uuid> = sqlx::query_scalar("SELECT channel_id FROM attachments WHERE url=$1").bind(&posted).fetch_one(&db).await.unwrap();
+    assert_eq!(ch, Some(chan), "rattaché au salon de la publication");
+    assert!(can_read_upload(&state, owner, &posted).await.unwrap());
+    assert!(!can_read_upload(&state, b, &posted).await.unwrap(), "salon masqué");
+    assert!(can_read_upload(&state, a, &plain).await.unwrap(), "auteur");
+    assert!(!can_read_upload(&state, owner, &plain).await.unwrap(), "fichier en clair sans salon : auteur seul");
+    assert!(can_read_upload(&state, b, &sealed).await.unwrap(), "blob chiffré");
+
     let (u1, u2) = if a < owner { (a, owner) } else { (owner, a) };
     let dm: Uuid = sqlx::query_scalar("INSERT INTO dm_channels (user1_id, user2_id) VALUES ($1, $2) RETURNING id")
         .bind(u1).bind(u2).fetch_one(&db).await.expect("dm");

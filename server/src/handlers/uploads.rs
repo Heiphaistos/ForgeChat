@@ -581,12 +581,13 @@ const SIGN_MAX: usize = 100;
 
 /// `user` peut-il lire la pièce jointe `url` ? Selon son propriétaire : message de salon, fil
 /// ou réponse de forum (salon visible), MP ou groupe (membre), média de forum (salon visible).
+/// Sans salon connu (média antérieur à la migration 109 que la 114 n'a pas pu rattacher) : son
+/// auteur, ou tout le monde s'il est chiffré (`.enc`, illisible sans la clé du message chiffré).
 pub async fn can_read_upload(state: &AppState, user: Uuid, url: &str) -> Result<bool> {
     use sqlx::Row;
     let Some(r) = sqlx::query(
         "SELECT a.uploader_id,
-                COALESCE(m.channel_id, t.channel_id, fp.channel_id, a.channel_id,
-                         (SELECT p.channel_id FROM forum_posts p WHERE p.media_url = a.url LIMIT 1)) AS channel_id,
+                COALESCE(m.channel_id, t.channel_id, fp.channel_id, a.channel_id) AS channel_id,
                 (a.dm_message_id IS NOT NULL OR a.group_dm_message_id IS NOT NULL) AS in_conv,
                 (EXISTS(SELECT 1 FROM dm_messages dm JOIN dm_channels d ON d.id = dm.dm_channel_id
                         WHERE dm.id = a.dm_message_id AND $2 IN (d.user1_id, d.user2_id))
@@ -614,9 +615,7 @@ pub async fn can_read_upload(state: &AppState, user: Uuid, url: &str) -> Result<
     if let Some(ch) = r.get::<Option<Uuid>, _>("channel_id") {
         return Ok(!crate::state::channel_audience_among(&state.db, ch, &[user]).await.is_empty());
     }
-    // ponytail: média de forum téléversé avant la migration 109 (salon inconnu, URL seulement
-    // dans le contenu chiffré) : tout compte connecté, comme avant F8. Blob chiffré de bout en bout.
-    Ok(true)
+    Ok(r.get::<Option<Uuid>, _>("uploader_id") == Some(user) || url.ends_with(".enc"))
 }
 
 /// POST /api/uploads/sign {urls:[…]} → {urls:{<url>: <url signée>}} : URL `/uploads/…` que
