@@ -1,5 +1,6 @@
 /** Validation côté client — miroir des règles serveur (handlers/auth.rs). */
 import { t } from '@/i18n'
+import { MIN_PASSWORD } from '@/e2e/authKdf'
 
 export const USERNAME_RE = /^[\p{L}\p{N}_-]{2,32}$/u
 export const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/
@@ -10,7 +11,7 @@ export function validateRegistration(v: { username: string; email: string; passw
   const username = v.username.trim()
   if (!USERNAME_RE.test(username)) errors.username = t('auth.usernameRule')
   if (!EMAIL_RE.test(v.email.trim())) errors.email = t('auth.invalidEmail')
-  if (v.password.length < 8) errors.password = t('auth.passwordMin')
+  if (v.password.length < MIN_PASSWORD) errors.password = t('auth.passwordMin')
   else if (v.password.length > 128) errors.password = t('auth.passwordMax')
   else if (passwordStrength(v.password).score < 2) errors.password = t('auth.passwordWeak')
   if (v.confirm !== v.password) errors.confirm = t('auth.passwordMismatch')

@@ -201,7 +201,7 @@ export const fr = {
 
   // --- Réinitialisation du mot de passe ---
   'social.reset.pasteLink': 'Colle le lien reçu par e-mail.',
-  'social.reset.length': 'Le mot de passe doit faire 8 à 128 caractères.',
+  'social.reset.length': 'Le mot de passe doit faire 10 à 128 caractères.',
   'social.reset.weak': 'Mot de passe trop faible.',
   'social.reset.mismatch': 'Les mots de passe ne correspondent pas.',
   'social.reset.signedOut': 'Mot de passe réinitialisé. Reconnecte-toi avec ton nouveau mot de passe.',
@@ -431,7 +431,7 @@ export const en: Partial<Record<keyof typeof fr, string>> = {
 
   // --- Réinitialisation du mot de passe ---
   'social.reset.pasteLink': 'Paste the link you received by email.',
-  'social.reset.length': 'The password must be 8 to 128 characters.',
+  'social.reset.length': 'The password must be 10 to 128 characters.',
   'social.reset.weak': 'Password too weak.',
   'social.reset.mismatch': 'Passwords don’t match.',
   'social.reset.signedOut': 'Password reset. Sign in again with your new password.',

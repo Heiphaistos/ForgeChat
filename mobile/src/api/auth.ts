@@ -2,7 +2,6 @@ import { z } from 'zod'
 import { t } from '@/i18n'
 import { ApiError, http } from '@/lib/http'
 import type { AuthResponse, Session, User } from '@/types/models'
-import type { WrappedKey } from '@/e2e/crypto'
 
 const userSchema = z
   .object({
@@ -24,9 +23,13 @@ const authSchema = z.object({
 })
 
 export const authApi = {
-  async login(email: string, password: string, totpCode?: string): Promise<AuthResponse> {
+  /**
+   * Connexion v2 : `proof` = `{auth}` (compte migré) ou `{password, auth_new, kdf_salt_new}`
+   * (dernière fois que le mot de passe part, le serveur migre le compte). Voir stores/auth.ts.
+   */
+  async login(email: string, proof: Record<string, string>, totpCode?: string): Promise<AuthResponse> {
     try {
-      const body: Record<string, string> = { email: email.trim().toLowerCase(), password }
+      const body: Record<string, string> = { email: email.trim().toLowerCase(), ...proof }
       if (totpCode) body.totp_code = totpCode.replace(/\s+/g, '')
       return (await http.post('/auth/login', body, { auth: false, schema: authSchema })) as AuthResponse
     } catch (e) {
@@ -37,12 +40,16 @@ export const authApi = {
     }
   },
 
-  async register(username: string, email: string, password: string, inviteCode?: string): Promise<AuthResponse> {
-    return (await http.post(
+  /** Envoie un code à l'adresse (réponse identique si elle a déjà un compte) ; le compte naît à verifyEmail. */
+  register: (username: string, email: string, auth: string, kdfSalt: string, inviteCode?: string) =>
+    http.post<{ pending: boolean }>(
       '/auth/register',
-      { username: username.trim(), email: email.trim().toLowerCase(), password, ...(inviteCode?.trim() ? { invite_code: inviteCode.trim() } : {}) },
-      { auth: false, schema: authSchema },
-    )) as AuthResponse
+      { username: username.trim(), email: email.trim().toLowerCase(), auth, kdf_salt: kdfSalt, ...(inviteCode?.trim() ? { invite_code: inviteCode.trim() } : {}) },
+      { auth: false },
+    ),
+
+  async verifyEmail(email: string, code: string): Promise<AuthResponse> {
+    return (await http.post('/auth/verify-email', { email: email.trim().toLowerCase(), code: code.trim() }, { auth: false, schema: authSchema })) as AuthResponse
   },
 
   /**
@@ -56,15 +63,13 @@ export const authApi = {
   me: () => http.get<User>('/users/me'),
   sessions: () => http.get<Session[]>('/users/me/sessions'),
   revokeSession: (id: string) => http.delete<void>(`/users/me/sessions/${encodeURIComponent(id)}`),
-  /** `wrapped` : clé E2E ré-enveloppée avec le nouveau mot de passe (enregistrée dans la même transaction). */
-  changePassword: (oldPassword: string, newPassword: string, wrapped: WrappedKey | null = null) =>
-    http.post('/auth/change-password', { old_password: oldPassword, new_password: newPassword, wrapped }),
 
   /** Réponse identique que le compte existe ou non (le serveur ne révèle rien). */
   forgotPassword: (email: string) => http.post('/auth/forgot-password', { email: email.trim().toLowerCase() }, { auth: false }),
   /** Jeton à usage unique (30 min) reçu par e-mail ; révoque toutes les sessions. */
-  resetPassword: (token: string, newPassword: string) =>
-    http.post('/auth/reset-password', { token, new_password: newPassword }, { auth: false }),
+  /** Le nouveau mot de passe ne part pas : sa preuve (`auth`) et son sel seulement (authKdf.ts). */
+  resetPassword: (token: string, newAuth: string, newKdfSalt: string) =>
+    http.post('/auth/reset-password', { token, new_auth: newAuth, new_kdf_salt: newKdfSalt }, { auth: false }),
 
   /** Double authentification (handlers/totp.rs). Le secret n'est actif qu'après `confirmTotp`. */
   setupTotp: () => http.post<TotpSetup>('/auth/2fa/setup'),

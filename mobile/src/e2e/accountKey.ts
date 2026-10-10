@@ -6,8 +6,9 @@ import * as SecureStore from 'expo-secure-store'
 import { create } from 'zustand'
 import { ApiError, http } from '@/lib/http'
 import * as c from './crypto'
+import { type AccountSecrets, type AnyWrapped, deriveSecrets, newKdfSalt, passwordProblem, unwrapAny, wrapKeyV2 } from './authKdf'
 
-interface KeysResponse { public: string; fingerprint: string; wrapped: c.WrappedKey; backup: c.WrappedKey | null }
+interface KeysResponse { public: string; fingerprint: string; wrapped: AnyWrapped; backup: c.WrappedKey | null }
 
 /** `setup` : aucune clé sur le serveur ; `unlock` : clé à ouvrir sur cet appareil. */
 export type LockMode = 'setup' | 'unlock'
@@ -38,14 +39,59 @@ const OPTS: SecureStore.SecureStoreOptions = {
   keychainService: 'org.heiphaistos.forgechat.e2e',
 }
 
-// Mot de passe saisi à la connexion : en mémoire seulement, jusqu'à ce que la clé soit prête.
-let typedPassword: string | null = null
-export const rememberPassword = (pw: string) => { typedPassword = pw }
-export const hasTypedPassword = () => typedPassword !== null
+// Mot de passe saisi à la connexion : en mémoire seulement (jamais envoyé), jusqu'à ce que la clé
+// soit prête. `secrets` = auth et wrapKey déjà dérivés à la connexion (connexion v2, authKdf.ts).
+let typed: { password: string; secrets: AccountSecrets | null } | null = null
+export const rememberLogin = (password: string, secrets: AccountSecrets | null) => { forgetTyped(); typed = { password, secrets } }
+export const hasTypedPassword = () => typed !== null
+export function forgetTyped() {
+  typed?.secrets?.wrapKey.fill(0)
+  typed = null
+}
 function passwordOr(pw?: string): string {
-  const v = pw || typedPassword
+  const v = pw || typed?.password
   if (!v) throw new Error('NEED_PASSWORD')
   return v
+}
+
+// ─── Connexion v2 : sel du compte et preuve du mot de passe ─────────────────
+export interface KdfInfo { kdf_salt: string | null; legacy: boolean }
+
+/** Sel avant connexion ; e-mail inconnu = sel factice et `legacy` (le serveur ne révèle rien). */
+export const prelogin = (email: string) =>
+  http.post<KdfInfo>('/auth/prelogin', { email: email.trim().toLowerCase() }, { auth: false })
+
+/** auth + wrapKey du compte connecté pour ce mot de passe ; null = compte pas encore migré. */
+async function secretsFor(password: string): Promise<AccountSecrets | null> {
+  if (typed?.password === password && typed.secrets) return typed.secrets
+  const k = await http.get<KdfInfo>('/users/me/kdf')
+  if (k.legacy || !k.kdf_salt) return null
+  return deriveSecrets(password, k.kdf_salt)
+}
+
+const proofOf = (password: string, s: AccountSecrets | null) => (s ? { auth: s.auth } : { password })
+
+/** Champ à joindre aux routes sensibles : `auth`, ou `password` pour un compte pas encore migré. */
+export async function passwordProof(password: string): Promise<{ auth: string } | { password: string }> {
+  const s = await working(() => secretsFor(password))
+  const proof = proofOf(password, s)
+  if (s && s !== typed?.secrets) s.wrapKey.fill(0)
+  return proof
+}
+
+/** Enveloppe du mot de passe : v2 (wrapKey) pour un compte migré, v1 sinon. */
+const sealFor = (priv: Uint8Array, password: string, s: AccountSecrets | null, userId: string): Promise<AnyWrapped> =>
+  s ? wrapKeyV2(priv, s.wrapKey, userId) : c.wrapKey(priv, password, c.keyAad(userId))
+
+/**
+ * Enveloppe du serveur encore en v1 sur un compte migré : rescellée en v2 avec la clé privée déjà
+ * ouverte. Idempotent ; un échec est rejoué à la connexion suivante.
+ */
+async function migrateWrapped(userId: string, keys: KeysResponse, priv: Uint8Array, s: AccountSecrets) {
+  if (keys.wrapped.v === 2) return
+  const wrapped = await wrapKeyV2(priv, s.wrapKey, userId)
+  await http.put('/users/me/keys/wrapped', { auth: s.auth, wrapped })
+  keys.wrapped = wrapped
 }
 
 async function fetchKeys(): Promise<KeysResponse | null> {
@@ -73,16 +119,16 @@ async function activate(userId: string, priv: Uint8Array, pub: Uint8Array) {
   if (c.b64uEncode(c.publicFromPrivate(priv)) !== c.b64uEncode(pub)) throw new Error('KEY_MISMATCH')
   const pubB64 = c.b64uEncode(pub)
   await SecureStore.setItemAsync(storeKey(userId), JSON.stringify({ userId, priv: c.b64uEncode(priv), pub: pubB64 }), OPTS)
-  typedPassword = null
+  forgetTyped()
   useAccountKey.setState({ status: 'ready', priv, pub: pubB64, userId })
 }
 
-async function newKeyMaterial(userId: string, password: string) {
+async function newKeyMaterial(userId: string, password: string, s: AccountSecrets | null) {
   const { priv, pub } = await c.generateKeyPair()
   const code = c.generateRecoveryCode()
   const body = {
     public: c.b64uEncode(pub),
-    wrapped: await c.wrapKey(priv, password, c.keyAad(userId)),
+    wrapped: await sealFor(priv, password, s, userId),
     backup: await c.wrapKey(priv, code, c.backupAad(userId)),
   }
   return { priv, pub, code, body }
@@ -107,17 +153,25 @@ async function loadStored(userId: string): Promise<{ priv: string; pub: string }
 /** Au démarrage d'une session : clé locale, sinon ouverture/création avec le mot de passe saisi. */
 export async function initAccountKey(userId: string) {
   const stored = await loadStored(userId)
+  const t = typed
   if (stored) {
-    typedPassword = null
-    useAccountKey.setState({ status: 'ready', priv: c.b64uDecode(stored.priv), pub: stored.pub, userId })
+    const priv = c.b64uDecode(stored.priv)
+    // Juste après une connexion : l'enveloppe du serveur passe en v2 même si la clé est déjà là.
+    if (t?.secrets) {
+      try {
+        const keys = await fetchKeys()
+        if (keys) await migrateWrapped(userId, keys, priv, t.secrets)
+      } catch { /* rejoué à la prochaine connexion */ }
+    }
+    forgetTyped()
+    useAccountKey.setState({ status: 'ready', priv, pub: stored.pub, userId })
     return
   }
   const keys = await fetchKeys()
-  const pw = typedPassword
-  if (pw) {
+  if (t) {
     try {
-      if (keys) await unlockWithPassword(userId, pw, keys)
-      else await createAccountKey(userId, pw)
+      if (keys) await unlockWithPassword(userId, t.password, keys)
+      else await createAccountKey(userId, t.password)
       return
     } catch { /* mot de passe changé par e-mail : écran de déverrouillage */ }
   }
@@ -125,7 +179,7 @@ export async function initAccountKey(userId: string) {
 }
 
 export const createAccountKey = (userId: string, password: string) => working(async () => {
-  const m = await newKeyMaterial(userId, password)
+  const m = await newKeyMaterial(userId, password, await secretsFor(password))
   await http.put('/users/me/keys', m.body)
   await activate(userId, m.priv, m.pub)
   useAccountKey.setState({ recoveryToShow: m.code })
@@ -134,7 +188,9 @@ export const createAccountKey = (userId: string, password: string) => working(as
 export const unlockWithPassword = (userId: string, password: string, keys?: KeysResponse | null) => working(async () => {
   const k = keys ?? await fetchKeys()
   if (!k) throw new Error('NO_KEY')
-  const priv = await c.unwrapKey(k.wrapped, password, c.keyAad(userId))
+  const s = await secretsFor(password)
+  const priv = await unwrapAny(k.wrapped, password, s, userId)
+  if (s) await migrateWrapped(userId, k, priv, s).catch(() => { /* rejoué à la prochaine connexion */ })
   await activate(userId, priv, c.b64uDecode(k.public))
 })
 
@@ -145,16 +201,18 @@ export const unlockWithRecovery = (userId: string, code: string, pw?: string) =>
   const k = await fetchKeys()
   if (!norm || !k?.backup) throw new Error('BAD_CODE')
   const priv = await c.unwrapKey(k.backup, norm, c.backupAad(userId))
-  const wrapped = await c.wrapKey(priv, password, c.keyAad(userId))
-  await http.put('/users/me/keys/wrapped', { password, wrapped })
+  const s = await secretsFor(password)
+  const wrapped = await sealFor(priv, password, s, userId)
+  await http.put('/users/me/keys/wrapped', { ...proofOf(password, s), wrapped })
   await activate(userId, priv, c.b64uDecode(k.public))
 })
 
 /** Nouvelle clé : l'ancien historique chiffré devient illisible (confirmation côté écran). */
 export const resetAccountKey = (userId: string, pw?: string) => working(async () => {
   const password = passwordOr(pw)
-  const m = await newKeyMaterial(userId, password)
-  await http.post('/users/me/keys/reset', { password, ...m.body })
+  const s = await secretsFor(password)
+  const m = await newKeyMaterial(userId, password, s)
+  await http.post('/users/me/keys/reset', { ...proofOf(password, s), ...m.body })
   await activate(userId, m.priv, m.pub)
   useAccountKey.setState({ recoveryToShow: m.code })
 })
@@ -165,20 +223,37 @@ export const regenerateRecoveryCode = (userId: string, password: string) => work
   if (!priv) throw new Error('NO_KEY')
   const code = c.generateRecoveryCode()
   const backup = await c.wrapKey(priv, code, c.backupAad(userId))
-  await http.put('/users/me/keys/backup', { password, backup })
+  await http.put('/users/me/keys/backup', { ...proofOf(password, await secretsFor(password)), backup })
   return code
 })
 
-/** Enveloppe pour /auth/change-password ; null sans clé sur cet appareil. */
-export async function rewrapForNewPassword(userId: string, newPw: string): Promise<c.WrappedKey | null> {
-  const priv = useAccountKey.getState().priv
-  return priv ? working(() => c.wrapKey(priv, newPw, c.keyAad(userId))) : null
-}
+/**
+ * Changement de mot de passe (atomique côté serveur) : nouvelle preuve, nouveau sel et clé privée
+ * rescellée en v2 par la nouvelle wrapKey. Sans clé sur cet appareil, l'enveloppe n'est pas envoyée.
+ */
+export const changePassword = (userId: string, oldPw: string, newPw: string) => working(async () => {
+  const problem = passwordProblem(newPw)
+  if (problem) throw new Error(problem)
+  const old = await secretsFor(oldPw)
+  const newSalt = newKdfSalt()
+  const next = await deriveSecrets(newPw, newSalt)
+  try {
+    const priv = useAccountKey.getState().priv
+    const wrapped = priv ? await wrapKeyV2(priv, next.wrapKey, userId) : null
+    await http.post('/auth/change-password', {
+      ...(old ? { old_auth: old.auth } : { old_password: oldPw }),
+      new_auth: next.auth, new_kdf_salt: newSalt, wrapped,
+    })
+  } finally {
+    next.wrapKey.fill(0)
+    if (old !== typed?.secrets) old?.wrapKey.fill(0)
+  }
+})
 
 /** Déconnexion : plus de clé pour ce compte sur cet appareil. `keep` (changement de compte) :
  *  la clé reste rangée, seule la mémoire est vidée. */
 export async function clearAccountKey(userId?: string | null, keep = false) {
-  typedPassword = null
+  forgetTyped()
   useAccountKey.setState({ status: 'idle', mode: 'unlock', priv: null, pub: null, recoveryToShow: null, prompt: false, userId: null })
   if (keep) return
   if (userId) await SecureStore.deleteItemAsync(storeKey(userId), OPTS).catch(() => {})

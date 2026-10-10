@@ -53,7 +53,9 @@ export default function LoginScreen() {
         setError(null)
       } else {
         setError(errorMessage(e))
-        if (needTotp) setTotp('')
+        setPassword('')
+        setNeedTotp(false)
+        setTotp('')
       }
     } finally {
       setLoading(false)

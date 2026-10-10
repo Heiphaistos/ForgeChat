@@ -1,13 +1,13 @@
 import { router } from 'expo-router'
 import { useState } from 'react'
 import { ScrollView } from 'react-native'
-import { authApi } from '@/api/auth'
 import { Button, PasswordField, T } from '@/components/ui'
 import { t as tr, useT } from '@/i18n'
 import { errorMessage } from '@/lib/http'
 import { passwordStrength } from '@/lib/validation'
 import { useAuth } from '@/stores/auth'
-import { rewrapForNewPassword } from '@/e2e/accountKey'
+import { changePassword } from '@/e2e/accountKey'
+import { MIN_PASSWORD } from '@/e2e/authKdf'
 import { colors, spacing } from '@/theme'
 
 export default function PasswordScreen() {
@@ -19,21 +19,25 @@ export default function PasswordScreen() {
   const [error, setError] = useState<string | null>(null)
 
   const submit = async () => {
-    if (newPw.length < 8 || newPw.length > 128) return setError(tr('settings.password.length'))
+    if (newPw.length < MIN_PASSWORD || newPw.length > 128) return setError(tr('settings.password.length'))
     if (passwordStrength(newPw).score < 2) return setError(tr('settings.password.weak'))
     if (newPw !== confirm) return setError(tr('settings.password.mismatch'))
     if (newPw === oldPw) return setError(tr('settings.password.same'))
     setLoading(true)
     setError(null)
     try {
-      // La clé E2E suit le mot de passe : ré-enveloppée ici, enregistrée par le serveur avec lui.
+      // La clé E2E suit le mot de passe : rescellée ici (v2), enregistrée par le serveur avec la
+      // nouvelle preuve ; le mot de passe lui-même ne part pas.
       const userId = useAuth.getState().user?.id
-      const wrapped = userId ? await rewrapForNewPassword(userId, newPw) : null
-      await authApi.changePassword(oldPw, newPw, wrapped)
+      if (!userId) return
+      await changePassword(userId, oldPw, newPw)
       // Le serveur a déjà révoqué toutes les sessions (et ce jeton) : fin de session locale.
       router.dismissAll()
       await useAuth.getState().signOutLocally(tr('settings.password.changed'))
     } catch (e) {
+      setOldPw('')
+      setNewPw('')
+      setConfirm('')
       setError(errorMessage(e))
     } finally {
       setLoading(false)

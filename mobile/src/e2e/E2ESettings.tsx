@@ -26,6 +26,7 @@ export function E2EKeySection() {
       setAsking(false)
       setPw('')
     } catch (e) {
+      setPw('')
       setError(errorText(e, 'e2e.unlock.wrong'))
     }
   }

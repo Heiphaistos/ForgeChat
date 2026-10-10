@@ -1,4 +1,5 @@
 import { openRaw } from '@/e2e/conversations'
+import { passwordProof } from '@/e2e/accountKey'
 import { http, path } from '@/lib/http'
 import type { NameInfo, NameStyle } from '@/lib/nameStyle'
 import type { MentionItem, ProfileLink, UnreadItem, User } from '@/types/models'
@@ -91,5 +92,5 @@ export const usersApi = {
       out.push(m.enc ? ((await openRaw('channel', m.channel_id, m as unknown as Record<string, unknown>)) as unknown as MentionItem) : m)
     return out
   },
-  deleteAccount: (password: string) => http.delete('/users/me', { body: { password } }),
+  deleteAccount: async (password: string) => http.delete('/users/me', { body: await passwordProof(password) }),
 }

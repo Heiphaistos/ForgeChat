@@ -207,7 +207,7 @@ export const fr = {
   'settings.privacy.exportSub': 'Profil, messages, serveurs et amis, au format JSON (RGPD).',
 
   // --- Mot de passe ---
-  'settings.password.length': 'Le nouveau mot de passe doit faire 8 à 128 caractères.',
+  'settings.password.length': 'Le nouveau mot de passe doit faire 10 à 128 caractères.',
   'settings.password.weak': 'Mot de passe trop faible.',
   'settings.password.mismatch': 'Les mots de passe ne correspondent pas.',
   'settings.password.same': 'Le nouveau mot de passe doit être différent.',
@@ -484,7 +484,7 @@ export const en: Partial<Record<keyof typeof fr, string>> = {
   'settings.privacy.exportSub': 'Profile, messages, servers and friends, as JSON (GDPR).',
 
   // --- Mot de passe ---
-  'settings.password.length': 'The new password must be 8 to 128 characters.',
+  'settings.password.length': 'The new password must be 10 to 128 characters.',
   'settings.password.weak': 'Password too weak.',
   'settings.password.mismatch': 'Passwords don’t match.',
   'settings.password.same': 'The new password must be different.',

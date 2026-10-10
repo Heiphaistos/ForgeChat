@@ -192,6 +192,8 @@ describe('DELETE /servers/:id via le client HTTP', () => {
   it('envoie le corps JSON sur DELETE et remonte totp_required', async () => {
     const calls: { url: string; init: RequestInit }[] = []
     global.fetch = jest.fn(async (url: string, init: RequestInit) => {
+      // Connexion v2 : sel du compte d'abord ; compte pas encore migré = le mot de passe sert de preuve.
+      if (url.endsWith('/users/me/kdf')) return new Response(JSON.stringify({ kdf_salt: null, legacy: true }), { status: 200 })
       calls.push({ url, init })
       return new Response(JSON.stringify({ error: 'totp_required' }), { status: 403 })
     }) as unknown as typeof fetch

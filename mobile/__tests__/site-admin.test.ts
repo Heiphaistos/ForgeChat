@@ -52,7 +52,10 @@ describe('administration (rôle El Patron)', () => {
     expect(m.post).toHaveBeenLastCalledWith(`/admin/servers/${id}/suspend`, { reason: 'abus' })
     await adminApi.unsuspend(id)
     expect(m.delete).toHaveBeenLastCalledWith(`/admin/servers/${id}/suspend`)
+    // Compte pas encore migré (connexion v2) : le mot de passe sert encore de preuve.
+    m.get.mockResolvedValueOnce({ kdf_salt: null, legacy: true })
     await adminApi.deleteServer(id, 'secret')
+    expect(m.get).toHaveBeenLastCalledWith('/users/me/kdf')
     expect(m.delete).toHaveBeenLastCalledWith(`/admin/servers/${id}`, { body: { password: 'secret' } })
     m.get.mockResolvedValue({ total: 0, servers: [] })
     await adminApi.servers(' jotun ', 'supervised')

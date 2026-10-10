@@ -1,4 +1,5 @@
 import { http, path } from '@/lib/http'
+import { passwordProof } from '@/e2e/accountKey'
 
 /** Administration du site (rôle « El Patron », propriétaire inclus) : mêmes routes que le web, /admin/*. */
 export interface AdminInfo {
@@ -98,7 +99,7 @@ export const adminApi = {
   endSupervision: (id: string) => http.delete(path`/admin/servers/${id}/supervise`),
   suspend: (id: string, reason: string) => http.post(path`/admin/servers/${id}/suspend`, { reason: reason.trim() || undefined }),
   unsuspend: (id: string) => http.delete(path`/admin/servers/${id}/suspend`),
-  deleteServer: (id: string, password: string) => http.delete(path`/admin/servers/${id}`, { body: { password } }),
+  deleteServer: async (id: string, password: string) => http.delete(path`/admin/servers/${id}`, { body: await passwordProof(password) }),
   invites: () => http.get<{ invites: Invite[] }>('/admin/invites'),
   createInvite: (note: string, maxUses: number, days: number) =>
     http.post<{ code: string }>('/admin/invites', {
