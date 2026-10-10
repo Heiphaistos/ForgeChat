@@ -228,3 +228,55 @@ async fn security_upload_sign_access() {
     assert!(can_read_upload(&state, owner, &in_dm).await.unwrap());
     assert!(!can_read_upload(&state, b, &in_dm).await.unwrap(), "hors du MP");
 }
+
+/// Secret du webhook GitHub chiffré au repos : l'ancien clair est migré (rejouable), le nouveau
+/// est chiffré à l'enregistrement, et la signature GitHub se vérifie toujours avec lui.
+#[tokio::test]
+#[ignore]
+async fn security_github_token_at_rest() {
+    use axum::{body::Bytes, extract::{Path, Query, State}, http::HeaderMap, Extension, Json};
+    use hmac::Mac;
+    crate::email_crypto::init_for_tests();
+    let (state, db) = setup().await;
+    let owner = user(&db).await;
+    let s: Uuid = sqlx::query_scalar("INSERT INTO servers (name, owner_id) VALUES ('gh', $1) RETURNING id")
+        .bind(owner).fetch_one(&db).await.expect("server");
+    sqlx::query("INSERT INTO server_members (user_id, server_id, is_owner) VALUES ($1, $2, TRUE)")
+        .bind(owner).bind(s).execute(&db).await.expect("member");
+    let old = "ancien-secret-en-clair-0001";
+    let chan: Uuid = sqlx::query_scalar("INSERT INTO channels (server_id, name, github_webhook_token) VALUES ($1, 'gh', $2) RETURNING id")
+        .bind(s).bind(old).fetch_one(&db).await.expect("channel");
+    crate::handlers::webhooks::migrate_github_tokens(&db).await.expect("migration");
+    crate::handlers::webhooks::migrate_github_tokens(&db).await.expect("migration rejouée");
+    let (clear, enc): (Option<String>, String) =
+        sqlx::query_as("SELECT github_webhook_token, github_webhook_token_enc FROM channels WHERE id=$1")
+            .bind(chan).fetch_one(&db).await.unwrap();
+    assert_eq!(clear, None);
+    assert!(enc.starts_with("v1:") && !enc.contains("ancien"));
+
+    let deliver = |secret: &'static str, query: Option<&'static str>| {
+        let state = state.clone();
+        async move {
+            let body = br#"{"zen":"ok"}"#;
+            let mut m = crate::crypto::HmacSha256::new_from_slice(secret.as_bytes()).unwrap();
+            m.update(body);
+            let mut h = HeaderMap::new();
+            h.insert("X-Hub-Signature-256", format!("sha256={}", data_encoding::HEXLOWER.encode(&m.finalize().into_bytes())).parse().unwrap());
+            h.insert("X-GitHub-Event", "ping".parse().unwrap());
+            let q = query.map(|t| std::collections::HashMap::from([("token".to_string(), t.to_string())])).unwrap_or_default();
+            crate::handlers::webhooks::receive_github_webhook(State(state), Path(chan), Query(q), h, Bytes::from_static(body)).await.is_ok()
+        }
+    };
+    assert!(deliver(old, None).await, "secret migré : signature acceptée");
+    assert!(deliver(old, Some(old)).await, "ancien ?token= toléré");
+    assert!(!deliver("autre-secret-du-salon-xx", None).await);
+
+    let new = "nouveau-secret-de-salon-0002";
+    let claims = crate::middleware::auth::Claims { sub: owner, exp: i64::MAX, iss: "forgechat".into(), iat: 0, sid: None };
+    crate::handlers::channels::set_github_webhook_token(State(state.clone()), Extension(claims), Path((s, chan)),
+        Json(crate::handlers::channels::SetGithubTokenBody { token: Some(new.into()) })).await.expect("set");
+    let enc: String = sqlx::query_scalar("SELECT github_webhook_token_enc FROM channels WHERE id=$1").bind(chan).fetch_one(&db).await.unwrap();
+    assert!(!enc.contains("nouveau"));
+    assert!(deliver(new, None).await);
+    assert!(!deliver(old, None).await, "ancien secret remplacé");
+}

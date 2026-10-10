@@ -69,6 +69,10 @@ async fn main() -> anyhow::Result<()> {
     if sealed > 0 {
         tracing::info!("E-mails : {sealed} adresse(s) chiffrée(s) au repos");
     }
+    let sealed = handlers::webhooks::migrate_github_tokens(&db).await?;
+    if sealed > 0 {
+        tracing::info!("GitHub : {sealed} secret(s) de webhook chiffré(s) au repos");
+    }
     let sealed = handlers::totp::migrate_at_rest(&db).await?;
     if sealed > 0 {
         tracing::info!("2FA : {sealed} compte(s) passé(s) au secret chiffré / codes de secours hachés");

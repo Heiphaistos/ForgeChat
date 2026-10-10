@@ -134,14 +134,14 @@ pub async fn delete_webhook(
 // pour les webhooks déjà configurés, mais n'est plus nécessaire.
 async fn github_secret(state: &AppState, channel_id: Uuid, token: Option<&str>) -> Result<String, AppError> {
     let stored: Option<String> = sqlx::query_scalar(
-        "SELECT github_webhook_token FROM channels WHERE id=$1"
+        "SELECT github_webhook_token_enc FROM channels WHERE id=$1"
     )
     .bind(channel_id)
     .fetch_optional(&state.db)
     .await?
     .flatten();
 
-    let t = stored.ok_or(AppError::Forbidden)?;
+    let t = stored.and_then(|s| open_github_token(channel_id, &s)).ok_or(AppError::Forbidden)?;
     if let Some(token) = token {
         // Comparaison en temps constant pour éviter les timing attacks
         let valid = t.len() == token.len()
@@ -151,6 +151,34 @@ async fn github_secret(state: &AppState, channel_id: Uuid, token: Option<&str>) 
         }
     }
     Ok(t)
+}
+
+/// Secret GitHub d'un salon chiffré au repos (migration 115) : le serveur le relit pour vérifier
+/// X-Hub-Signature-256, il n'est jamais renvoyé par l'API.
+const GITHUB_TOKEN_INFO: &str = "forgechat github token v1";
+
+pub fn seal_github_token(channel_id: Uuid, token: &str) -> String {
+    crate::email_crypto::seal_with(GITHUB_TOKEN_INFO, &channel_id.to_string(), token)
+}
+
+fn open_github_token(channel_id: Uuid, stored: &str) -> Option<String> {
+    crate::email_crypto::open_with(GITHUB_TOKEN_INFO, &channel_id.to_string(), stored)
+}
+
+/// Au démarrage : chiffre les secrets GitHub encore en clair puis les efface. Idempotent.
+pub async fn migrate_github_tokens(db: &sqlx::PgPool) -> anyhow::Result<u64> {
+    let rows: Vec<(Uuid, String)> =
+        sqlx::query_as("SELECT id, github_webhook_token FROM channels WHERE github_webhook_token IS NOT NULL")
+            .fetch_all(db)
+            .await?;
+    for (id, token) in &rows {
+        sqlx::query("UPDATE channels SET github_webhook_token_enc=$2, github_webhook_token=NULL WHERE id=$1")
+            .bind(id)
+            .bind(seal_github_token(*id, token))
+            .execute(db)
+            .await?;
+    }
+    Ok(rows.len() as u64)
 }
 
 /// Signature GitHub `sha256=<hex>` du corps avec le secret du salon.
