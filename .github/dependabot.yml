@@ -1,0 +1,16 @@
+# Les images Docker de base sont pinnées par digest (audit 2026-10-10) : Dependabot propose
+# chaque semaine la mise à jour des digests, sinon elles ne recevraient plus de correctifs.
+version: 2
+updates:
+  - package-ecosystem: docker
+    directory: /server
+    schedule:
+      interval: weekly
+  - package-ecosystem: docker-compose
+    directory: /
+    schedule:
+      interval: weekly
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
