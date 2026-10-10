@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 import { useThemeStore } from '../../theme/themeStore'
 import { format, isToday, isYesterday } from 'date-fns'
 import { ChevronDown, Loader2, SmilePlus, Copy, Link, Share2, CornerUpLeft, MessagesSquare, Forward, Pin, Pencil, Trash2, Flag } from 'lucide-react'
-import { useSearchParams, useNavigate } from 'react-router-dom'
+import { useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation } from '@tanstack/react-query'
 import { useAuth } from '../../store/auth'
 import { openUserMenu } from '../userMenu/store'
@@ -80,7 +80,6 @@ export default function MessageList({
 }: Props) {
   const t = useT()
   const { user } = useAuth()
-  const nav = useNavigate()
   // Utilisateurs ignorés : messages repliés, dépliables un par un.
   const ignoredUsers = useMyUxPrefs().ignored
   const [revealed, setRevealed] = useState<ReadonlySet<string>>(() => new Set())
