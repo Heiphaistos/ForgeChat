@@ -1,0 +1,26 @@
+# Déclenche tout de suite le déploiement automatique du VPS (deployer-auto), sans attendre son
+# minuteur de 2 min. La clé n'autorise QUE cette commande (commande forcée + restrict sur l'utilisateur
+# non-root `deploy`, sudo limité à `systemctl start --no-block deployer-auto.service`) : pas de shell,
+# pas de tunnel. Secret Forgejo : FORGEJO_DEPLOY_KEY (clé privée, D:\MDP\forgejo-deploy\id_ed25519).
+name: Deploy ForgeChat
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Déclencher deployer-auto
+        env:
+          DEPLOY_KEY: ${{ secrets.FORGEJO_DEPLOY_KEY }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$DEPLOY_KEY" > ~/.ssh/id_deploy && chmod 600 ~/.ssh/id_deploy
+          # Empreinte du serveur épinglée (vérifiée le 2026-10-10 : SHA256:48jKzaZSQEJ9oUAKnC8xKF4t06gDEeyevquwnW8J/SA).
+          echo 'forgechat.heiphaistos.org ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIG98xVc1MBALs5o1YroN88PTA+OX0g6oUZ229TdqboM' > ~/.ssh/known_hosts
+          ssh -i ~/.ssh/id_deploy -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes             -o ConnectTimeout=15 deploy@forgechat.heiphaistos.org </dev/null
+          rm -f ~/.ssh/id_deploy
