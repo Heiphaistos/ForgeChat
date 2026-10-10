@@ -47,7 +47,7 @@ pub fn admin_email() -> String {
         .unwrap_or_else(|| "heiphaistos44@gmail.com".to_string())
 }
 
-/// Propriétaire du site : le COMPTE (UUID `owner_user_id`, migration 300) qui a prouvé l'adresse
+/// Propriétaire du site : le COMPTE (UUID `owner_user_id`, migration 108) qui a prouvé l'adresse
 /// `FORGECHAT_ADMIN_EMAIL` en premier. Un compte recréé avec la même adresse n'en hérite pas.
 pub async fn is_owner(state: &AppState, user_id: Uuid) -> bool {
     sqlx::query_scalar::<_, bool>(

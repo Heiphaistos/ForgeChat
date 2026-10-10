@@ -41,7 +41,7 @@ Anti-force brute (même lot, faille H1) : compteurs Redis par IP (seul `X-Real-I
 
 2FA (faille M7) : code TOTP à usage unique aussi à la connexion (anti-rejeu 90 s) ; `totp_secret` chiffré au repos (AES-256-GCM, clé `TOTP_ENC_KEY` de 32 octets en base64, obligatoire au démarrage, AAD `forgechat totp v1|<user_id>`, préfixe `v1:`) ; 10 codes de secours de 64 bits, stockés en SHA-256 (préfixe `sha256:`), comparés en temps constant, retirés atomiquement. Les secrets et codes déjà en base sont convertis au démarrage (idempotent).
 
-Propriétaire du site (faille M2) : `fc_is_god` lit `site_settings.owner_user_id` (UUID du compte qui avait l'adresse du propriétaire à la migration 300, ou du premier compte qui prouve cette adresse), plus jamais l'e-mail : un compte supprimé puis recréé avec la même adresse n'hérite de rien.
+Propriétaire du site (faille M2) : `fc_is_god` lit `site_settings.owner_user_id` (UUID du compte qui avait l'adresse du propriétaire à la migration 108, ou du premier compte qui prouve cette adresse), plus jamais l'e-mail : un compte supprimé puis recréé avec la même adresse n'hérite de rien.
 
 ### 3.2 Enveloppes et récupération
 - À la première connexion d'une appli compatible : paire ECDH P-256 générée **sur l'appareil**.
