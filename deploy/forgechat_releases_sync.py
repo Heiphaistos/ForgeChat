@@ -92,7 +92,7 @@ def log(msg):
     print(msg, flush=True)
 
 
-# Dépôt privé : jeton GitHub en lecture seule (Contents: read, ce seul dépôt), fichier root 600.
+# Dépôt privé : jeton GitHub en lecture seule (Contents: read, ce seul dépôt), fichier root:forgechat-sync 640.
 TOKEN_FILE = os.environ.get("FORGECHAT_GITHUB_TOKEN_FILE", "/etc/forgechat/releases-token")
 
 

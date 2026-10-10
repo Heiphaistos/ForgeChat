@@ -6,9 +6,22 @@ Wants=network-online.target
 [Service]
 Type=oneshot
 ExecStart=/usr/bin/python3 /usr/local/sbin/forgechat_releases_sync.py
-# Ecrit seulement dans le dossier des telechargements.
+# Utilisateur dédié, sans shell : lit /etc/forgechat/releases-token (root:forgechat-sync 640) et
+# n'écrit que dans le dossier des téléchargements (forgechat-sync, lu par nginx et par le conteneur).
+# Création : docs/APPLIQUER-INFRA-2026-10-10.md.
+User=forgechat-sync
+Group=forgechat-sync
+UMask=0022
 ProtectSystem=strict
 ReadWritePaths=/var/www/forgechat-desktop
 ProtectHome=true
 PrivateTmp=true
+PrivateDevices=true
 NoNewPrivileges=true
+CapabilityBoundingSet=
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictSUIDSGID=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+LockPersonality=true
