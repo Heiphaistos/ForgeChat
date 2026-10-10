@@ -1,32 +1,30 @@
-import axios from 'axios'
-import api, { baseURL } from '../api/client'
-import { TAURI_KEY } from './localSession'
+import api from '../api/client'
+import { TAURI_KEY, invokeSession, setAccessToken } from './localSession'
 import { setOfflineOwner } from './offline'
 
 /**
  * Plusieurs comptes dans la même appli, bascule rapide.
  * - Web : les jetons des comptes inactifs restent dans des cookies HttpOnly propres à chaque
  *   compte (server/src/handlers/accounts.rs) ; la page n'en voit aucun.
- * - Bureau (Tauri, sans cookies) : rangés à côté du jeton du compte actif, dans le stockage
- *   de l'appli. Aucun mot de passe n'est jamais retenu.
+ * - Bureau (Tauri, sans cookies) : jeton de rafraîchissement de chaque compte dans le trousseau
+ *   de l'OS, côté Rust (session.rs) ; ici seulement les profils. Aucun mot de passe retenu.
  * Les clés de chiffrement restent séparées par compte (IndexedDB, clé = id du compte).
  */
 
 export interface SavedAccount { id: string; username: string; discriminator?: string; avatar: string | null }
-interface TauriAccount extends SavedAccount { refresh_token: string }
 
 const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
 export const MAX_OTHER_ACCOUNTS = 4
 
 let known: SavedAccount[] = []
 
-function tauriList(): TauriAccount[] {
+function tauriList(): SavedAccount[] {
   try {
     const v: unknown = JSON.parse(localStorage.getItem(TAURI_KEY) ?? '[]')
-    return Array.isArray(v) ? v.filter((a): a is TauriAccount => typeof a?.id === 'string' && typeof a?.refresh_token === 'string') : []
+    return Array.isArray(v) ? v.filter((a): a is SavedAccount => typeof a?.id === 'string' && typeof a?.username === 'string') : []
   } catch { return [] }
 }
-const tauriSave = (list: TauriAccount[]) => localStorage.setItem(TAURI_KEY, JSON.stringify(list))
+const tauriSave = (list: SavedAccount[]) => localStorage.setItem(TAURI_KEY, JSON.stringify(list))
 const strip = ({ id, username, discriminator, avatar }: SavedAccount): SavedAccount => ({ id, username, discriminator, avatar })
 
 /** Comptes mis de côté (hors compte actif). */
@@ -44,13 +42,11 @@ export const otherAccountIds = () => known.map(a => a.id)
 export async function stashCurrent(me: SavedAccount): Promise<void> {
   setOfflineOwner(null)
   if (!isTauri) { await api.post('/auth/accounts/stash'); return }
-  const refresh = localStorage.getItem('refresh_token')
-  if (!refresh) throw new Error('NO_SESSION')
   const list = tauriList().filter(a => a.id !== me.id)
   if (list.length >= MAX_OTHER_ACCOUNTS) throw new Error('TOO_MANY')
-  tauriSave([...list, { ...strip(me), refresh_token: refresh }])
-  localStorage.removeItem('access_token')
-  localStorage.removeItem('refresh_token')
+  await invokeSession('session_stash', { id: me.id })
+  setAccessToken(null)
+  tauriSave([...list, strip(me)])
 }
 
 /** Bascule vers un compte mis de côté (le compte actif est mis de côté), puis recharge l'appli. */
@@ -58,14 +54,11 @@ export async function switchTo(id: string, me: SavedAccount | null): Promise<voi
   if (!isTauri) {
     await api.post('/auth/accounts/switch', { user_id: id })
   } else {
-    const target = tauriList().find(a => a.id === id)
-    if (!target) throw new Error('UNKNOWN_ACCOUNT')
-    const { data } = await axios.post(`${baseURL}/auth/refresh`, { refresh_token: target.refresh_token })
-    const current = localStorage.getItem('refresh_token')
+    if (!tauriList().some(a => a.id === id)) throw new Error('UNKNOWN_ACCOUNT')
+    // Rust rafraîchit le compte choisi et range le compte actif sous `current`.
+    setAccessToken(await invokeSession<string>('session_switch', { id, current: me?.id ?? null }))
     const rest = tauriList().filter(a => a.id !== id && a.id !== me?.id)
-    tauriSave(me && current ? [...rest, { ...strip(me), refresh_token: current }] : rest)
-    localStorage.setItem('access_token', data.access_token)
-    localStorage.setItem('refresh_token', data.refresh_token)
+    tauriSave(me ? [...rest, strip(me)] : rest)
   }
   // Données hors ligne : celles du compte choisi dès le rechargement.
   setOfflineOwner(id)
@@ -73,10 +66,13 @@ export async function switchTo(id: string, me: SavedAccount | null): Promise<voi
 }
 
 /** Retire un compte mis de côté. Web : sa session est fermée côté serveur. Bureau : son jeton
- *  est oublié (il expire seul, ou se révoque depuis Réglages > Sessions de ce compte). */
+ *  est effacé du trousseau (il expire seul, ou se révoque depuis Réglages > Sessions de ce compte). */
 export async function forgetAccount(id: string): Promise<void> {
   if (!isTauri) await api.post('/auth/accounts/forget', { user_id: id })
-  else tauriSave(tauriList().filter(a => a.id !== id))
+  else {
+    await invokeSession('session_forget', { id })
+    tauriSave(tauriList().filter(a => a.id !== id))
+  }
   known = known.filter(a => a.id !== id)
 }
 

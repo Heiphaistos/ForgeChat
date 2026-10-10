@@ -35,6 +35,9 @@ sha2 = "0.10"
 ed25519-dalek = "2"
 base64 = "0.22"
 # Activite « joue a » : liste des processus (chemin de l'executable) seulement.
+# Jetons de session dans le trousseau de l'OS (audit M10) : Gestionnaire d'identifiants
+# Windows, Trousseau macOS, Secret Service Linux (zbus pur Rust, sans libdbus).
+keyring = "4.2"
 sysinfo = { version = "0.39", default-features = false, features = ["system"] }
 
 [target.'cfg(windows)'.dependencies]

@@ -3,6 +3,7 @@ import { WifiOff, RefreshCw } from 'lucide-react'
 import { useWs } from '../../store/ws'
 import { useT } from '../../i18n'
 import { useOffline } from '../../lib/offline'
+import { useServerStatus } from '../../api/client'
 
 function subscribeOnline(cb: () => void) {
   window.addEventListener('online', cb)
@@ -20,7 +21,8 @@ export default function ConnectionBanner() {
   const wsConnected = useWs(s => s.connected)
   const tr = useT()
   const browserOnline = useSyncExternalStore(subscribeOnline, () => navigator.onLine)
-  const disconnected = !wsConnected || !browserOnline
+  const serverDown = useServerStatus(s => s.unavailable)
+  const disconnected = !wsConnected || !browserOnline || serverDown
   const { fromCache, pending } = useOffline()
   const [visible, setVisible] = useState(false)
 
@@ -41,7 +43,7 @@ export default function ConnectionBanner() {
       {browserOnline ? (
         <>
           <RefreshCw size={13} className="animate-spin" aria-hidden />
-          {tr('conn.reconnecting')}
+          {serverDown ? tr('conn.serverDown') : tr('conn.reconnecting')}
         </>
       ) : (
         <>

@@ -691,6 +691,8 @@ export const fr = {
   'toast.allRead': 'Tout marqué comme lu',
   'conn.reconnecting': 'Reconnexion à ForgeChat...',
   'conn.offline': 'Hors ligne — vérifiez votre connexion',
+  'conn.serverDown': 'Serveur momentanément indisponible, nouvel essai en cours...',
+  'conn.upgradeRequired': 'Mets à jour ForgeChat pour continuer.',
   // --- Commun ---
   'common.cancel': 'Annuler',
   'common.edit': 'Modifier',

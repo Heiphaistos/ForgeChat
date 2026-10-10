@@ -692,6 +692,8 @@ export const en: Partial<Record<Key, string>> = {
   'toast.allRead': 'Everything marked as read',
   'conn.reconnecting': 'Reconnecting to ForgeChat...',
   'conn.offline': 'Offline: check your connection',
+  'conn.serverDown': 'Server temporarily unavailable, retrying...',
+  'conn.upgradeRequired': 'Update ForgeChat to continue.',
   // --- Commun ---
   'common.cancel': 'Cancel',
   'common.edit': 'Edit',
