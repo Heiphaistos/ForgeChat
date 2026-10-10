@@ -59,8 +59,6 @@ services:
       SMTP_FROM: ${SMTP_FROM:-noreply@forgechat.heiphaistos.org}
       STUN_URLS: ${STUN_URLS:-}
       TURN_URL: ${TURN_URL:-}
-      TURN_USERNAME: ${TURN_USERNAME:-}
-      TURN_PASSWORD: ${TURN_PASSWORD:-}
       TURN_STATIC_AUTH_SECRET: ${TURN_STATIC_AUTH_SECRET:-}
       FORGECHAT_DESKTOP_MANIFEST: ${FORGECHAT_DESKTOP_MANIFEST:-/app/desktop-releases/latest.json}
       FORGECHAT_DESKTOP_BASE_URL: ${FORGECHAT_DESKTOP_BASE_URL:-https://forgechat.heiphaistos.org/desktop}

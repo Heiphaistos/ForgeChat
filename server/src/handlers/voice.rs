@@ -15,7 +15,7 @@ const TURN_TTL_S: u64 = 3600;
 /// - **éphémère** (recommandé) si `TURN_STATIC_AUTH_SECRET` est défini :
 ///   `username = "<expiry_unix>:<aléatoire>"`, `credential = base64(HMAC-SHA1(secret, username))`,
 ///   valable `TURN_TTL_S`. Le secret ne quitte jamais le serveur (correctif N6).
-/// - **statique** en repli si seule `TURN_PASSWORD` est fournie (ancien comportement).
+/// - sans ce secret : pas de TURN (les identifiants statiques ne sont plus distribués).
 ///
 /// Le champ `ttl` indique au client dans combien de secondes recharger
 /// (0 = credentials statiques, pas d'expiration).
@@ -54,16 +54,10 @@ pub async fn get_ice_config(
                 "username": username,
                 "credential": credential,
             }));
-        } else if let (Some(turn_user), Some(turn_pass)) =
-            (&state.config.turn_username, &state.config.turn_password)
-        {
-            servers.push(serde_json::json!({
-                "urls": [turn_url],
-                "username": turn_user,
-                "credential": turn_pass,
-            }));
         } else {
-            tracing::warn!("TURN: TURN_URL défini sans TURN_STATIC_AUTH_SECRET ni TURN_PASSWORD — relais inutilisable");
+            // Plus jamais d'identifiants statiques distribués à tous les comptes (relais
+            // ouvert à n'importe qui les ayant vus une fois) : sans secret, pas de TURN.
+            tracing::warn!("TURN: TURN_URL défini sans TURN_STATIC_AUTH_SECRET : relais désactivé (TURN_USERNAME/TURN_PASSWORD ne sont plus distribués)");
         }
     }
 
