@@ -101,9 +101,53 @@ pub fn public_client(max_redirects: usize, user_agent: &str) -> reqwest::ClientB
         .user_agent(user_agent)
 }
 
+/// Corps d'une réponse sortante lu en flux, abandonné au-delà de `max` octets
+/// (avant : `.text()` / `.bytes()` chargeaient tout en mémoire, un flux ou une
+/// page de plusieurs Go saturait le serveur).
+pub async fn read_capped(mut resp: reqwest::Response, max: usize) -> Option<Vec<u8>> {
+    if resp.content_length().is_some_and(|n| n > max as u64) {
+        return None;
+    }
+    let mut out = Vec::new();
+    while let Some(chunk) = resp.chunk().await.ok()? {
+        if out.len() + chunk.len() > max {
+            return None;
+        }
+        out.extend_from_slice(&chunk);
+    }
+    Some(out)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Serveur local qui répond `body` en flux (sans Content-Length).
+    async fn serve(body: Vec<u8>) -> String {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        let l = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = l.local_addr().unwrap();
+        tokio::spawn(async move {
+            let (mut s, _) = l.accept().await.unwrap();
+            let mut buf = [0u8; 1024];
+            let _ = s.read(&mut buf).await;
+            let _ = s.write_all(b"HTTP/1.1 200 OK
+Connection: close
+
+").await;
+            let _ = s.write_all(&body).await;
+        });
+        format!("http://{addr}/")
+    }
+
+    #[tokio::test]
+    async fn capped_body() {
+        let c = reqwest::Client::new();
+        let url = serve(vec![b'a'; 5000]).await;
+        assert!(read_capped(c.get(&url).send().await.unwrap(), 4096).await.is_none());
+        let url = serve(vec![b'a'; 100]).await;
+        assert_eq!(read_capped(c.get(&url).send().await.unwrap(), 4096).await.map(|b| b.len()), Some(100));
+    }
 
     #[test]
     fn private_addresses_refused() {

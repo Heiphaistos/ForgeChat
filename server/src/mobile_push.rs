@@ -404,7 +404,10 @@ async fn deliver(state: &AppState, cfg: &MobilePushConfig, messages: &[serde_jso
     if !status.is_success() {
         anyhow::bail!("Expo a répondu {status}");
     }
-    let body: serde_json::Value = resp.json().await?;
+    let raw = crate::net_guard::read_capped(resp, 4 * 1024 * 1024)
+        .await
+        .ok_or_else(|| anyhow::anyhow!("réponse Expo illisible ou trop grande"))?;
+    let body: serde_json::Value = serde_json::from_slice(&raw)?;
     for token in dead_tokens(&body, tokens) {
         let _ = sqlx::query("DELETE FROM push_devices WHERE token = $1").bind(&token).execute(&state.db).await;
     }

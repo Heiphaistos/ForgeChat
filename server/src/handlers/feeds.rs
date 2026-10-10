@@ -258,7 +258,11 @@ async fn process_feed(state: &AppState, feed: &FeedRow, last_guid: Option<String
     if !resp.status().is_success() {
         anyhow::bail!("HTTP {}", resp.status());
     }
-    let xml = resp.text().await?;
+    const MAX_FEED_SIZE: usize = 2 * 1024 * 1024;
+    let bytes = crate::net_guard::read_capped(resp, MAX_FEED_SIZE)
+        .await
+        .ok_or_else(|| anyhow::anyhow!("flux illisible ou plus grand que 2 Mo"))?;
+    let xml = String::from_utf8_lossy(&bytes);
 
     // Parsing XML simplifié — extrait le premier <item> ou <entry>
     if let Some((guid, title, link)) = parse_first_item(&xml) {

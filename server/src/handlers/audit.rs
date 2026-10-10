@@ -553,9 +553,12 @@ pub(crate) fn is_ssrf_safe_url(url: &str) -> bool {
 
 pub async fn og_preview(
     State(state): State<AppState>,
-    _claims: Extension<Claims>,
+    Extension(claims): Extension<Claims>,
     Query(q): Query<OgQuery>,
 ) -> Result<Json<OgMeta>, AppError> {
+    if crate::handlers::password_reset::over_limit(&state, &format!("og:{}", claims.sub), 30, 60).await {
+        return Err(AppError::TooManyRequests);
+    }
     // Validation URL anti-SSRF
     if !is_ssrf_safe_url(&q.url) {
         return Err(AppError::BadRequest("URL invalide ou non autorisée".into()));
@@ -704,8 +707,7 @@ pub(crate) async fn fetch_og(state: &AppState, url: &str) -> Option<OgMeta> {
     if !ct.contains("text/html") && !ct.contains("text/plain") { return None }
     // Limiter la taille de réponse pour éviter un DOS
     const MAX_HTML_SIZE: usize = 1024 * 1024;
-    let bytes = resp.bytes().await.ok()?;
-    if bytes.len() > MAX_HTML_SIZE { return None }
+    let bytes = crate::net_guard::read_capped(resp, MAX_HTML_SIZE).await?;
     let html = String::from_utf8_lossy(&bytes);
     let m = meta_tags(&html);
     let pick = |keys: &[&str]| keys.iter().find_map(|k| m.get(*k).cloned());
