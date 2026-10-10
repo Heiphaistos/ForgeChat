@@ -8,7 +8,7 @@ import { useEffect } from 'react'
 import { View } from 'react-native'
 import { GestureHandlerRootView } from 'react-native-gesture-handler'
 import { KeyboardProvider } from 'react-native-keyboard-controller'
-import { ActiveCallBar, BootOverlay, ConnectionBanner, EnvBanner, GroupRingOverlay, IncomingCallOverlay, LockOverlay, ScreenShareBanner } from '@/components/Overlays'
+import { ActiveCallBar, ApiHealthBanner, BootOverlay, ConnectionBanner, EnvBanner, GroupRingOverlay, IncomingCallOverlay, LockOverlay, ScreenShareBanner } from '@/components/Overlays'
 import { loadServerChoice } from '@/config/env'
 import { queryClient } from '@/lib/queryClient'
 import { bindLifecycle, bindPrivacyScreen } from '@/services/lifecycle'
@@ -130,6 +130,7 @@ export default function RootLayout() {
                 <Stack.Screen name="friend-invite/[code]" options={{ presentation: 'modal' }} />
               </Stack>
               <ConnectionBanner />
+              <ApiHealthBanner />
               <UpdateBanner />
               <ActiveCallBar />
               <ScreenShareBanner />

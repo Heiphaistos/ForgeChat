@@ -53,3 +53,20 @@ export async function checkServerKey(sk: { server_id: string; public: string }, 
   const pin = await getPin(serverSubject(sk.server_id))
   return { fp, ok: !pin || pin.fp === fp, fresh: !pin, verified: !!pin?.verified }
 }
+
+/**
+ * Membres munis d'une clé exclus d'une nouvelle époque (clé changée non acceptée, clé mal formée) :
+ * champ `withheld` de la création, que le serveur n'accepte que pour un changement de clé récent.
+ */
+export function withheldOf(all: Member[], trusted: { user_id: string }[], me: string): string[] {
+  const ok = new Set(trusted.map(m => m.user_id))
+  return all.filter(m => m.public && m.user_id !== me && !ok.has(m.user_id)).map(m => m.user_id)
+}
+
+/** Enveloppe d'époque illisible : vrai la première fois par (conversation, époque) dans `seen` (une session). */
+export function firstUnreadable(seen: Set<string>, conv: string, epoch: number): boolean {
+  const k = `${conv}|${epoch}`
+  if (seen.has(k)) return false
+  seen.add(k)
+  return true
+}

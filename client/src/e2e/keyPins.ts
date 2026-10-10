@@ -78,7 +78,7 @@ export interface KeyAlert {
 }
 export const useKeyAlerts = create<{ alerts: KeyAlert[] }>(() => ({ alerts: [] }))
 /** Refus de la session (« pas maintenant ») : pas de nouvelle alerte pour cette clé, toujours exclue. */
-const refused = new Set<string>()
+const refused = new Map<string, KeyAlert>()
 
 function raise(a: KeyAlert) {
   if (refused.has(`${a.subject}|${a.fp}`)) return
@@ -95,8 +95,20 @@ export async function acceptKey(a: KeyAlert) {
 
 /** « Pas maintenant » : la clé reste exclue du chiffrement. */
 export function refuseKey(a: KeyAlert) {
-  refused.add(`${a.subject}|${a.fp}`)
+  refused.set(`${a.subject}|${a.fp}`, a)
   useKeyAlerts.setState(s => ({ alerts: s.alerts.filter(x => !(x.subject === a.subject && x.fp === a.fp)) }))
+}
+
+/**
+ * Rouvre la boîte de dialogue pour ces contacts, même refusés « pas maintenant » (le serveur
+ * refuse de les laisser de côté : WITHHELD_NOT_ALLOWED).
+ */
+export function reopenKeyAlerts(subjects: string[]) {
+  for (const [k, a] of [...refused]) {
+    if (!subjects.includes(a.subject)) continue
+    refused.delete(k)
+    raise(a)
+  }
 }
 
 /** Marque vérifiée (codes de sécurité comparés) la clé `pub` d'un contact, si c'est bien celle épinglée. */

@@ -9,7 +9,8 @@ import { useAccountKey } from './accountKey'
 import * as c from './crypto'
 import { becameReady, cacheUsable, emitKeysChanged, isLocked } from './keysRetry'
 import { indexMessage } from './searchIndex'
-import { trustedMembers, trustedServerKey } from './keyPins'
+import { reopenKeyAlerts, trustedMembers, trustedServerKey } from './keyPins'
+import { firstUnreadable, withheldOf } from './keyPinsCore'
 
 export { keysFor, onKeysChanged } from './keysRetry'
 
@@ -44,6 +45,8 @@ const cache = new Map<string, ConvState>()
 const loading = new Map<string, Promise<ConvState>>()
 const asked = new Map<string, number>()
 const completed = new Map<string, number>()
+/** Enveloppes illisibles déjà signalées (conversation|époque), pour la session. */
+const unreadable = new Set<string>()
 
 const myId = () => useAuth.getState().user?.id ?? null
 const base = (kind: ConvKind, id: string) => `/e2e/conversations/${kind}/${id}`
@@ -80,7 +83,13 @@ async function fetchState(kind: ConvKind, id: string): Promise<ConvState> {
       if (!e.wrapped_by) continue
       try {
         keys.set(e.epoch, await c.unwrapConvKey(priv, c.b64uDecode(e.wrapped_by_pub), e.wrapped, conv, e.epoch, me, e.wrapped_by))
-      } catch { /* enveloppe pour une ancienne clé ou altérée : on la redemandera */ }
+      } catch {
+        // Enveloppe pour une ancienne clé ou altérée : signalée (le serveur la supprime et relance
+        // KEY_REQUEST, son auteur ne peut plus m'en redéposer), une fois par époque et par session.
+        if (firstUnreadable(unreadable, conv, e.epoch)) {
+          void api.post(`${base(kind, id)}/keys/unreadable`, { epoch: e.epoch }).catch(() => {})
+        }
+      }
     }
   }
   return {
@@ -190,14 +199,23 @@ async function createEpoch(kind: ConvKind, id: string, st: ConvState): Promise<n
   // Les membres sans clé recevront l'époque après avoir créé la leur (`missing`).
   const all = await getAllMembers(kind, id)
   const keyed = await trustedMembers(all)
-  // MP/groupe : le serveur exige une enveloppe par membre muni d'une clé ; une clé changée
-  // non acceptée bloque donc la nouvelle époque (boîte de dialogue ouverte par trustedMembers).
-  if (kind !== 'channel' && keyed.length < all.filter(m => m.public && m.user_id !== me).length + 1) throw new Error('E2E_KEY_CHANGED')
+  // Clé changée non acceptée (boîte de dialogue ouverte par trustedMembers) : membre retenu,
+  // annoncé au serveur (`withheld`), qui ne l'admet que pour un changement de clé récent.
+  const withheld = withheldOf(all, keyed, me)
+  const postCreate = async (body: Record<string, unknown>) => {
+    try {
+      await api.post(`${base(kind, id)}/keys`, withheld.length ? { ...body, withheld } : body)
+    } catch (e) {
+      if (errorCode(e) !== 'WITHHELD_NOT_ALLOWED') throw e
+      reopenKeyAlerts(withheld)
+      throw new Error('E2E_WITHHELD')
+    }
+  }
   const epoch = st.current === null ? 0 : st.current + 1
   const key = c.generateConvKey()
   const conv = c.convName(kind, id)
   if (kind !== 'channel') {
-    await api.post(`${base(kind, id)}/keys`, { epoch, create: true, envelopes: await wrapFor(priv, me, conv, epoch, key, keyed) })
+    await postCreate({ epoch, create: true, envelopes: await wrapFor(priv, me, conv, epoch, key, keyed) })
   } else {
     // Salon : moi + un premier lot (et la clé du serveur), le reste ensuite sans bloquer l'envoi.
     const self = keyed.find(m => m.user_id === me)
@@ -206,9 +224,7 @@ async function createEpoch(kind: ConvKind, id: string, st: ConvState): Promise<n
     const first = [self, ...others.slice(0, BATCH - 1)]
     const server_envelope = st.serverKey ? await serverEnvelope(priv, me, conv, epoch, key, st.serverKey) : undefined
     if (server_envelope === null) throw new Error('E2E_SERVER_KEY_CHANGED')
-    await api.post(`${base(kind, id)}/keys`, {
-      epoch, create: true, envelopes: await wrapFor(priv, me, conv, epoch, key, first), server_envelope,
-    })
+    await postCreate({ epoch, create: true, envelopes: await wrapFor(priv, me, conv, epoch, key, first), server_envelope })
     void postBatches(kind, id, epoch, key, others.slice(BATCH - 1))
   }
   st.keys.set(epoch, key)
@@ -566,7 +582,7 @@ export function sendErrorText(e: unknown, fallback: string): string {
   if (m === 'E2E_WAITING') return t('e2e.send.waiting')
   if (m === 'E2E_LOCKED') return t('e2e.send.locked')
   if (m === 'AUTOMOD') return t('e2e.send.automod')
-  if (m === 'E2E_KEY_CHANGED') return t('e2e.send.keyChanged')
+  if (m === 'E2E_WITHHELD') return t('e2e.send.withheld')
   if (m === 'E2E_SERVER_KEY_CHANGED') return t('e2e.send.serverKeyChanged')
   if (errorCode(e) === 'PLAINTEXT_REFUSED') return t('e2e.send.update')
   return fallback

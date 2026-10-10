@@ -63,7 +63,10 @@ jest.mock('expo-crypto', () => ({
   getRandomBytes: (n: number) => new Uint8Array(require('crypto').randomBytes(n)),
   randomUUID: () => require('crypto').randomUUID(),
 }))
-jest.mock('@/lib/links', () => ({ resolveMediaUrl: (u: string) => `https://forge.test${u}` }))
+jest.mock('@/lib/links', () => ({
+  uploadPath: jest.requireActual('@/lib/links').uploadPath,
+  resolveMediaUrl: (u: string) => `https://forge.test${u}`,
+}))
 const mockMustEncrypt = jest.fn()
 jest.mock('@/e2e/conversations', () => ({ mustEncrypt: (...a: unknown[]) => mockMustEncrypt(...a) }))
 

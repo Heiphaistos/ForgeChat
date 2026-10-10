@@ -94,7 +94,7 @@ test('chiffrement obligatoire : un membre sans clé ne bloque pas, l\'époque es
   expect(back.content).toBe('Salut')
 })
 
-test("clé d'un membre changée depuis son épinglage : aucune enveloppe pour elle, nouvelle époque refusée", async () => {
+const changedKeyMembers = () => {
   // Empreinte épinglée d'une AUTRE clé pour A (le serveur sert maintenant pubA).
   mockPins.set(`fc_e2e_fp_${mockIds.b}_${mockIds.a}`, JSON.stringify({ fp: 'ancienne-empreinte' }))
   mockGet.mockImplementation(async (url: string) => url.endsWith('/members')
@@ -103,11 +103,47 @@ test("clé d'un membre changée depuis son épinglage : aucune enveloppe pour el
         { user_id: mockIds.a, username: 'a', public: mockV.ecdh.pubA, fingerprint: 'menteur' },
       ]
     : { current_epoch: null, rotate_needed: false, all_keyed: true, encrypt: true, envelopes: [] })
-  await expect(seal('dm', groupId, 'Salut')).rejects.toThrow('E2E_KEY_CHANGED')
-  expect(mockPost).not.toHaveBeenCalled()
+}
+
+test("clé d'un membre changée depuis son épinglage : aucune enveloppe pour elle, membre annoncé comme retenu", async () => {
+  changedKeyMembers()
+  const sealed = await seal('dm', groupId, 'Salut')
+  expect(sealed.enc.epoch).toBe(0)
+  const [, body] = mockPost.mock.calls[0] as [string, { envelopes: { member_id: string }[]; withheld: string[] }]
+  expect(body.envelopes.map((e) => e.member_id)).toEqual([mockIds.b])
+  expect(body.withheld).toEqual([mockIds.a])
   const { useKeyAlerts } = jest.requireActual('@/e2e/keyPins')
   expect(useKeyAlerts.getState().alerts.map((x: { subject: string }) => x.subject)).toEqual([mockIds.a])
   mockPins.clear()
+})
+
+test('WITHHELD_NOT_ALLOWED : envoi refusé avec un message clair, boîte de dialogue rouverte même après « pas maintenant »', async () => {
+  const { ApiError } = jest.requireMock('@/lib/http')
+  const { useKeyAlerts, refuseKey } = jest.requireActual('@/e2e/keyPins')
+  const { e2eErrorText } = jest.requireActual('@/e2e/conversations')
+  changedKeyMembers()
+  useKeyAlerts.getState().alerts.forEach(refuseKey)
+  expect(useKeyAlerts.getState().alerts).toEqual([])
+  mockPost.mockRejectedValue(new ApiError('WITHHELD_NOT_ALLOWED'))
+  const err = await seal('dm', groupId, 'Salut').catch((e: unknown) => e)
+  expect((err as Error).message).toBe('E2E_WITHHELD')
+  expect(e2eErrorText(err)).toBe('e2e.send.withheld')
+  expect(useKeyAlerts.getState().alerts.map((x: { subject: string }) => x.subject)).toEqual([mockIds.a])
+  mockPins.clear()
+})
+
+test('enveloppe illisible : signalée une seule fois par époque, puis clés redemandées', async () => {
+  const bad = { ...mockV.convKey.wrapped, ct: mockV.convKey.wrapped.ct.slice(0, -4) + 'AAAA' }
+  mockGet.mockResolvedValue({
+    current_epoch: 5, rotate_needed: false, all_keyed: true,
+    envelopes: [{ epoch: 5, wrapped: bad, wrapped_by: mockIds.a, wrapped_by_pub: mockV.ecdh.pubA }],
+  })
+  const o = await openRaw('group', groupId, { ...msg(), enc: { ...mockV.message.enc, epoch: 5 } })
+  expect(o.e2e).toBe('locked')
+  forgetConv()
+  await openRaw('group', groupId, { ...msg(), enc: { ...mockV.message.enc, epoch: 5 } })
+  const reports = mockPost.mock.calls.filter(([u]) => u === `/e2e/conversations/group/${groupId}/keys/unreadable`)
+  expect(reports).toEqual([[`/e2e/conversations/group/${groupId}/keys/unreadable`, { epoch: 5 }]])
 })
 
 test("rechiffrement de l'ancien texte d'un autre membre : l'AAD garde son auteur d'origine", async () => {

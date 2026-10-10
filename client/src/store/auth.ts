@@ -14,6 +14,7 @@ import { queryClient } from '../main'
 import { clearAccountKey, prelogin, rememberLogin } from '../e2e/accountKey'
 import { deriveSecrets, newKdfSalt, passwordProblem } from '../e2e/authKdf'
 import { clearSearchIndex } from '../e2e/searchIndex'
+import { markMigrated } from '../e2e/authGuard'
 
 const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
 
@@ -74,6 +75,7 @@ export const useAuth = create<AuthState>()(
         body = null
       }
       rememberLogin(password, secrets)
+      void markMigrated(email) // anti-retour arrière (e2e/authGuard.ts)
       // Web : jetons dans les cookies HttpOnly (automatiques via withCredentials)
       // Tauri : accès en mémoire, rafraîchissement dans le trousseau de l'OS (côté Rust)
       if (isTauri) await storeSession(data.access_token, data.refresh_token)

@@ -52,7 +52,7 @@ export default function LoginScreen() {
         setNeedTotp(true)
         setError(null)
       } else {
-        setError(errorMessage(e))
+        setError(e instanceof Error && e.message === 'AUTH_DOWNGRADE' ? t('auth.downgrade') : errorMessage(e))
         setPassword('')
         setNeedTotp(false)
         setTotp('')

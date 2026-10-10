@@ -1,7 +1,7 @@
 // Épinglage des clés publiques (TOFU, audit H3) : node --test scripts/keyPins.test.mjs
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { checkServerKey, fpOf, serverSubject, sortMembers } from '../src/e2e/keyPinsCore.ts'
+import { checkServerKey, firstUnreadable, fpOf, serverSubject, sortMembers, withheldOf } from '../src/e2e/keyPinsCore.ts'
 import { b64uEncode, generateKeyPair } from '../src/e2e/crypto.ts'
 
 const pubKey = async () => b64uEncode((await generateKeyPair()).pub)
@@ -59,4 +59,24 @@ test('clé de serveur : épinglée à la 1re vue, refusée si elle change', asyn
   const changed = await checkServerKey({ server_id: 's', public: p2 }, s.get)
   assert.equal(changed.ok, false)
   assert.equal(changed.fresh, false)
+})
+
+test('membres retenus : clé changée non acceptée ; ni moi, ni les membres sans clé', async () => {
+  const [oldPub, newPub, ok, mine] = [await pubKey(), await pubKey(), await pubKey(), await pubKey()]
+  const { get } = store({ b: { fp: await fpOf(oldPub) } })
+  const all = [
+    { user_id: 'a', public: mine }, { user_id: 'b', public: newPub }, { user_id: 'c', public: ok },
+    { user_id: 'd', public: null },
+  ]
+  const { trusted } = await sortMembers(all, 'a', mine, get)
+  assert.deepEqual(withheldOf(all, trusted, 'a'), ['b'])
+  assert.deepEqual(withheldOf(all.slice(0, 1), trusted, 'a'), [])
+})
+
+test('enveloppe illisible : signalée une seule fois par conversation et époque', () => {
+  const seen = new Set()
+  assert.equal(firstUnreadable(seen, 'dm:x', 2), true)
+  assert.equal(firstUnreadable(seen, 'dm:x', 2), false)
+  assert.equal(firstUnreadable(seen, 'dm:x', 3), true)
+  assert.equal(firstUnreadable(seen, 'group:x', 2), true)
 })

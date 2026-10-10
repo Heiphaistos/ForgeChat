@@ -3,11 +3,12 @@ import { router, usePathname } from 'expo-router'
 import { useEffect, useState } from 'react'
 import { Alert, Pressable, StyleSheet, Text, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import { IS_LAN } from '@/config/env'
+import * as Linking from 'expo-linking'
+import { IS_LAN, apiOrigin } from '@/config/env'
 import { useT } from '@/i18n'
 import { formatDuration } from '@/lib/format'
 import { useNow } from '@/lib/useNow'
-import { errorMessage } from '@/lib/http'
+import { errorMessage, useApiHealth } from '@/lib/http'
 import { useConnection } from '@/lib/realtime'
 import { useOffline } from '@/lib/offline'
 import { useAuth } from '@/stores/auth'
@@ -25,6 +26,7 @@ export function BootOverlay() {
   const status = useAuth((s) => s.status)
   const bootstrap = useAuth((s) => s.bootstrap)
   const logout = useAuth((s) => s.logout)
+  const busy = useApiHealth((s) => s.unavailable)
   if (status !== 'booting' && status !== 'offline') return null
   return (
     <View style={[StyleSheet.absoluteFill, styles.full]}>
@@ -33,8 +35,8 @@ export function BootOverlay() {
       ) : (
         <View style={{ alignItems: 'center', gap: spacing.lg, padding: spacing.xl }}>
           <Ionicons name="cloud-offline-outline" size={56} color={colors.textMuted} />
-          <Text style={styles.title}>{t('overlay.unreachable')}</Text>
-          <Text style={styles.sub}>{t('overlay.checkConnection')}</Text>
+          <Text style={styles.title}>{t(busy ? 'overlay.serverBusy' : 'overlay.unreachable')}</Text>
+          <Text style={styles.sub}>{t(busy ? 'overlay.serverBusyRetry' : 'overlay.checkConnection')}</Text>
           <Button title={t('common.retry')} onPress={() => void bootstrap()} style={{ alignSelf: 'stretch' }} />
           <Button title={t('you.logout')} variant="ghost" onPress={() => void logout()} />
         </View>
@@ -84,6 +86,35 @@ export function ConnectionBanner() {
           .filter(Boolean)
           .join(' · ')}
       </Text>
+    </View>
+  )
+}
+
+/**
+ * Santé de l'API (lib/http) : 503 = bandeau discret « Serveur momentanément indisponible »
+ * (session gardée, nouvel essai avec backoff) ; 426 = « Mets à jour ForgeChat », lien vers la page
+ * de téléchargement du serveur (aussi sur l'écran de connexion).
+ */
+export function ApiHealthBanner() {
+  const t = useT()
+  const { unavailable, updateRequired } = useApiHealth()
+  const signedIn = useAuth((s) => s.status === 'signedIn')
+  const insets = useSafeAreaInsets()
+  if (updateRequired) {
+    return (
+      <Pressable
+        style={[styles.banner, { top: insets.top + 28 }]}
+        onPress={() => void Linking.openURL(`${apiOrigin()}/telecharger`).catch(() => undefined)}
+        accessibilityRole="link"
+      >
+        <Text style={styles.bannerText}>{t('overlay.updateRequired')}</Text>
+      </Pressable>
+    )
+  }
+  if (!unavailable || !signedIn) return null
+  return (
+    <View style={[styles.banner, { top: insets.top + 28 }]} pointerEvents="none" accessibilityLiveRegion="polite">
+      <Text style={styles.bannerText}>{t('overlay.serverBusy')}</Text>
     </View>
   )
 }

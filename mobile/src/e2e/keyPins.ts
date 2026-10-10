@@ -56,7 +56,7 @@ export interface KeyAlert {
   verified: boolean
 }
 export const useKeyAlerts = create<{ alerts: KeyAlert[] }>(() => ({ alerts: [] }))
-const refused = new Set<string>()
+const refused = new Map<string, KeyAlert>()
 
 function raise(a: KeyAlert) {
   if (refused.has(`${a.subject}|${a.fp}`)) return
@@ -71,8 +71,20 @@ export async function acceptKey(a: KeyAlert) {
 }
 
 export function refuseKey(a: KeyAlert) {
-  refused.add(`${a.subject}|${a.fp}`)
+  refused.set(`${a.subject}|${a.fp}`, a)
   useKeyAlerts.setState((s) => ({ alerts: s.alerts.filter((x) => !(x.subject === a.subject && x.fp === a.fp)) }))
+}
+
+/**
+ * Rouvre la boîte de dialogue pour ces contacts, même refusés « pas maintenant » (le serveur
+ * refuse de les laisser de côté : WITHHELD_NOT_ALLOWED).
+ */
+export function reopenKeyAlerts(subjects: string[]) {
+  for (const [k, a] of [...refused]) {
+    if (!subjects.includes(a.subject)) continue
+    refused.delete(k)
+    raise(a)
+  }
 }
 
 export async function markVerified(userId: string, pub: string): Promise<boolean> {

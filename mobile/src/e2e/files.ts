@@ -9,7 +9,7 @@
 import { requireOptionalNativeModule } from 'expo'
 import * as Crypto from 'expo-crypto'
 import type { UploadFile } from '@/api/messages'
-import { resolveMediaUrl } from '@/lib/links'
+import { resolveMediaUrl, uploadPath } from '@/lib/links'
 import type { Attachment } from '@/types/models'
 import { mustEncrypt, type ConvKind } from './conversations'
 import * as c from './crypto'
@@ -174,8 +174,10 @@ export function displayAttachments(atts: Attachment[], files: c.FileEntry[] | nu
 
 /** Média chiffré d'une publication, cité par son adresse (`u`) : pièce jointe à afficher ; null si en clair. */
 export function encryptedMedia(url: string, files: c.FileEntry[] | null | undefined): Attachment | null {
-  if (!/\.enc$/.test(url)) return null
-  const e = files?.find((f) => f.u === url)
+  // Adresse servie signée (?exp&sig) : reconnue et reliée à sa clé sans la signature, téléchargée signée.
+  const bare = uploadPath(url)
+  if (!/\.enc$/.test(bare)) return null
+  const e = files?.find((f) => f.u === bare)
   return { id: e?.id ?? url, url, filename: e ? c.blobName(e.id) : 'media.enc', content_type: 'application/octet-stream', size: e?.s ?? 0 }
 }
 
