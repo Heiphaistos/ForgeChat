@@ -246,8 +246,6 @@ async fn main() -> anyhow::Result<()> {
         .route("/api/invites/:code", get(handlers::invites::get_invite_info))
         // Invitation amis (lecture publique — affiche le profil de l'invitant)
         .route("/api/friend-invite/:code", get(handlers::friends::get_friend_invite))
-        // Profil public (auth optionnelle pour les infos de relation)
-        .route("/api/users/:id/profile", get(handlers::users::get_user_profile_public))
         // WebSocket
         .route("/ws", get(handlers::websocket::ws_handler))
         // Routes bot (sans JWT — auth via Bearer token)
@@ -515,6 +513,8 @@ fn protected_routes(state: AppState) -> Router<AppState> {
         .route("/users/me/banner", post(handlers::profile_custom::upload_banner))
         .route("/users/styles", get(handlers::profile_custom::name_styles))
         .route("/users/:id", get(handlers::users::get_user))
+        // Profil (fiche) : authentifié depuis l'audit 2026-10-10 (avant : public, jeton optionnel jamais révoqué)
+        .route("/users/:id/profile", get(handlers::users::get_user_profile))
         .route("/users/search", get(handlers::users::search_users))
         // Servers
         .route("/servers", get(handlers::servers::get_my_servers))
