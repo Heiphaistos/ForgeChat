@@ -4,6 +4,8 @@ import { Toggle, Select, Field } from './shared'
 import api from '../../api/client'
 import toast from 'react-hot-toast'
 import { useT } from '../../i18n'
+import { AccessibilityPrefs } from './UxPrefControls'
+import { DensityChoice } from './appearance/LayoutSettings'
 
 export default function AccessibilitySection() {
   const t = useT()
@@ -70,6 +72,10 @@ export default function AccessibilitySection() {
       >
         {save.isPending ? t('common.saving') : t('common.save')}
       </button>
+
+      <p className="text-xs text-fc-muted">{t('ux.deviceOnly')}</p>
+      <DensityChoice />
+      <AccessibilityPrefs />
     </div>
   )
 }

@@ -1,6 +1,7 @@
 import { useCallback, useMemo, type CSSProperties } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import api, { mediaUrl } from '../api/client'
+import { useUxPrefs } from '../lib/uxPrefs'
 
 interface DecorRole {
   id: string
@@ -93,9 +94,10 @@ export function useRoleDecor(serverId?: string) {
   return useCallback((userId: string): RoleDecor | undefined => map.get(userId), [map])
 }
 
-/** Icône de rôle : image téléversée ou emoji. */
+/** Icône de rôle : image téléversée ou emoji (masquable : Accessibilité > icônes des rôles). */
 export function RoleIcon({ icon, title }: { icon?: string | null; title?: string }) {
-  if (!icon) return null
+  const show = useUxPrefs(s => s.roleIcons)
+  if (!icon || !show) return null
   return icon.startsWith('/uploads/')
     ? <img src={mediaUrl(icon)} alt={title ?? ''} title={title} className="w-4 h-4 inline-block object-contain flex-shrink-0 align-text-bottom" />
     : <span title={title} role="img" aria-label={title} className="text-sm leading-none flex-shrink-0">{icon}</span>

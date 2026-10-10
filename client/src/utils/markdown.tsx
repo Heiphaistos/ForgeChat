@@ -1,12 +1,20 @@
 import api, { mediaUrl } from '../api/client'
 import hljs from 'highlight.js/lib/common'
-import { useState } from 'react'
+import { createContext, useContext, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { cachedChannel, cachedRole, cachedUsername } from './mentions'
 import { deceptiveHost } from './safeUrl'
 import UserName from '../components/ui/UserName'
 import { intlLocale } from '../i18n'
+import { useUxPrefs } from '../lib/uxPrefs'
+import StillableImg from '../components/ui/StillableImg'
+
+/** Vrai dans un salon que je modère (réglage « Spoilers : dans les salons que je modère »). */
+export const SpoilerModContext = createContext(false)
+
+// Lien d'invitation : masqué par le mode streamer (option « liens d'invitation »).
+const inviteClass = (url: string) => (/\/invite\/[\w-]+/.test(url) ? 'streamer-invite' : undefined)
 
 function highlightCode(code: string, lang: string): string {
   if (lang && hljs.getLanguage(lang)) {
@@ -212,7 +220,7 @@ function tokenize(text: string, customEmojis?: Record<string, string>): React.Re
         // Texte qui imite une autre adresse que la cible : l'hôte réel est affiché à côté.
         const real = deceptiveHost(linkMatch[1], linkMatch[2])
         result.push(
-          <a key={match.index} href={linkMatch[2]} target="_blank" rel="noopener noreferrer" title={linkMatch[2]}>
+          <a key={match.index} href={linkMatch[2]} target="_blank" rel="noopener noreferrer" title={linkMatch[2]} className={inviteClass(linkMatch[2])}>
             {linkMatch[1]}{real && <span className="text-fc-yellow"> ({real})</span>}
           </a>
         )
@@ -234,7 +242,7 @@ function tokenize(text: string, customEmojis?: Record<string, string>): React.Re
         url = url.slice(0, -1)
       }
       result.push(
-        <a key={match.index} href={url} target="_blank" rel="noopener noreferrer">
+        <a key={match.index} href={url} target="_blank" rel="noopener noreferrer" className={inviteClass(url)}>
           {url}
         </a>
       )
@@ -254,7 +262,7 @@ function tokenize(text: string, customEmojis?: Record<string, string>): React.Re
       const url = customEmojis[name]
       if (url) {
         result.push(
-          <img key={match.index} src={mediaUrl(url)} alt={name} title={`:${name}:`}
+          <StillableImg key={match.index} src={mediaUrl(url)} alt={name} title={`:${name}:`}
             loading="lazy" decoding="async"
             className="inline-block w-5 h-5 object-contain align-middle mx-0.5" />
         )
@@ -302,7 +310,12 @@ function CodeBlock({ lang, code }: { lang: string; code: string }) {
 }
 
 function SpoilerText({ text }: { text: string }) {
-  const [revealed, setRevealed] = useState(false)
+  const mode = useUxPrefs(s => s.spoilers)
+  const moderated = useContext(SpoilerModContext)
+  const [clicked, setRevealed] = useState(false)
+  // Révélé d'office : réglage « toujours », ou « salons que je modère » ; fond léger pour le repérer.
+  const auto = mode === 'always' || (mode === 'moderated' && moderated)
+  const revealed = clicked || auto
   const reveal = () => setRevealed(true)
   return (
     <span
@@ -312,7 +325,7 @@ function SpoilerText({ text }: { text: string }) {
       tabIndex={revealed ? undefined : 0}
       aria-label={revealed ? undefined : 'Contenu masqué — cliquer pour révéler'}
       className={`rounded px-0.5 cursor-pointer transition-colors ${
-        revealed ? 'bg-transparent cursor-default' : 'bg-fc-muted/40 text-transparent select-none hover:bg-fc-muted/60'
+        revealed ? `${auto && !clicked ? 'bg-fc-muted/20' : 'bg-transparent'} cursor-default` : 'bg-fc-muted/40 text-transparent select-none hover:bg-fc-muted/60'
       }`}
     >
       {text}
@@ -354,7 +367,7 @@ function RemoteEmoji({ id, name }: { id: string; name: string }) {
   })
   if (!data?.url) return <>{`:${name}:`}</>
   return (
-    <img src={mediaUrl(data.url)} alt={name} title={`:${name}:`} loading="lazy" decoding="async"
+    <StillableImg src={mediaUrl(data.url)} alt={name} title={`:${name}:`} loading="lazy" decoding="async"
       className="inline-block w-5 h-5 object-contain align-middle mx-0.5" />
   )
 }

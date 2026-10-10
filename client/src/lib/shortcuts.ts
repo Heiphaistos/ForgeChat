@@ -23,6 +23,7 @@ export const SHORTCUTS: readonly ShortcutDef[] = [
   { action: 'next_server', default: 'Ctrl+Alt+ArrowDown', group: 'nav' },
   { action: 'prev_server', default: 'Ctrl+Alt+ArrowUp', group: 'nav' },
   { action: 'lock_app', default: 'Ctrl+Shift+L', group: 'nav' },
+  { action: 'toggle_streamer', default: 'Ctrl+Shift+F', group: 'nav' },
   { action: 'mark_all_read', default: 'Ctrl+Shift+A', group: 'chat' },
   { action: 'search_channel', default: 'Ctrl+F', group: 'chat' },
   { action: 'toggle_split', default: 'Ctrl+Shift+S', group: 'chat' },

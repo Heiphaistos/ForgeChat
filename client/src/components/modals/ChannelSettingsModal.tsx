@@ -605,7 +605,7 @@ export default function ChannelSettingsModal({ channel, serverId, onClose }: Pro
               <div className="bg-fc-bg/50 rounded-xl border border-fc-hover p-4 space-y-3">
                 <h4 className="text-sm font-semibold text-white">{t('chset.info')}</h4>
                 <div className="grid grid-cols-2 gap-2 text-xs">
-                  <div><span className="text-fc-muted">ID : </span><span className="text-white font-mono">{channel.id.slice(0, 18)}...</span></div>
+                  <div><span className="text-fc-muted">ID : </span><span className="text-white font-mono streamer-id">{channel.id.slice(0, 18)}...</span></div>
                   <div><span className="text-fc-muted">{t('chset.typeLabel')} </span><span className="text-white">{t(`chtype.${channel.type}` as Key)}</span></div>
                   <div><span className="text-fc-muted">Position : </span><span className="text-white">{channel.position ?? 'N/A'}</span></div>
                 </div>

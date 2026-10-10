@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react'
+import { streamerHides } from '../lib/uxPrefs'
 
 // ── AudioContext singleton ────────────────────────────────────────────────────
 let _ctx: AudioContext | null = null
@@ -70,6 +71,7 @@ function playDoubleBip(freq1: number, freq2: number, duration: number): void {
 
 // Vérification centralisée depuis localStorage pour éviter les états désynchronisés
 function isEnabled(): boolean {
+  if (streamerHides('smSounds')) return false
   const stored = localStorage.getItem('audio_notif_enabled')
   return stored === null ? true : stored === 'true'
 }

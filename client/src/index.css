@@ -341,9 +341,16 @@ a:focus-visible,
   --fc-float-a: 1 !important;
 }
 
-/* MODE STREAMER — masque les infos identifiables */
+/* MODE STREAMER — masque les infos identifiables (options : lib/uxPrefs.ts, data-sm-*) */
 [data-streamer-mode="true"] .streamer-hidden { visibility: hidden !important; }
-[data-streamer-mode="true"] .streamer-blur { filter: blur(8px) !important; }
+[data-streamer-mode="true"]:not([data-sm-personal="false"]) .streamer-blur,
+[data-streamer-mode="true"]:not([data-sm-invites="false"]) .streamer-invite,
+[data-streamer-mode="true"]:not([data-sm-ids="false"]) .streamer-id { filter: blur(8px) !important; }
+
+/* ACCESSIBILITÉ (lib/uxPrefs.ts) : liens soulignés, texte aéré */
+[data-underline-links="true"] a { text-decoration: underline; }
+[data-readable-text="true"] .fc-markdown,
+[data-readable-text="true"] textarea { letter-spacing: 0.05em; word-spacing: 0.12em; line-height: 1.7; }
 
 /* DÉCORATION D'AVATAR (anneau autour de l'avatar, cf. ProfileDecor.tsx) */
 .fc-deco {

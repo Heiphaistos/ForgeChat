@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import api, { SERVER_URL } from '../api/client'
+import { useUxPrefs } from '../lib/uxPrefs'
 
 type WsHandler = (data: unknown) => void
 
@@ -43,6 +44,8 @@ let _generation = 0
 
 // Un signal WebRTC périmé est pire qu'aucun signal : on jette ce qui a dépassé
 // sa fenêtre utile au lieu de le rejouer à la reconnexion.
+const TYPING_TYPES = new Set(['TYPING_START', 'TYPING', 'THREAD_TYPING'])
+
 const MAX_AGE: Record<string, number> = {
   VOICE_STATE: 10_000,
   TYPING_START: 3_000,
@@ -170,6 +173,8 @@ export const useWs = create<WsState>((set, get) => ({
   },
 
   send: (msg) => {
+    // Saisie silencieuse (Extras) : l'indicateur « en train d'écrire » n'est jamais envoyé.
+    if (TYPING_TYPES.has((msg as { type?: string }).type ?? '') && useUxPrefs.getState().silentTyping) return
     const { socket } = get()
     if (socket?.readyState === WebSocket.OPEN) {
       socket.send(JSON.stringify(msg))

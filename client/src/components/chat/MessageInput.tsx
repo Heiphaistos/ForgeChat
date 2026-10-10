@@ -30,6 +30,8 @@ import { t as tr, useT, type Key } from '../../i18n'
 import { openMessages, withSeal } from '../../e2e/conversations'
 import { channelSendError, postMessage, sendChannel } from '../../e2e/channels'
 import { sealPoll } from '../../e2e/channelScopes'
+import { outgoingText, useUxPrefs } from '../../lib/uxPrefs'
+import { renderMarkdown } from '../../utils/markdown'
 
 // ─── Emoji shortcodes ────────────────────────────────────────────────────────
 
@@ -137,7 +139,8 @@ interface Props {
   channelId: string
   serverId?: string
   placeholder?: string
-  onSend: (content: string, replyTo?: string, files?: FileWithTtl[], ttlSeconds?: number | null) => void
+  /** `replyPing` : réponse dans un salon, notifier l'auteur cité (false = sans mention). */
+  onSend: (content: string, replyTo?: string, files?: FileWithTtl[], ttlSeconds?: number | null, replyPing?: boolean) => void
   onEdit?: (messageId: string, content: string) => void
   replyTo?: ReplyTarget | null
   onCancelReply?: () => void
@@ -242,6 +245,10 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
   const fileInputRef = useRef<HTMLInputElement>(null)
   const { send } = useWs()
   const typingTimeout = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  const ux = useUxPrefs()
+  // Réponse : mention de l'auteur cité (réglage par défaut, modifiable pour chaque réponse).
+  const [replyPing, setReplyPing] = useState(ux.replyPing)
+  useEffect(() => { setReplyPing(useUxPrefs.getState().replyPing) }, [replyTo?.id])
   const queryClient = useQueryClient()
 
   const { data: mentionResults = [] } = useQuery<MentionUser[]>({
@@ -713,7 +720,9 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
       setContent('')
       return
     }
-    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submit() }
+    // Envoi : Entrée (Maj+Entrée = retour à la ligne) ou Ctrl+Entrée (Entrée = retour à la ligne).
+    const ctrl = e.ctrlKey || e.metaKey
+    if (e.key === 'Enter' && !e.shiftKey && (ux.sendKey === 'enter' || ctrl)) { e.preventDefault(); submit() }
   }
 
   // Réinitialiser le contenu, fichiers et options transientes quand le canal change
@@ -747,9 +756,9 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
     setContent(val)
     setDraft(channelId, val)
     setCursorPos(pos)
-    detectMention(val, pos)
+    if (ux.mentionSuggest) detectMention(val, pos)
     detectSlash(val)
-    detectEmojiAuto(val, pos)
+    if (ux.emojiSuggest) detectEmojiAuto(val, pos)
     // Throttle: send TYPING_START at most once per 3 seconds
     if (!typingTimeout.current) {
       send({ type: 'TYPING_START', channel_id: channelId })
@@ -762,7 +771,9 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
   const submit = () => {
     if (sending) return
     // Mentions choisies → jetons résolus par le serveur (salons seulement)
-    const trimmed = serverId ? encodeMentions(content.trim(), pickedMentions.current) : content.trim()
+    // Liens nettoyés et émoticônes converties sur l'appareil, avant le chiffrement.
+    const outgoing = outgoingText(content.trim())
+    const trimmed = serverId ? encodeMentions(outgoing, pickedMentions.current) : outgoing
 
     // Limite serveur : 4000 caractères — bloquer avant l'aller-retour réseau
     if (trimmed.length > MAX_CHARS) {
@@ -805,7 +816,7 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
       // Sinon : c'est peut-être une bot command, on envoie le message tel quel
     }
 
-    onSend(trimmed, replyTo?.id, files.length > 0 ? files : undefined, msgTtl)
+    onSend(trimmed, replyTo?.id, files.length > 0 ? files : undefined, msgTtl, serverId && replyTo ? replyPing : undefined)
     setContent('')
     clearDraft(channelId)
     clearFiles()
@@ -915,9 +926,23 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
           {replyTo.content && (
             <span className="text-fc-muted truncate max-w-xs">{replyTo.content.slice(0, 80)}</span>
           )}
-          <button onClick={onCancelReply} className="ml-auto p-0.5 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition" title={t('input.cancel')} aria-label={t('input.cancelReply')}>
+          {serverId && (
+            <button type="button" onClick={() => setReplyPing(v => !v)} aria-pressed={replyPing}
+              title={t(replyPing ? 'ux.reply.pingOn' : 'ux.reply.pingOff')}
+              className={`ml-auto px-1.5 rounded font-semibold transition ${replyPing ? 'text-fc-accent' : 'text-fc-muted line-through'}`}>
+              @{replyPing ? 'ON' : 'OFF'}
+            </button>
+          )}
+          <button onClick={onCancelReply} className={`${serverId ? '' : 'ml-auto '}p-0.5 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition`} title={t('input.cancel')} aria-label={t('input.cancelReply')}>
             <X size={12} />
           </button>
+        </div>
+      )}
+
+      {/* Aperçu du markdown, même rendu que les messages */}
+      {ux.markdownPreview && /[*_~`|>#[]|^\s*[-\d]/.test(content) && (
+        <div aria-label={t('ux.composer.previewLabel')} className="mb-1 px-3 py-1.5 max-h-32 overflow-y-auto rounded-lg bg-fc-input/40 border border-fc-hover text-sm text-fc-text break-words">
+          {renderMarkdown(content)}
         </div>
       )}
 
@@ -1171,9 +1196,9 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
           className="flex-1 min-w-0 bg-transparent text-fc-text placeholder-fc-muted outline-none resize-none text-sm overflow-y-hidden"
           style={{ lineHeight: '1.5', minHeight: '24px', maxHeight: '144px' }}
           enterKeyHint="send"
-          spellCheck
+          spellCheck={ux.spellcheck}
           autoComplete="off"
-          autoCorrect="on"
+          autoCorrect={ux.spellcheck ? 'on' : 'off'}
           autoCapitalize="sentences"
         />
         </div>

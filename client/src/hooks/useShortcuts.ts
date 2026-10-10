@@ -8,6 +8,8 @@ import { useUnread } from '../store/unread'
 import { useVoice } from '../store/voice'
 import { useAppLock } from '../lib/appLock'
 import { t as tr, type Key } from '../i18n'
+import { toggleStreamerMode } from '../lib/streamerMode'
+import { streamerActive } from '../lib/uxPrefs'
 
 /** Libellé traduit d'une action de raccourci. */
 export const shortcutLabel = (action: string): Key => `keys.action.${action}` as Key
@@ -82,6 +84,10 @@ export function useGlobalShortcuts(h: Handlers) {
         case 'next_server': cycleServer(1); return true
         case 'prev_server': cycleServer(-1); return true
         case 'lock_app': window.dispatchEvent(new Event('forgechat:lock-now')); return true
+        case 'toggle_streamer':
+          toggleStreamerMode()
+          toast(tr(streamerActive() ? 'ux.streamer.on' : 'ux.streamer.off'))
+          return true
         case 'toggle_split': window.dispatchEvent(new CustomEvent('forgechat:toggle-split')); return true
         case 'toggle_mute': useVoice.getState().toggleMute(); return true
         case 'toggle_deafen': useVoice.getState().toggleDeafen(); return true

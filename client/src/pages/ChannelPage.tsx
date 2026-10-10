@@ -288,9 +288,9 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
 
   const sendMsg = useMutation({
     // Chiffré dès que j'ai une clé (AutoMod et aperçu de lien faits ici) ; mentions en métadonnées.
-    mutationFn: ({ content, reply_to, expires_at_seconds, files }: { content: string | null; reply_to?: string; expires_at_seconds?: number | null; files?: PreparedFiles }) =>
+    mutationFn: ({ content, reply_to, reply_ping, expires_at_seconds, files }: { content: string | null; reply_to?: string; reply_ping?: boolean; expires_at_seconds?: number | null; files?: PreparedFiles }) =>
       postMessage(serverId!, channelId!, content ?? '', body =>
-        api.post(`/servers/${serverId}/channels/${channelId}/messages`, { ...body, reply_to, expires_at_seconds, has_attachments: !!files?.count }),
+        api.post(`/servers/${serverId}/channels/${channelId}/messages`, { ...body, reply_to, reply_ping, expires_at_seconds, has_attachments: !!files?.count }),
       filesExtra(files)),
     onError: (e: any) => {
       if (isQueued(e)) { toast(t('offline.queued')); return }
@@ -428,11 +428,11 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
     }
   }, [_titleCh, _titleSrv, isSplit, channelId])
 
-  const handleSend = useCallback(async (content: string, replyToId: string | undefined, files: import('../components/chat/MessageInput').FileWithTtl[] | undefined, ttlSeconds: number | null | undefined) => {
+  const handleSend = useCallback(async (content: string, replyToId: string | undefined, files: import('../components/chat/MessageInput').FileWithTtl[] | undefined, ttlSeconds: number | null | undefined, replyPing?: boolean) => {
     try {
       // Fichiers chiffrés sur l'appareil avant l'envoi : leurs clés vont dans le message chiffré.
       const prepared = await prepareFiles('channel', channelId!, files ?? [])
-      const res = await sendMsg.mutateAsync({ content: content || null, reply_to: replyToId, expires_at_seconds: ttlSeconds, files: prepared })
+      const res = await sendMsg.mutateAsync({ content: content || null, reply_to: replyToId, reply_ping: replyPing, expires_at_seconds: ttlSeconds, files: prepared })
       const msgId = res.data?.id
       if (prepared.count && msgId) {
         await postWithUploadProgress(`/servers/${serverId}/channels/${channelId}/messages/${msgId}/attachments`, prepared.form, prepared.bytes)

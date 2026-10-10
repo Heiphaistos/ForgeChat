@@ -160,7 +160,7 @@ export default function InviteModal({ serverId, serverName, onClose }: Props) {
             <div className="space-y-3">
               <label className="text-[10px] font-semibold text-fc-muted uppercase tracking-wide">{t('invite.link')}</label>
               <div className="flex gap-2">
-                <div className="flex-1 px-3 py-2 bg-fc-input rounded text-fc-text text-sm font-mono truncate streamer-blur">
+                <div className="flex-1 px-3 py-2 bg-fc-input rounded text-fc-text text-sm font-mono truncate streamer-invite">
                   {inviteUrl}
                 </div>
                 <button
@@ -204,7 +204,7 @@ export default function InviteModal({ serverId, serverName, onClose }: Props) {
                 <img
                   src={`https://api.qrserver.com/v1/create-qr-code/?size=140x140&data=${encodeURIComponent(inviteUrl)}&bgcolor=1e1f29&color=ffffff&qzone=1`}
                   alt={t('invite.qrAlt')}
-                  className="w-32 h-32 rounded-lg border border-fc-hover streamer-blur"
+                  className="w-32 h-32 rounded-lg border border-fc-hover streamer-invite"
                 />
                 <p className="text-[10px] text-fc-muted">{t('invite.scan')}</p>
               </div>
@@ -227,7 +227,7 @@ export default function InviteModal({ serverId, serverName, onClose }: Props) {
                   <div key={inv.id} className="flex items-center gap-2 px-3 py-2 bg-fc-bg/40 rounded-lg">
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
-                        <span className="text-sm font-mono text-fc-text truncate streamer-blur">{inv.code}</span>
+                        <span className="text-sm font-mono text-fc-text truncate streamer-invite">{inv.code}</span>
                         <span className="text-[10px] text-fc-muted">{t('invite.usesShort', { used: inv.uses ?? 0, max: inv.max_uses ?? '∞' })}</span>
                         <span className="text-[10px] text-fc-muted">{t('invite.exp', { d: formatExpiry(inv.expires_at) })}</span>
                       </div>

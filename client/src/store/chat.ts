@@ -3,6 +3,10 @@ import { immer } from 'zustand/middleware/immer'
 import type { EncPayload, MsgBody } from '../e2e/crypto'
 import type { E2EState } from '../e2e/conversations'
 import { mergeUnlocked } from '../e2e/keysRetry'
+import { applyDeletion, editHistory } from '../lib/messageLog'
+import { useUxPrefs } from '../lib/uxPrefs'
+// Import circulaire (auth importe chat) : useAuth n'est lu que dans les actions, jamais au chargement.
+import { useAuth } from './auth'
 
 // ─── Draft Store (localStorage) ───────────────────────────────────────────────
 
@@ -88,6 +92,10 @@ interface Message {
   e2e_body?: MsgBody
   /** Aperçu de la réponse citée encore illisible. */
   e2e_reply?: 'locked'
+  /** Journal local (Extras) : supprimé chez l'auteur, gardé barré en mémoire. */
+  logged_deleted?: boolean
+  /** Journal local (Extras) : versions précédentes, en mémoire seulement. */
+  logged_edits?: string[]
 }
 export type ChatMessage = Message
 
@@ -142,7 +150,10 @@ export const useChat = create<ChatState>()(
       const msgs = s.messagesByChannel[channelId]
       if (!msgs) return
       const idx = msgs.findIndex(m => m.id === msgId)
-      if (idx !== -1) Object.assign(msgs[idx], patch)
+      if (idx === -1) return
+      // Modification (edited_at) : l'ancien texte va au journal local s'il est actif.
+      if ('edited_at' in patch) msgs[idx].logged_edits = editHistory(msgs[idx], patch.content, useUxPrefs.getState().messageLogger)
+      Object.assign(msgs[idx], patch)
     }),
 
     mergeAttachments: (channelId, msgId, attachments) => set(s => {
@@ -157,7 +168,7 @@ export const useChat = create<ChatState>()(
     deleteMessage: (channelId, msgId) => set(s => {
       const msgs = s.messagesByChannel[channelId]
       if (!msgs) return
-      s.messagesByChannel[channelId] = msgs.filter(m => m.id !== msgId)
+      s.messagesByChannel[channelId] = applyDeletion(msgs, msgId, useUxPrefs.getState().messageLogger, useAuth.getState().user?.id)
     }),
 
     clearChannel: (channelId) => set(s => {

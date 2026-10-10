@@ -162,8 +162,11 @@ export function unindexMessage(id: string) {
   schedule()
 }
 
-/** Recherche plein texte locale, du plus récent au plus ancien ; `convId` limite à une conversation. */
-export async function searchLocal(input: string, convId?: string): Promise<IndexedMsg[]> {
+/**
+ * Recherche plein texte locale, du plus récent au plus ancien ; `convId` limite à une
+ * conversation, `kinds` à certains types (MP et groupes, ou salons de serveur).
+ */
+export async function searchLocal(input: string, convId?: string, kinds?: readonly IndexedMsg['kind'][]): Promise<IndexedMsg[]> {
   const q = parseQuery(input)
   const me = useAuth.getState().user?.id
   if (isEmptyQuery(q) || !me) return []
@@ -181,7 +184,7 @@ export async function searchLocal(input: string, convId?: string): Promise<Index
     for (let i = 0; i < all.length && out.length < MAX_RESULTS; i += 500) {
       const page = all.slice(i, i + 500).filter(s => {
         if (s.expiresAt && Date.parse(s.expiresAt) <= now) { expired.push(s.id); return false }
-        return !convId || s.convId === convId
+        return (!convId || s.convId === convId) && (!kinds || kinds.includes(s.kind))
       })
       for (const m of await Promise.all(page.map(s => openEntry(key, s)))) {
         if (!m || out.length >= MAX_RESULTS) continue

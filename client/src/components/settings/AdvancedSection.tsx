@@ -67,7 +67,7 @@ export default function AdvancedSection({ user }: Props) {
       <div className="border-t border-fc-hover pt-6">
         <h3 className="text-sm font-semibold text-white mb-1">{t('settings.adv.debug')}</h3>
         <div className="bg-fc-channel rounded-lg p-3 text-xs font-mono text-fc-muted space-y-1">
-          <div>UserID: {user.id}</div>
+          <div>UserID: <span className="streamer-id">{user.id}</span></div>
           <div>Version: {__APP_VERSION__}</div>
           <div>UA: {navigator.userAgent.slice(0, 60)}...</div>
         </div>

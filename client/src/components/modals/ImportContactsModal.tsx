@@ -171,7 +171,7 @@ export default function ImportContactsModal({ onClose }: ImportContactsModalProp
                 <div key={i} className="flex items-center gap-2 px-3 py-2">
                   <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0
                     ${c.username ? 'bg-green-400' : 'bg-yellow-400'}`} />
-                  <span className="text-xs text-fc-text flex-1 truncate">
+                  <span className={`text-xs text-fc-text flex-1 truncate ${c.username ? '' : 'streamer-blur'}`}>
                     {c.username ?? c.email}
                   </span>
                   <span className="text-xs text-fc-muted flex-shrink-0">
