@@ -461,6 +461,8 @@ pub struct ServerNotifOverride {
     pub muted: bool,
     pub muted_until: Option<chrono::DateTime<chrono::Utc>>,
     pub suppress_everyone: bool,
+    pub suppress_roles: bool,
+    pub forum_posts: bool,
 }
 
 /// Durées proposées par « Couper pendant… » : 0 = jusqu'à réactivation ;
@@ -479,7 +481,8 @@ pub async fn get_notification_overrides(
     let rows = sqlx::query_as::<_, ServerNotifOverride>(
         "SELECT id, server_id, level,
                 (muted AND (muted_until IS NULL OR muted_until > NOW())) AS muted,
-                CASE WHEN muted THEN muted_until END AS muted_until, suppress_everyone
+                CASE WHEN muted THEN muted_until END AS muted_until, suppress_everyone,
+                suppress_roles, forum_posts
          FROM notification_overrides_server WHERE user_id = $1 ORDER BY id"
     )
     .bind(claims.sub)
@@ -497,6 +500,10 @@ pub struct SetNotifOverride {
     pub mute_minutes: Option<i32>,
     /// Absent : réglage inchangé.
     pub suppress_everyone: Option<bool>,
+    /// Ignorer les mentions de rôles ; absent : inchangé.
+    pub suppress_roles: Option<bool>,
+    /// Alerter à chaque nouveau post de forum ; absent : inchangé.
+    pub forum_posts: Option<bool>,
 }
 
 pub async fn set_notification_override(
@@ -510,15 +517,17 @@ pub async fn set_notification_override(
     let mute_minutes = valid_mute_minutes(body.mute_minutes)?;
     crate::handlers::servers::require_member(&state, claims.sub, body.server_id).await?;
     sqlx::query(
-        "INSERT INTO notification_overrides_server (user_id, server_id, level, muted, muted_until, suppress_everyone)
+        "INSERT INTO notification_overrides_server (user_id, server_id, level, muted, muted_until, suppress_everyone, suppress_roles, forum_posts)
          VALUES ($1, $2, $3, $4,
                  CASE WHEN $4 AND $5 > 0 THEN NOW() + make_interval(mins => $5) END,
-                 COALESCE($6, FALSE))
+                 COALESCE($6, FALSE), COALESCE($7, FALSE), COALESCE($8, FALSE))
          ON CONFLICT (user_id, server_id) DO UPDATE SET level = EXCLUDED.level, muted = EXCLUDED.muted,
              muted_until = CASE WHEN EXCLUDED.muted AND $5::int IS NULL AND notification_overrides_server.muted
                                      AND notification_overrides_server.muted_until > NOW()
                                 THEN notification_overrides_server.muted_until ELSE EXCLUDED.muted_until END,
-             suppress_everyone = COALESCE($6, notification_overrides_server.suppress_everyone)"
+             suppress_everyone = COALESCE($6, notification_overrides_server.suppress_everyone),
+             suppress_roles = COALESCE($7, notification_overrides_server.suppress_roles),
+             forum_posts = COALESCE($8, notification_overrides_server.forum_posts)"
     )
     .bind(claims.sub)
     .bind(body.server_id)
@@ -526,6 +535,8 @@ pub async fn set_notification_override(
     .bind(body.muted)
     .bind(mute_minutes)
     .bind(body.suppress_everyone)
+    .bind(body.suppress_roles)
+    .bind(body.forum_posts)
     .execute(&state.db)
     .await?;
     Ok(Json(serde_json::json!({ "ok": true })))

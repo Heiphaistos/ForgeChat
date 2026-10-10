@@ -41,6 +41,7 @@ export default function ServerSidebar() {
   const isDMs = pathname.startsWith('/friends') || pathname.startsWith('/dms') || pathname.startsWith('/dm')
   const isSaved = pathname.startsWith('/saved')
   const isNews = pathname.startsWith('/news')
+  const isNotif = pathname.startsWith('/notifications')
   const qc = useQueryClient()
   const serverCounts = useUnread(s => s.serverCounts)
   // Non-lus DM = total des counts par canal moins la part attribuée aux serveurs
@@ -51,6 +52,7 @@ export default function ServerSidebar() {
   })
   // Mentions non lues par serveur (pastille rouge chiffrée, même serveur en sourdine)
   const serverMentionCounts = useUnread(s => s.serverMentionCounts)
+  const mentionTotal = useUnread(s => Object.values(s.serverMentionCounts).reduce((a, b) => a + b, 0))
   const [showCreate, setShowCreate] = useState(false)
   const [createStep, setCreateStep] = useState<Step>('choice')
   const [folders, setFolders] = useState<Folders>(loadFolders)
@@ -393,6 +395,29 @@ export default function ServerSidebar() {
         >
           <Newspaper size={20} className="text-fc-text" />
         </button>
+      </div>
+
+      {/* Centre de notifications : réglages par serveur, catégorie, MP */}
+      <div className="relative w-full flex items-center justify-center">
+        <span aria-hidden className={`absolute left-0 w-1 h-9 rounded-r-full bg-white transition-all duration-200 ${isNotif ? 'opacity-100' : 'opacity-0 h-0'}`} />
+        <button
+          onClick={() => { nav('/notifications'); closeSidebar() }}
+          aria-current={isNotif ? 'page' : undefined}
+          aria-label={t('notifCenter.title')}
+          className={`min-w-[44px] min-h-[44px] w-12 h-12 rounded-full flex items-center justify-center transition-all hover:rounded-2xl ${isNotif ? 'bg-fc-accent rounded-2xl' : 'bg-fc-channel hover:bg-fc-accent'}`}
+          title={t('notifCenter.title')}
+        >
+          <Bell size={20} className="text-fc-text" />
+        </button>
+        {mentionTotal > 0 && (
+          <span
+            role="status"
+            aria-label={t('notifCenter.unread', { n: mentionTotal })}
+            className="absolute bottom-0 right-2 min-w-[16px] h-4 px-1 bg-fc-red text-white text-[9px] font-bold rounded-full border-2 border-fc-bg flex items-center justify-center"
+          >
+            <span aria-hidden>{mentionTotal > 99 ? '99+' : mentionTotal}</span>
+          </span>
+        )}
       </div>
 
       <div className="w-8 h-px bg-fc-hover mx-auto" />

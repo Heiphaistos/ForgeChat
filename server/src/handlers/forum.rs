@@ -252,7 +252,7 @@ pub async fn create_post(
     .fetch_one(&state.db)
     .await?;
 
-    let event = serde_json::json!({ "type": "FORUM_POST_CREATE", "channel_id": channel_id, "post": post });
+    let event = serde_json::json!({ "type": "FORUM_POST_CREATE", "server_id": server_id, "channel_id": channel_id, "post": post });
     state.broadcast_to_channel_members(channel_id, event.to_string()).await;
 
     Ok(Json(serde_json::json!({ "post": post })))

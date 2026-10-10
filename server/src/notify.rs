@@ -112,28 +112,46 @@ pub struct NotifPrefs {
     pub status: String,
     pub channel_level: Option<String>,
     pub channel_muted: bool,
+    /// Niveau de la catégorie du salon (centre de notifications), jamais `inherit`.
+    pub category_level: Option<String>,
     pub server_level: Option<String>,
     pub server_muted: bool,
     pub suppress_everyone: bool,
+    pub suppress_roles: bool,
     pub default_level: String,
 }
 
-/// `None` : la mention est ignorée (« ignorer @everyone » et seule une mention
-/// de masse vise l'utilisateur). `Some(notify)` : la mention est enregistrée ;
-/// `notify` dit s'il faut une alerte (son, notification système, push).
-/// Priorité : niveau du salon > niveau du serveur > défaut du serveur ;
-/// muet (même temporaire, déjà filtré par `muted_until`) et Ne pas déranger
-/// coupent l'alerte mais pas le badge, comme Discord.
-pub fn decide(p: &NotifPrefs, mass_mention_only: bool) -> Option<bool> {
-    if mass_mention_only && p.suppress_everyone {
-        return None;
-    }
-    let level = [p.channel_level.as_deref(), p.server_level.as_deref()]
+/// Chemins par lesquels une mention atteint un destinataire.
+#[derive(Debug, Default, Clone, Copy)]
+pub struct Reach {
+    /// Mention nominative, pseudo ou réponse : jamais ignorée.
+    pub direct: bool,
+    pub role: bool,
+    /// @everyone / @here.
+    pub mass: bool,
+}
+
+/// Niveau effectif : salon > catégorie > serveur > défaut du serveur.
+pub fn effective_level(p: &NotifPrefs) -> &str {
+    [p.channel_level.as_deref(), p.category_level.as_deref(), p.server_level.as_deref()]
         .into_iter()
         .flatten()
         .find(|l| *l != "inherit")
-        .unwrap_or(p.default_level.as_str());
-    Some(!p.channel_muted && !p.server_muted && level != "nothing" && p.status != "dnd")
+        .unwrap_or(p.default_level.as_str())
+}
+
+/// `None` : la mention est ignorée (seules des mentions de masse ou de rôle,
+/// que l'utilisateur a choisi d'ignorer, le visent). `Some(notify)` : la
+/// mention est enregistrée ; `notify` dit s'il faut une alerte (son,
+/// notification système, push). Muet (même temporaire, déjà filtré par
+/// `muted_until`) et Ne pas déranger coupent l'alerte mais pas le badge,
+/// comme Discord.
+pub fn decide(p: &NotifPrefs, reach: Reach) -> Option<bool> {
+    let kept = reach.direct || (reach.role && !p.suppress_roles) || (reach.mass && !p.suppress_everyone);
+    if !kept {
+        return None;
+    }
+    Some(!p.channel_muted && !p.server_muted && effective_level(p) != "nothing" && p.status != "dnd")
 }
 
 /// Remplace les jetons par des noms lisibles (corps d'une notification push).
@@ -197,6 +215,7 @@ pub async fn dispatch_channel_mentions(state: &AppState, m: ChannelMessage<'_>) 
     let can_mass = perms & Permissions::MENTION_EVERYONE != 0;
 
     let mut names: HashMap<Uuid, String> = HashMap::new();
+    let mut by_role: HashSet<Uuid> = HashSet::new();
     let mut direct: HashSet<Uuid> = parsed.users.iter().copied().collect();
     direct.extend(m.reply_author);
 
@@ -247,7 +266,7 @@ pub async fn dispatch_channel_mentions(state: &AppState, m: ChannelMessage<'_>) 
             .bind(&allowed)
             .fetch_all(&state.db)
             .await?;
-            direct.extend(members);
+            by_role.extend(members);
         }
     }
 
@@ -274,7 +293,7 @@ pub async fn dispatch_channel_mentions(state: &AppState, m: ChannelMessage<'_>) 
         );
     }
 
-    let mut candidates: HashSet<Uuid> = direct.union(&broad).copied().collect();
+    let mut candidates: HashSet<Uuid> = direct.iter().chain(&by_role).chain(&broad).copied().collect();
     candidates.remove(&m.author_id);
     if candidates.is_empty() {
         return Ok(());
@@ -289,13 +308,17 @@ pub async fn dispatch_channel_mentions(state: &AppState, m: ChannelMessage<'_>) 
     let rows = sqlx::query(
         "SELECT u.id, u.status, co.level AS ch_level,
                 COALESCE(co.muted AND (co.muted_until IS NULL OR co.muted_until > NOW()), FALSE) AS ch_muted,
+                ko.level AS cat_level,
                 so.level AS sv_level,
                 COALESCE(so.muted AND (so.muted_until IS NULL OR so.muted_until > NOW()), FALSE) AS sv_muted,
                 COALESCE(so.suppress_everyone, FALSE) AS suppress_everyone,
+                COALESCE(so.suppress_roles, FALSE) AS suppress_roles,
                 s.default_notification_level
          FROM users u
          JOIN servers s ON s.id = $2
+         JOIN channels c ON c.id = $3
          LEFT JOIN notification_overrides_channel co ON co.user_id = u.id AND co.channel_id = $3
+         LEFT JOIN notification_overrides_category ko ON ko.user_id = u.id AND ko.category_id = c.category_id
          LEFT JOIN notification_overrides_server so ON so.user_id = u.id AND so.server_id = $2
          WHERE u.id = ANY($1)"
     )
@@ -312,12 +335,15 @@ pub async fn dispatch_channel_mentions(state: &AppState, m: ChannelMessage<'_>) 
             status: r.get("status"),
             channel_level: r.get("ch_level"),
             channel_muted: r.get("ch_muted"),
+            category_level: r.get("cat_level"),
             server_level: r.get("sv_level"),
             server_muted: r.get("sv_muted"),
             suppress_everyone: r.get("suppress_everyone"),
+            suppress_roles: r.get("suppress_roles"),
             default_level: r.get("default_notification_level"),
         };
-        if let Some(notify) = decide(&prefs, !direct.contains(&uid)) {
+        let reach = Reach { direct: direct.contains(&uid), role: by_role.contains(&uid), mass: broad.contains(&uid) };
+        if let Some(notify) = decide(&prefs, reach) {
             kept.push((uid, notify));
         }
     }
@@ -471,23 +497,55 @@ mod tests {
         assert!(parse_mentions("@here").here);
     }
 
+    const DIRECT: Reach = Reach { direct: true, role: false, mass: false };
+    const ROLE: Reach = Reach { direct: false, role: true, mass: false };
+    const MASS: Reach = Reach { direct: false, role: false, mass: true };
+
     #[test]
     fn decide_follows_priority() {
         let base = NotifPrefs { status: "online".into(), default_level: "all".into(), ..Default::default() };
-        assert_eq!(decide(&base, false), Some(true));
+        assert_eq!(decide(&base, DIRECT), Some(true));
         let nothing_srv = NotifPrefs { server_level: Some("nothing".into()), ..base_clone(&base) };
-        assert_eq!(decide(&nothing_srv, false), Some(false));
+        assert_eq!(decide(&nothing_srv, DIRECT), Some(false));
         // Le salon prime sur le serveur
         let ch_all = NotifPrefs { channel_level: Some("mentions".into()), ..nothing_srv };
-        assert_eq!(decide(&ch_all, false), Some(true));
+        assert_eq!(decide(&ch_all, DIRECT), Some(true));
         let inherit = NotifPrefs { channel_level: Some("inherit".into()), server_level: Some("inherit".into()), default_level: "nothing".into(), ..base_clone(&base) };
-        assert_eq!(decide(&inherit, false), Some(false));
-        assert_eq!(decide(&NotifPrefs { channel_muted: true, ..base_clone(&base) }, false), Some(false));
-        assert_eq!(decide(&NotifPrefs { server_muted: true, ..base_clone(&base) }, false), Some(false));
-        assert_eq!(decide(&NotifPrefs { status: "dnd".into(), ..base_clone(&base) }, false), Some(false));
+        assert_eq!(decide(&inherit, DIRECT), Some(false));
+        assert_eq!(decide(&NotifPrefs { channel_muted: true, ..base_clone(&base) }, DIRECT), Some(false));
+        assert_eq!(decide(&NotifPrefs { server_muted: true, ..base_clone(&base) }, DIRECT), Some(false));
+        assert_eq!(decide(&NotifPrefs { status: "dnd".into(), ..base_clone(&base) }, DIRECT), Some(false));
         let sup = NotifPrefs { suppress_everyone: true, ..base_clone(&base) };
-        assert_eq!(decide(&sup, true), None);
-        assert_eq!(decide(&sup, false), Some(true));
+        assert_eq!(decide(&sup, MASS), None);
+        assert_eq!(decide(&sup, DIRECT), Some(true));
+        assert_eq!(decide(&sup, Reach { mass: true, role: true, direct: false }), Some(true), "le rôle atteint encore");
+    }
+
+    #[test]
+    fn category_sits_between_channel_and_server() {
+        let base = NotifPrefs { status: "online".into(), default_level: "mentions".into(), ..Default::default() };
+        let p = |ch: Option<&str>, cat: Option<&str>, sv: Option<&str>| NotifPrefs {
+            channel_level: ch.map(Into::into),
+            category_level: cat.map(Into::into),
+            server_level: sv.map(Into::into),
+            ..base_clone(&base)
+        };
+        assert_eq!(effective_level(&p(None, None, None)), "mentions");
+        assert_eq!(effective_level(&p(None, None, Some("all"))), "all");
+        assert_eq!(effective_level(&p(None, Some("nothing"), Some("all"))), "nothing");
+        assert_eq!(effective_level(&p(Some("inherit"), Some("nothing"), Some("all"))), "nothing");
+        assert_eq!(effective_level(&p(Some("all"), Some("nothing"), Some("mentions"))), "all");
+        assert_eq!(decide(&p(None, Some("nothing"), None), DIRECT), Some(false));
+        assert_eq!(decide(&p(Some("mentions"), Some("nothing"), None), DIRECT), Some(true));
+    }
+
+    #[test]
+    fn suppress_roles_ignores_role_only_mentions() {
+        let p = NotifPrefs { status: "online".into(), default_level: "all".into(), suppress_roles: true, ..Default::default() };
+        assert_eq!(decide(&p, ROLE), None);
+        assert_eq!(decide(&p, Reach { role: true, direct: true, mass: false }), Some(true));
+        assert_eq!(decide(&p, Reach { role: true, mass: true, direct: false }), Some(true), "@everyone non ignoré");
+        assert_eq!(decide(&p, Reach::default()), None);
     }
 
     fn base_clone(p: &NotifPrefs) -> NotifPrefs {
