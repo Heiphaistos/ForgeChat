@@ -4,6 +4,7 @@ Demande de Momo : **tout chiffré de A à Z, le serveur (et son administrateur) 
 
 ## 1. Modèle de menace
 - Protégé : lecture de la base, des fichiers, des journaux, de la mémoire du serveur ; administrateur du VPS ; fuite de sauvegarde.
+- Mot de passe du compte : depuis la connexion v2 (2026-10-10, §3) le serveur ne le reçoit plus (sauf une dernière fois pour migrer un compte ancien) ; il ne voit que `auth`, dérivé sur l'appareil, d'où l'on ne tire pas la clé qui scelle la clé privée. Un VPS compromis passivement (lecture de la base, des journaux, de la mémoire) ne lit donc plus les conversations des personnes qui se connectent. Limite : un serveur **modifié activement** peut toujours mentir au prelogin (`legacy: true`) pour obtenir le mot de passe d'un compte, ou servir un client web piégé ; les applis mobiles/bureau signées ne le croient pas sur le code.
 - Non protégé (limite assumée, dite dans la politique de confidentialité) : un serveur **modifié activement** qui servirait un client web piégé ou mentirait sur la liste des membres / les clés publiques. Atténuations : codes de sécurité vérifiables entre deux personnes, alerte « la clé de X a changé », applis mobiles/bureau signées (le code ne vient pas du serveur).
 - Métadonnées visibles du serveur (nécessaires au fonctionnement) : qui parle dans quel salon et quand, noms des serveurs/salons, pseudos/avatars, réactions (emoji), identifiants des personnes et rôles mentionnés et @everyone/@here (pour notifier), votes des sondages (par option, sans leur texte), nombre d'options d'un sondage, tags de forum, tailles des fichiers.
 
@@ -15,14 +16,46 @@ Demande de Momo : **tout chiffré de A à Z, le serveur (et son administrateur) 
 - Encodage : base64url sans remplissage. Toute structure chiffrée porte `v` (version).
 
 ## 3. Clé de compte
+### 3.1 Connexion v2 : le mot de passe ne quitte pas l'appareil (2026-10-10)
+Le mot de passe protège aussi la clé privée : avant la v2, le serveur le recevait en clair à chaque connexion (faille H2 de l'audit du 2026-10-10). Désormais, identique octet pour octet sur web/bureau (WebCrypto, `client/src/e2e/authKdf.ts`) et mobile (`mobile/src/e2e/authKdf.ts`, PBKDF2 natif + `@noble/*`) :
+- Chaque compte a `kdf_salt` (16 octets aléatoires tirés par l'appli, base64url), stocké par le serveur (`users.kdf_salt`).
+- `master = PBKDF2-SHA256(mot de passe normalisé NFKC, kdf_salt, 600 000 itérations, 32 octets)`.
+- `auth = HKDF-SHA256(master, sel vide, "forgechat auth v2", 32 o)` : envoyé en base64url. Le serveur stocke `auth_hash = bcrypt(auth)` (`users.auth_hash`) et refuse tout `auth` qui ne fait pas exactement 32 octets.
+- `wrapKey = HKDF-SHA256(master, sel vide, "forgechat wrap v2", 32 o)` : ne quitte jamais l'appareil. Enveloppe de la clé privée `wrapped = {v:2, iv, ct}` = AES-256-GCM(wrapKey, iv 12 o aléatoire), AAD `forgechat key v2|<user_id>`. Le format v1 (`{v:1, salt, iv, ct}`, PBKDF2(mot de passe, salt), AAD `forgechat key v1|<user_id>`) reste lisible pour la migration.
+- Longueur minimale du mot de passe : **10 caractères**, vérifiée par l'appli (le serveur ne voit plus le mot de passe) et affichée à l'écran.
+- Vecteurs communs `authV2` (`docs/e2e-vectors.json`, mot de passe avec pleine chasse et ligature pour la NFKC) : `client/scripts/auth-v2-vectors.gen.mjs`, vérifiés par `client/scripts/e2e.test.mjs`, `mobile/__tests__/e2e-crypto.test.ts` et recoupés par une implémentation Python indépendante (hashlib + cryptography).
+
+Routes et champs :
+- `POST /api/auth/prelogin {email}` → `{kdf_salt, legacy}`. Compte migré : son sel, `legacy: false`. Compte non migré **ou e-mail inconnu** : `kdf_salt = HMAC-SHA256(JWT_SECRET, "forgechat prelogin v2|" + e-mail normalisé)[0..16]`, `legacy: true` (même réponse : pas d'énumération). 30 / 15 min par IP et par e-mail.
+- `GET /users/me/kdf` → `{kdf_salt, legacy}` du compte connecté (avant une action sensible).
+- `POST /api/auth/register {username, email, auth, kdf_salt, invite_code?}` → `{pending: true}`, toujours la même réponse ; un code à 6 chiffres (15 min) part par e-mail, ou, si l'adresse a déjà un compte, un avertissement à son propriétaire. Le compte naît à `POST /api/auth/verify-email {email, code}` (invitation consommée à ce moment-là, dans la même transaction). Plus aucun compte sans e-mail prouvé, invitation comprise. Corps avec `password` (ancienne appli) : 426.
+- `POST /api/auth/login` : compte migré `{email, auth, totp_code?}` ; un `password` reçu pour un compte migré = **426 « Mets à jour ForgeChat pour te connecter »** (champ jamais vérifié ni journalisé). Compte non migré : `{email, password, auth_new, kdf_salt_new, totp_code?}`, le serveur vérifie l'ancien bcrypt puis, après la 2FA, pose `auth_hash`, `kdf_salt` et rend `password_hash` inutilisable (`!v2`) en une seule requête ; `{email, password}` seul (ancienne appli) reste accepté tant que le compte n'est pas migré.
+- Juste après la connexion, l'appli (qui connaît le mot de passe saisi) ouvre une enveloppe encore v1 et la rescelle en v2 : `PUT /users/me/keys/wrapped {auth, wrapped}`. Idempotent, rejoué à chaque connexion tant qu'il n'a pas réussi.
+- Actions sensibles : `auth` au lieu de `password` (`PUT /users/me/keys/wrapped`, `PUT|DELETE /users/me/keys/backup`, `POST /users/me/keys/reset`, `DELETE /users/me`, `POST /servers/:id/transfer`, `DELETE /servers/:id` et `DELETE /admin/servers/:id` avec `totp_code`). `password` n'y est accepté que pour un compte pas encore migré, 426 sinon. 10 essais / 15 min par compte, toutes routes confondues.
+- `POST /auth/change-password {old_auth, new_auth, new_kdf_salt, wrapped}` (`old_password` pour un compte pas encore migré) : preuve, sel et enveloppe v2 scellée par la nouvelle wrapKey changés ensemble ; toutes les sessions sont révoquées.
+- `POST /api/auth/reset-password {token, new_auth, new_kdf_salt}` : l'enveloppe scellée par l'ancienne wrapKey devient illisible ; l'appli propose le code de récupération (rescelle en v2), sinon une nouvelle clé.
+- Le mot de passe saisi est effacé des écrans et de la mémoire (`typed`, wrapKey remise à zéro) dans tous les chemins, échecs compris ; il ne reste en mémoire que jusqu'à ce que la clé soit prête.
+- Le mot de passe d'un salon vocal (`websocket.rs`) n'est pas un mot de passe de compte : inchangé.
+
+Anti-force brute (même lot, faille H1) : compteurs Redis par IP (seul `X-Real-IP`, posé par nginx, compte ; `X-Forwarded-For` est ignoré) **et par compte** (e-mail normalisé, pseudonymisé) : connexion 20/IP et 10/compte par 15 min, plus jamais remis à zéro par une connexion réussie ; 2FA et codes de secours 5 échecs / 15 min par compte ; prelogin, inscription, vérification d'e-mail, oubli et réinitialisation aussi. Redis injoignable : **refus 503**, jamais de passage libre.
+
+2FA (faille M7) : code TOTP à usage unique aussi à la connexion (anti-rejeu 90 s) ; `totp_secret` chiffré au repos (AES-256-GCM, clé `TOTP_ENC_KEY` de 32 octets en base64, obligatoire au démarrage, AAD `forgechat totp v1|<user_id>`, préfixe `v1:`) ; 10 codes de secours de 64 bits, stockés en SHA-256 (préfixe `sha256:`), comparés en temps constant, retirés atomiquement. Les secrets et codes déjà en base sont convertis au démarrage (idempotent).
+
+Propriétaire du site (faille M2) : `fc_is_god` lit `site_settings.owner_user_id` (UUID du compte qui avait l'adresse du propriétaire à la migration 300, ou du premier compte qui prouve cette adresse), plus jamais l'e-mail : un compte supprimé puis recréé avec la même adresse n'hérite de rien.
+
+### 3.2 Enveloppes et récupération
 - À la première connexion d'une appli compatible : paire ECDH P-256 générée **sur l'appareil**.
-- Stockée sur le serveur : `public` (clair) + `wrapped` = clé privée (PKCS8 sur web, scalaire 32 o sur mobile → on stocke le **scalaire 32 octets**, le web l'importe en JWK `d`) chiffrée par AES-GCM(PBKDF2(mot de passe, sel)), AAD `forgechat key v1|<user_id>`.
-- **Code de récupération** : 20 caractères (alphabet Crockford base32, 100 bits), affiché **une seule fois** à la création, téléchargeable ; `backup` = même clé privée chiffrée par PBKDF2(code), AAD `forgechat backup v1|<user_id>`.
-- Connexion sur un nouvel appareil : l'appli télécharge `wrapped`, le déchiffre avec le mot de passe saisi (côté appareil, jamais envoyé déchiffré), garde la clé privée **non extractible** (IndexedDB CryptoKey sur web ; SecureStore sur mobile).
-- Changement de mot de passe : l'appli ré-enveloppe (`wrapped`) et l'envoie avec la requête de changement (atomique).
-- Mot de passe oublié : la réinitialisation par e-mail ne rend PAS les messages ; l'écran propose « entrer mon code de récupération » (ré-enveloppe) sinon « nouvelle clé : l'ancien historique chiffré devient illisible pour toi ».
+- Stockée sur le serveur : `public` (clair) + `wrapped` = clé privée (PKCS8 sur web, scalaire 32 o sur mobile → on stocke le **scalaire 32 octets**, le web l'importe en JWK `d`) scellée par la wrapKey (v2 ci-dessus ; v1 historique : AES-GCM(PBKDF2(mot de passe, sel)), AAD `forgechat key v1|<user_id>`).
+- **Code de récupération** : 20 caractères (alphabet Crockford base32, 100 bits), affiché **une seule fois** à la création, téléchargeable ; `backup` = même clé privée chiffrée par PBKDF2(code), AAD `forgechat backup v1|<user_id>` (inchangé en v2).
+- Connexion sur un nouvel appareil : l'appli télécharge `wrapped`, l'ouvre avec la wrapKey dérivée du mot de passe saisi (côté appareil), garde la clé privée **non extractible** (IndexedDB CryptoKey sur web ; SecureStore sur mobile).
+- Changement de mot de passe : l'appli rescelle (`wrapped` v2) et l'envoie avec la requête de changement (atomique).
+- Mot de passe oublié : la réinitialisation par e-mail ne rend PAS les messages ; l'écran propose « entrer mon code de récupération » (rescelle) sinon « nouvelle clé : l'ancien historique chiffré devient illisible pour toi ».
 - Fingerprint = SHA-256 de la clé publique ; **code de sécurité** (60 chiffres comme Signal) entre deux comptes, affiché sur les profils.
 - Le serveur refuse d'écraser une clé existante sans le jeton de réinitialisation (409 KEY_EXISTS), garde les 20 anciennes clés publiques (`old`).
+
+### 3.3 Anciennes applis face au serveur migré
+- Web : servi par le serveur, à jour au rechargement ; un onglet resté ouvert sur l'ancien code se comporte comme une ancienne appli jusqu'au rechargement.
+- Mobile ≤ 1.27.0 et bureau ≤ 3.54.0 (et web en cache) : connexion acceptée tant que le compte n'a pas été migré par une appli à jour (le compte reste alors en v1) ; dès qu'il l'est, 426 « Mets à jour ForgeChat pour te connecter » à la connexion et aux actions sensibles. Inscription : 426 (« Mets à jour ForgeChat pour créer un compte »). Changement et réinitialisation du mot de passe : 426. Une enveloppe v2 n'est pas lisible par une ancienne appli : sur un nouvel appareil, elle doit être mise à jour.
 
 ## 4. Conversations
 ### 4.1 Clé de conversation (MP, groupes, salons — même mécanisme partout)
