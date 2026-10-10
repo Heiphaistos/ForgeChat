@@ -1,7 +1,7 @@
 # Déclenche tout de suite le déploiement automatique du VPS (deployer-auto), sans attendre son
 # minuteur de 2 min. La clé n'autorise QUE cette commande (commande forcée + restrict sur l'utilisateur
 # non-root `deploy`, sudo limité à `systemctl start --no-block deployer-auto.service`) : pas de shell,
-# pas de tunnel. Secret Forgejo : FORGEJO_DEPLOY_KEY (clé privée, D:\MDP\forgejo-deploy\id_ed25519).
+# pas de tunnel. Secret Forgejo : DEPLOY_KEY (le préfixe FORGEJO_ est réservé) (clé privée, D:\MDP\forgejo-deploy\id_ed25519).
 name: Deploy ForgeChat
 
 on:
@@ -16,7 +16,7 @@ jobs:
     steps:
       - name: Déclencher deployer-auto
         env:
-          DEPLOY_KEY: ${{ secrets.FORGEJO_DEPLOY_KEY }}
+          DEPLOY_KEY: ${{ secrets.DEPLOY_KEY }}
         run: |
           install -m 700 -d ~/.ssh
           printf '%s\n' "$DEPLOY_KEY" > ~/.ssh/id_deploy && chmod 600 ~/.ssh/id_deploy
