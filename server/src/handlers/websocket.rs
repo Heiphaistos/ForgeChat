@@ -1847,3 +1847,7 @@ async fn handle_ws_message(
         _ => {}
     }
 }
+
+#[cfg(test)]
+#[path = "security_db_tests.rs"]
+mod security_db_tests;
