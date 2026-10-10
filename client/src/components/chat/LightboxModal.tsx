@@ -1,4 +1,5 @@
-import { mediaUrl } from '../../api/client'
+import { uploadPath } from '../../lib/uploadSign'
+import { useSignedUrl } from '../../lib/useSignedUrl'
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { X, Download, ChevronLeft, ChevronRight, ZoomIn, ZoomOut, Share2, Copy } from 'lucide-react'
 import toast from 'react-hot-toast'
@@ -11,6 +12,7 @@ interface Props {
 
 export default function LightboxModal({ images, initialIndex, onClose }: Props) {
   const [index, setIndex] = useState(initialIndex)
+  const src = useSignedUrl(images[index])
   const [zoom, setZoom] = useState(1)
   const [dragging, setDragging] = useState(false)
   const [pos, setPos] = useState({ x: 0, y: 0 })
@@ -39,14 +41,14 @@ export default function LightboxModal({ images, initialIndex, onClose }: Props) 
 
   const download = () => {
     const a = document.createElement('a')
-    a.href = images[index]
-    a.download = images[index].split('/').pop() ?? 'image'
+    a.href = src ?? ''
+    a.download = uploadPath(images[index]).split('/').pop() ?? 'image'
     a.click()
   }
 
   // Web Share API (mobile) avec fallback copie du lien
   const share = async () => {
-    const url = new URL(images[index], window.location.origin).href
+    const url = new URL(src ?? '', window.location.origin).href
     if (navigator.share) {
       try { await navigator.share({ url }) } catch { /* partage annulé */ }
     } else {
@@ -65,7 +67,7 @@ export default function LightboxModal({ images, initialIndex, onClose }: Props) 
     try {
       const img = new Image()
       img.crossOrigin = 'anonymous'
-      img.src = mediaUrl(images[index]) ?? ''
+      img.src = src ?? ''
       await img.decode()
       const canvas = document.createElement('canvas')
       canvas.width = img.naturalWidth
@@ -180,7 +182,7 @@ export default function LightboxModal({ images, initialIndex, onClose }: Props) 
         }}
       >
         <img
-          src={mediaUrl(images[index])}
+          src={src}
           alt=""
           className="max-w-[90vw] max-h-[85vh] object-contain select-none"
           style={{ transform: `scale(${zoom}) translate(${pos.x / zoom}px, ${pos.y / zoom}px)`, transition: dragging ? 'none' : 'transform 0.15s ease' }}

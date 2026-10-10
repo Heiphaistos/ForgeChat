@@ -4,6 +4,7 @@
 // dans le contenu chiffré du message (`f: [...]`). Réception : téléchargement du blob,
 // déchiffrement en flux, affichage par une adresse blob: (jamais de copie en clair ailleurs).
 import { mediaUrl } from '../api/client'
+import { signUpload } from '../lib/useSignedUrl'
 import { postWithUploadProgress } from '../utils/uploadProgress'
 import { mustEncrypt, type ConvKind } from './conversations'
 import * as c from './crypto'
@@ -184,8 +185,8 @@ export function decryptedUrl(url: string, e: c.FileEntry): Promise<string> {
 }
 
 async function fetchDecrypted(url: string, e: c.FileEntry): Promise<Blob> {
-  // Blobs publics par adresse aléatoire (comme les autres fichiers) : pas de cookie.
-  const res = await fetch(mediaUrl(url)!)
+  // Adresse signée (?exp&sig) : déjà signée par l'API, ou brute tirée d'un contenu chiffré (forum). Pas de cookie.
+  const res = await fetch(mediaUrl(await signUpload(url))!)
   if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`)
   const dec = new c.FileDecryptor(await c.fileCipher(c.b64uDecode(e.k)), e.id, e.s)
   const parts: BlobPart[] = []

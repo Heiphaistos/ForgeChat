@@ -9,7 +9,7 @@ import { useWs } from '../store/ws'
 import toast from 'react-hot-toast'
 import { confirm } from '../components/ui/ConfirmModal'
 import { useMobile } from '../contexts/MobileContext'
-import { EncMedia, isEncUrl, useMediaUpload } from '../components/chat/MediaContent'
+import { EncMedia, UploadImg, UploadVideo, isEncUrl, useMediaUpload } from '../components/chat/MediaContent'
 import { fileEntries } from '../e2e/crypto'
 import PostView, { AttachButton, isVideoUrl, type ForumPost } from '../components/forum/PostView'
 import EmojiPicker from '../components/chat/EmojiPicker'
@@ -103,8 +103,8 @@ function CreatePostModal({ serverId, channelId, media, onClose }: { serverId: st
                   {isEncUrl(mediaFile)
                     ? <EncMedia url={mediaFile} files={postUpload.entries} className="w-full max-h-64 object-contain rounded bg-black" />
                     : isVideoUrl(mediaFile)
-                    ? <video src={mediaUrl(mediaFile)} controls playsInline className="w-full max-h-64 rounded bg-black" />
-                    : <img src={mediaUrl(mediaFile)} alt="" className="w-full max-h-64 object-contain rounded bg-black" />}
+                    ? <UploadVideo url={mediaFile} controls playsInline className="w-full max-h-64 rounded bg-black" />
+                    : <UploadImg url={mediaFile} className="w-full max-h-64 object-contain rounded bg-black" />}
                   <button onClick={() => setMediaFile(null)} aria-label={t('forum.removeMedia')} className="absolute top-2 right-2 p-1 rounded-full bg-black/70 text-white hover:bg-black"><X size={14} aria-hidden /></button>
                 </div>
               ) : (
@@ -451,10 +451,10 @@ export default function ForumPage({ channel, serverId, channelId, canManageMessa
                   ? <EncMedia url={post.media_url} files={fileEntries(post.e2e_body)} className="w-full h-full object-cover" />
                   : post.media_url && (isVideoUrl(post.media_url)
                   ? <>
-                      <video src={mediaUrl(post.media_url)} muted playsInline preload="metadata" className="w-full h-full object-cover" />
+                      <UploadVideo url={post.media_url} muted playsInline preload="metadata" className="w-full h-full object-cover" />
                       <Play size={28} className="absolute inset-0 m-auto text-white drop-shadow" aria-hidden />
                     </>
-                  : <img src={mediaUrl(post.media_url)} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover group-hover:scale-105 transition" />)}
+                  : <UploadImg url={post.media_url} loading="lazy" decoding="async" className="w-full h-full object-cover group-hover:scale-105 transition" />)}
                 <div className="absolute inset-x-0 bottom-0 p-2 bg-gradient-to-t from-black/80 to-transparent text-left">
                   <div className="text-xs text-white font-medium truncate">{post.title}</div>
                   <div className="text-[11px] text-white/70 flex items-center gap-1">

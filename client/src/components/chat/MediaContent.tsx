@@ -1,5 +1,6 @@
-import { mediaUrl } from '../../api/client'
-import { useCallback, useState } from 'react'
+import { useCallback, useState, type ImgHTMLAttributes, type VideoHTMLAttributes } from 'react'
+import { uploadPath } from '../../lib/uploadSign'
+import { primeSignedUpload, useSignedUrl } from '../../lib/useSignedUrl'
 import LightboxModal from './LightboxModal'
 import { renderMarkdown } from '../../utils/markdown'
 import { postWithUploadProgress } from '../../utils/uploadProgress'
@@ -26,6 +27,8 @@ export function useMediaUpload(serverId: string, channelId: string) {
       // toast d'erreur (message serveur inclus) est géré par l'utilitaire
       const { data } = await postWithUploadProgress(`/servers/${serverId}/channels/${channelId}/forum-uploads`, fd, sealed?.blob.size ?? f.size)
       if (data?.url) {
+        // Aperçu : adresse signée renvoyée par l'envoi ; le contenu (chiffré) garde l'adresse brute.
+        if (typeof data.signed_url === 'string') primeSignedUpload(data.url, data.signed_url)
         if (sealed) setEntries(list => [...list, { ...sealed.entry, u: data.url }])
         onUrl(data.url)
       }
@@ -80,7 +83,19 @@ export function EncMedia({ url, files, className }: { url: string; files?: FileE
  * Chemin d'un fichier sans sa signature (`/uploads/x.enc?exp=…&sig=…` → `/uploads/x.enc`) : pour
  * comparer ou reconnaître un type. Le téléchargement garde l'adresse signée reçue telle quelle.
  */
-export const uploadPath = (url: string) => url.split('?')[0] ?? url
+export { uploadPath }
+
+/** Image de /uploads tirée d'un contenu (signée à l'affichage, lib/useSignedUrl). */
+export function UploadImg({ url, ...props }: { url: string } & Omit<ImgHTMLAttributes<HTMLImageElement>, 'src'>) {
+  const src = useSignedUrl(url)
+  return src ? <img src={src} alt="" {...props} /> : null
+}
+
+/** Vidéo de /uploads tirée d'un contenu (signée à l'affichage). */
+export function UploadVideo({ url, ...props }: { url: string } & Omit<VideoHTMLAttributes<HTMLVideoElement>, 'src'>) {
+  const src = useSignedUrl(url)
+  return src ? <video src={src} {...props} /> : null
+}
 
 export const isEncUrl = (url: string | null | undefined) => !!url && /\.enc$/.test(uploadPath(url))
 
@@ -101,8 +116,8 @@ export default function MediaContent({ text, className, files }: { text: string;
         if (part.startsWith('/uploads/') && /\.(png|jpe?g|gif|webp)$/i.test(part)) {
           const imgIdx = images.indexOf(part)
           return (
-            <img
-              key={i} src={mediaUrl(part)} alt="" loading="lazy" decoding="async"
+            <UploadImg
+              key={i} url={part} loading="lazy" decoding="async"
               className="max-w-full md:max-w-sm rounded-lg my-1.5 block cursor-pointer hover:opacity-90 transition"
               onClick={() => setLightbox(imgIdx)}
             />
@@ -112,7 +127,7 @@ export default function MediaContent({ text, className, files }: { text: string;
           return <div key={i} className="my-1.5"><EncMedia url={part} files={files} className="max-w-full md:max-w-sm rounded-lg" /></div>
         }
         if (part.startsWith('/uploads/') && /\.(mp4|webm|mov)$/i.test(part)) {
-          return <video key={i} src={mediaUrl(part)} controls playsInline preload="metadata" className="max-w-full md:max-w-sm rounded-lg my-1.5 block" />
+          return <UploadVideo key={i} url={part} controls playsInline preload="metadata" className="max-w-full md:max-w-sm rounded-lg my-1.5 block" />
         }
         // Segment texte : markdown complet (gras, code, liens...) — renderMarkdown
         // gère lui-même les sauts de ligne, pas de whitespace-pre-wrap ici
