@@ -144,11 +144,36 @@ describe('vérification automatique (démarrage et retour au premier plan)', () 
     const mod = require('@/features/updates/useUpdateCheck') as typeof import('@/features/updates/useUpdateCheck')
     const store = require('@/features/updates/updateStore') as typeof import('@/features/updates/updateStore')
     /* eslint-enable @typescript-eslint/no-require-imports */
-    return { run: mod.runAutomaticUpdateCheck, settings, useUpdate: store.useUpdate }
+    return { run: mod.runAutomaticUpdateCheck, required: mod.updateFromRequired, settings, useUpdate: store.useUpdate }
   }
 
   beforeEach(() => {
     env = { UPDATES_MANIFEST_URL: MANIFEST, APP_VERSION: '1.0.0' }
+  })
+
+  it('426 : manifeste signé d’abord (bannière, même version ignorée), page /telecharger en repli', async () => {
+    const { required, settings, useUpdate } = load()
+    settings.updateSkippedVersion = '1.2.0'
+    const fallback = jest.fn()
+    await required(fallback, server())
+    expect(useUpdate.getState()).toMatchObject({ update: { version: '1.2.0' }, dismissed: false })
+    expect(fallback).not.toHaveBeenCalled()
+    useUpdate.setState({ update: null })
+    await required(fallback, server(manifest(), SUMS, sign(new Uint8Array([1]))))
+    expect(useUpdate.getState().update).toBeNull()
+    expect(fallback).toHaveBeenCalledTimes(1)
+    await required(fallback, jest.fn().mockRejectedValue(new Error('hors ligne')))
+    expect(fallback).toHaveBeenCalledTimes(2)
+  })
+
+  it('426 sans manifeste dans ce build : page /telecharger', async () => {
+    env = { UPDATES_MANIFEST_URL: null, APP_VERSION: '1.0.0' }
+    const { required } = load()
+    const fallback = jest.fn()
+    const fetchMock = jest.fn()
+    await required(fallback, fetchMock)
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(fallback).toHaveBeenCalledTimes(1)
   })
 
   it('affiche la bannière, puis ne revérifie qu’après 3 h', async () => {

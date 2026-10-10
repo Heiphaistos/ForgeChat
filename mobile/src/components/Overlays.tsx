@@ -5,6 +5,7 @@ import { Alert, Pressable, StyleSheet, Text, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import * as Linking from 'expo-linking'
 import { IS_LAN, apiOrigin } from '@/config/env'
+import { updateFromRequired } from '@/features/updates/useUpdateCheck'
 import { useT } from '@/i18n'
 import { formatDuration } from '@/lib/format'
 import { useNow } from '@/lib/useNow'
@@ -92,8 +93,8 @@ export function ConnectionBanner() {
 
 /**
  * Santé de l'API (lib/http) : 503 = bandeau discret « Serveur momentanément indisponible »
- * (session gardée, nouvel essai avec backoff) ; 426 = « Mets à jour ForgeChat », lien vers la page
- * de téléchargement du serveur (aussi sur l'écran de connexion).
+ * (session gardée, nouvel essai avec backoff) ; 426 = « Mets à jour ForgeChat » : vérification par
+ * manifeste signé (bannière de mise à jour), repli sur la page de téléchargement du serveur.
  */
 export function ApiHealthBanner() {
   const t = useT()
@@ -104,7 +105,7 @@ export function ApiHealthBanner() {
     return (
       <Pressable
         style={[styles.banner, { top: insets.top + 28 }]}
-        onPress={() => void Linking.openURL(`${apiOrigin()}/telecharger`).catch(() => undefined)}
+        onPress={() => void updateFromRequired(() => void Linking.openURL(`${apiOrigin()}/telecharger`).catch(() => undefined))}
         accessibilityRole="link"
       >
         <Text style={styles.bannerText}>{t('overlay.updateRequired')}</Text>
