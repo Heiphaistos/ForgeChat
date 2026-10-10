@@ -230,6 +230,14 @@ mod tests {
         assert_eq!(parse_tokens(b"<html>"), None);
     }
 
+    /// La vraie route refuse un jeton inconnu par un statut HTTP, pas une erreur réseau.
+    #[test]
+    #[ignore = "réseau : interroge forgechat.heiphaistos.org"]
+    fn refresh_route_rejects_unknown_token() {
+        let r = tauri::async_runtime::block_on(post_refresh("jeton-inconnu-selftest"));
+        assert_eq!(r, Err(401));
+    }
+
     /// Écrit, relit et efface une entrée du vrai trousseau de la machine.
     #[test]
     #[ignore = "trousseau réel : Secret Service absent sur les CI Linux"]
