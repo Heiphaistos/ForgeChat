@@ -170,6 +170,22 @@ pub fn channel_epoch_ok(creator: Uuid, keyed: &[Uuid], given: &[Uuid]) -> bool {
     given.contains(&creator) && (covers(keyed, given) || given.len() >= CHANNEL_FIRST_BATCH.min(keyed.len()))
 }
 
+/// Membre retenu : sa clé publique a été posée ou remplacée il y a moins de ce délai.
+pub const WITHHELD_MAX_KEY_AGE_DAYS: i32 = 30;
+
+/// Membres « retenus » d'une nouvelle époque (`withheld`) : clé changée que l'utilisateur
+/// n'a pas encore acceptée (épinglage côté client). Autorisés seulement s'ils sont membres
+/// munis d'une clé (`keyed`), ni le créateur, et si leur clé est récente (`recent`). Renvoie
+/// les membres que l'époque doit couvrir (`keyed` moins les retenus), sinon 409
+/// WITHHELD_NOT_ALLOWED. Les retenus restent « manquants » (`missing`, KEY_REQUEST).
+pub fn effective_keyed(creator: Uuid, keyed: &[Uuid], recent: &[Uuid], withheld: &[Uuid]) -> Result<Vec<Uuid>> {
+    let ok = withheld.iter().all(|w| *w != creator && keyed.contains(w) && recent.contains(w));
+    if !ok {
+        return Err(AppError::Conflict("WITHHELD_NOT_ALLOWED".into()));
+    }
+    Ok(keyed.iter().copied().filter(|k| !withheld.contains(k)).collect())
+}
+
 /// Une nouvelle époque doit être enveloppée pour exactement les membres munis d'une clé.
 pub fn covers(keyed: &[Uuid], given: &[Uuid]) -> bool {
     let a: HashSet<_> = keyed.iter().collect();
@@ -432,6 +448,10 @@ pub struct PostEnvelopes {
     /// Salon d'un serveur muni d'une clé de récupération : obligatoire à la création.
     #[serde(default)]
     server_envelope: Option<ServerEnvelope>,
+    /// Création d'époque : membres volontairement laissés sans enveloppe (clé changée, pas
+    /// encore acceptée par le créateur). Voir `effective_keyed`.
+    #[serde(default)]
+    withheld: Vec<Uuid>,
 }
 
 /// Range des enveloppes faites par `user` (membre muni d'une clé) pour des membres de la conversation.
@@ -502,7 +522,21 @@ pub async fn store_envelopes(db: &PgPool, conv: Conv, user: Uuid, body: &PostEnv
     .into_iter()
     .collect();
     if plan == Plan::NewEpoch {
-        let keyed: Vec<Uuid> = fps.keys().copied().collect();
+        let mut keyed: Vec<Uuid> = fps.keys().copied().collect();
+        if !body.withheld.is_empty() {
+            if body.withheld.len() > MEMBERS_PAGE as usize {
+                return Err(AppError::BadRequest("withheld trop long".into()));
+            }
+            let recent: Vec<Uuid> = sqlx::query_scalar(
+                "SELECT user_id FROM user_keys WHERE user_id = ANY($1)
+                   AND created_at > NOW() - make_interval(days => $2)",
+            )
+            .bind(&body.withheld)
+            .bind(WITHHELD_MAX_KEY_AGE_DAYS)
+            .fetch_all(&mut *tx)
+            .await?;
+            keyed = effective_keyed(user, &keyed, &recent, &body.withheld)?;
+        }
         let ok = match conv {
             Conv::Channel(c) => {
                 crate::handlers::e2e_channel::require_server_envelope(db, c, body.server_envelope.as_ref()).await?;
@@ -818,6 +852,24 @@ mod tests {
         assert!(KeyWrap { ct: URL_SAFE_NO_PAD.encode([7u8; 47]), ..ok }.validate().is_err());
         let extra = r#"{"v":1,"iv":"a","ct":"b","key":"fuite"}"#;
         assert!(serde_json::from_str::<KeyWrap>(extra).is_err());
+    }
+
+    #[test]
+    fn withheld_members() {
+        let (c, a, b, x) = (Uuid::new_v4(), Uuid::new_v4(), Uuid::new_v4(), Uuid::new_v4());
+        let keyed = [c, a, b];
+        // Aucun retenu : tous les membres munis d'une clé.
+        assert_eq!(effective_keyed(c, &keyed, &[], &[]).unwrap(), vec![c, a, b]);
+        // b a changé de clé récemment : retenu, l'époque couvre c et a.
+        let eff = effective_keyed(c, &keyed, &[b], &[b]).unwrap();
+        assert_eq!(eff, vec![c, a]);
+        assert!(covers(&eff, &[c, a]));
+        // Clé ancienne, créateur, non-membre : refusés.
+        assert_eq!(code(effective_keyed(c, &keyed, &[], &[b]).unwrap_err()), "WITHHELD_NOT_ALLOWED");
+        assert_eq!(code(effective_keyed(c, &keyed, &[c], &[c]).unwrap_err()), "WITHHELD_NOT_ALLOWED");
+        assert_eq!(code(effective_keyed(c, &keyed, &[x], &[x]).unwrap_err()), "WITHHELD_NOT_ALLOWED");
+        // Salon : le premier lot se compte sur les membres non retenus.
+        assert!(channel_epoch_ok(c, &eff, &[c, a]));
     }
 
     #[test]

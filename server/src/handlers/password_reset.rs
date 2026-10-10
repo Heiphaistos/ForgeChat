@@ -62,9 +62,9 @@ pub async fn forgot_password(
     }
 
     let user: Option<(Uuid, String)> = sqlx::query_as(
-        "SELECT id, username FROM users WHERE email=$1 AND is_bot=false AND id <> $2::uuid",
+        "SELECT id, username FROM users WHERE email_hmac=$1 AND is_bot=false AND id <> $2::uuid",
     )
-    .bind(&email)
+    .bind(crate::email_crypto::hmac(&email))
     .bind(DELETED_USER)
     .fetch_optional(&state.db)
     .await?;

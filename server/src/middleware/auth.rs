@@ -98,7 +98,7 @@ pub async fn require_auth(
 
     // Blocklist (déconnexion), révocation globale, bannissement. Redis injoignable :
     // 503 (avant : tout jeton révoqué redevenait valide pendant la panne).
-    match token_state(&state, claims.sub, claims.iat, Some(&token)).await {
+    match token_state(&state, claims.sub, claims.iat, claims.sid, Some(&token)).await {
         TokenState::Valid => {}
         TokenState::Revoked => return Err(AppError::Unauthorized),
         TokenState::Unknown => return Err(AppError::Unavailable("Service momentanément indisponible".into())),
@@ -139,6 +139,18 @@ async fn revoke_tokens_before(state: &AppState, user_id: Uuid, ts: i64) {
     crate::mobile_push::forget_devices(state, user_id).await;
 }
 
+fn revoke_sid_key(sid: Uuid) -> String {
+    format!("jwtrevoke_sid:{sid}")
+}
+
+/// Révoque tout de suite les jetons d'accès d'UNE session (déconnexion de cet appareil,
+/// session révoquée depuis la page « Sessions ») : gardé un peu plus que la durée de vie
+/// d'un jeton d'accès (1 h).
+pub async fn revoke_session_tokens(state: &AppState, sid: Uuid) {
+    let mut redis = state.redis.lock().await;
+    let _: () = redis.set_ex(revoke_sid_key(sid), "1", 3600 + 300).await.unwrap_or(());
+}
+
 #[derive(Debug, PartialEq, Eq)]
 pub enum TokenState {
     Valid,
@@ -148,14 +160,20 @@ pub enum TokenState {
 }
 
 /// État d'un jeton émis à `iat` pour `user` (`raw` : jeton brut, pour la blocklist
-/// de déconnexion). Une WebSocket ouverte par ticket passe son heure d'ouverture.
-pub async fn token_state(state: &AppState, user: Uuid, iat: i64, raw: Option<&str>) -> TokenState {
+/// de déconnexion, `sid` : session émettrice). Une WebSocket ouverte par ticket passe son
+/// heure d'ouverture et la session du jeton qui a demandé le ticket.
+pub async fn token_state(state: &AppState, user: Uuid, iat: i64, sid: Option<Uuid>, raw: Option<&str>) -> TokenState {
     let check = async {
         let mut redis = state.redis.lock().await;
-        let blocked: Option<String> = match raw {
+        let mut blocked: Option<String> = match raw {
             Some(t) => redis.get(format!("jwtblock:{}", hash_token(t))).await?,
             None => None,
         };
+        if blocked.is_none() {
+            if let Some(sid) = sid {
+                blocked = redis.get(revoke_sid_key(sid)).await?;
+            }
+        }
         let since: Option<i64> = redis.get(revoke_key(user)).await?;
         let banned: bool = redis.sismember(crate::handlers::site_admin::BANNED_SET, user.to_string()).await?;
         Ok::<_, redis::RedisError>(decide(blocked.is_some(), since, banned, iat))

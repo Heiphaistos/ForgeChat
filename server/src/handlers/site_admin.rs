@@ -30,7 +30,7 @@ use crate::{
 pub const BANNED_SET: &str = "sitebanned";
 
 /// Le compte « Utilisateur supprimé » (migration 063) existe dès l'installation : il ne compte pas.
-pub const NO_REAL_USERS_SQL: &str = "SELECT NOT EXISTS(SELECT 1 FROM users WHERE NOT is_bot AND email NOT LIKE '%@forgechat.invalid')";
+pub const NO_REAL_USERS_SQL: &str = "SELECT NOT EXISTS(SELECT 1 FROM users WHERE NOT is_bot AND id <> '00000000-0000-0000-0000-00000000dead')";
 
 /// Alphabet sans caractères ambigus (ni 0/O, ni 1/I/L).
 const CODE_ALPHABET: &[u8] = b"ABCDEFGHJKMNPQRSTUVWXYZ23456789";
@@ -79,12 +79,10 @@ pub async fn is_site_admin(state: &AppState, user_id: Uuid) -> bool {
         .unwrap_or(false)
 }
 
-/// Écrit l'e-mail du propriétaire là où la fonction SQL `fc_is_god` le lit (au démarrage).
+/// Au démarrage. `fc_is_god` ne lit plus d'adresse (migration 108 : `owner_user_id`) et les
+/// adresses ne sont plus gardées en clair en base (email_crypto::migrate_at_rest efface
+/// `owner_email`).
 pub async fn sync_owner_email(state: &AppState) {
-    let _ = sqlx::query("INSERT INTO site_settings (key, value) VALUES ('owner_email', $1) ON CONFLICT (key) DO UPDATE SET value = $1")
-        .bind(admin_email())
-        .execute(&state.db)
-        .await;
     lift_sanctions(state).await;
 }
 
@@ -213,10 +211,10 @@ pub async fn overview(State(state): State<AppState>, Extension(claims): Extensio
     require_site_admin(&state, &claims).await?;
     let row = sqlx::query(
         "SELECT
-           (SELECT COUNT(*) FROM users WHERE NOT is_bot AND email NOT LIKE '%@forgechat.invalid') AS total,
-           (SELECT COUNT(*) FROM users WHERE NOT is_bot AND email NOT LIKE '%@forgechat.invalid' AND created_at > NOW() - INTERVAL '1 day') AS new_1d,
-           (SELECT COUNT(*) FROM users WHERE NOT is_bot AND email NOT LIKE '%@forgechat.invalid' AND created_at > NOW() - INTERVAL '7 days') AS new_7d,
-           (SELECT COUNT(*) FROM users WHERE NOT is_bot AND email NOT LIKE '%@forgechat.invalid' AND created_at > NOW() - INTERVAL '30 days') AS new_30d,
+           (SELECT COUNT(*) FROM users WHERE NOT is_bot AND id <> '00000000-0000-0000-0000-00000000dead') AS total,
+           (SELECT COUNT(*) FROM users WHERE NOT is_bot AND id <> '00000000-0000-0000-0000-00000000dead' AND created_at > NOW() - INTERVAL '1 day') AS new_1d,
+           (SELECT COUNT(*) FROM users WHERE NOT is_bot AND id <> '00000000-0000-0000-0000-00000000dead' AND created_at > NOW() - INTERVAL '7 days') AS new_7d,
+           (SELECT COUNT(*) FROM users WHERE NOT is_bot AND id <> '00000000-0000-0000-0000-00000000dead' AND created_at > NOW() - INTERVAL '30 days') AS new_30d,
            (SELECT COUNT(*) FROM users WHERE site_banned_at IS NOT NULL) AS banned,
            (SELECT COUNT(*) FROM site_role_members WHERE role = 'el-patron') AS patrons,
            (SELECT COUNT(*) FROM servers) AS servers,
@@ -263,7 +261,7 @@ pub async fn list_users(
     let filter = q.filter.as_deref().unwrap_or("all");
 
     let rows = sqlx::query(
-        "SELECT u.id, u.username, u.discriminator, u.email, u.avatar, u.created_at, u.is_bot,
+        "SELECT u.id, u.username, u.discriminator, u.email_enc, u.avatar, u.created_at, u.is_bot,
                 (u.id::text = $6) AS is_owner,
                 EXISTS(SELECT 1 FROM site_role_members r WHERE r.user_id = u.id AND r.role = 'el-patron') AS is_patron,
                 u.site_banned_at, u.site_ban_reason,
@@ -275,8 +273,8 @@ pub async fn list_users(
          FROM users u
          LEFT JOIN users inv ON inv.id = u.invited_by
          LEFT JOIN registration_invites ri ON ri.id = u.registration_invite_id
-         WHERE u.email NOT LIKE '%@forgechat.invalid'
-           AND ($1::text IS NULL OR u.username ILIKE $1 OR u.email ILIKE $1 OR u.id::text ILIKE $1)
+         WHERE u.id <> '00000000-0000-0000-0000-00000000dead'
+           AND ($1::text IS NULL OR u.username ILIKE $1 OR u.email_hmac = $7 OR u.id::text ILIKE $1)
            AND (CASE $2
                   WHEN 'online'  THEN u.id = ANY($3)
                   WHEN 'banned'  THEN u.site_banned_at IS NOT NULL
@@ -292,6 +290,8 @@ pub async fn list_users(
     .bind(limit)
     .bind(offset)
     .bind(owner_user_id(&state).await.unwrap_or_default())
+    // Adresse chiffrée au repos : recherche exacte par empreinte seulement.
+    .bind(q.q.as_deref().map(str::trim).filter(|s| s.contains('@')).map(crate::email_crypto::hmac))
     .fetch_all(&state.db)
     .await?;
 
@@ -304,7 +304,7 @@ pub async fn list_users(
                 "id": id,
                 "username": r.get::<String, _>("username"),
                 "discriminator": r.get::<String, _>("discriminator"),
-                "email": r.get::<String, _>("email"),
+                "email": r.get::<Option<String>, _>("email_enc").and_then(|e| crate::email_crypto::open(id, &e)),
                 "avatar": r.get::<Option<String>, _>("avatar"),
                 "created_at": r.get::<DateTime<Utc>, _>("created_at"),
                 "is_bot": r.get::<bool, _>("is_bot"),
@@ -441,7 +441,7 @@ pub async fn set_patron(
             return Err(AppError::BadRequest("Ce compte est banni".into()));
         }
         let eligible: bool = sqlx::query_scalar(
-            "SELECT EXISTS(SELECT 1 FROM users WHERE id=$1 AND NOT is_bot AND email NOT LIKE '%@forgechat.invalid')",
+            "SELECT EXISTS(SELECT 1 FROM users WHERE id=$1 AND NOT is_bot AND id <> '00000000-0000-0000-0000-00000000dead')",
         )
         .bind(user_id)
         .fetch_one(&state.db)

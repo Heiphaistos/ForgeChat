@@ -57,6 +57,25 @@ fn auth_cookie_headers(auth: &AuthResponse, secure: bool) -> HeaderMap {
     session_cookie_headers(&auth.access_token, &auth.refresh_token, secure)
 }
 
+/// `X-ForgeChat-Tokens: cookie` : l'appli (web) ne veut ses jetons qu'en cookies HttpOnly ; le
+/// corps JSON ne les contient pas. Sans l'en-tête (bureau, mobile) : jetons aussi dans le corps.
+pub(crate) fn cookie_only(headers: &HeaderMap) -> bool {
+    headers
+        .get("x-forgechat-tokens")
+        .and_then(|v| v.to_str().ok())
+        .is_some_and(|v| v.trim().eq_ignore_ascii_case("cookie"))
+}
+
+/// Cookies de session posés, puis jetons retirés du corps si l'appli ne veut que les cookies.
+fn auth_reply(req_headers: &HeaderMap, mut auth: AuthResponse, secure: bool) -> (HeaderMap, Json<AuthResponse>) {
+    let headers = auth_cookie_headers(&auth, secure);
+    if cookie_only(req_headers) {
+        auth.access_token.clear();
+        auth.refresh_token.clear();
+    }
+    (headers, Json(auth))
+}
+
 /// Cookies HttpOnly de session (accès + rafraîchissement).
 pub(crate) fn session_cookie_headers(access_token: &str, refresh_token: &str, secure: bool) -> HeaderMap {
     let flag = if secure { "; Secure" } else { "" };
@@ -158,8 +177,9 @@ pub async fn register(
     let auth_hash = hash_auth(auth)?;
     let ok = Json(serde_json::json!({ "pending": true }));
 
-    let exists: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM users WHERE email=$1)")
-        .bind(&email_lower)
+    let email_hmac = crate::email_crypto::hmac(&email_lower);
+    let exists: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM users WHERE email_hmac=$1)")
+        .bind(&email_hmac)
         .fetch_one(&state.db)
         .await?;
     if exists {
@@ -176,13 +196,13 @@ pub async fn register(
     let code = format!("{:06}", rand::thread_rng().gen_range(0..1_000_000));
     let discriminator = format!("{:04}", rand::thread_rng().gen_range(1..=9999));
     sqlx::query(
-        "INSERT INTO pending_registrations (email, username, password_hash, discriminator, code, expires_at, auth_hash, kdf_salt, invite_code)
+        "INSERT INTO pending_registrations (email_hmac, username, password_hash, discriminator, code, expires_at, auth_hash, kdf_salt, invite_code)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-         ON CONFLICT (email) DO UPDATE SET username=EXCLUDED.username, discriminator=EXCLUDED.discriminator,
+         ON CONFLICT (email_hmac) DO UPDATE SET username=EXCLUDED.username, discriminator=EXCLUDED.discriminator,
             code=EXCLUDED.code, expires_at=EXCLUDED.expires_at, auth_hash=EXCLUDED.auth_hash,
             kdf_salt=EXCLUDED.kdf_salt, invite_code=EXCLUDED.invite_code, created_at=NOW()",
     )
-    .bind(&email_lower)
+    .bind(&email_hmac)
     .bind(&body.username)
     .bind(NO_PASSWORD)
     .bind(&discriminator)
@@ -207,6 +227,7 @@ pub async fn register(
 /// POST /api/auth/verify-email {email, code} : crée le compte (et consomme l'invitation).
 pub async fn verify_email(
     State(state): State<AppState>,
+    req_headers: HeaderMap,
     Json(body): Json<serde_json::Value>,
 ) -> Result<(HeaderMap, Json<AuthResponse>)> {
     let email = body["email"]
@@ -220,8 +241,8 @@ pub async fn verify_email(
     hit(&state, &account_key("verify_attempts", &email), 5, 900).await?;
 
     let bad = || AppError::BadRequest("Code incorrect ou expiré".into());
-    let pending = sqlx::query_as::<_, PendingRegistration>("SELECT * FROM pending_registrations WHERE email=$1")
-        .bind(&email)
+    let pending = sqlx::query_as::<_, PendingRegistration>("SELECT * FROM pending_registrations WHERE email_hmac=$1")
+        .bind(crate::email_crypto::hmac(&email))
         .fetch_optional(&state.db)
         .await?
         .ok_or_else(bad)?;
@@ -252,13 +273,17 @@ pub async fn verify_email(
         }
         _ => None,
     };
+    // Adresse prouvée par le code : seulement son empreinte et sa version chiffrée sont gardées.
+    let user_id = Uuid::new_v4();
     let user = sqlx::query_as::<_, crate::models::user::User>(
-        "INSERT INTO users (username, discriminator, email, password_hash, auth_hash, kdf_salt, is_verified, invited_by, registration_invite_id)
-         VALUES ($1, $2, $3, $4, $5, $6, true, $7, $8) RETURNING *",
+        "INSERT INTO users (id, username, discriminator, email_hmac, email_enc, password_hash, auth_hash, kdf_salt, is_verified, invited_by, registration_invite_id)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, true, $9, $10) RETURNING *",
     )
+    .bind(user_id)
     .bind(&pending.username)
     .bind(&pending.discriminator)
-    .bind(&pending.email)
+    .bind(crate::email_crypto::hmac(&email))
+    .bind(crate::email_crypto::seal(user_id, &email))
     .bind(NO_PASSWORD)
     .bind(&pending.auth_hash)
     .bind(&pending.kdf_salt)
@@ -275,7 +300,7 @@ pub async fn verify_email(
     }
     // Propriétaire du site : lié une fois pour toutes au premier compte qui prouve l'adresse du
     // propriétaire, puis à son UUID seulement (un compte recréé avec l'adresse n'hérite de rien).
-    if user.email == crate::handlers::site_admin::admin_email() {
+    if email == crate::handlers::site_admin::admin_email() {
         sqlx::query("INSERT INTO site_settings (key, value) VALUES ('owner_user_id', $1) ON CONFLICT (key) DO NOTHING")
             .bind(user.id.to_string())
             .execute(&mut *tx)
@@ -289,8 +314,7 @@ pub async fn verify_email(
     store_refresh_token(&state, user.id, &refresh_token).await?;
 
     let auth = AuthResponse { access_token, refresh_token, user: user.into_self_public() };
-    let headers = auth_cookie_headers(&auth, is_secure(&state));
-    Ok((headers, Json(auth)))
+    Ok(auth_reply(&req_headers, auth, is_secure(&state)))
 }
 
 /// Vérifie la preuve de connexion selon l'état du compte (voir LoginRequest). `Ok(None)` = refus.
@@ -335,8 +359,8 @@ pub async fn login(
         _ => None,
     };
 
-    let user_opt = sqlx::query_as::<_, crate::models::user::User>("SELECT * FROM users WHERE email=$1")
-        .bind(&email)
+    let user_opt = sqlx::query_as::<_, crate::models::user::User>("SELECT * FROM users WHERE email_hmac=$1")
+        .bind(crate::email_crypto::hmac(&email))
         .fetch_optional(&state.db)
         .await?;
     let user = login_credentials(&body, user_opt)?.ok_or(AppError::Unauthorized)?;
@@ -399,8 +423,7 @@ pub async fn login(
         .map_err(AppError::Internal)?;
 
     let auth = AuthResponse { access_token, refresh_token, user: user.into_self_public() };
-    let resp_headers = auth_cookie_headers(&auth, is_secure(&state));
-    Ok((resp_headers, Json(auth)))
+    Ok(auth_reply(&headers, auth, is_secure(&state)))
 }
 
 pub async fn refresh(
@@ -422,6 +445,9 @@ pub async fn refresh(
 
     let (_, new_refresh_token, access_token) = rotate_refresh_token(&state, &token).await?;
     let resp_headers = session_cookie_headers(&access_token, &new_refresh_token, is_secure(&state));
+    if cookie_only(&req_headers) {
+        return Ok((resp_headers, Json(serde_json::json!({ "ok": true }))));
+    }
     Ok((resp_headers, Json(serde_json::json!({
         "access_token": access_token,
         "refresh_token": new_refresh_token,
@@ -572,6 +598,7 @@ pub async fn change_password(
     // Tous les appareils sont déconnectés, pas seulement celui-ci : c'est le but
     // d'un changement de mot de passe après un vol de session.
     crate::middleware::auth::revoke_all_tokens(&state, claims.sub).await;
+    state.disconnect_user_sockets(claims.sub).await;
 
     Ok(Json(serde_json::json!({ "ok": true })))
 }
@@ -587,7 +614,11 @@ pub async fn ws_ticket(
         .map(char::from)
         .collect();
     let key = format!("ws_ticket:{}", ticket);
-    let user_id_str = claims.sub.to_string();
+    // La session suit la socket : déconnecter ou révoquer cette session ferme ses sockets seulement.
+    let user_id_str = match claims.sid {
+        Some(sid) => format!("{}:{sid}", claims.sub),
+        None => claims.sub.to_string(),
+    };
     let mut redis = state.redis.lock().await;
     redis.set_ex::<_, _, ()>(&key, &user_id_str, 30)
         .await
@@ -599,7 +630,7 @@ pub async fn logout(
     State(state): State<AppState>,
     axum::Extension(claims): axum::Extension<crate::middleware::auth::Claims>,
     axum::Extension(raw_token): axum::Extension<crate::middleware::auth::RawToken>,
-    Json(_body): Json<serde_json::Value>,
+    Json(body): Json<serde_json::Value>,
 ) -> Result<(HeaderMap, Json<serde_json::Value>)> {
     // Blocklist l'access token courant pour sa durée de vie restante
     let remaining_secs = (claims.exp - Utc::now().timestamp()).max(0) as u64;
@@ -610,22 +641,29 @@ pub async fn logout(
         let _: () = redis.set_ex(&blocklist_key, "1", remaining_secs).await.unwrap_or(());
     }
 
-    // Supprimer tous les refresh tokens de l'utilisateur (invalide toutes les sessions)
-    sqlx::query("DELETE FROM refresh_tokens WHERE user_id=$1")
-        .bind(claims.sub)
-        .execute(&state.db)
-        .await?;
-    // Plus aucun jeton de rafraîchissement : les lignes de session ne désignent plus rien.
-    sqlx::query("DELETE FROM user_sessions WHERE user_id=$1")
-        .bind(claims.sub)
-        .execute(&state.db)
-        .await?;
-    sqlx::query("UPDATE users SET status='offline', updated_at=NOW() WHERE id=$1")
-        .bind(claims.sub)
-        .execute(&state.db)
-        .await?;
-    // Toutes les sessions sont fermées : plus de notifications vers les téléphones.
-    crate::mobile_push::forget_devices(&state, claims.sub).await;
+    // `scope: "current"` (appli mobile) : seulement la session de cet appareil. Sinon (défaut
+    // historique, appli web) : toutes les sessions du compte.
+    match (body["scope"].as_str(), claims.sid) {
+        (Some("current"), Some(sid)) => end_session(&state, claims.sub, sid).await?,
+        _ => {
+            sqlx::query("DELETE FROM refresh_tokens WHERE user_id=$1")
+                .bind(claims.sub)
+                .execute(&state.db)
+                .await?;
+            // Plus aucun jeton de rafraîchissement : les lignes de session ne désignent plus rien.
+            sqlx::query("DELETE FROM user_sessions WHERE user_id=$1")
+                .bind(claims.sub)
+                .execute(&state.db)
+                .await?;
+            sqlx::query("UPDATE users SET status='offline', updated_at=NOW() WHERE id=$1")
+                .bind(claims.sub)
+                .execute(&state.db)
+                .await?;
+            // Jetons d'accès des autres appareils et leurs sockets : coupés tout de suite.
+            crate::middleware::auth::revoke_all_tokens(&state, claims.sub).await;
+            state.disconnect_user_sockets(claims.sub).await;
+        }
+    }
 
     // Effacer les cookies côté client
     let clear = "access_token=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0";
@@ -705,23 +743,29 @@ pub async fn revoke_session(
     // indéfiniment son access token (jusqu'à l'expiration naturelle du refresh token,
     // 30 jours). Bouton de sécurité 100% cosmétique. Fix : supprimer aussi la ligne
     // refresh_tokens correspondante avant de retirer l'entrée d'affichage.
+    end_session(&state, claims.sub, session_id).await?;
+    Ok(axum::http::StatusCode::NO_CONTENT)
+}
+
+/// Termine UNE session du compte : ligne d'affichage, jeton de rafraîchissement, jetons
+/// d'accès déjà émis (révocation par `sid` jusqu'à leur expiration) et WebSocket ouvertes.
+pub(crate) async fn end_session(state: &AppState, user_id: Uuid, sid: Uuid) -> Result<()> {
     let hash: Option<String> = sqlx::query_scalar(
         "DELETE FROM user_sessions WHERE id = $1 AND user_id = $2 RETURNING refresh_token_hash",
     )
-    .bind(session_id)
-    .bind(claims.sub)
+    .bind(sid)
+    .bind(user_id)
     .fetch_optional(&state.db)
     .await?;
-
-    if let Some(hash) = hash {
-        sqlx::query("DELETE FROM refresh_tokens WHERE token_hash=$1 AND user_id=$2")
-            .bind(&hash)
-            .bind(claims.sub)
-            .execute(&state.db)
-            .await?;
-    }
-
-    Ok(axum::http::StatusCode::NO_CONTENT)
+    let Some(hash) = hash else { return Ok(()) };
+    sqlx::query("DELETE FROM refresh_tokens WHERE token_hash=$1 AND user_id=$2")
+        .bind(&hash)
+        .bind(user_id)
+        .execute(&state.db)
+        .await?;
+    crate::middleware::auth::revoke_session_tokens(state, sid).await;
+    state.disconnect_session_sockets(user_id, sid).await;
+    Ok(())
 }
 
 async fn store_refresh_token(state: &AppState, user_id: Uuid, token: &str) -> Result<()> {
@@ -736,4 +780,42 @@ async fn store_refresh_token(state: &AppState, user_id: Uuid, token: &str) -> Re
     .execute(&state.db)
     .await?;
     Ok(())
+}
+
+#[cfg(test)]
+mod cookie_only_tests {
+    use super::*;
+
+    fn reply(header: Option<&str>) -> (HeaderMap, serde_json::Value) {
+        let mut req = HeaderMap::new();
+        if let Some(h) = header {
+            req.insert("x-forgechat-tokens", HeaderValue::from_str(h).unwrap());
+        }
+        let user: crate::models::user::User = serde_json::from_value(serde_json::json!({
+            "id": Uuid::nil(), "username": "u", "discriminator": "0001", "password_hash": "x",
+            "avatar": null, "banner": null, "bio": null, "status": "online", "custom_status": null,
+            "custom_status_emoji": null, "activity_type": null, "activity_name": null, "activity_detail": null,
+            "is_bot": false, "focus_mode": false, "is_verified": true, "birthday": null,
+            "created_at": Utc::now(), "updated_at": Utc::now(), "totp_enabled": false, "pronouns": null,
+        })).unwrap();
+        let auth = AuthResponse { access_token: "acc".into(), refresh_token: "ref".into(), user: user.into_self_public() };
+        let (h, Json(body)) = auth_reply(&req, auth, true);
+        (h, serde_json::to_value(body).unwrap())
+    }
+
+    #[test]
+    fn tokens_left_out_of_the_body_for_cookie_apps() {
+        let (h, body) = reply(Some("cookie"));
+        assert!(body.get("access_token").is_none() && body.get("refresh_token").is_none());
+        assert_eq!(body["user"]["username"], "u");
+        let cookies: Vec<_> = h.get_all(SET_COOKIE).iter().map(|v| v.to_str().unwrap().to_string()).collect();
+        assert!(cookies.iter().any(|c| c.starts_with("access_token=acc;")), "cookies toujours posés");
+        assert!(cookies.iter().any(|c| c.starts_with("refresh_token=ref;")));
+        // Sans l'en-tête (bureau, mobile) : inchangé.
+        let (_, body) = reply(None);
+        assert_eq!(body["access_token"], "acc");
+        assert_eq!(body["refresh_token"], "ref");
+        let (_, body) = reply(Some("bearer"));
+        assert_eq!(body["access_token"], "acc");
+    }
 }

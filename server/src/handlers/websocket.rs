@@ -34,8 +34,8 @@ pub async fn ws_handler(
     let Some(ticket) = params.get("ticket") else {
         return StatusCode::UNAUTHORIZED.into_response();
     };
-    let user_id = match consume_ticket(&state, ticket).await {
-        Ok(Some(id)) => id,
+    let (user_id, sid) = match consume_ticket(&state, ticket).await {
+        Ok(Some(t)) => t,
         Ok(None) => {
             tracing::warn!("WebSocket: ticket invalide ou expiré");
             return StatusCode::UNAUTHORIZED.into_response();
@@ -62,7 +62,7 @@ pub async fn ws_handler(
     ws.max_message_size(WS_MAX_MESSAGE)
         .max_frame_size(WS_MAX_MESSAGE)
         .on_upgrade(move |socket| async move {
-            handle_socket(socket, state, user_id, opened_at).await;
+            handle_socket(socket, state, user_id, sid, opened_at).await;
             drop(guard);
         })
 }
@@ -89,8 +89,9 @@ impl Drop for IpSlot {
     }
 }
 
-/// Ticket à usage unique (lu puis supprimé atomiquement). Err : Redis injoignable.
-async fn consume_ticket(state: &AppState, ticket: &str) -> std::result::Result<Option<Uuid>, ()> {
+/// Ticket à usage unique (lu puis supprimé atomiquement) : compte et session (`sid` du jeton
+/// qui l'a demandé, absent pour un jeton émis sans session). Err : Redis injoignable.
+async fn consume_ticket(state: &AppState, ticket: &str) -> std::result::Result<Option<(Uuid, Option<Uuid>)>, ()> {
     if ticket.is_empty() || ticket.len() > 64 {
         return Ok(None);
     }
@@ -100,10 +101,29 @@ async fn consume_ticket(state: &AppState, ticket: &str) -> std::result::Result<O
         .query_async(&mut *redis)
         .await
         .map_err(|e| tracing::error!("WebSocket: Redis injoignable ({e})"))?;
-    Ok(val.and_then(|s| Uuid::parse_str(&s).ok()))
+    Ok(val.and_then(|s| parse_ticket(&s)))
 }
 
-async fn handle_socket(socket: WebSocket, state: AppState, user_id: Uuid, opened_at: i64) {
+/// Valeur d'un ticket : `<user_id>` ou `<user_id>:<sid>`.
+fn parse_ticket(v: &str) -> Option<(Uuid, Option<Uuid>)> {
+    match v.split_once(':') {
+        Some((u, s)) => Some((Uuid::parse_str(u).ok()?, Some(Uuid::parse_str(s).ok()?))),
+        None => Some((Uuid::parse_str(v).ok()?, None)),
+    }
+}
+
+/// Signal interne de fermeture : `Some(true)` si cette socket (session `sid`) doit se fermer,
+/// `Some(false)` s'il vise une autre session (à ne pas transmettre au client), `None` sinon.
+fn close_signal(msg: &str, sid: Option<Uuid>) -> Option<bool> {
+    let rest = msg.strip_prefix(crate::state::WS_CLOSE)?;
+    if rest.is_empty() {
+        return Some(true);
+    }
+    let target = rest.strip_prefix(':').and_then(|s| Uuid::parse_str(s).ok());
+    Some(target.is_some() && target == sid)
+}
+
+async fn handle_socket(socket: WebSocket, state: AppState, user_id: Uuid, sid: Option<Uuid>, opened_at: i64) {
 
     // N5 — identité de CONNEXION, distincte de l'identité d'utilisateur.
     // Plusieurs onglets partagent le même `user_id` mais ont chacun leur
@@ -223,7 +243,7 @@ async fn handle_socket(socket: WebSocket, state: AppState, user_id: Uuid, opened
                 _ = recheck.tick() => {
                     // Jetons révoqués depuis l'ouverture (déconnexion partout, mot de passe
                     // changé, bannissement) : la socket se ferme, l'appli devra se réauthentifier.
-                    if crate::middleware::auth::token_state(&check_state, user_id, opened_at, None).await
+                    if crate::middleware::auth::token_state(&check_state, user_id, opened_at, sid, None).await
                         == crate::middleware::auth::TokenState::Revoked
                     {
                         break;
@@ -232,8 +252,12 @@ async fn handle_socket(socket: WebSocket, state: AppState, user_id: Uuid, opened
                 }
             };
             match next {
-                Ok(msg) if msg == crate::state::WS_CLOSE => break,
                 Ok(msg) => {
+                    match close_signal(&msg, sid) {
+                        Some(true) => break,
+                        Some(false) => continue,
+                        None => {}
+                    }
                     // Compte banni ou déconnecté de force : le client est prévenu, puis la socket se ferme.
                     let terminal = msg.starts_with(r#"{"type":"ACCOUNT_BANNED""#) || msg.starts_with(r#"{"type":"FORCE_LOGOUT""#);
                     if sender.send(Message::Text(msg)).await.is_err() || terminal {

@@ -401,3 +401,41 @@ async fn e2e_channels() {
     assert_eq!(kept.as_deref(), Some("vieux"));
     lg::encrypt_item(&db, d, lg::Item::Message, old, req(Uuid::new_v4())).await.unwrap();
 }
+
+/// Membres retenus (clé changée, pas encore acceptée) : l'époque se crée sans eux, ils restent
+/// « manquants » ; refusé si leur clé n'a pas changé récemment, pour le créateur ou un non-membre.
+#[tokio::test]
+#[ignore]
+async fn e2e_withheld_members() {
+    let url = std::env::var("FORGECHAT_TEST_DATABASE_URL").expect("FORGECHAT_TEST_DATABASE_URL");
+    let db = PgPool::connect(&url).await.unwrap();
+    sqlx::migrate!("./migrations").run(&db).await.unwrap();
+    let (a, b, c, x) = (user(&db, true).await, user(&db, true).await, user(&db, true).await, user(&db, true).await);
+    let g: Uuid = sqlx::query_scalar("INSERT INTO group_dm_channels (owner_id) VALUES ($1) RETURNING id")
+        .bind(a).fetch_one(&db).await.unwrap();
+    for m in [a, b, c] {
+        sqlx::query("INSERT INTO group_dm_members (dm_id, user_id) VALUES ($1, $2)").bind(g).bind(m).execute(&db).await.unwrap();
+    }
+    let conv = Conv::Group(g);
+    let with = |mut body: PostEnvelopes, w: &[Uuid]| {
+        body.withheld = w.to_vec();
+        body
+    };
+    // Clé de b vieille de 40 jours : il ne peut pas être retenu.
+    sqlx::query("UPDATE user_keys SET created_at = NOW() - INTERVAL '40 days' WHERE user_id=$1").bind(b).execute(&db).await.unwrap();
+    assert_eq!(err(store_envelopes(&db, conv, a, &with(body(&db, 0, true, &[a, c], 9).await, &[b])).await), "WITHHELD_NOT_ALLOWED");
+    // Sans withheld : couverture incomplète.
+    assert_eq!(err(store_envelopes(&db, conv, a, &body(&db, 0, true, &[a, c], 9).await).await), "MEMBERS_CHANGED");
+    // Ni le créateur, ni un non-membre.
+    assert_eq!(err(store_envelopes(&db, conv, a, &with(body(&db, 0, true, &[b, c], 9).await, &[a])).await), "WITHHELD_NOT_ALLOWED");
+    assert_eq!(err(store_envelopes(&db, conv, a, &with(body(&db, 0, true, &[a, b, c], 9).await, &[x])).await), "WITHHELD_NOT_ALLOWED");
+    // b vient de changer de clé : retenu, l'époque se crée pour a et c.
+    set_key(&db, b, &format!("fp-b2-{b}")).await;
+    sqlx::query("UPDATE user_keys SET created_at = NOW() WHERE user_id=$1").bind(b).execute(&db).await.unwrap();
+    store_envelopes(&db, conv, a, &with(body(&db, 0, true, &[a, c], 9).await, &[b])).await.unwrap();
+    let mem = members(&db, conv).await.unwrap();
+    assert_eq!(missing_members(&db, conv, &mem, Some((0, false))).await.unwrap(), vec![b], "b servi plus tard par KEY_REQUEST");
+    // c, qui a accepté la nouvelle clé de b, la lui donne.
+    store_envelopes(&db, conv, c, &body(&db, 0, false, &[b], 9).await).await.unwrap();
+    assert!(missing_members(&db, conv, &mem, Some((0, false))).await.unwrap().is_empty());
+}

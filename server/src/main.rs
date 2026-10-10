@@ -11,6 +11,9 @@ mod push;
 mod mobile_push;
 mod net_guard;
 mod privacy;
+mod crypto;
+mod email_crypto;
+mod upload_sign;
 
 use axum::{
     middleware as axum_middleware,
@@ -61,6 +64,11 @@ async fn main() -> anyhow::Result<()> {
     sqlx::migrate!("./migrations").run(&db).await?;
     tracing::info!("Migrations OK");
     handlers::totp::init_enc_key()?;
+    email_crypto::init()?;
+    let sealed = email_crypto::migrate_at_rest(&db).await?;
+    if sealed > 0 {
+        tracing::info!("E-mails : {sealed} adresse(s) chiffrée(s) au repos");
+    }
     let sealed = handlers::totp::migrate_at_rest(&db).await?;
     if sealed > 0 {
         tracing::info!("2FA : {sealed} compte(s) passé(s) au secret chiffré / codes de secours hachés");
@@ -223,6 +231,8 @@ async fn main() -> anyhow::Result<()> {
             axum::http::header::AUTHORIZATION,
             axum::http::header::CONTENT_TYPE,
             axum::http::header::ACCEPT,
+            // Appli web : jetons en cookies HttpOnly seulement (auth.rs, cookie_only).
+            axum::http::HeaderName::from_static("x-forgechat-tokens"),
         ])
         .allow_credentials(true);
 
@@ -285,6 +295,8 @@ async fn main() -> anyhow::Result<()> {
                     header::CONTENT_SECURITY_POLICY,
                     HeaderValue::from_static("default-src 'none'; sandbox"),
                 ))
+                // F8 : hors dossiers publics, URL signée exigée (404 sinon).
+                .layer(axum::middleware::from_fn(upload_sign::guard))
                 .service(ServeDir::new(&config.upload_dir))
         )
         // 12 Mo partout ailleurs (plus gros envoi hors pièce jointe : une bannière de 10 Mo) : un
@@ -428,7 +440,7 @@ async fn send_dm_notifications(state: &AppState) {
         )
         SELECT
             un.recipient_id,
-            u.email,
+            u.email_enc,
             u.username,
             COUNT(un.msg_id) AS unread_count
         FROM unread un
@@ -438,7 +450,7 @@ async fn send_dm_notifications(state: &AppState) {
         WHERE (rr.last_read_at IS NULL OR un.msg_at > rr.last_read_at)
           AND ep.dm_unread_notify = TRUE
           AND (ep.last_notified_at IS NULL OR ep.last_notified_at < NOW() - INTERVAL '24 hours')
-        GROUP BY un.recipient_id, u.email, u.username"
+        GROUP BY un.recipient_id, u.email_enc, u.username"
     )
     .fetch_all(&state.db)
     .await
@@ -446,7 +458,9 @@ async fn send_dm_notifications(state: &AppState) {
 
     for row in &rows {
         let recipient_id: Uuid = row.get("recipient_id");
-        let email: String = row.get("email");
+        // Adresse chiffrée au repos : déchiffrée seulement pour l'envoi.
+        let Some(email) = row.get::<Option<String>, _>("email_enc")
+            .and_then(|e| email_crypto::open(recipient_id, &e)) else { continue };
         let username: String = row.get("username");
         let count: i64 = row.get("unread_count");
 
@@ -678,6 +692,7 @@ fn protected_routes(state: AppState) -> Router<AppState> {
         .route("/dms/groups/:group_id/read", post(handlers::reads::mark_group_dm_read))
         // Threads
         .route("/servers/:server_id/channels/:channel_id/forum-uploads", post(handlers::uploads::forum_upload).layer(DefaultBodyLimit::max(ATTACHMENT_BODY_LIMIT)))
+        .route("/uploads/sign", post(handlers::uploads::sign_urls))
         .route("/servers/:server_id/channels/:channel_id/threads", get(handlers::threads::list_threads))
         .route("/servers/:server_id/channels/:channel_id/threads", post(handlers::threads::create_thread))
         .route("/servers/:server_id/channels/:channel_id/threads/:thread_id/messages", get(handlers::threads::get_thread_messages))

@@ -68,15 +68,15 @@ async fn security_audit_2026_10_10() {
         let mut r = state.redis.lock().await;
         let _: () = r.set_ex(format!("ws_ticket:{ticket}"), a.to_string(), 30).await.expect("ticket");
     }
-    assert_eq!(consume_ticket(&state, &ticket).await, Ok(Some(a)));
+    assert_eq!(consume_ticket(&state, &ticket).await, Ok(Some((a, None))));
     assert_eq!(consume_ticket(&state, &ticket).await, Ok(None));
 
     // M6 / F6 : révocation vue par la revérification périodique des sockets.
     let now = chrono::Utc::now().timestamp();
-    assert_eq!(token_state(&state, a, now - 10, None).await, TokenState::Valid);
+    assert_eq!(token_state(&state, a, now - 10, None, None).await, TokenState::Valid);
     crate::middleware::auth::revoke_all_tokens(&state, a).await;
-    assert_eq!(token_state(&state, a, now - 10, None).await, TokenState::Revoked);
-    assert_eq!(token_state(&state, a, now + 5, None).await, TokenState::Valid);
+    assert_eq!(token_state(&state, a, now - 10, None, None).await, TokenState::Revoked);
+    assert_eq!(token_state(&state, a, now + 5, None, None).await, TokenState::Valid);
 
     // M6 : fermeture des sockets d'un compte (signal interne).
     let mut rx = {
@@ -104,4 +104,102 @@ async fn security_audit_2026_10_10() {
     sqlx::query("DELETE FROM blocks WHERE blocker_id=$1").bind(a).execute(&db).await.expect("unblock");
     accept_dm_call(&state, a, Uuid::new_v4(), "a", b, &serde_json::Value::Null, true).await;
     assert_eq!(answered(db.clone()).await, 1);
+}
+
+/// Phase 2, point 1 : révoquer UNE session coupe ses jetons d'accès et ses sockets, pas celles
+/// des autres appareils ; « tout déconnecter » coupe tout.
+#[tokio::test]
+#[ignore]
+async fn security_session_revocation_closes_sockets() {
+    let (state, db) = setup().await;
+    let u = user(&db).await;
+    let mut sids = Vec::new();
+    for i in 0..2 {
+        let sid: Uuid = sqlx::query_scalar(
+            "INSERT INTO user_sessions (user_id, refresh_token_hash, device_info) VALUES ($1, $2, 'test') RETURNING id",
+        )
+        .bind(u).bind(format!("h{i}-{u}")).fetch_one(&db).await.expect("session");
+        sqlx::query("INSERT INTO refresh_tokens (user_id, token_hash, expires_at) VALUES ($1, $2, NOW() + INTERVAL '1 day')")
+            .bind(u).bind(format!("h{i}-{u}")).execute(&db).await.expect("refresh");
+        sids.push(sid);
+    }
+    let (s1, s2) = (sids[0], sids[1]);
+
+    // Ticket porteur de la session.
+    let ticket = Uuid::new_v4().simple().to_string();
+    {
+        use redis::AsyncCommands;
+        let mut r = state.redis.lock().await;
+        let _: () = r.set_ex(format!("ws_ticket:{ticket}"), format!("{u}:{s1}"), 30).await.expect("ticket");
+    }
+    assert_eq!(consume_ticket(&state, &ticket).await, Ok(Some((u, Some(s1)))));
+
+    let mut rx = {
+        let mut clients = state.clients.write().await;
+        clients.entry(u).or_insert_with(|| tokio::sync::broadcast::channel::<String>(8).0).subscribe()
+    };
+    let iat = chrono::Utc::now().timestamp() - 5;
+    crate::handlers::auth::end_session(&state, u, s1).await.expect("end");
+    let sig = rx.recv().await.expect("signal");
+    assert_eq!(close_signal(&sig, Some(s1)), Some(true), "socket de la session révoquée fermée");
+    assert_eq!(close_signal(&sig, Some(s2)), Some(false), "autre appareil : ignoré, pas transmis");
+    assert_eq!(close_signal(&sig, None), Some(false));
+    assert_eq!(close_signal("{\"type\":\"X\"}", Some(s1)), None);
+    assert_eq!(token_state(&state, u, iat, Some(s1), None).await, TokenState::Revoked);
+    assert_eq!(token_state(&state, u, iat, Some(s2), None).await, TokenState::Valid);
+    let left: Vec<String> = sqlx::query_scalar("SELECT token_hash FROM refresh_tokens WHERE user_id=$1")
+        .bind(u).fetch_all(&db).await.expect("left");
+    assert_eq!(left, vec![format!("h1-{u}")]);
+
+    // Tout déconnecter.
+    state.disconnect_user_sockets(u).await;
+    assert_eq!(close_signal(&rx.recv().await.expect("signal"), Some(s2)), Some(true));
+}
+
+/// F8 : signature à la demande (POST /api/uploads/sign) seulement pour qui peut lire le fichier.
+#[tokio::test]
+#[ignore]
+async fn security_upload_sign_access() {
+    use crate::handlers::uploads::can_read_upload;
+    let (state, db) = setup().await;
+    let (owner, a, b) = (user(&db).await, user(&db).await, user(&db).await);
+    let s: Uuid = sqlx::query_scalar("INSERT INTO servers (name, owner_id) VALUES ('upl', $1) RETURNING id")
+        .bind(owner).fetch_one(&db).await.expect("server");
+    sqlx::query("INSERT INTO roles (server_id, name, permissions, is_everyone) VALUES ($1, '@everyone', $2, TRUE)")
+        .bind(s).bind(Permissions::VIEW_CHANNEL | Permissions::READ_HISTORY).execute(&db).await.expect("everyone");
+    for (m, is_owner) in [(owner, true), (a, false), (b, false)] {
+        sqlx::query("INSERT INTO server_members (user_id, server_id, is_owner) VALUES ($1, $2, $3)")
+            .bind(m).bind(s).bind(is_owner).execute(&db).await.expect("member");
+    }
+    let chan: Uuid = sqlx::query_scalar("INSERT INTO channels (server_id, name) VALUES ($1, 'prive') RETURNING id")
+        .bind(s).fetch_one(&db).await.expect("channel");
+    sqlx::query("INSERT INTO channel_permissions (channel_id, target_id, target_type, deny) VALUES ($1, $2, 'member', $3)")
+        .bind(chan).bind(b).bind(Permissions::VIEW_CHANNEL).execute(&db).await.expect("override");
+    let msg: Uuid = sqlx::query_scalar("INSERT INTO messages (channel_id, user_id, content) VALUES ($1, $2, 'x') RETURNING id")
+        .bind(chan).bind(a).fetch_one(&db).await.expect("message");
+    let att = |col: &'static str, owner_id: Uuid| {
+        let db = db.clone();
+        async move {
+            let url = format!("/uploads/{}.enc", Uuid::new_v4());
+            sqlx::query(&format!("INSERT INTO attachments ({col}, filename, content_type, size, url) VALUES ($1, 'f', 'application/octet-stream', 1, $2)"))
+                .bind(owner_id).bind(&url).execute(&db).await.expect("attachment");
+            url
+        }
+    };
+    let in_channel = att("message_id", msg).await;
+    let forum_media = att("channel_id", chan).await;
+    assert!(can_read_upload(&state, a, &in_channel).await.unwrap());
+    assert!(!can_read_upload(&state, b, &in_channel).await.unwrap(), "salon masqué");
+    assert!(can_read_upload(&state, a, &forum_media).await.unwrap());
+    assert!(!can_read_upload(&state, b, &forum_media).await.unwrap());
+    assert!(!can_read_upload(&state, a, "/uploads/inconnu.enc").await.unwrap());
+
+    let (u1, u2) = if a < owner { (a, owner) } else { (owner, a) };
+    let dm: Uuid = sqlx::query_scalar("INSERT INTO dm_channels (user1_id, user2_id) VALUES ($1, $2) RETURNING id")
+        .bind(u1).bind(u2).fetch_one(&db).await.expect("dm");
+    let dm_msg: Uuid = sqlx::query_scalar("INSERT INTO dm_messages (dm_channel_id, sender_id, content) VALUES ($1, $2, 'x') RETURNING id")
+        .bind(dm).bind(a).fetch_one(&db).await.expect("dm message");
+    let in_dm = att("dm_message_id", dm_msg).await;
+    assert!(can_read_upload(&state, owner, &in_dm).await.unwrap());
+    assert!(!can_read_upload(&state, b, &in_dm).await.unwrap(), "hors du MP");
 }

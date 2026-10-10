@@ -325,7 +325,7 @@ pub async fn get_group_messages(
         let mid = r.get::<Option<Uuid>, _>("group_dm_message_id").unwrap_or_default();
         att_map.entry(mid).or_default().push(serde_json::json!({
             "id": r.get::<Uuid, _>("id"),
-            "url": r.get::<String, _>("url"),
+            "url": crate::upload_sign::sign_url(&r.get::<String, _>("url")),
             "filename": r.get::<String, _>("filename"),
             "content_type": r.get::<String, _>("content_type"),
             "size": r.get::<i64, _>("size"),
