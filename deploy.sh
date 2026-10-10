@@ -51,7 +51,10 @@ fi
 # ── Docker Compose ──────────────────────────────────────────────────
 log "Démarrage des services..."
 docker compose pull --quiet 2>/dev/null || true
-docker compose up -d --build --remove-orphans
+# --pull : l'image de base du serveur est retirée à chaque build (correctifs de sécurité Debian),
+# le Dockerfile ne fait plus d'apt-get upgrade.
+docker compose build --pull
+docker compose up -d --remove-orphans
 
 log "Attente de la DB (max 30s)..."
 for i in $(seq 1 30); do
