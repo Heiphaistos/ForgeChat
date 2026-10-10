@@ -9,6 +9,7 @@ import { socialFr } from './socialFr.ts'
 import { comfortFr } from './comfort.ts'
 import { voiceLotFr } from './voiceLotFr.ts'
 import { remoteSupportFr } from './remoteSupport.ts'
+import { voiceDockFr } from './voiceDock.ts'
 
 export const fr = {
   ...profileFr,
@@ -18,6 +19,7 @@ export const fr = {
   ...messaging.fr,
   ...chrome.fr,
   ...remoteSupportFr,
+  ...voiceDockFr,
   ...ai.fr,
   // --- Connexion, inscription, mot de passe oublié ---
   'auth.email': 'Email',

@@ -215,10 +215,10 @@ export default function MainLayout() {
                 <div className="flex-1 overflow-hidden flex flex-col min-h-0">
                   <ChannelSidebar />
                 </div>
-                <VoiceBar />
               </div>
             </div>
-            {/* Profil sur toute la largeur (sous le rail des serveurs aussi) : pseudo et statut lisibles. */}
+            {/* Vocal et profil sur toute la largeur (sous le rail des serveurs aussi), sur toutes les pages. */}
+            <VoiceBar compact={location.pathname.startsWith('/news')} />
             <UserPanel onToggleActivity={toggleActivity} activityOpen={activityOpen} compact={location.pathname.startsWith('/news')} />
           </nav>
 

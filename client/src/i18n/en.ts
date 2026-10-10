@@ -10,6 +10,7 @@ import { socialEn } from './socialEn.ts'
 import { comfortEn } from './comfort.ts'
 import { voiceLotEn } from './voiceLotEn.ts'
 import { remoteSupportEn } from './remoteSupport.ts'
+import { voiceDockEn } from './voiceDock.ts'
 
 export const en: Partial<Record<Key, string>> = {
   ...profileEn,
@@ -19,6 +20,7 @@ export const en: Partial<Record<Key, string>> = {
   ...messaging.en,
   ...chrome.en,
   ...remoteSupportEn,
+  ...voiceDockEn,
   ...ai.en,
   // --- Connexion, inscription, mot de passe oublié ---
   'auth.email': 'Email',

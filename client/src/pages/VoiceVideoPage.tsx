@@ -3,7 +3,7 @@ import {
   Mic, MicOff, Video, VideoOff, PhoneOff, Monitor, MonitorOff,
   Volume2, VolumeX, Maximize2, Users, Hand, Radio,
   BarChart2, MessageSquare, Circle, Square, Grid2x2,
-  Layout, Sparkles, Wifi, WifiOff, Music2, PenLine, ChevronLeft,
+  Layout, Sparkles, Music2, PenLine, ChevronLeft,
   Focus, GalleryHorizontal, Tv,
 } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
@@ -19,6 +19,7 @@ import SpeakerStats from '../components/voice/SpeakerStats'
 import VolumeSlider from '../components/voice/VolumeSlider'
 import { volumeMenuItem } from '../components/voice/UserVolumePopover'
 import Soundboard from '../components/voice/Soundboard'
+import CallQualityIndicator from '../components/voice/CallQualityIndicator'
 import VoiceActivityBar from '../components/voice/VoiceActivityBar'
 import Whiteboard from '../components/voice/Whiteboard'
 import WatchTogether, { useWatchTogether } from '../components/voice/WatchTogether'
@@ -61,29 +62,6 @@ function MeetingTimer({ startTime }: { startTime: number }) {
     <span className="text-xs text-fc-muted font-mono">
       {h > 0 ? `${h}:` : ''}{String(m).padStart(2, '0')}:{String(s).padStart(2, '0')}
     </span>
-  )
-}
-
-// ─── Call Quality ─────────────────────────────────────────────────────────────
-// Qualité mesurée par le SFU (perte, gigue, débit) : plus de sondage getStats().
-// Le SFU dégrade aussi tout seul (simulcast + dynacast + contrôle de congestion),
-// l'ancien divisé-par-deux manuel des débits n'a plus de raison d'être.
-function CallQualityIndicator() {
-  const status = useVoice(s => s.mediaStatus)
-  const q = useVoice(s => s.mediaQuality)
-  const t = useT()
-  const view =
-    status === 'connecting' ? { icon: <Wifi size={12} />, color: 'text-fc-muted', label: t('voice.q.connecting') }
-    : status === 'reconnecting' ? { icon: <WifiOff size={12} />, color: 'text-fc-yellow', label: t('voice.q.reconnecting') }
-    : status === 'failed' ? { icon: <WifiOff size={12} />, color: 'text-fc-red', label: t('voice.q.offline') }
-    : q === 'excellent' || q === 'good' ? { icon: <Wifi size={12} />, color: 'text-fc-green', label: q === 'excellent' ? t('voice.q.excellent') : t('voice.q.good') }
-    : q === 'poor' ? { icon: <Wifi size={12} />, color: 'text-fc-yellow', label: t('voice.q.poor') }
-    : q === 'lost' ? { icon: <WifiOff size={12} />, color: 'text-fc-red', label: t('voice.q.lost') }
-    : { icon: <Wifi size={12} />, color: 'text-fc-muted', label: '' }
-  return (
-    <div className={`flex items-center gap-1 text-xs ${view.color}`} title={t('voice.q.title', { q: view.label || t('voice.q.unknown') })} role="status">
-      {view.icon}{view.label && <span>{view.label}</span>}
-    </div>
   )
 }
 
@@ -240,6 +218,9 @@ export default function VoiceVideoPage({ channel, serverId }: Props) {
   // « Regarder ensemble » : le lecteur s'ouvre de lui-même quand une vidéo démarre.
   const watch = useWatchTogether(channel.id, isInThisChannel)
   const [showWatch, setShowWatch] = useState(false)
+  // Bouton « Activités » du panneau vocal : arrive ici avec la demande d'ouvrir « Regarder ensemble ».
+  const openActivity = (location.state as { openActivity?: boolean } | null)?.openActivity
+  useEffect(() => { if (openActivity) setShowWatch(true) }, [openActivity, location.key])
   const watchActive = watch !== null
   useEffect(() => { if (watchActive) setShowWatch(true) }, [watchActive])
   const participantsInChannel = (roomParticipants[channel.id] ?? []).length
