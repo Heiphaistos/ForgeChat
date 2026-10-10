@@ -1,5 +1,6 @@
 import axios from 'axios'
-import { clearLocalSession } from '../lib/localSession'
+import { create } from 'zustand'
+import { accessToken, clearLocalSession, refreshAccess } from '../lib/localSession'
 import { installOffline } from '../lib/offline'
 
 const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
@@ -24,13 +25,27 @@ const api = axios.create({
 })
 
 api.interceptors.request.use(cfg => {
-  // Tauri uniquement : Bearer token depuis localStorage (les cookies ne traversent pas l'origine Tauri)
+  // Tauri uniquement : jeton d'accès en mémoire (les cookies ne traversent pas l'origine Tauri)
   if (isTauri) {
-    const token = localStorage.getItem('access_token')
+    const token = accessToken()
     if (token) cfg.headers.Authorization = `Bearer ${token}`
   }
   return cfg
 })
+
+/** 503 (Redis coupé, refus de sécurité) : bannière et nouvel essai, jamais de déconnexion. */
+export const useServerStatus = create<{ unavailable: boolean }>(() => ({ unavailable: false }))
+const MAX_503_RETRIES = 3
+
+/** 426 : client trop ancien. Bureau : lance la vérification de mise à jour. */
+async function onUpgradeRequired() {
+  const [{ default: toast }, { t }] = await Promise.all([import('react-hot-toast'), import('../i18n')])
+  toast.error(t('conn.upgradeRequired'), { id: 'upgrade-required', duration: 10_000 })
+  if (!isTauri) return
+  const { invoke } = await import('@tauri-apps/api/core')
+  const info = await invoke<import('../components/DesktopUpdateToast').DesktopUpdateInfo | null>('update_check').catch(() => null)
+  if (info) (await import('../components/DesktopUpdateToast')).showDesktopUpdateToast(info)
+}
 
 // Semaphore: une seule tentative de refresh à la fois, les autres attendent
 let refreshPromise: Promise<void> | null = null
@@ -42,9 +57,23 @@ const PUBLIC_PATHS = new Set(['/', '/login', '/register', '/verify-email', '/for
 export const isPublicPath = (p: string) => PUBLIC_PATHS.has(p) || p.startsWith('/telecharger/')
 
 api.interceptors.response.use(
-  r => r,
+  r => {
+    if (useServerStatus.getState().unavailable) useServerStatus.setState({ unavailable: false })
+    return r
+  },
   async err => {
     const url: string = err.config?.url ?? ''
+    const status = err.response?.status
+    // Le serveur a refusé avant de traiter : rejouer est sans effet de bord. Jetons et clé intacts.
+    if (status === 503 && err.config) {
+      useServerStatus.setState({ unavailable: true })
+      const n = (err.config._tries503 ?? 0) + 1
+      if (n > MAX_503_RETRIES) return Promise.reject(err)
+      err.config._tries503 = n
+      await new Promise(r => setTimeout(r, 1000 * 2 ** (n - 1)))
+      return api(err.config)
+    }
+    if (status === 426) void onUpgradeRequired()
     const isAuthEndpoint = url.includes('/auth/login') || url.includes('/auth/register') || url.includes('/auth/refresh')
     const onPublicPage = typeof window !== 'undefined' && isPublicPath(window.location.pathname)
 
@@ -56,20 +85,15 @@ api.interceptors.response.use(
       try {
         if (!refreshPromise) {
           refreshPromise = (async () => {
-            const body = isTauri
-              ? { refresh_token: localStorage.getItem('refresh_token') }
-              : {}
-            const res = await axios.post(`${baseURL}/auth/refresh`, body, { withCredentials: true })
-            if (isTauri && res.data.access_token) {
-              localStorage.setItem('access_token', res.data.access_token)
-              if (res.data.refresh_token) localStorage.setItem('refresh_token', res.data.refresh_token)
-            }
+            // Bureau : Rust rafraîchit avec le jeton du trousseau. Web : cookie HttpOnly.
+            if (isTauri) await refreshAccess()
+            else await axios.post(`${baseURL}/auth/refresh`, {}, { withCredentials: true })
           })().finally(() => { refreshPromise = null })
         }
         await refreshPromise
         // Mettre à jour le header si Tauri
         if (isTauri) {
-          const token = localStorage.getItem('access_token')
+          const token = accessToken()
           if (token) err.config.headers.Authorization = `Bearer ${token}`
         }
         err.config._retried = true
@@ -83,7 +107,7 @@ api.interceptors.response.use(
           err.sessionKept = true // lu par fetchMe : ce 401 d'origine n'est pas un refus définitif
           return Promise.reject(err)
         }
-        if (isTauri) clearLocalSession()
+        if (isTauri) await clearLocalSession()
         // Relu ici (et non avant le refresh) : AuthGuard a pu entre-temps aller sur
         // /login?redirect=… ; un rechargement vers /login nu perdait la destination
         const { pathname, search } = window.location

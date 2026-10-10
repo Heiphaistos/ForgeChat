@@ -144,7 +144,15 @@ pub async fn session_refresh() -> Result<String, u16> {
         return Ok(a);
     }
     let token = active_refresh().await.ok_or(401u16)?;
-    let (access, refresh) = post_refresh(&token).await?;
+    let (access, refresh) = match post_refresh(&token).await {
+        Ok(t) => t,
+        // Jeton périmé, révoqué ou compte suspendu : il ne servira plus jamais.
+        Err(s @ (400 | 401 | 403)) => {
+            let _ = session_clear().await;
+            return Err(s);
+        }
+        Err(s) => return Err(s),
+    };
     if let Err(e) = set_active(Some(access.clone()), refresh).await {
         eprintln!("[session] trousseau indisponible, session gardée en mémoire : {e}");
     }

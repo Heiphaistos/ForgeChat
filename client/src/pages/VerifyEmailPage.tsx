@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../store/auth'
 import api from '../api/client'
+import { storeSession } from '../lib/localSession'
 import toast from 'react-hot-toast'
 
 const CODE_LEN = 6
@@ -56,11 +57,8 @@ export default function VerifyEmailPage() {
     setLoading(true)
     try {
       const { data } = await api.post('/auth/verify-email', { email, code })
-      // Web: tokens en cookies httpOnly (set par le serveur) — pas de localStorage
-      if (isTauri) {
-        localStorage.setItem('access_token', data.access_token)
-        localStorage.setItem('refresh_token', data.refresh_token)
-      }
+      // Web : jetons en cookies HttpOnly (posés par le serveur). Bureau : trousseau de l'OS.
+      if (isTauri) await storeSession(data.access_token, data.refresh_token)
       await fetchMe()
       toast.success('Compte créé !')
       nav('/')

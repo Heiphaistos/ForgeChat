@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { immer } from 'zustand/middleware/immer'
 import api from '../api/client'
-import { clearLocalSession } from '../lib/localSession'
+import { clearLocalSession, loadAccess, migrateLegacySession, refreshAccess, storeSession } from '../lib/localSession'
 import { useChat, useDraft } from './chat'
 import { usePresence } from './presence'
 import { useUnread } from './unread'
@@ -74,12 +74,9 @@ export const useAuth = create<AuthState>()(
         body = null
       }
       rememberLogin(password, secrets)
-      // Web : tokens dans les cookies httpOnly (automatiques via withCredentials)
-      // Tauri : tokens dans localStorage (les cookies cross-origin ne sont pas garantis)
-      if (isTauri) {
-        localStorage.setItem('access_token', data.access_token)
-        localStorage.setItem('refresh_token', data.refresh_token)
-      }
+      // Web : jetons dans les cookies HttpOnly (automatiques via withCredentials)
+      // Tauri : accès en mémoire, rafraîchissement dans le trousseau de l'OS (côté Rust)
+      if (isTauri) await storeSession(data.access_token, data.refresh_token)
       set(s => { s.user = data.user })
     },
 
@@ -101,12 +98,11 @@ export const useAuth = create<AuthState>()(
     },
 
     logout: async () => {
-      const body = isTauri ? { refresh_token: localStorage.getItem('refresh_token') } : {}
       // Avant la déconnexion (route authentifiée) : ce navigateur ne doit plus
       // recevoir les notifications push de ce compte.
       await disableWebPush((await listAccounts()).length > 0)
-      await api.post('/auth/logout', body).catch(() => {})
-      if (isTauri) clearLocalSession()
+      await api.post('/auth/logout', {}).catch(() => {})
+      if (isTauri) await clearLocalSession()
       const uid = useAuth.getState().user?.id
       await clearAccountKey(uid)
       if (uid) await forgetOfflineData(uid)
@@ -126,9 +122,16 @@ export const useAuth = create<AuthState>()(
 
     fetchMe: async () => {
       // Web : le cookie httpOnly est envoyé automatiquement
-      // Tauri : le Bearer token est injecté par l'interceptor axios
-      const hasSession = isTauri ? !!localStorage.getItem('access_token') : true
-      if (!hasSession) { set(s => { s.loading = false }); return }
+      // Tauri : le Bearer token est injecté par l'interceptor axios. Sans jeton d'accès en
+      // mémoire, Rust rafraîchit depuis le trousseau ; aucun jeton enregistré = pas de session.
+      if (isTauri) {
+        await migrateLegacySession()
+        if (!(await loadAccess())) {
+          const status = await refreshAccess().then(() => 0, (e: { response?: { status: number } }) => e.response?.status ?? 0)
+          // Refus définitif : Rust a déjà oublié le jeton. Réseau ou 503 : on garde et on réessaie.
+          if (status === 400 || status === 401 || status === 403) { set(s => { s.loading = false }); return }
+        }
+      }
       // Réseau instable au lancement (réveil de veille, Wi-Fi qui s'accroche) : on réessaie un peu avant
       // d'abandonner, et on ne touche JAMAIS à la session sur une simple erreur réseau.
       for (let attempt = 0; ; attempt++) {
@@ -140,7 +143,7 @@ export const useAuth = create<AuthState>()(
           const status = err?.response?.status
           if ((status === 401 || status === 403) && !err?.sessionKept) {
             // Refus définitif (l'intercepteur a déjà tenté le rafraîchissement).
-            if (isTauri) clearLocalSession()
+            if (isTauri) await clearLocalSession()
             break
           }
           if (attempt >= 3) {
@@ -162,6 +165,6 @@ export const useAuth = create<AuthState>()(
 if (isTauri && typeof window !== 'undefined') {
   window.addEventListener('online', () => {
     const { user, fetchMe } = useAuth.getState()
-    if (!user && localStorage.getItem('refresh_token')) void fetchMe()
+    if (!user) void fetchMe()
   })
 }

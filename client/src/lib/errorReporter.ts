@@ -8,6 +8,7 @@
  * MAX_AUTO_REPORTS envois automatiques, regroupés toutes les 2 s.
  */
 import { baseURL } from '../api/client'
+import { accessToken } from './localSession'
 
 type Kind = 'js_error' | 'unhandled_rejection' | 'react_crash' | 'manual'
 
@@ -86,10 +87,8 @@ async function send(report: Report): Promise<boolean> {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' }
   if (isTauri) {
     // App de bureau : les cookies ne traversent pas l'origine tauri.localhost.
-    try {
-      const token = localStorage.getItem('access_token')
-      if (token) headers.Authorization = `Bearer ${token}`
-    } catch { /* stockage indisponible : rapport anonyme */ }
+    const token = accessToken()
+    if (token) headers.Authorization = `Bearer ${token}`
   }
   const body = JSON.stringify(report)
   try {
