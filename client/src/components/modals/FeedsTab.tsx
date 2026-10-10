@@ -120,10 +120,10 @@ export default function FeedsTab({ serverId, channels }: Props) {
   })
 
   const webhookBase = SERVER_URL || (typeof window !== 'undefined' ? window.location.origin : '')
-  // Le token est obligatoire côté serveur (verify_github_token_get) -- sans lui
-  // l'URL est invalide et toute livraison GitHub échoue en 401.
+  // Le secret ne figure plus dans l'URL (journaux des proxys) : GitHub signe chaque
+  // livraison avec lui (champ « Secret »), le serveur vérifie X-Hub-Signature-256.
   const webhookUrl = selectedChannelId && tokenSaved
-    ? `${webhookBase}/api/github-webhook/${selectedChannelId}?token=${githubToken}`
+    ? `${webhookBase}/api/github-webhook/${selectedChannelId}`
     : ''
 
   function copyWebhookUrl() {
@@ -361,6 +361,13 @@ export default function FeedsTab({ serverId, channels }: Props) {
                     <span aria-hidden>{copied ? t('feeds.copied') : t('feeds.copy')}</span>
                   </button>
                 </div>
+                <input
+                  readOnly
+                  value={githubToken}
+                  aria-label={t('feeds.ghSecret')}
+                  className="w-full px-3 py-2 bg-fc-input rounded text-white text-xs font-mono outline-none select-all"
+                  onFocus={e => e.target.select()}
+                />
                 <button onClick={() => setTokenSaved(false)} className="text-xs text-fc-muted hover:text-white transition">
                   {t('feeds.newSecret')}
                 </button>

@@ -1760,7 +1760,7 @@ export const fr = {
   'feeds.ghSecret': 'Secret du webhook GitHub',
   'feeds.generate': 'Générer',
   'feeds.saveAndUrl': "Enregistrer et générer l'URL",
-  'feeds.ghUrlWarning': 'URL du webhook — copiez-la maintenant, le secret ne sera plus jamais affiché',
+  'feeds.ghUrlWarning': "Collez l'URL dans « Payload URL » et le secret dans « Secret » sur GitHub, maintenant : le secret ne sera plus jamais affiché",
   'feeds.ghUrl': 'URL du webhook GitHub',
   'feeds.ghCopy': "Copier l'URL du webhook GitHub",
   'feeds.copied': 'Copié !',
