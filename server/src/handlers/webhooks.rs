@@ -31,7 +31,7 @@ pub async fn list_webhooks(
     _check_manage(claims.sub, server_id, &state).await?;
     use sqlx::Row;
     let rows = sqlx::query(
-        "SELECT id, server_id, channel_id, name, avatar, token, created_by, created_at
+        "SELECT id, server_id, channel_id, name, avatar, COALESCE(token_preview, '') AS token_preview, created_by, created_at
          FROM webhooks WHERE server_id=$1 ORDER BY created_at DESC"
     )
     .bind(server_id)
@@ -39,9 +39,8 @@ pub async fn list_webhooks(
     .await?;
 
     let webhooks = rows.iter().map(|r| {
-        let token: String = r.get("token");
-        // Masquer le token — affiché en clair uniquement à la création (create_webhook)
-        let token_preview = format!("{}...", &token[..token.len().min(8)]);
+        // Jeton jamais stocké en clair : aperçu masqué seulement (« ••••abcd »).
+        let token_preview: String = r.get("token_preview");
         WebhookRow {
             id: r.get("id"),
             server_id: r.get("server_id"),
@@ -77,30 +76,44 @@ pub async fn create_webhook(
     use crate::handlers::servers::require_channel_in_server;
     require_channel_in_server(&state, body.channel_id, server_id).await?;
     use sqlx::Row;
+    let raw_token = data_encoding::HEXLOWER.encode(&rand::random::<[u8; 32]>());
+    let preview = token_preview(&raw_token);
     let row = sqlx::query(
-        "INSERT INTO webhooks (server_id, channel_id, name, created_by)
-         VALUES ($1,$2,$3,$4)
-         RETURNING id, server_id, channel_id, name, avatar, token, created_by, created_at"
+        "INSERT INTO webhooks (server_id, channel_id, name, created_by, token_hash, token_preview)
+         VALUES ($1,$2,$3,$4,$5,$6)
+         RETURNING id, server_id, channel_id, name, avatar, created_by, created_at"
     )
     .bind(server_id)
     .bind(body.channel_id)
     .bind(&body.name)
     .bind(claims.sub)
+    .bind(hash_webhook_token(&raw_token))
+    .bind(&preview)
     .fetch_one(&state.db)
     .await?;
 
-    let raw_token: String = row.get("token");
     Ok(Json(WebhookRow {
         id: row.get("id"),
         server_id: row.get("server_id"),
         channel_id: row.get("channel_id"),
         name: row.get("name"),
         avatar: row.get("avatar"),
-        token_preview: format!("{}...", &raw_token[..raw_token.len().min(8)]),
+        token_preview: preview,
+        // Seule fois où le jeton est montré.
         token: Some(raw_token),
         created_by: row.get("created_by"),
         created_at: row.get("created_at"),
     }))
+}
+
+/// SHA-256 hex du jeton (même calcul que la migration 110).
+pub fn hash_webhook_token(token: &str) -> String {
+    use sha2::{Digest, Sha256};
+    data_encoding::HEXLOWER.encode(&Sha256::digest(token.as_bytes()))
+}
+
+fn token_preview(token: &str) -> String {
+    format!("••••{}", &token[token.len().saturating_sub(4)..])
 }
 
 pub async fn delete_webhook(
@@ -169,16 +182,18 @@ pub async fn execute_webhook(
     // faire une comparaison memcmp classique (short-circuit au 1er octet différent),
     // un canal auxiliaire théorique. Fetch par id seul, comparaison XOR-fold en Rust.
     let row = sqlx::query(
-        "SELECT w.channel_id, w.name, w.created_by, w.token, c.server_id
+        "SELECT w.channel_id, w.name, w.created_by, COALESCE(w.token_hash, '') AS token_hash, c.server_id
          FROM webhooks w JOIN channels c ON c.id = w.channel_id WHERE w.id=$1"
     )
         .bind(webhook_id)
         .fetch_optional(&state.db).await?
         .ok_or(AppError::Unauthorized)?;
 
-    let stored_token: String = row.get("token");
-    let valid = stored_token.len() == token.len()
-        && stored_token.bytes().zip(token.bytes()).fold(0u8, |acc, (a, b)| acc | (a ^ b)) == 0;
+    // Haché, comparé en temps constant.
+    let stored: String = row.get("token_hash");
+    let given = hash_webhook_token(&token);
+    let valid = stored.len() == given.len()
+        && stored.bytes().zip(given.bytes()).fold(0u8, |acc, (a, b)| acc | (a ^ b)) == 0;
     if !valid {
         return Err(AppError::Unauthorized);
     }
@@ -369,6 +384,39 @@ async fn _check_manage(user_id: Uuid, server_id: Uuid, state: &AppState) -> Resu
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn webhook_token_hash_and_preview() {
+        // printf abc | sha256sum
+        assert_eq!(hash_webhook_token("abc"), "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
+        assert_eq!(token_preview("0123456789abcdef"), "••••cdef");
+    }
+
+    /// Migration 110 sur une ligne encore en clair : même hachage qu'en Rust, clair effacé,
+    /// rejouable sans effet.
+    #[tokio::test]
+    #[ignore]
+    async fn webhook_token_migration_db() {
+        let url = std::env::var("FORGECHAT_TEST_DATABASE_URL").expect("FORGECHAT_TEST_DATABASE_URL");
+        let db = sqlx::PgPool::connect(&url).await.unwrap();
+        sqlx::migrate!("./migrations").run(&db).await.unwrap();
+        let tag = Uuid::new_v4().simple().to_string();
+        let u: Uuid = sqlx::query_scalar("INSERT INTO users (username, email, password_hash) VALUES ($1, $2, 'x') RETURNING id")
+            .bind(&tag[..20]).bind(format!("{tag}@test.local")).fetch_one(&db).await.unwrap();
+        let s: Uuid = sqlx::query_scalar("INSERT INTO servers (name, owner_id) VALUES ('w', $1) RETURNING id").bind(u).fetch_one(&db).await.unwrap();
+        let c: Uuid = sqlx::query_scalar("INSERT INTO channels (server_id, name) VALUES ($1, 'c') RETURNING id").bind(s).fetch_one(&db).await.unwrap();
+        let token = format!("{tag}{tag}");
+        let w: Uuid = sqlx::query_scalar("INSERT INTO webhooks (server_id, channel_id, name, created_by, token) VALUES ($1, $2, 'w', $3, $4) RETURNING id")
+            .bind(s).bind(c).bind(u).bind(&token).fetch_one(&db).await.unwrap();
+        for _ in 0..2 {
+            sqlx::raw_sql(include_str!("../../migrations/110_webhook_token_hash.sql")).execute(&db).await.unwrap();
+        }
+        let (clear, hash, preview): (Option<String>, String, String) =
+            sqlx::query_as("SELECT token, token_hash, token_preview FROM webhooks WHERE id=$1").bind(w).fetch_one(&db).await.unwrap();
+        assert_eq!(clear, None);
+        assert_eq!(hash, hash_webhook_token(&token));
+        assert_eq!(preview, token_preview(&token));
+    }
 
     #[test]
     fn github_signature() {
