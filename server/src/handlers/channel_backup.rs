@@ -88,7 +88,7 @@ async fn channel_backup(state: &AppState, channel_id: Uuid) -> Result<Value> {
             "filename": a.get::<String, _>("filename"),
             "content_type": a.get::<String, _>("content_type"),
             "size": a.get::<i64, _>("size"),
-            "url": a.get::<String, _>("url"),
+            "url": crate::upload_sign::sign_url(&a.get::<String, _>("url")),
         }));
     }
 

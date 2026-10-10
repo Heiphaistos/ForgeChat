@@ -30,7 +30,8 @@ pub struct ForumPost {
     pub reply_count: i32,
     pub last_reply_at: Option<chrono::DateTime<chrono::Utc>>,
     pub created_at: chrono::DateTime<chrono::Utc>,
-    /// Média d'une publication de salon média (`/uploads/<uuid>.<ext>`).
+    /// Média d'une publication de salon média (`/uploads/<uuid>.<ext>`), signé à la sérialisation.
+    #[serde(serialize_with = "crate::upload_sign::ser_opt")]
     pub media_url: Option<String>,
     /// Titre et contenu chiffrés ensemble ({t, title}) ; `title` vide, `content` NULL.
     pub enc: Option<serde_json::Value>,
@@ -158,7 +159,7 @@ pub async fn list_posts(
             "reply_count": r.get::<i32, _>("reply_count"),
             "last_reply_at": r.get::<Option<chrono::DateTime<chrono::Utc>>, _>("last_reply_at"),
             "created_at": r.get::<chrono::DateTime<chrono::Utc>, _>("created_at"),
-            "media_url": r.get::<Option<String>, _>("media_url"),
+            "media_url": crate::upload_sign::sign_opt(r.get::<Option<String>, _>("media_url")),
         });
         merge(post, e2e_fields(r))
     }).collect();
@@ -336,7 +337,7 @@ pub async fn get_post(
         "locked": post_row.get::<bool, _>("locked"),
         "reply_count": post_row.get::<i32, _>("reply_count"),
         "created_at": post_row.get::<chrono::DateTime<chrono::Utc>, _>("created_at"),
-        "media_url": post_row.get::<Option<String>, _>("media_url"),
+        "media_url": crate::upload_sign::sign_opt(post_row.get::<Option<String>, _>("media_url")),
     });
     let post = merge(post, e2e_fields(&post_row));
 

@@ -95,6 +95,8 @@ pub struct Attachment {
     pub filename: String,
     pub content_type: String,
     pub size: i64,
+    /// Signée à la sérialisation (F8, `/uploads` non public).
+    #[serde(serialize_with = "crate::upload_sign::ser")]
     pub url: String,
     pub width: Option<i32>,
     pub height: Option<i32>,

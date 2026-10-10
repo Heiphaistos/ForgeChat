@@ -11,6 +11,8 @@ mod push;
 mod mobile_push;
 mod net_guard;
 mod privacy;
+mod crypto;
+mod upload_sign;
 
 use axum::{
     middleware as axum_middleware,
@@ -285,6 +287,8 @@ async fn main() -> anyhow::Result<()> {
                     header::CONTENT_SECURITY_POLICY,
                     HeaderValue::from_static("default-src 'none'; sandbox"),
                 ))
+                // F8 : hors dossiers publics, URL signée exigée (404 sinon).
+                .layer(axum::middleware::from_fn(upload_sign::guard))
                 .service(ServeDir::new(&config.upload_dir))
         )
         // 12 Mo partout ailleurs (plus gros envoi hors pièce jointe : une bannière de 10 Mo) : un
@@ -678,6 +682,7 @@ fn protected_routes(state: AppState) -> Router<AppState> {
         .route("/dms/groups/:group_id/read", post(handlers::reads::mark_group_dm_read))
         // Threads
         .route("/servers/:server_id/channels/:channel_id/forum-uploads", post(handlers::uploads::forum_upload).layer(DefaultBodyLimit::max(ATTACHMENT_BODY_LIMIT)))
+        .route("/uploads/sign", post(handlers::uploads::sign_urls))
         .route("/servers/:server_id/channels/:channel_id/threads", get(handlers::threads::list_threads))
         .route("/servers/:server_id/channels/:channel_id/threads", post(handlers::threads::create_thread))
         .route("/servers/:server_id/channels/:channel_id/threads/:thread_id/messages", get(handlers::threads::get_thread_messages))

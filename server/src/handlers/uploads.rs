@@ -341,7 +341,7 @@ async fn insert_attachment(
     .await?;
     Ok(serde_json::json!({
         "id": attachment.get::<Uuid, _>("id"),
-        "url": attachment.get::<String, _>("url"),
+        "url": crate::upload_sign::sign_url(&attachment.get::<String, _>("url")),
         "filename": attachment.get::<String, _>("filename"),
         "content_type": attachment.get::<String, _>("content_type"),
         "size": attachment.get::<i64, _>("size"),
@@ -372,7 +372,7 @@ pub async fn attachments_by_owner(
     for r in rows {
         map.entry(r.get::<Uuid, _>("owner_id")).or_default().push(serde_json::json!({
             "id": r.get::<Uuid, _>("id"),
-            "url": r.get::<String, _>("url"),
+            "url": crate::upload_sign::sign_url(&r.get::<String, _>("url")),
             "filename": r.get::<String, _>("filename"),
             "content_type": r.get::<String, _>("content_type"),
             "size": r.get::<i64, _>("size"),
@@ -535,11 +535,11 @@ pub async fn forum_upload(
             let size = budget.save(&state, field, &upload_dir.join(&filename)).await?;
             let url = format!("/uploads/{filename}");
             sqlx::query(
-                "INSERT INTO attachments (filename, content_type, size, url, uploader_id) VALUES ($1, 'application/octet-stream', $2, $3, $4)"
+                "INSERT INTO attachments (filename, content_type, size, url, uploader_id, channel_id) VALUES ($1, 'application/octet-stream', $2, $3, $4, $5)"
             )
-            .bind(&name).bind(size).bind(&url).bind(claims.sub)
+            .bind(&name).bind(size).bind(&url).bind(claims.sub).bind(channel_id)
             .execute(&state.db).await?;
-            return Ok(Json(serde_json::json!({ "url": url })));
+            return Ok(Json(serde_json::json!({ "url": url, "signed_url": crate::upload_sign::sign_url(&url) })));
         }
 
         if !FORUM_EXTENSIONS.contains(&ext.as_str()) {
@@ -554,20 +554,96 @@ pub async fn forum_upload(
         // Ligne sans message propriétaire, seulement pour compter le fichier dans le quota
         // (l'URL est collée dans le contenu du post).
         sqlx::query(
-            "INSERT INTO attachments (filename, content_type, size, url, uploader_id) VALUES ($1, $2, $3, $4, $5)"
+            "INSERT INTO attachments (filename, content_type, size, url, uploader_id, channel_id) VALUES ($1, $2, $3, $4, $5, $6)"
         )
         .bind(filename.as_str())
         .bind(mime_guess::from_ext(&ext).first_raw().unwrap_or("application/octet-stream"))
         .bind(size)
         .bind(&url)
         .bind(claims.sub)
+        .bind(channel_id)
         .execute(&state.db)
         .await?;
 
-        return Ok(Json(serde_json::json!({ "url": url })));
+        return Ok(Json(serde_json::json!({ "url": url, "signed_url": crate::upload_sign::sign_url(&url) })));
     }
 
     Err(AppError::BadRequest("Aucun fichier reçu".into()))
+}
+
+#[derive(serde::Deserialize)]
+pub struct SignBody {
+    urls: Vec<String>,
+}
+
+/// URL signées par requête au plus.
+const SIGN_MAX: usize = 100;
+
+/// `user` peut-il lire la pièce jointe `url` ? Selon son propriétaire : message de salon, fil
+/// ou réponse de forum (salon visible), MP ou groupe (membre), média de forum (salon visible).
+pub async fn can_read_upload(state: &AppState, user: Uuid, url: &str) -> Result<bool> {
+    use sqlx::Row;
+    let Some(r) = sqlx::query(
+        "SELECT a.uploader_id,
+                COALESCE(m.channel_id, t.channel_id, fp.channel_id, a.channel_id,
+                         (SELECT p.channel_id FROM forum_posts p WHERE p.media_url = a.url LIMIT 1)) AS channel_id,
+                (a.dm_message_id IS NOT NULL OR a.group_dm_message_id IS NOT NULL) AS in_conv,
+                (EXISTS(SELECT 1 FROM dm_messages dm JOIN dm_channels d ON d.id = dm.dm_channel_id
+                        WHERE dm.id = a.dm_message_id AND $2 IN (d.user1_id, d.user2_id))
+                 OR EXISTS(SELECT 1 FROM group_dm_messages g JOIN group_dm_members gm ON gm.dm_id = g.dm_id
+                        WHERE g.id = a.group_dm_message_id AND gm.user_id = $2)) AS conv_member
+         FROM attachments a
+         LEFT JOIN messages m ON m.id = a.message_id
+         LEFT JOIN thread_messages tm ON tm.id = a.thread_message_id
+         LEFT JOIN threads t ON t.id = tm.thread_id
+         LEFT JOIN forum_replies fr ON fr.id = a.forum_reply_id
+         LEFT JOIN forum_posts fp ON fp.id = fr.post_id
+         WHERE a.url = $1 AND (a.expires_at IS NULL OR a.expires_at > NOW())
+         LIMIT 1",
+    )
+    .bind(url)
+    .bind(user)
+    .fetch_optional(&state.db)
+    .await?
+    else {
+        return Ok(false);
+    };
+    if r.get::<bool, _>("in_conv") {
+        return Ok(r.get("conv_member"));
+    }
+    if let Some(ch) = r.get::<Option<Uuid>, _>("channel_id") {
+        return Ok(!crate::state::channel_audience_among(&state.db, ch, &[user]).await.is_empty());
+    }
+    // ponytail: média de forum téléversé avant la migration 109 (salon inconnu, URL seulement
+    // dans le contenu chiffré) : tout compte connecté, comme avant F8. Blob chiffré de bout en bout.
+    Ok(true)
+}
+
+/// POST /api/uploads/sign {urls:[…]} → {urls:{<url>: <url signée>}} : URL `/uploads/…` que
+/// l'appli tient d'un contenu chiffré (média de forum) ou ancien. Les URL refusées sont omises.
+pub async fn sign_urls(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+    Json(body): Json<SignBody>,
+) -> Result<Json<serde_json::Value>> {
+    if crate::handlers::password_reset::over_limit(&state, &format!("upload_sign:{}", claims.sub), 120, 60).await {
+        return Err(AppError::TooManyRequests);
+    }
+    if body.urls.len() > SIGN_MAX {
+        return Err(AppError::BadRequest("Trop d'URL".into()));
+    }
+    let mut out = serde_json::Map::new();
+    for raw in &body.urls {
+        let url = raw.split('?').next().unwrap_or_default();
+        if !url.starts_with("/uploads/") || url.len() > 500 || out.contains_key(raw) {
+            continue;
+        }
+        let signed = crate::upload_sign::sign_url(url);
+        if signed == url || can_read_upload(&state, claims.sub, url).await? {
+            out.insert(raw.clone(), signed.into());
+        }
+    }
+    Ok(Json(serde_json::json!({ "urls": out })))
 }
 
 #[cfg(test)]

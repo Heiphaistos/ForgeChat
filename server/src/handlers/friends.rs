@@ -515,7 +515,7 @@ pub async fn get_dm_messages(
             "filename": a.get::<String, _>("filename"),
             "content_type": a.get::<String, _>("content_type"),
             "size": a.get::<i64, _>("size"),
-            "url": a.get::<String, _>("url"),
+            "url": crate::upload_sign::sign_url(&a.get::<String, _>("url")),
             "expires_at": a.get::<Option<chrono::DateTime<chrono::Utc>>, _>("expires_at"),
         }));
     }

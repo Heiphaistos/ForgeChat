@@ -119,6 +119,7 @@ impl AppState {
         redis: MultiplexedConnection,
         config: Config,
     ) -> Self {
+        crate::upload_sign::init(&config.jwt_secret);
         let http_client = reqwest::Client::builder()
             .redirect(reqwest::redirect::Policy::limited(3))
             .user_agent(format!("ForgeChat/{} (+https://forgechat.heiphaistos.org)", APP_VERSION))
