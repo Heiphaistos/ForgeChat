@@ -3,7 +3,8 @@ import { RoleIcon, type RoleDecor } from '../../hooks/useRoleDecor'
 import { memo, useEffect, useRef, useState, useContext } from 'react'
 import { Pencil, Trash2, SmilePlus, MessagesSquare, Check, X, Pin, CornerUpLeft, Bot, Clock, Bookmark, Forward, Bell, Languages, Flag, Copy, Link, Loader2, Megaphone, Sparkles } from 'lucide-react'
 import { format } from 'date-fns'
-import { renderMarkdown } from '../../utils/markdown'
+import { renderMarkdown, SpoilerModContext } from '../../utils/markdown'
+import { useUxPrefs } from '../../lib/uxPrefs'
 import ReminderModal from './ReminderModal'
 import PollDisplay from './PollDisplay'
 import LinkPreview from './LinkPreview'
@@ -124,6 +125,10 @@ function MessageRow({
   // (pas de rôles en DM/group DM) -- noRoleAuthorIds y est toujours vide, donc ce
   // mode se comporte comme "none" là-bas, dégradation silencieuse acceptable.
   const [mediaRevealed, setMediaRevealed] = useState(false)
+  const showReactions = useUxPrefs(s => s.showReactions)
+  const showAttachments = useUxPrefs(s => s.showAttachments)
+  const [attachmentsOpened, setAttachmentsOpened] = useState(false)
+  const attachments = displayAttachments(msg.attachments, msg.e2e_body)
   const shouldBlurMedia = !isOwn && !mediaRevealed && (
     explicitFilter === 'all' ||
     (explicitFilter === 'members_without_roles' && !!noRoleAuthorIds?.has(msg.author_id))
@@ -281,8 +286,13 @@ function MessageRow({
                   )
                 }
                 return (
-                  <div className="text-fc-text text-sm break-words leading-relaxed">
-                    {renderMarkdown(msg.content, customEmojiMap)}
+                  <div className={`text-fc-text text-sm break-words leading-relaxed ${msg.logged_deleted ? 'opacity-60 line-through' : ''}`}>
+                    {/* Journal local (Extras) : anciennes versions, jamais envoyées ni gardées */}
+                    {msg.logged_edits?.map((old: string, i: number) => (
+                      <div key={i} className="text-fc-muted opacity-70 no-underline" title={t('ux.logger.oldVersion')}>{old}</div>
+                    ))}
+                    <SpoilerModContext.Provider value={canManageMessages}>{renderMarkdown(msg.content, customEmojiMap)}</SpoilerModContext.Provider>
+                    {msg.logged_deleted && <span className="ml-1.5 text-xs text-fc-red no-underline inline-block">{t('ux.logger.deleted')}</span>}
                     {msg.edited_at && (
                       <button
                         onClick={() => onOpenEditHistory(msg.id)}
@@ -315,8 +325,13 @@ function MessageRow({
                 )
               })()}
 
-              {/* Pièces jointes */}
-              {displayAttachments(msg.attachments, msg.e2e_body).map((att: any) => (
+              {/* Pièces jointes (réglage « Afficher les pièces jointes » : repliées derrière un bouton) */}
+              {!showAttachments && !attachmentsOpened && attachments.length > 0 && (
+                <button type="button" onClick={() => setAttachmentsOpened(true)} className="mt-1.5 text-xs text-fc-accent hover:underline">
+                  {t('ux.display.showAttachmentsBtn', { n: attachments.length })}
+                </button>
+              )}
+              {(showAttachments || attachmentsOpened) && attachments.map((att: any) => (
                 <div key={att.id} className="mt-1.5">
                   {att.e2e || att.e2eLocked ? (
                     // Fichier chiffré de bout en bout : déchiffré sur l'appareil (§12).
@@ -425,7 +440,7 @@ function MessageRow({
               })()}
 
               {/* Réactions */}
-              {msg.reactions?.length > 0 && (
+              {showReactions && msg.reactions?.length > 0 && (
                 <div className="flex flex-wrap gap-1 mt-1.5">
                   {msg.reactions?.map((r: any) => {
                     const isSuper = !!r.is_super

@@ -121,6 +121,8 @@ pub struct SendMessageRequest {
     /// Contenu chiffré {v, epoch, iv, ct} (remplace `content`).
     pub enc: Option<serde_json::Value>,
     pub client_msg_id: Option<Uuid>,
+    /// Réponse : `false` = ne pas notifier l'auteur du message cité (absent = notifier).
+    pub reply_ping: Option<bool>,
     /// Mentions en métadonnées (message chiffré : le serveur ne lit pas le texte).
     #[serde(flatten)]
     pub mentions: MentionMeta,

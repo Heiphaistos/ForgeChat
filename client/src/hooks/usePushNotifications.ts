@@ -1,6 +1,8 @@
 import { useState, useCallback } from 'react'
 import { stripMarkdown } from '../utils/mdShortcuts'
 import { queryClient } from '../main'
+import { streamerHides } from '../lib/uxPrefs'
+import { t } from '../i18n'
 
 // `quiet_hours_*` (PrivacySection.tsx) était sauvegardé et réaffiché mais jamais
 // consulté nulle part -- un pur placebo côté UI, comme les autres réglages du même
@@ -65,6 +67,7 @@ export function sendNativeNotification(
   if (Notification.permission !== 'granted') return
   if (document.hasFocus()) return
   if (isQuietHoursActive()) return
+  if (streamerHides('smNotifications')) return
 
   try {
     const { onClick, ...notifOptions } = options ?? {}
@@ -73,7 +76,10 @@ export function sendNativeNotification(
     if (typeof notifOptions.body === 'string') {
       notifOptions.body = stripMarkdown(notifOptions.body)
     }
-    const notif = new Notification(title, {
+    // Mode streamer : ni expéditeur ni contenu à l'écran.
+    const hide = streamerHides('smDmPreviews')
+    if (hide) notifOptions.body = t('ux.streamer.hiddenPreview')
+    const notif = new Notification(hide ? 'ForgeChat' : title, {
       icon: '/icon.svg',
       badge: '/icon.svg',
       ...notifOptions,

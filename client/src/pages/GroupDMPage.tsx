@@ -18,6 +18,8 @@ import MessageInput from '../components/chat/MessageInput'
 import UserPopup from '../components/UserPopup'
 import { useFormatDate } from '../hooks/useFormatDate'
 import { renderMarkdown } from '../utils/markdown'
+import { useUxPrefs } from '../lib/uxPrefs'
+import { applyDeletion, editHistory } from '../lib/messageLog'
 import LinkPreview, { extractFirstUrl } from '../components/chat/LinkPreview'
 import { handleMarkdownShortcut, stripMarkdown } from '../utils/mdShortcuts'
 import { isToday, isYesterday, format } from 'date-fns'
@@ -83,6 +85,9 @@ interface GDMMessage {
   e2e_body?: { f?: unknown }
   reactions?: GDMReaction[]
   attachments?: GDMAttachment[]
+  /** Journal local (Extras), en mémoire seulement. */
+  logged_deleted?: boolean
+  logged_edits?: string[]
 }
 
 /** Déchiffre un message de groupe et l'aperçu du message auquel il répond. */
@@ -194,6 +199,10 @@ export default function GroupDMPage() {
     staleTime: 60_000,
   })
   const linkPreviewEnabled = (userSettings?.link_preview ?? true) as boolean
+  const showReactions = useUxPrefs(s => s.showReactions)
+  const showAttachments = useUxPrefs(s => s.showAttachments)
+  // Pièces jointes repliées (réglage) que l'on a ouvertes, par message.
+  const [openedAtt, setOpenedAtt] = useState<ReadonlySet<string>>(new Set())
 
   // Messages épinglés du groupe
   const { data: groupPins = [] } = useQuery<{ id: string; content: string | null; created_at: string; sender_username: string }[]>({
@@ -333,7 +342,7 @@ export default function GroupDMPage() {
     })
     const offDelete = on('GROUP_DM_MESSAGE_DELETE', (d: any) => {
       if (d.group_id !== groupId) return
-      setAllMessages(prev => prev.filter(m => m.id !== d.message_id))
+      setAllMessages(prev => applyDeletion(prev, d.message_id, useUxPrefs.getState().messageLogger, useAuth.getState().user?.id))
     })
     const offEdit = on('GROUP_DM_MESSAGE_EDIT', async (d: any) => {
       if (d.group_id !== groupId) return
@@ -345,7 +354,7 @@ export default function GroupDMPage() {
       }
       setAllMessages(prev => prev.map(m =>
         m.id === d.message_id
-          ? { ...m, content, enc: d.enc ?? null, client_msg_id: d.client_msg_id ?? m.client_msg_id, e2e: d.enc ? 'ok' : m.e2e, edited_at: new Date().toISOString() }
+          ? { ...m, logged_edits: editHistory(m, content, useUxPrefs.getState().messageLogger), content, enc: d.enc ?? null, client_msg_id: d.client_msg_id ?? m.client_msg_id, e2e: d.enc ? 'ok' : m.e2e, edited_at: new Date().toISOString() }
           : m
       ))
     })
@@ -1106,12 +1115,14 @@ export default function GroupDMPage() {
                           </button>
                         )}
                         {msg.content && (
-                          <div className={`px-3 py-2 rounded-2xl text-sm break-words ${
+                          <div className={`px-3 py-2 rounded-2xl text-sm break-words ${msg.logged_deleted ? 'opacity-60 line-through' : ''} ${
                             isMe
                               ? 'bg-fc-accent text-white rounded-tr-sm'
                               : 'bg-fc-channel text-fc-text rounded-tl-sm'
                           }`}>
+                            {msg.logged_edits?.map((old, i) => <div key={i} className="opacity-60" title={t('ux.logger.oldVersion')}>{old}</div>)}
                             {(() => { const gif = gifMessage(msg.content); return gif ? <GifMessage url={gif.url} provider={gif.provider} /> : renderMarkdown(msg.content) })()}
+                            {msg.logged_deleted && <span className="ml-1 text-[10px] inline-block">{t('ux.logger.deleted')}</span>}
                             {msg.edited_at && <span className="text-[9px] opacity-60 ml-1">{t('msg.edited')}</span>}
                           </div>
                         )}
@@ -1120,7 +1131,12 @@ export default function GroupDMPage() {
                           const url = extractFirstUrl(msg.content ?? '')
                           return url ? <LinkPreview url={url} /> : null
                         })()}
-                        {msg.attachments && msg.attachments.length > 0 && (
+                        {!showAttachments && !openedAtt.has(msg.id) && !!msg.attachments?.length && (
+                          <button type="button" onClick={() => setOpenedAtt(s => new Set(s).add(msg.id))} className="mt-1 text-xs text-fc-accent hover:underline">
+                            {t('ux.display.showAttachmentsBtn', { n: msg.attachments.length })}
+                          </button>
+                        )}
+                        {(showAttachments || openedAtt.has(msg.id)) && msg.attachments && msg.attachments.length > 0 && (
                           <div className="flex flex-col gap-1 mt-1">
                             {displayAttachments(msg.attachments, msg.e2e_body).map(att => {
                               if (att.e2e || att.e2eLocked) return <E2EAttachment key={att.id} att={att} mediaClass="max-w-[200px] max-h-[200px] rounded-xl" />
@@ -1153,7 +1169,7 @@ export default function GroupDMPage() {
                           </div>
                         )}
                         {/* Réactions */}
-                        {msg.reactions && msg.reactions.length > 0 && (
+                        {showReactions && msg.reactions && msg.reactions.length > 0 && (
                           <div className={`flex flex-wrap gap-1 mt-1 ${isMe ? 'justify-end' : 'justify-start'}`}>
                             {msg.reactions.map((r: GDMReaction) => (
                               <button

@@ -1,6 +1,7 @@
 import type { CSSProperties, ReactNode } from 'react'
 import { useLook } from '../../store/nameStyles'
 import { DEFAULT_BG, nameCss, pickNameStyle, shownName } from '../../lib/nameStyle'
+import { useUxPrefs } from '../../lib/uxPrefs'
 
 /** Fond actuel du thème (variable --fc-bg si un thème la définit), relu au plus toutes les 2 s. */
 let bgCache = { at: 0, value: DEFAULT_BG }
@@ -45,11 +46,14 @@ export default function UserName({ userId, name, nickname, roleStyle, roleOverri
   const style = useRole ? { ...roleStyle, ...css } : css
   const shimmer = personal?.effect === 'shimmer' ? ' fc-name-shimmer' : ''
   const shown = shownName(name, look?.display_name, nickname)
+  // Extras : nom d'utilisateur à côté du pseudo affiché (en-têtes de message et profils).
+  const withUsername = useUxPrefs(s => s.showUsername) && withTag && shown !== name
   return (
     <>
       <span className={className + shimmer} style={style} title={title ?? (shown !== name ? name : undefined)}>
         {shown}{children}
       </span>
+      {withUsername && <span className="ml-1 text-xs font-normal text-fc-muted">@{name}</span>}
       {withTag && look?.profile_tag && (
         <span className="ml-1 px-1 rounded text-[10px] font-semibold leading-4 bg-fc-hover text-fc-muted align-middle whitespace-nowrap">
           {look.profile_tag}

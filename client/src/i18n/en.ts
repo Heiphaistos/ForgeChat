@@ -6,6 +6,7 @@ import * as messaging from './parts/messaging.ts'
 import * as chrome from './parts/chrome.ts'
 import * as ai from './parts/ai.ts'
 import * as notifCenter from './parts/notifCenter.ts'
+import * as uxSettings from './parts/uxSettings.ts'
 import { profileEn } from './profileEn.ts'
 import { socialEn } from './socialEn.ts'
 import { comfortEn } from './comfort.ts'
@@ -1139,7 +1140,6 @@ export const en: Partial<Record<Key, string>> = {
   'settings.keywords.profile': 'avatar photo picture banner bio about color pronouns',
   'settings.keywords.connected': 'github google spotify linked accounts oauth connection',
   'settings.keywords.appearance': 'theme dark light color accent appearance background font',
-  'settings.keywords.text_display': 'size font text compact timestamp time previews links emoji markdown gif',
   'settings.keywords.notifications': 'sounds push mentions badge notification quiet hours',
   'settings.keywords.notifications_email': 'email mail digest newsletter',
   'settings.keywords.keybindings': 'shortcuts keyboard keys combinations hotkeys',
@@ -1150,8 +1150,6 @@ export const en: Partial<Record<Key, string>> = {
   'settings.keywords.security': 'password 2fa two-factor authentication totp code',
   'settings.keywords.sessions': 'devices connected logout sign out remotely',
   'settings.keywords.login_history': 'history sign-ins logins ip location device',
-  'settings.keywords.accessibility': 'contrast reduced animations motion screen reader color blind',
-  'settings.keywords.streamer': 'stream hide sensitive information obs',
   'settings.keywords.advanced': 'developer debug cache data experimental report delete',
   'settings.keywords.stats': 'statistics messages activity charts',
   // --- Commun (suite) ---
@@ -2412,4 +2410,5 @@ export const en: Partial<Record<Key, string>> = {
   'e2e.serverKey.ownerOnly': 'Server owner only.',
   'e2e.serverKey.unreadable': '[unreadable: missing key]',
   ...communityEn,
+  ...uxSettings.en,
 }

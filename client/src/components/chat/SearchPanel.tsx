@@ -8,7 +8,8 @@ import api, { mediaUrl } from '../../api/client'
 import { stripMarkdown } from '../../utils/mdShortcuts'
 import { useFormatDate } from '../../hooks/useFormatDate'
 import { messageLink } from '../../utils/searchLink'
-import { useT } from '../../i18n'
+import { useT, type Key } from '../../i18n'
+import type { IndexedMsg } from '../../e2e/searchQuery'
 import { lockedText } from '../../e2e/conversations'
 import { clearSearchIndex, countIndexed, searchLocal } from '../../e2e/searchIndex'
 import toast from 'react-hot-toast'
@@ -20,6 +21,11 @@ const FILTER_HELP = [
   ['before:2026-01-31', 'avant cette date'],
   ['after:2026-01-01', 'après cette date'],
 ]
+
+/** Portée : cette conversation, tous les MP et groupes, tous les salons de serveur, partout. */
+type Scope = 'here' | 'dms' | 'servers' | 'all'
+const SCOPE_LABEL: Record<Scope, Key> = { here: 'ux.search.here', dms: 'ux.search.dms', servers: 'ux.search.servers', all: 'ux.search.all' }
+const LOCAL_KINDS: Partial<Record<Scope, IndexedMsg['kind'][]>> = { dms: ['dm', 'group'], servers: ['channel'] }
 
 interface Props {
   serverId: string
@@ -40,8 +46,8 @@ export default function SearchPanel({ serverId, channelId, channelName, onClose,
   const t = useT()
   const [query, setQuery] = useState('')
   const [search, setSearch] = useState('')
-  // Portée : ce salon/DM, ou partout (salons visibles, DM et groupes).
-  const [everywhere, setEverywhere] = useState(false)
+  const [scope, setScope] = useState<Scope>('here')
+  const everywhere = scope !== 'here'
   // Navigation clavier dans les résultats (↑/↓ depuis le champ, Entrée pour ouvrir)
   const [selIdx, setSelIdx] = useState(-1)
   const itemRefs = useRef<Record<number, HTMLDivElement | null>>({})
@@ -56,12 +62,12 @@ export default function SearchPanel({ serverId, channelId, channelName, onClose,
 
   // Recherche paginée par curseur, filtres analysés par le serveur.
   const { data, isFetching, hasNextPage, fetchNextPage, isFetchingNextPage } = useInfiniteQuery({
-    queryKey: ['search_messages', everywhere ? 'all' : channelId, search],
+    queryKey: ['search_messages', everywhere ? scope : channelId, search],
     queryFn: ({ pageParam }) => api.get('/search', {
       params: {
         q: search,
         cursor: pageParam || undefined,
-        ...(everywhere ? {} : serverId ? { channel_id: channelId } : { dm_id: channelId }),
+        ...(scope === 'all' ? {} : everywhere ? { scope } : serverId ? { channel_id: channelId } : { dm_id: channelId }),
       },
     }).then(r => r.data as { messages: any[]; next_cursor: string | null }),
     initialPageParam: '',
@@ -71,8 +77,8 @@ export default function SearchPanel({ serverId, channelId, channelName, onClose,
   // Index local des messages déjà déchiffrés sur cet appareil (texte jamais envoyé au serveur).
   const qc = useQueryClient()
   const { data: indexed = [] } = useQuery({
-    queryKey: ['search_local', everywhere ? 'all' : channelId, search],
-    queryFn: async () => (await searchLocal(search, everywhere ? undefined : channelId)).map(m => ({
+    queryKey: ['search_local', everywhere ? scope : channelId, search],
+    queryFn: async () => (await searchLocal(search, everywhere ? undefined : channelId, LOCAL_KINDS[scope])).map(m => ({
       id: m.id, content: m.text, created_at: m.createdAt, author_username: m.authorName, author_avatar: null,
       kind: m.kind, channel_id: m.convId, server_id: m.serverId ?? undefined, channel_name: m.convName ?? '',
     })),
@@ -163,15 +169,19 @@ export default function SearchPanel({ serverId, channelId, channelName, onClose,
             <Search size={14} aria-hidden />
           </button>
         </div>
-        <label className="flex items-center gap-1.5 mt-2 text-xs text-fc-muted cursor-pointer select-none">
-          <input type="checkbox" checked={everywhere} onChange={e => setEverywhere(e.target.checked)} className="accent-fc-accent" />
-          Chercher partout (salons, messages privés, groupes)
-        </label>
+        <div role="radiogroup" aria-label={t('ux.search.scope')} className="flex flex-wrap gap-1 mt-2">
+          {(Object.keys(SCOPE_LABEL) as Scope[]).map(id => (
+            <button key={id} type="button" role="radio" aria-checked={scope === id} onClick={() => setScope(id)}
+              className={`px-2 py-0.5 rounded-full text-xs border transition ${scope === id ? 'border-fc-accent bg-fc-accent/15 text-white' : 'border-fc-hover text-fc-muted hover:text-white'}`}>
+              {t(SCOPE_LABEL[id])}
+            </button>
+          ))}
+        </div>
         {localMessages && !everywhere && <p className="mt-1.5 text-xs text-fc-muted">{t(channelEncrypted ? 'e2e.search.channelLocal' : 'e2e.search.local')}</p>}
         {search && (
           <div className="flex items-center gap-1 mt-1.5 text-xs text-fc-muted">
             <Hash size={10} aria-hidden />
-            <span>{everywhere ? 'Partout' : channelName}</span>
+            <span>{everywhere ? t(SCOPE_LABEL[scope]) : channelName}</span>
             {isFetching && <Loader2 size={10} className="ml-auto animate-spin" aria-hidden />}
             {!isFetching && (
               <span aria-live="polite" aria-atomic="true" className="ml-auto">

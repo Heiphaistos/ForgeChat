@@ -1,3 +1,5 @@
+import StillableImg from '../ui/StillableImg'
+
 // Message qui n'est QUE l'URL d'un GIF (sélecteur GIF : GIPHY ou Wikimedia via le serveur ; anciens
 // messages : Tenor, KLIPY) : affiché comme une image animée plutôt qu'un lien. Seuls ces hôtes https
 // sont reconnus (même liste que server/src/handlers/gifs.rs).
@@ -20,7 +22,7 @@ export function GifMessage({ url, provider }: { url: string; provider: string })
   return (
     <div className="mt-1">
       <a href={url} target="_blank" rel="noopener noreferrer">
-        <img src={url} alt={`GIF (${provider})`} loading="lazy" decoding="async" referrerPolicy="no-referrer" className="max-w-[260px] max-h-[220px] rounded" />
+        <StillableImg src={url} alt={`GIF (${provider})`} loading="lazy" decoding="async" referrerPolicy="no-referrer" className="max-w-[260px] max-h-[220px] rounded" />
       </a>
       <div className="text-[10px] text-fc-muted mt-0.5">GIF via {provider}</div>
     </div>

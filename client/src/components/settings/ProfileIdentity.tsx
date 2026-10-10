@@ -62,7 +62,7 @@ export default function ProfileIdentity({ user, updateMe }: Props) {
           {displayName.trim() || user.username}
         </span>
         {tag.trim() && <span className="ml-1.5 px-1 rounded text-[10px] font-semibold bg-fc-hover text-fc-muted align-middle">{tag.trim()}</span>}
-        <p className="text-xs text-fc-muted">{user.username}#{user.discriminator}</p>
+        <p className="text-xs text-fc-muted">{user.username}<span className="streamer-blur">#{user.discriminator}</span></p>
       </div>
 
       <Field label={t('profileId.displayName')} hint={t('profileId.displayNameHint')}>

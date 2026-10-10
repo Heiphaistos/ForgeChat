@@ -31,16 +31,26 @@ const DENSITIES: { id: Density; label: Key; hint: Key }[] = [
   { id: 'ultra-compact', label: 'layout.density.ultra', hint: 'layout.density.ultraHint' },
 ]
 
+/** Densité des messages (compte) : ici et dans Accessibilité > densité visuelle. */
+export function DensityChoice() {
+  const t = useT()
+  const density = useThemeStore(s => s.density)
+  const setDensity = useThemeStore(s => s.setDensity)
+  return (
+    <Choice title={t('layout.messages')} value={density} options={DENSITIES}
+      onChange={d => { setDensity(d); api.put('/user/settings', { interface_density: d }).catch(() => {}) }} />
+  )
+}
+
 /** Disposition : messages, liste des membres, rail des serveurs, barre de saisie (appliqué tout de suite). */
 export default function LayoutSettings() {
   const t = useT()
-  const { layout, setLayout, density, setDensity, category, setCategory } = useThemeStore()
+  const { layout, setLayout, category, setCategory } = useThemeStore()
   const set = <K extends keyof LayoutPrefs>(k: K) => (v: LayoutPrefs[K]) => setLayout({ [k]: v } as Partial<LayoutPrefs>)
 
   return (
     <div className="space-y-4 p-4 rounded-xl border border-fc-hover bg-fc-channel">
-      <Choice title={t('layout.messages')} value={density} options={DENSITIES}
-        onChange={d => { setDensity(d); api.put('/user/settings', { interface_density: d }).catch(() => {}) }} />
+      <DensityChoice />
       <Choice title={t('layout.members')} value={layout.members} onChange={set('members')}
         options={[{ id: 'right', label: 'layout.right' }, { id: 'left', label: 'layout.left' }]} />
       <div className="space-y-1">

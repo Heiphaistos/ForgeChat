@@ -5,6 +5,7 @@ import api from '../../api/client'
 import toast from 'react-hot-toast'
 import { useT } from '../../i18n'
 import { getAvatarAnimation, setAvatarAnimation, type AvatarAnimation } from '../ui/AnimatedImg'
+import { ComposerPrefs, MessageDisplayPrefs } from './UxPrefControls'
 
 export default function TextDisplaySection() {
   const t = useT()
@@ -109,6 +110,11 @@ export default function TextDisplaySection() {
       >
         {save.isPending ? t('common.saving') : t('common.save')}
       </button>
+
+      {/* Réglages de cet appareil, appliqués tout de suite (sans « Sauvegarder ») */}
+      <p className="text-xs text-fc-muted">{t('ux.deviceOnly')}</p>
+      <MessageDisplayPrefs />
+      <ComposerPrefs />
     </div>
   )
 }

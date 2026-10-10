@@ -22,6 +22,7 @@ import { channelSendError } from '../../e2e/channels'
 import { createThread as createThreadE2E, openThreadMessages, openThreads, sendScoped, threadScopeOf } from '../../e2e/channelScopes'
 import { sealBody } from '../../e2e/conversations'
 import { UnencryptedBadge } from '../../e2e/ChannelBadge'
+import { outgoingText } from '../../lib/uxPrefs'
 
 interface Props {
   serverId: string
@@ -288,7 +289,7 @@ export default function ThreadPanel({ serverId, channelId, parentMessageId, thre
   const sendMessage = useMutation({
     mutationFn: async () => {
       const prepared = await prepareFiles('channel', channelId, pending.files.map(file => ({ file })))
-      const res = await sendScoped(serverId, channelId, scope(), input.trim(), body => api.post(
+      const res = await sendScoped(serverId, channelId, scope(), outgoingText(input.trim()), body => api.post(
         `/servers/${serverId}/channels/${channelId}/threads/${threadId}/messages`, { ...body, reply_to: replyTo?.id, has_attachments: prepared.count > 0 },
       ), undefined, filesExtra(prepared))
       return Object.assign(res, { prepared })

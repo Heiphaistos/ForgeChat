@@ -4,7 +4,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import {
   User, Palette, Bell, Mic, Shield, Cpu, LogOut, X, ChevronLeft,
   Camera, Globe, Accessibility, Link, Keyboard, Film, Monitor, Video, BarChart3, Mail, Clock,
-  Search, Sparkles,
+  Search, Sparkles, Puzzle,
 } from 'lucide-react'
 import { useAuth } from '../store/auth'
 import AppearanceSection from '../components/settings/AppearanceSection'
@@ -27,13 +27,14 @@ import StatsSection from '../components/settings/StatsSection'
 import NotificationsEmailSection from '../components/settings/NotificationsEmailSection'
 import LoginHistorySection from '../components/settings/LoginHistorySection'
 import AiSection from '../components/settings/AiSection'
+import ExtrasSection from '../components/settings/ExtrasSection'
 import { useT, type Key } from '../i18n'
 
 type Section =
   | 'account' | 'profile' | 'appearance' | 'text_display'
   | 'notifications' | 'notifications_email' | 'audio' | 'video' | 'privacy' | 'language'
   | 'accessibility' | 'streamer' | 'connected' | 'keybindings' | 'advanced' | 'security' | 'sessions'
-  | 'stats' | 'login_history' | 'ai'
+  | 'stats' | 'login_history' | 'ai' | 'extras'
 
 // Libellés = clés de traduction (traduits au rendu)
 const NAV: { id: Section; label: Key; icon: React.ReactNode; group?: Key }[] = [
@@ -47,6 +48,7 @@ const NAV: { id: Section; label: Key; icon: React.ReactNode; group?: Key }[] = [
   { id: 'keybindings', label: 'settings.section.keybindings', icon: <Keyboard size={16} /> },
   { id: 'language', label: 'settings.section.language', icon: <Globe size={16} /> },
   { id: 'ai', label: 'settings.section.ai', icon: <Sparkles size={16} /> },
+  { id: 'extras', label: 'settings.section.extras', icon: <Puzzle size={16} /> },
   { id: 'audio', label: 'settings.section.audio', icon: <Mic size={16} />, group: 'settings.group.voice' },
   { id: 'video', label: 'settings.section.video', icon: <Video size={16} /> },
   { id: 'privacy', label: 'settings.section.privacy', icon: <Shield size={16} />, group: 'settings.group.privacy' },
@@ -252,6 +254,7 @@ export default function SettingsPage() {
           {section === 'login_history' && <LoginHistorySection />}
           {section === 'stats' && <StatsSection />}
           {section === 'ai' && <AiSection />}
+          {section === 'extras' && <ExtrasSection />}
         </div>
       </div>
     </div>

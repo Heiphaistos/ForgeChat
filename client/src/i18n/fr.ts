@@ -5,6 +5,7 @@ import * as messaging from './parts/messaging.ts'
 import * as chrome from './parts/chrome.ts'
 import * as ai from './parts/ai.ts'
 import * as notifCenter from './parts/notifCenter.ts'
+import * as uxSettings from './parts/uxSettings.ts'
 import { profileFr } from './profileFr.ts'
 import { socialFr } from './socialFr.ts'
 import { comfortFr } from './comfort.ts'
@@ -1138,7 +1139,6 @@ export const fr = {
   'settings.keywords.profile': 'avatar photo bannière bio à propos couleur',
   'settings.keywords.connected': 'github google spotify comptes liés oauth liaison',
   'settings.keywords.appearance': 'thème sombre clair couleur accent apparence fond',
-  'settings.keywords.text_display': 'taille police texte compact horodatage heure aperçus liens emoji markdown',
   'settings.keywords.notifications': 'sons push mentions badge notification silencieux',
   'settings.keywords.notifications_email': 'email courriel résumé newsletter',
   'settings.keywords.keybindings': 'raccourcis clavier touches combinaisons',
@@ -1149,8 +1149,6 @@ export const fr = {
   'settings.keywords.security': 'mot de passe 2fa a2f double authentification totp code',
   'settings.keywords.sessions': 'appareils connectés déconnexion à distance',
   'settings.keywords.login_history': 'historique connexions ip localisation appareil',
-  'settings.keywords.accessibility': 'contraste animations réduites mouvement lecteur écran daltonien',
-  'settings.keywords.streamer': 'stream masquer informations sensibles obs',
   'settings.keywords.advanced': 'développeur debug cache données expérimental',
   'settings.keywords.stats': 'statistiques messages activité graphiques',
   // --- Commun (suite) ---
@@ -2411,6 +2409,7 @@ export const fr = {
   'e2e.serverKey.ownerOnly': 'Réservé au propriétaire du serveur.',
   'e2e.serverKey.unreadable': '[illisible : clé manquante]',
   ...communityFr,
+  ...uxSettings.fr,
 } as const
 
 export type Key = keyof typeof fr

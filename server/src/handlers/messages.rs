@@ -431,7 +431,8 @@ pub async fn send_message(
         mentions,
         enc: full_msg.e2e.enc.as_ref(),
         client_msg_id: full_msg.e2e.client_msg_id,
-        reply_author,
+        // Réponse « sans mention » : l'auteur cité n'est pas notifié (il le reste s'il est mentionné).
+        reply_author: reply_author.filter(|_| body.reply_ping != Some(false)),
         created_at: full_msg.created_at,
     }).await {
         tracing::warn!("Mentions non traitées pour le message {} : {e}", full_msg.id);

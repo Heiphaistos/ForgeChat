@@ -479,7 +479,7 @@ export default function FriendsPage() {
               {inviteUrl ? (
                 <div className="flex gap-2">
                   <input readOnly value={inviteUrl} aria-label={t('invite.link')}
-                    className="flex-1 px-2 py-1.5 bg-fc-input rounded text-white text-xs outline-none font-mono" />
+                    className="flex-1 px-2 py-1.5 bg-fc-input rounded text-white text-xs outline-none font-mono streamer-invite" />
                   <button
                     onClick={copyInviteUrl}
                     className={`px-3 py-1.5 rounded text-xs font-medium transition flex items-center gap-1

@@ -341,6 +341,8 @@ function AppInner() {
 
   // Activité « Joue à … » détectée par l'app de bureau.
   useGameActivity(!!user)
+  // Mode streamer allumé tout seul quand OBS & co tournent (bureau, si activé dans les réglages).
+  useStreamerAuto(!!user)
 
   // Rappel d'anniversaire d'un ami (birthdays.rs, une fois par an).
   useEffect(() => on('BIRTHDAY_TODAY', (d) => {
@@ -1140,6 +1142,7 @@ import type { IncomingCallInfo } from './store/call'
 import { ConfirmModal } from './components/ui/ConfirmModal'
 import { t as tr, useLang, intlLocale } from './i18n'
 import { useNameStyles } from './store/nameStyles'
+import { useStreamerAuto } from './lib/streamerMode'
 
 function IncomingCallModal({ call, onAccept, onDecline }: {
   call: IncomingCallInfo
