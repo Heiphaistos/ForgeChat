@@ -2351,7 +2351,7 @@ export const en: Partial<Record<Key, string>> = {
   'e2e.conv.notYetShort': 'End-to-end encrypted (a member\'s key is pending)',
   'e2e.conv.title': 'End-to-end encryption',
   'e2e.conv.desc': 'Messages in this conversation are encrypted on your devices: neither the server nor its administrator can read them. Compare safety codes to make sure nobody is standing between you.',
-  'e2e.send.keyChanged': "A member's encryption key changed: check and accept it before writing here.",
+  'e2e.send.withheld': "A member's key doesn't match the one you know, and it wasn't changed recently: check it before writing here.",
   'e2e.send.serverKeyChanged': "This server's recovery key changed: nothing is encrypted for it. Tell the server owner.",
   'e2e.pin.title': "{name}'s encryption key changed",
   'e2e.pin.titleServer': 'The recovery key of the server {name} changed',

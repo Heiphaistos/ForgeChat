@@ -2350,7 +2350,7 @@ export const fr = {
   'e2e.conv.notYetShort': 'Chiffré de bout en bout (clé d\'un membre en attente)',
   'e2e.conv.title': 'Chiffrement de bout en bout',
   'e2e.conv.desc': 'Les messages de cette conversation sont chiffrés sur vos appareils : ni le serveur ni son administrateur ne peuvent les lire. Compare les codes de sécurité pour t\'assurer que personne ne s\'interpose.',
-  'e2e.send.keyChanged': "La clé de chiffrement d'un membre a changé : vérifie-la et accepte-la avant d'écrire ici.",
+  'e2e.send.withheld': "Un membre n'a pas changé de clé récemment mais sa clé ne correspond pas à celle que tu connais : vérifie-la avant d'écrire ici.",
   'e2e.send.serverKeyChanged': "La clé de récupération de ce serveur a changé : rien n'est chiffré vers elle. Préviens le propriétaire du serveur.",
   'e2e.pin.title': 'La clé de chiffrement de {name} a changé',
   'e2e.pin.titleServer': 'La clé de récupération du serveur {name} a changé',
