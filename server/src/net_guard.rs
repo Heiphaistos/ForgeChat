@@ -131,10 +131,7 @@ mod tests {
             let (mut s, _) = l.accept().await.unwrap();
             let mut buf = [0u8; 1024];
             let _ = s.read(&mut buf).await;
-            let _ = s.write_all(b"HTTP/1.1 200 OK
-Connection: close
-
-").await;
+            let _ = s.write_all(b"HTTP/1.1 200 OK\r\nConnection: close\r\n\r\n").await;
             let _ = s.write_all(&body).await;
         });
         format!("http://{addr}/")
