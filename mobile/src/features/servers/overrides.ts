@@ -20,7 +20,6 @@ export const CHANNEL_PERMS: { bit: number; label: Key }[] = [
   { bit: PERM.MUTE_MEMBERS, label: 'serverSettings.perm.mute' },
   { bit: PERM.DEAFEN_MEMBERS, label: 'serverSettings.perm.deafen' },
   { bit: PERM.MOVE_MEMBERS, label: 'serverSettings.perm.move' },
-  { bit: PERM.PRIORITY_SPEAKER, label: 'serverSettings.perm.priority' },
 ]
 
 // BigInt : STREAM (bit 40) dépasse les 32 bits des opérateurs bit à bit de JS.
