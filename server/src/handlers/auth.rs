@@ -165,20 +165,23 @@ pub async fn register(
     // inscription est libre et donne les droits d'administrateur du site.
     let first_user: bool = sqlx::query_scalar(crate::handlers::site_admin::NO_REAL_USERS_SQL).fetch_one(&state.db).await?;
     let mode = if first_user { "open".to_string() } else { crate::handlers::site_admin::registration_mode(&state).await };
+    // Gardé en attente sous forme d'empreinte seulement (migration 116).
     let invite_code = body.invite_code.as_deref().map(str::trim).filter(|c| !c.is_empty());
-    match mode.as_str() {
+    let invite_hash = match mode.as_str() {
         "closed" => return Err(AppError::ForbiddenMsg("Les inscriptions sont fermées".into())),
         "invite" => {
             let Some(code) = invite_code else {
                 return Err(AppError::ForbiddenMsg("Un code d'invitation est nécessaire pour créer un compte".into()));
             };
+            let hash = crate::handlers::site_admin::invite_code_hash(code)?;
             // Code vérifié tout de suite, consommé seulement à la création du compte (transaction annulée).
             let mut probe = state.db.begin().await?;
-            crate::handlers::site_admin::consume_invite(&mut probe, code).await?;
+            crate::handlers::site_admin::consume_invite(&mut probe, &hash).await?;
             probe.rollback().await?;
+            Some(hash)
         }
-        _ => {}
-    }
+        _ => invite_code.and_then(|c| crate::handlers::site_admin::invite_code_hash(c).ok()),
+    };
 
     // Haché avant de savoir si l'adresse existe : même durée dans les deux cas.
     let auth_hash = hash_auth(auth)?;
@@ -217,7 +220,7 @@ pub async fn register(
     .bind(Utc::now() + chrono::Duration::minutes(PENDING_TTL_MIN))
     .bind(&auth_hash)
     .bind(kdf_salt)
-    .bind(invite_code)
+    .bind(invite_hash)
     .execute(&state.db)
     .await?;
     let html = mail_html(

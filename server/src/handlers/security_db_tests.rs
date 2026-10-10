@@ -273,10 +273,35 @@ async fn security_github_token_at_rest() {
 
     let new = "nouveau-secret-de-salon-0002";
     let claims = crate::middleware::auth::Claims { sub: owner, exp: i64::MAX, iss: "forgechat".into(), iat: 0, sid: None };
-    crate::handlers::channels::set_github_webhook_token(State(state.clone()), Extension(claims), Path((s, chan)),
+    let _ = crate::handlers::channels::set_github_webhook_token(State(state.clone()), Extension(claims), Path((s, chan)),
         Json(crate::handlers::channels::SetGithubTokenBody { token: Some(new.into()) })).await.expect("set");
     let enc: String = sqlx::query_scalar("SELECT github_webhook_token_enc FROM channels WHERE id=$1").bind(chan).fetch_one(&db).await.unwrap();
     assert!(!enc.contains("nouveau"));
     assert!(deliver(new, None).await);
     assert!(!deliver(old, None).await, "ancien secret remplacé");
+}
+
+/// Codes d'invitation au site : seule l'empreinte est en base (même calcul que la migration 116),
+/// le code se saisit en minuscules / avec espaces, et un ancien code de 12 caractères reste valable.
+#[tokio::test]
+#[ignore]
+async fn security_invite_code_hash() {
+    use crate::handlers::site_admin::{consume_invite, invite_code_hash};
+    let (_state, db) = setup().await;
+    let old = Uuid::new_v4().simple().to_string().to_uppercase().replace(['0', '1'], "Z")[..12].to_string();
+    let sql_hash: String = sqlx::query_scalar("SELECT encode(sha256(convert_to($1, 'UTF8')), 'hex')")
+        .bind(&old).fetch_one(&db).await.unwrap();
+    assert_eq!(sql_hash, invite_code_hash(&old).unwrap(), "empreinte identique à la migration");
+    let id: Uuid = sqlx::query_scalar("INSERT INTO registration_invites (code_hash, code_preview, max_uses) VALUES ($1, $2, 1) RETURNING id")
+        .bind(&sql_hash).bind(&old[8..]).fetch_one(&db).await.unwrap();
+    let typed = format!(" {}-{} {} ", &old[..4], &old[4..8], &old[8..]).to_lowercase();
+    let mut tx = db.begin().await.unwrap();
+    assert_eq!(consume_invite(&mut tx, &invite_code_hash(&typed).unwrap()).await.unwrap().0, id);
+    tx.commit().await.unwrap();
+    let mut tx = db.begin().await.unwrap();
+    assert!(consume_invite(&mut tx, &sql_hash).await.is_err(), "usage unique");
+    tx.rollback().await.unwrap();
+    let cols: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM information_schema.columns WHERE table_name='registration_invites' AND column_name='code'")
+        .fetch_one(&db).await.unwrap();
+    assert_eq!(cols, 0, "plus de colonne en clair");
 }

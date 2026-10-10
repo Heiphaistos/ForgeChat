@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ChevronLeft, Copy, Ban, LogOut, Trash2, Plus, Search, Crown } from 'lucide-react'
+import { ChevronLeft, Ban, LogOut, Trash2, Plus, Search, Crown } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api, { SERVER_URL } from '../api/client'
 import { passwordProof } from '../e2e/accountKey'
@@ -26,6 +26,7 @@ interface AdminUser {
   server_count: number; message_count: number
 }
 interface Invite {
+  /** Aperçu « ••••ABCD » : le code complet n'est montré (et copié) qu'à la création. */
   id: string; code: string; note: string | null; max_uses: number; uses: number
   status: 'active' | 'used' | 'expired' | 'revoked'; expires_at: string | null; created_at: string
   creator: string | null; used_by: { id: string; username: string; at: string }[]
@@ -310,8 +311,6 @@ function InvitesTab() {
             <span className="text-xs text-fc-muted">{i.uses}/{i.max_uses} utilisée(s)</span>
             <span className="text-xs text-fc-muted flex-1 min-w-[160px] truncate">{i.note ?? ''}{i.used_by.length ? ` → ${i.used_by.map(u => u.username).join(', ')}` : ''}</span>
             <span className="text-xs text-fc-muted">{i.expires_at ? `expire le ${fmt(i.expires_at)}` : 'sans expiration'}</span>
-            <button onClick={() => copy(inviteLink(i.code.replace(/-/g, '')), 'Lien copié')} className="p-1.5 rounded text-fc-muted hover:text-white hover:bg-fc-hover" title="Copier le lien" aria-label="Copier le lien"><Copy size={15} /></button>
-            <button onClick={() => copy(i.code, 'Code copié')} className="px-2 py-1 text-xs rounded text-fc-muted hover:text-white hover:bg-fc-hover">Code</button>
             {i.status === 'active' && <button onClick={() => { if (window.confirm('Révoquer cette invitation ?')) revoke.mutate(i.id) }} className="p-1.5 rounded text-red-400 hover:bg-red-500/20" title="Révoquer" aria-label="Révoquer"><Trash2 size={15} /></button>}
           </div>
         ))}
