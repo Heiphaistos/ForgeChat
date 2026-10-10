@@ -9,6 +9,7 @@ import { useAccountKey } from './accountKey'
 import * as c from './crypto'
 import { becameReady, cacheUsable, emitKeysChanged, isLocked } from './keysRetry'
 import { indexMessage } from './searchIndex'
+import { trustedMembers, trustedServerKey } from './keyPins'
 
 export { keysFor, onKeysChanged } from './keysRetry'
 
@@ -16,7 +17,7 @@ export type ConvKind = 'dm' | 'group' | 'channel'
 
 interface Envelope { epoch: number; wrapped: c.ConvWrapped; wrapped_by: string | null; wrapped_by_pub: string }
 /** Clé de récupération du serveur d'un salon (§11). */
-export interface ServerKeyInfo { server_id: string; public: string; fingerprint: string }
+export interface ServerKeyInfo { server_id: string; public: string }
 interface KeysResponse {
   current_epoch: number | null; rotate_needed: boolean; all_keyed: boolean; envelopes: Envelope[]
   /** « Il faut chiffrer » : j'ai une clé de compte (chiffrement obligatoire partout). */
@@ -146,8 +147,8 @@ export async function getAllMembers(kind: ConvKind, id: string): Promise<ConvMem
   }
 }
 
+/** Membre vers qui chiffrer : clé épinglée (ou vue pour la 1re fois), empreinte recalculée ici (keyPins.ts). */
 type Keyed = ConvMember & { public: string; fingerprint: string }
-const keyedOnly = (list: ConvMember[]) => list.filter((m): m is Keyed => !!m.public && !!m.fingerprint)
 
 async function wrapFor(priv: CryptoKey, me: string, conv: string, epoch: number, key: Uint8Array, list: Keyed[]) {
   return Promise.all(list.map(async m => ({
@@ -157,8 +158,13 @@ async function wrapFor(priv: CryptoKey, me: string, conv: string, epoch: number,
   })))
 }
 
-/** Enveloppe d'une époque de salon pour la clé de récupération du serveur. */
-async function serverEnvelope(priv: CryptoKey, me: string, conv: string, epoch: number, key: Uint8Array, sk: ServerKeyInfo) {
+/**
+ * Enveloppe d'une époque de salon pour la clé de récupération du serveur ; null si cette clé
+ * a changé depuis sa première vue (refus de chiffrer vers elle, alerte : keyPins.ts).
+ */
+async function serverEnvelope(priv: CryptoKey, me: string, conv: string, epoch: number, key: Uint8Array, served: ServerKeyInfo) {
+  const sk = await trustedServerKey(served)
+  if (!sk) return null
   return {
     server_fp: sk.fingerprint,
     wrapped: await c.wrapConvKey(priv, c.b64uDecode(sk.public), key, conv, epoch, c.serverMember(sk.server_id), me),
@@ -182,7 +188,11 @@ async function createEpoch(kind: ConvKind, id: string, st: ConvState): Promise<n
   const me = myId()
   if (!priv || !me) throw new Error('E2E_LOCKED')
   // Les membres sans clé recevront l'époque après avoir créé la leur (`missing`).
-  const keyed = keyedOnly(await getAllMembers(kind, id))
+  const all = await getAllMembers(kind, id)
+  const keyed = await trustedMembers(all)
+  // MP/groupe : le serveur exige une enveloppe par membre muni d'une clé ; une clé changée
+  // non acceptée bloque donc la nouvelle époque (boîte de dialogue ouverte par trustedMembers).
+  if (kind !== 'channel' && keyed.length < all.filter(m => m.public && m.user_id !== me).length + 1) throw new Error('E2E_KEY_CHANGED')
   const epoch = st.current === null ? 0 : st.current + 1
   const key = c.generateConvKey()
   const conv = c.convName(kind, id)
@@ -194,9 +204,10 @@ async function createEpoch(kind: ConvKind, id: string, st: ConvState): Promise<n
     if (!self) throw new Error('E2E_LOCKED')
     const others = keyed.filter(m => m.user_id !== me)
     const first = [self, ...others.slice(0, BATCH - 1)]
+    const server_envelope = st.serverKey ? await serverEnvelope(priv, me, conv, epoch, key, st.serverKey) : undefined
+    if (server_envelope === null) throw new Error('E2E_SERVER_KEY_CHANGED')
     await api.post(`${base(kind, id)}/keys`, {
-      epoch, create: true, envelopes: await wrapFor(priv, me, conv, epoch, key, first),
-      server_envelope: st.serverKey ? await serverEnvelope(priv, me, conv, epoch, key, st.serverKey) : undefined,
+      epoch, create: true, envelopes: await wrapFor(priv, me, conv, epoch, key, first), server_envelope,
     })
     void postBatches(kind, id, epoch, key, others.slice(BATCH - 1))
   }
@@ -388,7 +399,7 @@ export async function answerKeyRequest(d: { conv_kind?: string; conv_id?: string
   await new Promise(r => setTimeout(r, Math.random() * 1500))
   const st = await load(kind, d.conv_id).catch(() => null)
   if (!st || st.keys.size === 0) return
-  const target = keyedOnly(await getMembers(kind, d.conv_id, { member: d.member_id }).catch(() => []))
+  const target = (await trustedMembers(await getMembers(kind, d.conv_id, { member: d.member_id }).catch(() => [])))
     .find(m => m.user_id === d.member_id)
   if (!target) return
   for (const [epoch, key] of st.keys) await postBatches(kind, d.conv_id, epoch, key, [target])
@@ -410,7 +421,7 @@ async function completeKeys(kind: ConvKind, id: string) {
     const st = await load(kind, id, true)
     if (st.missing.length && st.keys.size) {
       const wanted = new Set(st.missing)
-      const targets = keyedOnly(await getAllMembers(kind, id)).filter(m => wanted.has(m.user_id))
+      const targets = (await trustedMembers(await getAllMembers(kind, id))).filter(m => wanted.has(m.user_id))
       for (const [epoch, key] of st.keys) await postBatches(kind, id, epoch, key, targets)
     }
     const sk = kind === 'channel' ? st.serverKey : null
@@ -420,9 +431,9 @@ async function completeKeys(kind: ConvKind, id: string) {
       for (const epoch of st.serverMissing) {
         const key = st.keys.get(epoch)
         if (!key) continue
-        await api.post(`${base('channel', channelId)}/keys`, {
-          epoch, envelopes: [], server_envelope: await serverEnvelope(priv, me, conv, epoch, key, sk),
-        }).catch(() => {})
+        const server_envelope = await serverEnvelope(priv, me, conv, epoch, key, sk)
+        if (!server_envelope) break
+        await api.post(`${base('channel', channelId)}/keys`, { epoch, envelopes: [], server_envelope }).catch(() => {})
       }
     }
   } catch { /* hors ligne : au prochain passage */ }
@@ -549,37 +560,14 @@ export async function reencryptLegacy() {
   }
 }
 
-// ─── Alerte « la clé de X a changé » ────────────────────────────────────────
-const SEEN = 'fc_e2e_seen_fp'
-
-/** Membres dont l'empreinte a changé depuis la dernière fois (mémoire locale, par compte). */
-export function keyChanges(members: ConvMember[]): ConvMember[] {
-  const me = myId()
-  if (!me) return []
-  let seen: Record<string, string> = {}
-  try { seen = JSON.parse(localStorage.getItem(`${SEEN}:${me}`) ?? '{}') } catch { /* stockage indisponible */ }
-  const changed = members.filter(m => m.user_id !== me && m.fingerprint && seen[m.user_id] && seen[m.user_id] !== m.fingerprint)
-  return changed
-}
-
-/** « J'ai vu » : retient les empreintes actuelles. */
-export function acceptKeys(members: ConvMember[]) {
-  const me = myId()
-  if (!me) return
-  try {
-    const key = `${SEEN}:${me}`
-    const seen: Record<string, string> = JSON.parse(localStorage.getItem(key) ?? '{}')
-    for (const m of members) if (m.fingerprint) seen[m.user_id] = m.fingerprint
-    localStorage.setItem(key, JSON.stringify(seen))
-  } catch { /* stockage indisponible : l'alerte reviendra */ }
-}
-
 /** Message d'erreur d'envoi lisible (chiffrement en attente, clé verrouillée…). */
 export function sendErrorText(e: unknown, fallback: string): string {
   const m = e instanceof Error ? e.message : ''
   if (m === 'E2E_WAITING') return t('e2e.send.waiting')
   if (m === 'E2E_LOCKED') return t('e2e.send.locked')
   if (m === 'AUTOMOD') return t('e2e.send.automod')
+  if (m === 'E2E_KEY_CHANGED') return t('e2e.send.keyChanged')
+  if (m === 'E2E_SERVER_KEY_CHANGED') return t('e2e.send.serverKeyChanged')
   if (errorCode(e) === 'PLAINTEXT_REFUSED') return t('e2e.send.update')
   return fallback
 }

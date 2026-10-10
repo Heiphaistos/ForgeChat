@@ -1,10 +1,13 @@
 // Réglages > Sécurité : clé de compte E2E ; profils : code de sécurité à comparer.
 import { useEffect, useState } from 'react'
-import { KeyRound, ShieldCheck } from 'lucide-react'
+import { BadgeCheck, KeyRound, ShieldAlert, ShieldCheck } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { useAuth } from '../store/auth'
 import { useT } from '../i18n'
-import { regenerateRecoveryCode, safetyCodeWith, useAccountKey } from './accountKey'
+import api from '../api/client'
+import { regenerateRecoveryCode, useAccountKey } from './accountKey'
+import * as c from './crypto'
+import { fpOf, markVerified, pinOf, trustedMembers, useKeyAlerts } from './keyPins'
 import { RecoveryCodeModal } from './E2EGate'
 
 /** 60 chiffres en 12 groupes de 5, comme Signal. */
@@ -67,27 +70,62 @@ export function E2EKeySection() {
   )
 }
 
+interface Safety { code: string; pub: string; changed: boolean; verified: boolean }
+
+/** Code de sécurité avec la clé servie pour `userId`, comparée à l'empreinte épinglée ; null si l'un n'a pas de clé. */
+async function safetyWith(userId: string, mine: string): Promise<Safety | null> {
+  try {
+    const { data } = await api.get<{ public: string }>(`/users/${userId}/keys/public`)
+    // Première vue : épinglée ; clé changée : boîte de dialogue bloquante.
+    const trusted = (await trustedMembers([{ user_id: userId, public: data.public }])).length > 0
+    const pin = await pinOf(userId)
+    const fp = await fpOf(data.public)
+    return {
+      code: await c.safetyCode(c.b64uDecode(mine), c.b64uDecode(data.public)),
+      pub: data.public, changed: !trusted, verified: trusted && pin?.fp === fp && !!pin.verified,
+    }
+  } catch {
+    return null
+  }
+}
+
 /** Code de sécurité partagé avec `userId` : identique sur les deux écrans si personne ne s'interpose. */
 export function SafetyCode({ userId }: { userId: string }) {
   const t = useT()
   const ready = useAccountKey(s => s.status === 'ready')
-  const [code, setCode] = useState<string | null>(null)
+  const mine = useAccountKey(s => s.pub)
+  const [info, setInfo] = useState<Safety | null>(null)
+  const [tick, setTick] = useState(0)
+  // Nouvelle clé acceptée ou refusée dans la boîte de dialogue : on relit.
+  const alerts = useKeyAlerts(s => s.alerts.length)
   useEffect(() => {
     let alive = true
-    if (ready) safetyCodeWith(userId).then(c => { if (alive) setCode(c) })
+    if (ready && mine) safetyWith(userId, mine).then(v => { if (alive) setInfo(v) })
     return () => { alive = false }
-  }, [userId, ready])
+  }, [userId, ready, mine, tick, alerts])
+  const verify = async () => {
+    if (info && await markVerified(userId, info.pub)) setTick(n => n + 1)
+  }
   return (
     <div className="bg-fc-channel rounded-xl p-5 mt-4">
       <h2 className="text-xs font-semibold text-fc-muted uppercase tracking-wide mb-2 flex items-center gap-1.5">
         <ShieldCheck size={13} aria-hidden /> {t('e2e.safety.title')}
       </h2>
-      {code ? (
+      {info ? (
         <>
           <div className="grid grid-cols-4 gap-2 font-mono text-sm text-white mb-2" aria-label={t('e2e.safety.title')}>
-            {groups(code).map((g, i) => <span key={i}>{g}</span>)}
+            {groups(info.code).map((g, i) => <span key={i}>{g}</span>)}
           </div>
           <p className="text-xs text-fc-muted">{t('e2e.safety.desc')}</p>
+          {info.changed && (
+            <p className="text-xs text-red-300 mt-2 flex items-center gap-1"><ShieldAlert size={13} aria-hidden />{t('e2e.safety.changed')}</p>
+          )}
+          {info.verified && (
+            <p className="text-xs text-green-400 mt-2 flex items-center gap-1"><BadgeCheck size={13} aria-hidden />{t('e2e.safety.verified')}</p>
+          )}
+          {!info.changed && !info.verified && (
+            <button type="button" onClick={verify} className="mt-2 px-3 py-1.5 text-xs bg-fc-hover text-white rounded-lg">{t('e2e.safety.verify')}</button>
+          )}
         </>
       ) : (
         <p className="text-xs text-fc-muted">{t(ready ? 'e2e.safety.none' : 'e2e.settings.locked')}</p>

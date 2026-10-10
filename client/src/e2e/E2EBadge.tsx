@@ -1,12 +1,13 @@
 // En-tête d'un MP ou d'un groupe : cadenas « chiffré de bout en bout », codes de
 // sécurité des membres et alerte « la clé de X a changé ».
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Lock, ShieldAlert, X } from 'lucide-react'
+import { Lock, X } from 'lucide-react'
 import { useAuth } from '../store/auth'
 import { useT } from '../i18n'
 import { useAccountKey } from './accountKey'
-import { acceptKeys, getMembers, keyChanges, type ConvKind } from './conversations'
+import { getMembers, type ConvKind } from './conversations'
+import { trustedMembers } from './keyPins'
 import { SafetyCode } from './E2ESettings'
 
 /**
@@ -30,10 +31,9 @@ export function E2EBadge({ kind, id }: { kind: ConvKind; id: string }) {
   const me = useAuth(s => s.user?.id)
   const { members } = useConvEncrypted(kind, id)
   const [open, setOpen] = useState(false)
-  const [dismissed, setDismissed] = useState(0)
-  const changed = useMemo(() => keyChanges(members), [members, dismissed])
-  // Première rencontre : on retient les empreintes sans alerter.
-  useEffect(() => { if (members.length && !changed.length) acceptKeys(members) }, [members, changed.length])
+  // Empreintes recalculées et comparées aux épinglées dès l'ouverture : une clé changée ouvre
+  // la boîte de dialogue bloquante (KeyChangeDialog) avant tout envoi ; première vue = épinglée.
+  useEffect(() => { if (members.length) void trustedMembers(members) }, [members])
   const others = members.filter(m => m.user_id !== me)
   const missing = others.filter(m => !m.public).map(m => m.username)
 
@@ -49,16 +49,6 @@ export function E2EBadge({ kind, id }: { kind: ConvKind; id: string }) {
       >
         <Lock size={18} />
       </button>
-      {changed.length > 0 && (
-        <div role="alert" className="fixed top-14 right-4 z-40 max-w-sm bg-fc-channel border border-fc-yellow/50 rounded-lg p-3 shadow-xl flex gap-2">
-          <ShieldAlert size={18} className="text-fc-yellow flex-shrink-0 mt-0.5" aria-hidden />
-          <div className="text-xs text-fc-text">
-            <p>{t('e2e.conv.keyChanged', { names: changed.map(m => m.username).join(', ') })}</p>
-            <button type="button" onClick={() => { acceptKeys(members); setDismissed(n => n + 1) }}
-              className="mt-2 px-2 py-1 bg-fc-hover rounded text-white">{t('e2e.conv.keyChangedOk')}</button>
-          </div>
-        </div>
-      )}
       {open && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4" onClick={() => setOpen(false)}>
           <div role="dialog" aria-modal="true" aria-label={t('e2e.conv.title')} onClick={e => e.stopPropagation()}
