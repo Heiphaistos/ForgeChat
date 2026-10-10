@@ -87,7 +87,7 @@ pub struct RegisterDeviceBody {
     pub platform: String,
     pub provider: Option<String>,
     pub show_preview: Option<bool>,
-    pub device_name: Option<String>,
+    // `device_name` (modèle du téléphone) : encore envoyé par l'appli, ignoré (jamais relu).
     /// Secret aléatoire de l'installation de l'app (16 à 128 caractères), jamais montré.
     pub device_id: Option<String>,
     /// Autres comptes connectés dans cette appli (plusieurs comptes) : ils gardent leurs
@@ -137,11 +137,6 @@ pub async fn register_device(
             return Err(AppError::TooManyRequests);
         }
     }
-    let device_name: Option<String> = body
-        .device_name
-        .as_deref()
-        .map(|n| n.chars().filter(|c| !c.is_control()).take(64).collect::<String>())
-        .filter(|n| !n.trim().is_empty());
 
     let key_hash = device_key_hash(body.device_id.as_deref())?;
 
@@ -175,7 +170,7 @@ pub async fn register_device(
     .bind(&body.token)
     .bind(&body.platform)
     .bind(body.show_preview.unwrap_or(false))
-    .bind(&device_name)
+    .bind(None::<String>)
     .bind(&key_hash)
     .fetch_optional(&state.db)
     .await?;
