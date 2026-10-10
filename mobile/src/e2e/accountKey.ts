@@ -81,8 +81,8 @@ async function secretsFor(password: string): Promise<AccountSecrets | null> {
   // Message affiché tel quel par les écrans (errorMessage) ; `code` pour qui veut le reconnaître.
   const refuse = () => Object.assign(new Error(t('auth.proofDowngrade')), { code: 'AUTH_DOWNGRADE' })
   const userId = await tokens.getUserId()
+  // Sans identifiant (session très ancienne) : aucun état migré connu, rien à comparer.
   if (userId) await guardKdf(userId, k).catch(() => { throw refuse() })
-  else if (k.legacy) throw refuse() // jamais de mot de passe en clair sans compte identifié
   if (k.legacy || !k.kdf_salt) return null
   return deriveSecrets(password, k.kdf_salt)
 }

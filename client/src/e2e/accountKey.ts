@@ -89,8 +89,8 @@ async function secretsFor(password: string): Promise<AccountSecrets | null> {
   // Erreur au format axios : les écrans affichent `response.data.error`.
   const refuse = () => Object.assign(new Error('AUTH_DOWNGRADE'), { response: { data: { error: t('auth.proof.downgrade') } } })
   const userId = useAuth.getState().user?.id
+  // Sans compte chargé : aucun état migré connu, rien à comparer.
   if (userId) await guardKdf(userId, data).catch(() => { throw refuse() })
-  else if (data.legacy) throw refuse() // jamais de mot de passe en clair sans compte identifié
   if (data.legacy || !data.kdf_salt) return null
   return deriveSecrets(password, data.kdf_salt)
 }
