@@ -26,7 +26,7 @@ pub async fn export_user_data(
     // groupe DM, souvent le contenu le plus personnel, n'étaient jamais inclus.
     let (user_res, messages, dm_messages, group_dm_messages, servers, friends) = tokio::join!(
         sqlx::query(
-            "SELECT username, email, bio, pronouns, created_at FROM users WHERE id=$1"
+            "SELECT username, email_enc, bio, pronouns, created_at FROM users WHERE id=$1"
         ).bind(uid).fetch_one(&state.db),
         // Pas de LIMIT -- un export RGPD (droit à la portabilité) doit couvrir la
         // TOTALITÉ des messages, pas un échantillon. `LIMIT 100` tronquait
@@ -86,7 +86,7 @@ pub async fn export_user_data(
         "exported_at": chrono::Utc::now().to_rfc3339(),
         "profile": {
             "username": user.get::<String, _>("username"),
-            "email": user.get::<String, _>("email"),
+            "email": user.get::<Option<String>, _>("email_enc").and_then(|e| crate::email_crypto::open(uid, &e)),
             "bio": user.get::<Option<String>, _>("bio"),
             "pronouns": user.get::<Option<String>, _>("pronouns"),
             "created_at": user.get::<chrono::DateTime<chrono::Utc>, _>("created_at").to_rfc3339(),

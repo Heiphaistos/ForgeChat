@@ -42,17 +42,15 @@ pub async fn create_bot(
 
     let bot_username = format!("{}Bot", name.replace(' ', ""));
     let disc = format!("{:04}", rand::thread_rng().gen_range(1..9999u32));
-    let fake_email = format!("bot_{}@forgechat.internal", Uuid::new_v4());
     let fake_hash = bcrypt::hash("bot_no_login", 4)
         .map_err(|e| AppError::Internal(anyhow::anyhow!(e)))?;
 
     let bot_user = sqlx::query(
-        "INSERT INTO users (username, discriminator, email, password_hash, is_bot)
-         VALUES ($1, $2, $3, $4, true) RETURNING id"
+        "INSERT INTO users (username, discriminator, password_hash, is_bot)
+         VALUES ($1, $2, $3, true) RETURNING id"
     )
     .bind(&bot_username)
     .bind(&disc)
-    .bind(&fake_email)
     .bind(&fake_hash)
     .fetch_one(&state.db)
     .await?;

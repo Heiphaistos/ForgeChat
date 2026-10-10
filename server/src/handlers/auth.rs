@@ -158,8 +158,9 @@ pub async fn register(
     let auth_hash = hash_auth(auth)?;
     let ok = Json(serde_json::json!({ "pending": true }));
 
-    let exists: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM users WHERE email=$1)")
-        .bind(&email_lower)
+    let email_hmac = crate::email_crypto::hmac(&email_lower);
+    let exists: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM users WHERE email_hmac=$1)")
+        .bind(&email_hmac)
         .fetch_one(&state.db)
         .await?;
     if exists {
@@ -176,13 +177,13 @@ pub async fn register(
     let code = format!("{:06}", rand::thread_rng().gen_range(0..1_000_000));
     let discriminator = format!("{:04}", rand::thread_rng().gen_range(1..=9999));
     sqlx::query(
-        "INSERT INTO pending_registrations (email, username, password_hash, discriminator, code, expires_at, auth_hash, kdf_salt, invite_code)
+        "INSERT INTO pending_registrations (email_hmac, username, password_hash, discriminator, code, expires_at, auth_hash, kdf_salt, invite_code)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-         ON CONFLICT (email) DO UPDATE SET username=EXCLUDED.username, discriminator=EXCLUDED.discriminator,
+         ON CONFLICT (email_hmac) DO UPDATE SET username=EXCLUDED.username, discriminator=EXCLUDED.discriminator,
             code=EXCLUDED.code, expires_at=EXCLUDED.expires_at, auth_hash=EXCLUDED.auth_hash,
             kdf_salt=EXCLUDED.kdf_salt, invite_code=EXCLUDED.invite_code, created_at=NOW()",
     )
-    .bind(&email_lower)
+    .bind(&email_hmac)
     .bind(&body.username)
     .bind(NO_PASSWORD)
     .bind(&discriminator)
@@ -220,8 +221,8 @@ pub async fn verify_email(
     hit(&state, &account_key("verify_attempts", &email), 5, 900).await?;
 
     let bad = || AppError::BadRequest("Code incorrect ou expiré".into());
-    let pending = sqlx::query_as::<_, PendingRegistration>("SELECT * FROM pending_registrations WHERE email=$1")
-        .bind(&email)
+    let pending = sqlx::query_as::<_, PendingRegistration>("SELECT * FROM pending_registrations WHERE email_hmac=$1")
+        .bind(crate::email_crypto::hmac(&email))
         .fetch_optional(&state.db)
         .await?
         .ok_or_else(bad)?;
@@ -252,13 +253,17 @@ pub async fn verify_email(
         }
         _ => None,
     };
+    // Adresse prouvée par le code : seulement son empreinte et sa version chiffrée sont gardées.
+    let user_id = Uuid::new_v4();
     let user = sqlx::query_as::<_, crate::models::user::User>(
-        "INSERT INTO users (username, discriminator, email, password_hash, auth_hash, kdf_salt, is_verified, invited_by, registration_invite_id)
-         VALUES ($1, $2, $3, $4, $5, $6, true, $7, $8) RETURNING *",
+        "INSERT INTO users (id, username, discriminator, email_hmac, email_enc, password_hash, auth_hash, kdf_salt, is_verified, invited_by, registration_invite_id)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, true, $9, $10) RETURNING *",
     )
+    .bind(user_id)
     .bind(&pending.username)
     .bind(&pending.discriminator)
-    .bind(&pending.email)
+    .bind(crate::email_crypto::hmac(&email))
+    .bind(crate::email_crypto::seal(user_id, &email))
     .bind(NO_PASSWORD)
     .bind(&pending.auth_hash)
     .bind(&pending.kdf_salt)
@@ -275,7 +280,7 @@ pub async fn verify_email(
     }
     // Propriétaire du site : lié une fois pour toutes au premier compte qui prouve l'adresse du
     // propriétaire, puis à son UUID seulement (un compte recréé avec l'adresse n'hérite de rien).
-    if user.email == crate::handlers::site_admin::admin_email() {
+    if email == crate::handlers::site_admin::admin_email() {
         sqlx::query("INSERT INTO site_settings (key, value) VALUES ('owner_user_id', $1) ON CONFLICT (key) DO NOTHING")
             .bind(user.id.to_string())
             .execute(&mut *tx)
@@ -335,8 +340,8 @@ pub async fn login(
         _ => None,
     };
 
-    let user_opt = sqlx::query_as::<_, crate::models::user::User>("SELECT * FROM users WHERE email=$1")
-        .bind(&email)
+    let user_opt = sqlx::query_as::<_, crate::models::user::User>("SELECT * FROM users WHERE email_hmac=$1")
+        .bind(crate::email_crypto::hmac(&email))
         .fetch_optional(&state.db)
         .await?;
     let user = login_credentials(&body, user_opt)?.ok_or(AppError::Unauthorized)?;

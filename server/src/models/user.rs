@@ -7,7 +7,6 @@ pub struct User {
     pub id: Uuid,
     pub username: String,
     pub discriminator: String,
-    pub email: String,
     #[serde(skip_serializing)]
     pub password_hash: String,
     pub avatar: Option<String>,
@@ -277,7 +276,6 @@ mod tests {
 #[allow(dead_code)]
 pub struct PendingRegistration {
     pub id: Uuid,
-    pub email: String,
     pub username: String,
     pub password_hash: String,
     pub discriminator: String,

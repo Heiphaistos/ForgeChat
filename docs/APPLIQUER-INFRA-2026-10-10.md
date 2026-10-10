@@ -15,6 +15,8 @@ cp -p .env /root/forgechat-env-$(date +%Y%m%d%H%M%S).bak
 grep -q '^FORGECHAT_ADMIN_EMAIL=.' .env || echo 'FORGECHAT_ADMIN_EMAIL=<e-mail du propriétaire>' >> .env
 # Clé de chiffrement des secrets 2FA : générée UNE fois, à sauvegarder (la perdre = 2FA à refaire).
 grep -q '^TOTP_ENC_KEY=.' .env || echo "TOTP_ENC_KEY=$(openssl rand -base64 32)" >> .env
+# Phase 2 (sec2-srv) : clé de chiffrement des adresses e-mail, même règle (la perdre = adresses illisibles).
+grep -q '^EMAIL_ENC_KEY=.' .env || echo "EMAIL_ENC_KEY=$(openssl rand -base64 32)" >> .env
 chmod 600 .env
 docker compose config -q && echo "compose OK"
 ```

@@ -1403,7 +1403,7 @@ pub async fn get_friend_suggestions(
            -- Instance sur invitation : tous les membres sont proposés (relations communes d'abord),
            -- pour ajouter quelqu'un sans connaître son #tag. Pas les bots, bannis, compte système
            -- des messages supprimés, ni ceux qui refusent toute demande.
-           AND NOT u.is_bot AND u.site_banned_at IS NULL AND u.email <> 'deleted-user@forgechat.invalid'
+           AND NOT u.is_bot AND u.site_banned_at IS NULL AND u.id <> '00000000-0000-0000-0000-00000000dead'
            AND NOT EXISTS (SELECT 1 FROM user_settings s WHERE s.user_id = u.id AND s.friend_request_from = 'nobody')
          ORDER BY COALESCE(mf.mutual_count, 0) * 3 + COALESCE(ms.server_count, 0) DESC, lower(u.username)
          LIMIT 200"

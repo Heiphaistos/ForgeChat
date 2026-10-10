@@ -113,8 +113,8 @@ pub struct PreloginBody {
 pub async fn prelogin_lookup(db: &PgPool, secret: &str, email: &str) -> Result<(String, bool)> {
     let email = email_norm(email);
     let salt: Option<String> =
-        sqlx::query_scalar("SELECT kdf_salt FROM users WHERE email=$1 AND auth_hash IS NOT NULL AND kdf_salt IS NOT NULL")
-            .bind(&email)
+        sqlx::query_scalar("SELECT kdf_salt FROM users WHERE email_hmac=$1 AND auth_hash IS NOT NULL AND kdf_salt IS NOT NULL")
+            .bind(crate::email_crypto::hmac(&email))
             .fetch_optional(db)
             .await?;
     Ok(match salt {
