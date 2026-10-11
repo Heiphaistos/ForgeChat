@@ -2,8 +2,8 @@ import { useState, useMemo, useEffect } from 'react'
 import { usePageTitle } from '../hooks/usePageTitle'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
-  UserPlus, MessageCircle, Check, X, Link, Copy, Search, LifeBuoy,
-  MoreHorizontal, UserX, Shield, User, Wifi, WifiOff,
+  UserPlus, MessageCircle, Check, X, Link, Copy, Search,
+  MoreHorizontal, Wifi, WifiOff,
   Clock, MinusCircle, Upload, Menu, ChevronLeft,
   Phone, Video, PhoneIncoming, PhoneOutgoing, PhoneMissed,
 } from 'lucide-react'
@@ -13,7 +13,8 @@ import { useNavigate } from 'react-router-dom'
 import { usePresence } from '../store/presence'
 import { useFormatDate } from '../hooks/useFormatDate'
 import ImportContactsModal from '../components/modals/ImportContactsModal'
-import FriendSections, { FriendMenuExtras, FriendStatusLine } from '../components/friends/FriendSections'
+import FriendSections, { FriendStatusLine } from '../components/friends/FriendSections'
+import { openUserMenu, userMenuProps } from '../components/userMenu/store'
 import { useMobile } from '../contexts/MobileContext'
 import { useT, t as tr, type Key } from '../i18n'
 
@@ -137,7 +138,6 @@ export default function FriendsPage() {
   const [inviteUrl, setInviteUrl] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
   const [search, setSearch] = useState('')
-  const [menuOpen, setMenuOpen] = useState<string | null>(null)
   const [showImport, setShowImport] = useState(false)
   const qc = useQueryClient()
   const nav = useNavigate()
@@ -252,35 +252,16 @@ export default function FriendsPage() {
     onError: () => toast.error(t('friends.cancelError')),
   })
 
-  const remove = useMutation({
-    mutationFn: (friendId: string) => api.delete(`/friends/${friendId}`),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['friends'] })
-      toast.success(t('friends.removed'))
-    },
-    onError: () => toast.error(t('saved.removeError')),
-  })
-
-  const blockUser = useMutation({
-    mutationFn: (userId: string) => api.post(`/friends/block/${userId}`),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['friends'] })
-      qc.invalidateQueries({ queryKey: ['friends_blocked'] })
-      toast.success(t('friends.blockedToast'))
-    },
-    onError: () => toast.error(t('friends.blockError')),
-  })
-
   const unblockUser = useMutation({
     mutationFn: (userId: string) => api.delete(`/friends/block/${userId}`),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['friends_blocked'] }),
     onError: () => toast.error(t('friends.unblockError')),
   })
 
-  const openDm = async (userId: string, support = false) => {
+  const openDm = async (userId: string) => {
     try {
       const { data } = await api.post(`/dms/${userId}`)
-      nav(`/dms/${data.dm_id}${support ? '?support=1' : ''}`)
+      nav(`/dms/${data.dm_id}`)
     } catch {
       toast.error(t('friends.dmError'))
     }
@@ -318,13 +299,13 @@ export default function FriendsPage() {
   // ── Friend card (render function, pas un composant React) ─────────────────
   const renderFriendCard = (f: FriendRow) => {
     const live = getStatus(f.friend_id) || f.user_status
-    const isOpen = menuOpen === f.id
+    const target = { userId: f.friend_id, username: f.username, avatar: f.avatar }
 
     return (
       <div
         key={f.id}
         className="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-fc-hover transition group relative"
-        onClick={() => isOpen && setMenuOpen(null)}
+        {...userMenuProps(target)}
       >
         <AvatarWithStatus username={f.username} avatar={f.avatar} status={live} />
 
@@ -349,47 +330,14 @@ export default function FriendsPage() {
             <MessageCircle size={16} />
           </button>
 
-          <div className="relative">
-            <button
-              onClick={e => { e.stopPropagation(); setMenuOpen(isOpen ? null : f.id) }}
-              title={t('friends.more')}
-              aria-label={t('friends.more')}
-              className="p-1.5 text-fc-muted hover:text-white rounded hover:bg-fc-input transition"
-            >
-              <MoreHorizontal size={16} />
-            </button>
-
-            {isOpen && (
-              <div className="absolute right-0 top-8 z-20 bg-fc-bg border border-fc-hover rounded-lg shadow-xl py-1 w-52 max-h-80 overflow-y-auto"
-                onClick={e => e.stopPropagation()}>
-                <button
-                  onClick={() => { nav(`/users/${f.friend_id}`); setMenuOpen(null) }}
-                  className="flex items-center gap-2 w-full px-3 py-2 text-sm text-fc-text hover:bg-fc-hover transition"
-                >
-                  <User size={14} /> {t('friends.profile')}
-                </button>
-                <FriendMenuExtras friend={f} />
-                <button
-                  onClick={() => { openDm(f.friend_id, true); setMenuOpen(null) }}
-                  className="flex items-center gap-2 w-full px-3 py-2 text-sm text-fc-text hover:bg-fc-hover transition"
-                >
-                  <LifeBuoy size={14} /> {t('rs.button')}
-                </button>
-                <button
-                  onClick={() => { remove.mutate(f.friend_id); setMenuOpen(null) }}
-                  className="flex items-center gap-2 w-full px-3 py-2 text-sm text-fc-red hover:bg-fc-hover transition"
-                >
-                  <UserX size={14} /> {t('common.delete')}
-                </button>
-                <button
-                  onClick={() => { blockUser.mutate(f.friend_id); setMenuOpen(null) }}
-                  className="flex items-center gap-2 w-full px-3 py-2 text-sm text-fc-red hover:bg-fc-hover transition"
-                >
-                  <Shield size={14} /> {t('friends.block')}
-                </button>
-              </div>
-            )}
-          </div>
+          <button
+            onClick={e => { e.stopPropagation(); openUserMenu(e, target) }}
+            title={t('friends.more')}
+            aria-label={t('friends.more')}
+            className="p-1.5 text-fc-muted hover:text-white rounded hover:bg-fc-input transition"
+          >
+            <MoreHorizontal size={16} />
+          </button>
         </div>
       </div>
     )
@@ -398,7 +346,7 @@ export default function FriendsPage() {
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
     <>
-    <div className="flex flex-col h-full" onClick={() => menuOpen && setMenuOpen(null)}>
+    <div className="flex flex-col h-full">
       {/* Header — rangée 1 : titre + actions */}
       <div className="flex items-center gap-2 px-3 md:px-4 py-2.5 border-b border-fc-bg shadow-sm flex-shrink-0">
         <button

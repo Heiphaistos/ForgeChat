@@ -202,6 +202,7 @@ function MessageRow({
               <button
                 className="font-semibold text-white text-sm hover:underline cursor-pointer"
                 onClick={e => onOpenUserPopup(e, msg.author_id)}
+                onContextMenu={e => onAvatarContextMenu(e, msg)}
               >
                 <UserName userId={msg.author_id} name={msg.author_username} roleStyle={roleDecor?.style} roleOverrides={roleDecor?.overridesName} withTag />
               </button>

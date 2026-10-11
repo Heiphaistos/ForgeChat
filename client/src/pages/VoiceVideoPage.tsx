@@ -17,7 +17,6 @@ import LiveCaptions from '../components/ai/LiveCaptions'
 import { prepareCaptions, useAiSettings } from '../ai/engine'
 import SpeakerStats from '../components/voice/SpeakerStats'
 import VolumeSlider from '../components/voice/VolumeSlider'
-import { volumeMenuItem } from '../components/voice/UserVolumePopover'
 import Soundboard from '../components/voice/Soundboard'
 import CallQualityIndicator from '../components/voice/CallQualityIndicator'
 import VoiceActivityBar from '../components/voice/VoiceActivityBar'
@@ -36,9 +35,7 @@ import { startClipBuffer, useClipsSetting, type ClipBuffer } from '../lib/clipBu
 import { popOut } from '../lib/popout'
 import { isNativeVoice, nativePopOut } from '../lib/nativeVoice'
 import { MobileContext } from '../contexts/MobileContext'
-import { useContextMenu } from '../components/ui/ContextMenu'
-import { useMemberModeration } from '../components/chat/MemberModeration'
-import { useRemoteSupportItem } from '../components/chat/RemoteSupport'
+import { openUserMenu } from '../components/userMenu/store'
 import { t as tr, useT, type Key } from '../i18n'
 import { E2ECallBadge } from '../e2e/E2ECallBadge'
 
@@ -161,18 +158,9 @@ function VoiceLobby({
 export default function VoiceVideoPage({ channel, serverId }: Props) {
   const { user } = useAuth()
   const t = useT()
-  // Modération vocale (P2-2) : clic droit sur la tuile d'un participant.
-  const tileMenu = useContextMenu()
-  const moderation = useMemberModeration(serverId)
-  const remoteSupportItem = useRemoteSupportItem()
-  const openTileMenu = (e: React.MouseEvent, userId: string, username: string) => {
-    const rs = remoteSupportItem(userId)
-    const vol = volumeMenuItem(userId, username, e)
-    const items = [...(vol ? [vol] : []), ...(rs ? [rs] : []), ...moderation.voiceItemsFor(userId).filter(i => !('separator' in i && i.separator))]
-    if (items.length === 0) return
-    e.preventDefault()
-    tileMenu.open(e, items)
-  }
+  // Menu utilisateur partagé (volume, modération vocale, profil…) : clic droit sur une tuile.
+  const openTileMenu = (e: React.MouseEvent, userId: string, username: string) =>
+    openUserMenu(e, { userId, username, serverId, voice: true })
   const { send, on } = useWs()
   const location = useLocation()
   const voicePassword: string | undefined = (location.state as any)?.voicePassword
@@ -692,8 +680,6 @@ export default function VoiceVideoPage({ channel, serverId }: Props) {
       {rec.result && (
         <ClipDialog recording blob={rec.result} label={channel.name} serverId={serverId} voiceChannelId={channel.id} onClose={rec.clearResult} />
       )}
-      {tileMenu.node}
-      {moderation.node}
     </div>
   )
 }

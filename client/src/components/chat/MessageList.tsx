@@ -2,10 +2,11 @@ import { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 import { useThemeStore } from '../../theme/themeStore'
 import { format, isToday, isYesterday } from 'date-fns'
 import { ChevronDown, Loader2, SmilePlus, Copy, Link, Share2, CornerUpLeft, MessagesSquare, Forward, Pin, Pencil, Trash2, Flag } from 'lucide-react'
-import { useSearchParams, useNavigate } from 'react-router-dom'
+import { useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation } from '@tanstack/react-query'
 import { useAuth } from '../../store/auth'
-import { useContextMenu } from '../ui/ContextMenu'
+import { openUserMenu } from '../userMenu/store'
+import { useMyUxPrefs } from '../../store/uxPrefs'
 import { useChat } from '../../store/chat'
 import { useUnread } from '../../store/unread'
 import EmojiPicker, { getRecentEmojis } from './EmojiPicker'
@@ -79,8 +80,9 @@ export default function MessageList({
 }: Props) {
   const t = useT()
   const { user } = useAuth()
-  const nav = useNavigate()
-  const avatarCtxMenu = useContextMenu()
+  // Utilisateurs ignorés : messages repliés, dépliables un par un.
+  const ignoredUsers = useMyUxPrefs().ignored
+  const [revealed, setRevealed] = useState<ReadonlySet<string>>(() => new Set())
   const [searchParams] = useSearchParams()
   const targetMsgId = searchParams.get('msg')
 
@@ -655,37 +657,8 @@ export default function MessageList({
   // -- Handlers stables passés à MessageRow (React.memo) — fonctionnels/sans état
   // fermé pour ne jamais changer de référence et casser la mémoïsation par ligne --
   const handleAvatarContextMenu = useCallback((e: React.MouseEvent, msg: any) => {
-    e.preventDefault()
-    e.stopPropagation()
-    avatarCtxMenu.open(e, [
-      { label: tr('dms.viewProfile'), onClick: () => nav(`/users/${msg.author_id}`) },
-      { label: tr('msg.sendMessage'), onClick: () => {
-        // Même bug que MemberList.tsx (déjà corrigé) : /dms n'existe pas en POST
-        // (seul GET /dms existe), la vraie route est /dms/:user_id sans body,
-        // et la réponse est { dm_id } pas { id } -- catch muet en plus.
-        api.post(`/dms/${msg.author_id}`)
-          .then(r => nav(`/dms/${r.data.dm_id}`))
-          .catch(() => toast.error(tr('msg.openDmFailed')))
-      }, disabled: msg.author_id === user?.id },
-      { label: tr('msg.mention', { name: msg.author_username }), onClick: () => {
-        const el = document.querySelector<HTMLTextAreaElement>('textarea[data-message-input]')
-        if (el) {
-          const pos = el.selectionStart ?? el.value.length
-          window.dispatchEvent(new CustomEvent('forgechat:mention-picked', { detail: { name: msg.author_username, token: `<@${msg.author_id}>` } }))
-          const mention = `@${msg.author_username} `
-          const newVal = el.value.slice(0, pos) + mention + el.value.slice(pos)
-          el.focus()
-          const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value')?.set
-          setter?.call(el, newVal)
-          el.dispatchEvent(new Event('input', { bubbles: true }))
-          const newPos = pos + mention.length
-          setTimeout(() => el.setSelectionRange(newPos, newPos), 0)
-        }
-      }},
-      { separator: true },
-      { label: tr('servers.copyId'), onClick: () => navigator.clipboard.writeText(msg.author_id) },
-    ])
-  }, [nav, user?.id])
+    openUserMenu(e, { userId: msg.author_id, username: msg.author_username, avatar: msg.author_avatar, serverId: serverId || undefined })
+  }, [serverId])
 
   const handleRowDoubleClick = useCallback((msgId: string, x: number, y: number) => setDblClickPopover({ msgId, x, y }), [])
   const handleRowContextMenu = useCallback((x: number, y: number, msg: any) => setContextMenu({ x, y, msg }), [])
@@ -798,6 +771,17 @@ export default function MessageList({
           const bumpedEmojis = Object.keys(bumped).length === 0
             ? EMPTY_ARR
             : Object.keys(bumped).filter(k => k.startsWith(msg.id + ':')).map(k => k.slice(msg.id.length + 1))
+
+          if (ignoredUsers.includes(msg.author_id) && !revealed.has(msg.id)) {
+            return (
+              <div key={msg.id} className="px-4 py-1 text-xs text-fc-muted italic flex items-center gap-2">
+                {tr('um.ignoredMsg')}
+                <button onClick={() => setRevealed(r => new Set(r).add(msg.id))} className="not-italic text-fc-accent hover:underline">
+                  {tr('um.ignoredShow')}
+                </button>
+              </div>
+            )
+          }
 
           return (
             <MessageRow
@@ -1242,7 +1226,6 @@ export default function MessageList({
           </div>
         </div>
       )}
-      {avatarCtxMenu.node}
     </div>
   )
 }

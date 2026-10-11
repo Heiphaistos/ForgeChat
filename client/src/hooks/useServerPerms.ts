@@ -8,6 +8,7 @@ export const PERM = {
   SEND_MESSAGES: 1 << 1,
   MANAGE_MESSAGES: 1 << 3,
   MANAGE_CHANNELS: 1 << 4,
+  MANAGE_SERVER: 1 << 8,
   KICK_MEMBERS: 1 << 6,
   BAN_MEMBERS: 1 << 7,
   MUTE_MEMBERS: 1 << 15,
@@ -25,6 +26,18 @@ export interface MemberRank {
   user_id: string
   is_owner?: boolean
   role_ids?: string[]
+}
+
+/** Droits effectifs depuis la réponse `GET /servers/:id` (rôles + @everyone, propriétaire, ADMINISTRATOR). */
+export function permsOf(data: any, meId: string | undefined) {
+  const roles: any[] = data?.roles ?? []
+  const mine = new Set<string>((data?.my_role_ids ?? []).map(String))
+  const perms = roles
+    .filter(r => r.is_everyone || mine.has(String(r.id)))
+    .reduce((acc: number, r) => acc | Number(r.permissions), 0)
+  const isOwner = !!meId && data?.server?.owner_id === meId
+  const isAdmin = isOwner || (perms & PERM.ADMINISTRATOR) !== 0
+  return { isOwner, isAdmin, has: (bit: number) => isAdmin || (perms & bit) !== 0 }
 }
 
 /**
@@ -46,13 +59,8 @@ export function useServerPerms(serverId?: string) {
   return useMemo(() => {
     const roles: any[] = data?.roles ?? []
     const mine = new Set<string>((data?.my_role_ids ?? []).map(String))
-    const perms = roles
-      .filter(r => r.is_everyone || mine.has(String(r.id)))
-      .reduce((acc: number, r) => acc | Number(r.permissions), 0)
     const ownerId: string | undefined = data?.server?.owner_id
-    const isOwner = !!meId && ownerId === meId
-    const isAdmin = isOwner || (perms & PERM.ADMINISTRATOR) !== 0
-    const has = (bit: number) => isAdmin || (perms & bit) !== 0
+    const { isOwner, isAdmin, has } = permsOf(data, meId)
     const topPosition = (ids: Iterable<string>) => {
       const set = new Set([...ids].map(String))
       return roles.reduce((top: number, r) => (!r.is_everyone && set.has(String(r.id)) ? Math.max(top, Number(r.position)) : top), -1)

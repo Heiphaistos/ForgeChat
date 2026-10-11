@@ -37,6 +37,8 @@ import MainLayout from './components/layout/MainLayout'
 import PersistentVoiceAudio from './components/voice/PersistentVoiceAudio'
 import PersistentDmCallAudio from './components/voice/PersistentDmCallAudio'
 import UserVolumePopover from './components/voice/UserVolumePopover'
+import UserMenuHost from './components/userMenu/UserMenuHost'
+import { isIgnored } from './store/uxPrefs'
 import FloatingCallPiP from './components/voice/FloatingCallPiP'
 import VoiceHotkeys from './components/voice/VoiceHotkeys'
 import AppLockOverlay from './components/AppLockOverlay'
@@ -504,7 +506,7 @@ function AppInner() {
     // Ici : seulement les salons au niveau « Tous les messages », hors sourdine.
     const offMsg = on('MESSAGE_CREATE', async (d: any) => {
       const msg = d.message
-      if (!msg?.channel_id || !d.server_id || msg.author_id === user.id || user.focus_mode) return
+      if (!msg?.channel_id || !d.server_id || msg.author_id === user.id || user.focus_mode || isIgnored(msg.author_id)) return
       if (mentionedMessageIds.has(msg.id) || isViewing(msg.channel_id)) return
       if (isChannelMuted(msg.channel_id) || isServerMuted(d.server_id)) return
       if (effectiveNotifLevel(msg.channel_id, d.server_id) !== 'all') return
@@ -716,7 +718,7 @@ function AppInner() {
       if (!isActive) {
         const isMuted = getDmMuted(d.dm_id)
         incrUnread(d.dm_id)
-        if (isMuted) return
+        if (isMuted || isIgnored(msg.sender_id)) return
         if (!user.focus_mode) playMessage()
         if (document.hasFocus()) {
           // Fenêtre focusée mais sur une autre page → toast cliquable
@@ -756,7 +758,7 @@ function AppInner() {
           new RegExp(`@${escapedName}(?:[^a-zA-Z0-9_]|$)`).test(content) ||
           content.includes('@everyone')
         )
-        if (isGroupMuted) return
+        if (isGroupMuted || isIgnored(msg.sender_id)) return
         if (!user.focus_mode) {
           if (mentionedMe) playMention()
           else playMessage()
@@ -1095,6 +1097,7 @@ function AppInner() {
         {user && <PersistentVoiceAudio />}
         {user && <PersistentDmCallAudio />}
         {user && <UserVolumePopover />}
+        {user && <UserMenuHost />}
         {user && <GroupCallRinger />}
         {user && <FloatingCallPiP />}
         {user && <VoiceHotkeys />}

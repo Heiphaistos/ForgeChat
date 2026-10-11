@@ -3,7 +3,7 @@
 // statut riche de chaque ami.
 import { useMemo, useState, type ReactNode } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowDown, ArrowUp, Pencil, Pin, PinOff, Trash2, Users } from 'lucide-react'
+import { ArrowDown, ArrowUp, Pencil, Trash2, Users } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../../api/client'
 import { usePresence } from '../../store/presence'
@@ -55,36 +55,6 @@ export function FriendStatusLine({ friend, fallback }: { friend: SocialFriend; f
         ? <RichStatus activity={activity} />
         : <span className="truncate">{friend.custom_status ?? fallback}</span>}
     </div>
-  )
-}
-
-/** Entrées du menu « … » d'un ami : épingler, ranger dans des groupes. */
-export function FriendMenuExtras({ friend }: { friend: SocialFriend }) {
-  const t = useT()
-  const { data: groups = [] } = useGroups()
-  const pin = useGroupMutation((favorite: boolean) => api.put(`/friends/${friend.friend_id}/favorite`, { favorite }))
-  const toggle = useGroupMutation(({ g, on }: { g: string; on: boolean }) => on
-    ? api.post(`/friends/groups/${g}/members`, { user_id: friend.friend_id })
-    : api.delete(`/friends/groups/${g}/members/${friend.friend_id}`))
-  return (
-    <>
-      <button onClick={() => pin.mutate(!friend.is_favorite)}
-        className="flex items-center gap-2 w-full px-3 py-2 text-sm text-fc-text hover:bg-fc-hover transition">
-        {friend.is_favorite ? <PinOff size={14} /> : <Pin size={14} />} {t(friend.is_favorite ? 'soc.fav.unpin' : 'soc.fav.pin')}
-      </button>
-      {groups.length > 0 && (
-        <fieldset className="px-3 py-1 border-t border-fc-hover">
-          <legend className="text-[10px] uppercase text-fc-muted">{t('soc.groups.in')}</legend>
-          {groups.map(g => (
-            <label key={g.id} className="flex items-center gap-2 py-0.5 text-sm text-fc-text">
-              <input type="checkbox" checked={g.member_ids.includes(friend.friend_id)}
-                onChange={e => toggle.mutate({ g: g.id, on: e.target.checked })} />
-              <span className="truncate">{g.name}</span>
-            </label>
-          ))}
-        </fieldset>
-      )}
-    </>
   )
 }
 

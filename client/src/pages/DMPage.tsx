@@ -5,6 +5,7 @@ import { useParams, useSearchParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Phone, Video, Search, Mic, MicOff, PhoneOff, VideoOff, ChevronLeft, Pin, X, Maximize2, Captions, Volume2 } from 'lucide-react'
 import { openUserVolume } from '../components/voice/UserVolumePopover'
+import { openUserMenu, userMenuProps } from '../components/userMenu/store'
 import LiveCaptions from '../components/ai/LiveCaptions'
 import { prepareCaptions, useAiSettings } from '../ai/engine'
 import api, { mediaUrl } from '../api/client'
@@ -419,7 +420,7 @@ export default function DMPage() {
         >
           <ChevronLeft size={20} />
         </button>
-        <div className="relative flex-shrink-0">
+        <div className="relative flex-shrink-0" {...(partnerId ? userMenuProps({ userId: partnerId, username: partnerName, avatar: partnerAvatar }) : {})}>
           <div className="w-9 h-9 rounded-full bg-fc-accent flex items-center justify-center font-bold text-sm text-white overflow-hidden">
             {partnerAvatar
               ? <img src={mediaUrl(partnerAvatar)} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
@@ -428,7 +429,7 @@ export default function DMPage() {
           <div className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-fc-channel ${STATUS_COLOR[status]}`} />
         </div>
 
-        <div className="min-w-0">
+        <div className="min-w-0" {...(partnerId ? userMenuProps({ userId: partnerId, username: partnerName, avatar: partnerAvatar }) : {})}>
           <div className="font-semibold text-white text-sm leading-none flex items-center gap-1.5">
             {partnerName}
           </div>
@@ -495,7 +496,7 @@ export default function DMPage() {
           conversation (isThisCallActive) ; s'il tourne ailleurs, aucune UI ici (la
           VoiceBar globale ou une future pastille flottante s'en charge) */}
       {isThisCallActive && (
-        <div onContextMenu={partnerId ? e => { e.preventDefault(); openUserVolume(partnerId, partnerName, e) } : undefined}
+        <div onContextMenu={partnerId ? e => openUserMenu(e, { userId: partnerId, username: partnerName, avatar: partnerAvatar, voice: true }) : undefined}
           className={`flex flex-col items-center justify-center gap-4 p-6 border-b ${callType === 'video' ? 'border-fc-accent/40 bg-black' : 'border-green-600/40 bg-green-900/10'}`}>
           {callType === 'video' ? (
             <div className="relative w-full max-h-56 bg-black rounded-xl overflow-hidden flex items-center justify-center"

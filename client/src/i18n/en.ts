@@ -7,6 +7,7 @@ import * as chrome from './parts/chrome.ts'
 import * as ai from './parts/ai.ts'
 import * as notifCenter from './parts/notifCenter.ts'
 import * as uxSettings from './parts/uxSettings.ts'
+import * as menus from './parts/menus.ts'
 import { profileEn } from './profileEn.ts'
 import { socialEn } from './socialEn.ts'
 import { comfortEn } from './comfort.ts'
@@ -27,6 +28,7 @@ export const en: Partial<Record<Key, string>> = {
   ...ai.en,
   ...notifCenter.en,
   ...systemDeskEn,
+  ...menus.en,
   // --- Connexion, inscription, mot de passe oublié ---
   'auth.email': 'Email',
   'auth.password': 'Password',

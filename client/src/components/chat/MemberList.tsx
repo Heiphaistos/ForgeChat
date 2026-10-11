@@ -2,20 +2,16 @@ import { useQuery } from '@tanstack/react-query'
 import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { X } from 'lucide-react'
 import { useSwipeRightToClose } from '../../hooks/useSwipeClose'
-import { useNavigate } from 'react-router-dom'
 import api from '../../api/client'
-import toast from 'react-hot-toast'
 import { usePresence } from '../../store/presence'
-import { useContextMenu } from '../ui/ContextMenu'
+import { userMenuProps } from '../userMenu/store'
 import UserPopup from '../UserPopup'
-import { useMemberModeration } from './MemberModeration'
-import { useRemoteSupportItem } from './RemoteSupport'
 import { RoleIcon, useRoleDecor, type RoleDecor } from '../../hooks/useRoleDecor'
 import AnimatedImg from '../ui/AnimatedImg'
 import UserName from '../ui/UserName'
 import RichStatus from '../ui/RichStatus'
 import { AvatarDecoration } from '../ui/ProfileDecor'
-import { t as tr, useT, type Key } from '../../i18n'
+import { useT, type Key } from '../../i18n'
 
 interface Props {
   serverId: string
@@ -49,10 +45,9 @@ const STATUS_LABELS: Record<string, Key> = {
   invisible: 'presence.invisible',
 }
 
-function MemberRow({ m, decor, onClick, onContextMenu, onLongPress }: { m: any; decor?: RoleDecor; onClick: (e: React.MouseEvent) => void; onContextMenu: (e: React.MouseEvent) => void; onLongPress: (x: number, y: number) => void }) {
+function MemberRow({ m, decor, serverId, onClick }: { m: any; decor?: RoleDecor; serverId: string; onClick: (e: React.MouseEvent) => void }) {
   const t = useT()
   const statusLabel = t(STATUS_LABELS[m.liveStatus] ?? 'presence.offline')
-  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   return (
     <div
       role="listitem"
@@ -60,18 +55,7 @@ function MemberRow({ m, decor, onClick, onContextMenu, onLongPress }: { m: any; 
       style={{ height: ROW_H }}
       className="flex items-center gap-2 px-2 rounded hover:bg-fc-hover group cursor-pointer transition"
       onClick={onClick}
-      onContextMenu={onContextMenu}
-      onTouchStart={e => {
-        const { clientX, clientY } = e.touches[0]
-        longPressTimer.current = setTimeout(() => {
-          longPressTimer.current = null
-          if ('vibrate' in navigator) navigator.vibrate(20)
-          onLongPress(clientX, clientY)
-        }, 500)
-      }}
-      onTouchEnd={() => { if (longPressTimer.current) { clearTimeout(longPressTimer.current); longPressTimer.current = null } }}
-      onTouchCancel={() => { if (longPressTimer.current) { clearTimeout(longPressTimer.current); longPressTimer.current = null } }}
-      onTouchMove={() => { if (longPressTimer.current) { clearTimeout(longPressTimer.current); longPressTimer.current = null } }}
+      {...userMenuProps({ userId: m.user_id, username: m.username, avatar: m.avatar, serverId })}
     >
       <div className="relative flex-shrink-0">
         <AvatarDecoration id={m.avatar_decoration} size={32}>
@@ -119,12 +103,6 @@ export default function MemberList({ serverId, onClose }: Props) {
   // Activité en direct (WS) : remplace l'ancien rechargement toutes les 30 s
   const presenceActivities = usePresence(s => s.activities)
   const getStatus = (id: string) => presenceStatuses[id] ?? 'offline'
-  const ctxMenu = useContextMenu()
-  const nav = useNavigate()
-  // Expulser / Bannir / Timeout / Notes / vocal selon les permissions réelles
-  // et la hiérarchie (avant : « Expulser » réservé au seul propriétaire).
-  const moderation = useMemberModeration(serverId)
-  const remoteSupportItem = useRemoteSupportItem()
   const [popup, setPopup] = useState<{ userId: string; x: number; y: number } | null>(null)
 
   const { online, offline } = useMemo(() => {
@@ -146,39 +124,6 @@ export default function MemberList({ serverId, onClose }: Props) {
     }
   }, [members, presenceStatuses, presenceActivities])
 
-  const menuItems = (m: any) => [
-    { label: tr('dms.viewProfile'), onClick: () => nav(`/users/${m.user_id}`) },
-    { label: tr('msg.sendMessage'), onClick: () => {
-      // Route réelle : POST /dms/:user_id (id en path, pas de body), réponse
-      // { dm_id } -- l'ancien code postait sur /dms (route inexistante, seul
-      // GET /dms existe) et lisait r.data.id (jamais présent) : le clic
-      // n'ouvrait jamais de DM, sans le moindre message d'erreur (catch muet).
-      api.post(`/dms/${m.user_id}`)
-        .then(r => nav(`/dms/${r.data.dm_id}`))
-        .catch(() => toast.error(tr('msg.openDmFailed')))
-    }},
-    ...[remoteSupportItem(m.user_id)].filter(i => i !== null),
-    { label: tr('members.mention'), onClick: () => {
-      const el = document.querySelector<HTMLTextAreaElement>('textarea[data-message-input]')
-      if (el) {
-        const pos = el.selectionStart ?? el.value.length
-        // Pseudo (et non le surnom) + jeton <@id> enregistré par MessageInput :
-        // le message part avec une vraie mention qui notifie.
-        window.dispatchEvent(new CustomEvent('forgechat:mention-picked', { detail: { name: m.username, token: `<@${m.user_id}>` } }))
-        const mention = `@${m.username} `
-        const newVal = el.value.slice(0, pos) + mention + el.value.slice(pos)
-        el.focus()
-        const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value')?.set
-        setter?.call(el, newVal)
-        el.dispatchEvent(new Event('input', { bubbles: true }))
-        const newPos = pos + mention.length
-        setTimeout(() => el.setSelectionRange(newPos, newPos), 0)
-      }
-    }},
-    { separator: true as const },
-    { label: tr('servers.copyId'), onClick: () => navigator.clipboard.writeText(m.user_id) },
-    ...moderation.itemsFor(m.user_id),
-  ]
 
   const [search, setSearch] = useState('')
   const swipe = useSwipeRightToClose(() => onClose?.())
@@ -276,7 +221,7 @@ export default function MemberList({ serverId, onClose }: Props) {
                   {it.label}
                 </div>
               ) : (
-                <MemberRow m={it.m} decor={roleDecor(it.m.user_id)} onClick={e => setPopup({ userId: it.m.user_id, x: e.clientX - 356, y: e.clientY })} onContextMenu={e => ctxMenu.open(e, menuItems(it.m))} onLongPress={(x, y) => ctxMenu.openAt(x, y, menuItems(it.m))} />
+                <MemberRow m={it.m} decor={roleDecor(it.m.user_id)} serverId={serverId} onClick={e => setPopup({ userId: it.m.user_id, x: e.clientX - 356, y: e.clientY })} />
               )}
             </div>
           )
@@ -285,8 +230,6 @@ export default function MemberList({ serverId, onClose }: Props) {
       {query && filteredOnline.length === 0 && filteredOffline.length === 0 && (
         <p className="text-xs text-fc-muted px-2 py-4 text-center">{t('members.noMatch')}</p>
       )}
-      {ctxMenu.node}
-      {moderation.node}
       {popup && (
         <UserPopup userId={popup.userId} serverId={serverId} anchorX={popup.x} anchorY={popup.y} onClose={() => setPopup(null)} />
       )}
