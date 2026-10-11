@@ -8,6 +8,7 @@ export const PERM = {
   SEND_MESSAGES: 1 << 1,
   MANAGE_MESSAGES: 1 << 3,
   MANAGE_CHANNELS: 1 << 4,
+  MANAGE_ROLES: 1 << 5,
   MANAGE_SERVER: 1 << 8,
   KICK_MEMBERS: 1 << 6,
   BAN_MEMBERS: 1 << 7,
@@ -82,8 +83,13 @@ export function useServerPerms(serverId?: string) {
       if (has(PERM.MANAGE_CHANNELS | PERM.DELETE_CHANNELS)) return true
       return has(PERM.DELETE_OWN_CHANNELS) && !!createdBy && createdBy === meId
     }
+    /** Rôles que je peux attribuer : sous mon plus haut rôle (le serveur refuse aussi ceux qui dépassent mes droits). */
+    const assignableRoles: { id: string; name: string }[] = roles
+      .filter(r => !r.is_everyone && (isOwner || Number(r.position) < myTop))
+      .sort((a, b) => Number(b.position) - Number(a.position))
+      .map(r => ({ id: String(r.id), name: String(r.name) }))
     return {
-      loaded: !!data, meId, isOwner, isAdmin, has, outranks,
+      loaded: !!data, meId, isOwner, isAdmin, has, outranks, assignableRoles,
       canCreateChannels, canEditChannels, canDeleteChannel,
       channels: (data?.channels ?? []) as any[],
     }

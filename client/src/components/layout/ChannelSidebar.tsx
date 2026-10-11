@@ -62,7 +62,8 @@ export default function ChannelSidebar() {
   const [showOnboarding, setShowOnboarding] = useState(false)
   // Ouvrir la modale paramètres serveur depuis le menu contextuel du rail
   useEffect(() => {
-    const open = () => setSettingsTab('general')
+    // detail : onglet voulu (ex. « profile » depuis « Changer le pseudo » du menu utilisateur).
+    const open = (e: Event) => setSettingsTab((e as CustomEvent<ServerSettingsTab | null>).detail ?? 'general')
     // « Inviter » et « Créer un salon » du menu de la vignette de serveur (ServerSidebar).
     const panel = (e: Event) => {
       const what = (e as CustomEvent<string>).detail

@@ -58,10 +58,15 @@ interface Channel {
   auto_threads?: boolean
 }
 
+type Target = { id: string; name: string; type: 'role' | 'member' }
+
 interface Props {
   channel: Channel
   serverId: string
   onClose: () => void
+  /** Ouverture depuis le menu d'un membre : onglet Permissions, surcharge de ce membre sélectionnée. */
+  initialTab?: TabId
+  initialTarget?: Target
 }
 
 const isVoice = (t: string) => ['voice', 'video', 'stage'].includes(t)
@@ -80,10 +85,10 @@ function Toggle({ value, onChange }: { value: boolean; onChange: (v: boolean) =>
 
 // ─── Onglet Permissions ───────────────────────────────────────────────────────
 
-function PermissionsTab({ channel, serverId }: { channel: Channel; serverId: string }) {
+function PermissionsTab({ channel, serverId, initialTarget }: { channel: Channel; serverId: string; initialTarget?: Target }) {
   const t = useT()
   const qc = useQueryClient()
-  const [selectedTarget, setSelectedTarget] = useState<{ id: string; name: string; type: 'role' | 'user' } | null>(null)
+  const [selectedTarget, setSelectedTarget] = useState<Target | null>(initialTarget ?? null)
   const [editAllow, setEditAllow] = useState(0)
   const [editDeny, setEditDeny] = useState(0)
 
@@ -93,11 +98,20 @@ function PermissionsTab({ channel, serverId }: { channel: Channel; serverId: str
     staleTime: 60_000,
   })
 
-  const { data: overrides = [], refetch } = useQuery({
+  const { data: overrides = [], refetch, isFetched } = useQuery({
     queryKey: ['channel-permissions', channel.id],
     queryFn: () => api.get(`/channels/${channel.id}/permissions`).then(r => r.data).catch(() => []),
     staleTime: 30_000,
   })
+  // Membre choisi depuis son menu : sa surcharge existante, une fois la liste chargée.
+  const [initialLoaded, setInitialLoaded] = useState(!initialTarget)
+  useEffect(() => {
+    if (initialLoaded || !isFetched || !initialTarget) return
+    const existing = (overrides as any[]).find((o: any) => o.target_id === initialTarget.id)
+    setEditAllow(existing?.allow ?? 0)
+    setEditDeny(existing?.deny ?? 0)
+    setInitialLoaded(true)
+  }, [initialLoaded, isFetched, initialTarget, overrides])
 
   const saveOverride = useMutation({
     mutationFn: () => api.put(`/channels/${channel.id}/permissions/${selectedTarget!.id}`, {
@@ -115,7 +129,7 @@ function PermissionsTab({ channel, serverId }: { channel: Channel; serverId: str
     onError: (e: any) => toast.error(e.response?.data?.error ?? t('common.error')),
   })
 
-  const selectTarget = (target: { id: string; name: string; type: 'role' | 'user' }) => {
+  const selectTarget = (target: Target) => {
     setSelectedTarget(target)
     const existing = (overrides as any[]).find((o: any) => o.target_id === target.id)
     setEditAllow(existing?.allow ?? 0)
@@ -164,7 +178,7 @@ function PermissionsTab({ channel, serverId }: { channel: Channel; serverId: str
         <div className="space-y-0.5 mb-3">
           {(overrides as any[]).map((o: any) => {
             const role = (roles as any[]).find((r: any) => r.id === o.target_id)
-            const name = role?.name ?? o.target_id.slice(0, 8)
+            const name = role?.name ?? (initialTarget && o.target_id === initialTarget.id ? initialTarget.name : o.target_id.slice(0, 8))
             return (
               <button key={o.target_id}
                 onClick={() => selectTarget({ id: o.target_id, name, type: o.target_type })}
@@ -257,11 +271,11 @@ function PermissionsTab({ channel, serverId }: { channel: Channel; serverId: str
 
 // ─── Modal principale ─────────────────────────────────────────────────────────
 
-export default function ChannelSettingsModal({ channel, serverId, onClose }: Props) {
+export default function ChannelSettingsModal({ channel, serverId, onClose, initialTab, initialTarget }: Props) {
   const t = useT()
   useEscapeKey(onClose)
   const qc = useQueryClient()
-  const [tab, setTab] = useState<TabId>('general')
+  const [tab, setTab] = useState<TabId>(initialTab ?? 'general')
   const { canEditChannels, canDeleteChannel } = useServerPerms(serverId)
   const [deleting, setDeleting] = useState(false)
 
@@ -595,7 +609,7 @@ export default function ChannelSettingsModal({ channel, serverId, onClose }: Pro
           {/* ─── PERMISSIONS ─── */}
           {tab === 'permissions' && (
             <div className="h-[400px]">
-              <PermissionsTab channel={channel} serverId={serverId} />
+              <PermissionsTab channel={channel} serverId={serverId} initialTarget={initialTarget} />
             </div>
           )}
 
