@@ -106,6 +106,8 @@ export const messagesApi = {
     ref: ConversationRef,
     input: {
       content: string | null; replyTo?: string | null; hasAttachments?: boolean; expiresInSeconds?: number | null; files?: FileEntry[]
+      /** Réponse dans un salon : false = l'auteur cité n'est pas notifié (champ reply_ping du serveur). */
+      replyPing?: boolean
       /** MP : carte de support à distance, dans le contenu chiffré (`rs`). */
       support?: SupportPayload
     },
@@ -115,6 +117,7 @@ export const messagesApi = {
       has_attachments: input.hasAttachments ?? false,
       // Messages éphémères : seuls les salons les gèrent côté serveur (comme le web).
       ...(ref.kind === 'channel' && input.expiresInSeconds ? { expires_at_seconds: input.expiresInSeconds } : {}),
+      ...(ref.kind === 'channel' && input.replyTo && input.replyPing === false ? { reply_ping: false } : {}),
     }
     if (ref.kind === 'channel') return sendChannel(ref, input.content ?? '', extra, input.files)
     const conv = e2eConv(ref)

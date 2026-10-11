@@ -26,6 +26,7 @@ import {
 import { AttachmentUploadError } from './sendErrors'
 import { e2eErrorText } from '@/e2e/conversations'
 import { useAccountKey } from '@/e2e/accountKey'
+import { outgoingText, useUxPrefs } from '@/stores/uxPrefs'
 
 /** Erreur de chiffrement (clé en attente, verrouillée, appli à mettre à jour) en texte lisible. */
 const withE2EMessage = (e: unknown) => {
@@ -142,6 +143,8 @@ export function useConversation(ref: ConversationRef) {
   // ── Saisie ───────────────────────────────────────────────────────────────
   const lastTyping = useRef(0)
   const notifyTyping = useCallback(() => {
+    // Saisie silencieuse (Réglages > Affichage et saisie) : rien n'est signalé.
+    if (useUxPrefs.getState().silentTyping) return
     const now = Date.now()
     if (now - lastTyping.current < 3000) return
     lastTyping.current = now
@@ -151,9 +154,10 @@ export function useConversation(ref: ConversationRef) {
 
   // ── Envoi ────────────────────────────────────────────────────────────────
   const send = useCallback(
-    async (content: string, opts: { replyTo?: ChatMessage | null; files?: LocalAttachment[]; expiresInSeconds?: number | null } = {}) => {
+    async (content: string, opts: { replyTo?: ChatMessage | null; files?: LocalAttachment[]; expiresInSeconds?: number | null; replyPing?: boolean } = {}) => {
       if (!me) return
-      const text = content.trim()
+      // Liens nettoyés et émoticônes converties sur l'appareil, AVANT le chiffrement.
+      const text = outgoingText(content.trim())
       const files = opts.files ?? []
       if (!text && files.length === 0) return
       if (text.length > LIMITS.messageMaxChars) throw new Error(`Message trop long (max ${LIMITS.messageMaxChars} caractères)`)
@@ -206,6 +210,7 @@ export function useConversation(ref: ConversationRef) {
         real = await messagesApi.send(stableRef, {
           content: text || null,
           replyTo: opts.replyTo?.id ?? null,
+          replyPing: opts.replyPing,
           hasAttachments: files.length > 0,
           expiresInSeconds: opts.expiresInSeconds ?? null,
           files: prepared.entries,

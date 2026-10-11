@@ -9,7 +9,7 @@ import { PipView } from '@/components/call/PipView'
 import { VideoStage } from '@/components/call/VideoStage'
 import type { CallTile } from '@/components/call/VideoTile'
 import { Sheet, type SheetAction } from '@/components/Sheet'
-import { PeerVolumeSheet } from '@/components/call/PeerVolumeSheet'
+import { openUserMenu } from '@/features/userMenu/UserMenuHost'
 import { usePeerVolumes } from '@/stores/peerVolumes'
 import { Button, ErrorState, PasswordField, type IconName } from '@/components/ui'
 import { errorMessage } from '@/lib/http'
@@ -26,13 +26,12 @@ import { confirmScreenShare, screenShareSupported } from '@/services/screenCaptu
 import { useAuth } from '@/stores/auth'
 import { useCall } from '@/stores/call'
 import { useGroupCall } from '@/stores/groupCall'
-import { useVoice, type VoicePeer } from '@/stores/voice'
+import { useVoice } from '@/stores/voice'
 import { useWatch } from '@/stores/watch'
 import { useT, type Key } from '@/i18n'
 import { colors, font, radius, spacing } from '@/theme'
 import { E2ECallBadge } from '@/e2e/E2ECallBadge'
 import { VoiceLotBanners } from '@/features/voice/VoiceLotBanners'
-import { openDmWith } from '@/features/friends/openDm'
 
 const REACTIONS = ['👍', '😂', '🎉', '❤️', '😮', '👏']
 const QUALITY_LABEL: Record<string, Key> = { poor: 'voice.weak', lost: 'voice.lost' }
@@ -47,7 +46,6 @@ export default function VoiceScreen() {
   // Vidéo ouverte en plein écran et tuile épinglée en grand (clés de tuile).
   const [open, setOpen] = useState<string | null>(null)
   const [pinned, setPinned] = useState<string | null>(null)
-  const [volumeOf, setVolumeOf] = useState<VoicePeer | null>(null)
   const volumes = usePeerVolumes((s) => s.volumes)
   const [more, setMore] = useState(false)
   const [sounds, setSounds] = useState(false)
@@ -164,10 +162,6 @@ export default function VoiceScreen() {
           ? QUALITY_LABEL[v.quality] && t(QUALITY_LABEL[v.quality]!)
           : undefined
 
-  // Support à distance avec ce participant : son MP, menu déplié (on reste dans le salon).
-  const volumeExtra: SheetAction[] = volumeOf
-    ? [{ label: t('rs.button'), icon: 'help-buoy-outline', onPress: () => void openDmWith(volumeOf.userId, volumeOf.username, true) }]
-    : []
   const moreActions: SheetAction[] = [
     { label: t(v.handRaised ? 'voice.lowerHand' : 'voice.raiseHand'), icon: 'hand-left-outline', onPress: v.toggleHand },
     ...(v.video ? [{ label: t('voice.switchCamera'), icon: 'camera-reverse' as IconName, onPress: v.switchCamera }] : []),
@@ -229,7 +223,6 @@ export default function VoiceScreen() {
     <View style={{ flex: 1, backgroundColor: colors.bgDeep }}>
       {header}
       {route.sheet}
-      <PeerVolumeSheet peer={volumeOf ? { userId: volumeOf.userId, name: volumeOf.username } : null} onClose={() => setVolumeOf(null)} extra={volumeExtra} />
       <Sheet visible={more} onClose={() => setMore(false)} actions={moreActions} />
       {here ? <SoundboardSheet serverId={ids.serverId} canManage={perms.has(PERM.MANAGE_SERVER)} visible={sounds} onClose={() => setSounds(false)} /> : null}
       {!here ? (
@@ -291,7 +284,8 @@ export default function VoiceScreen() {
                 onOpen={setOpen}
                 onLongPress={(tile) => {
                   const peer = tile.self || tile.screen ? undefined : v.peers.find((p) => p.userId === tile.userId)
-                  if (peer) setVolumeOf(peer)
+                  // Menu de la personne (volume, support à distance via son MP, profil…).
+                  if (peer) openUserMenu({ userId: peer.userId, name: peer.username, avatar: peer.avatar, serverId: ids.serverId, volume: true })
                 }}
               />
               <View style={styles.reactions}>

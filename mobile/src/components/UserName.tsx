@@ -36,6 +36,7 @@ export function StyledName({
   tag,
   numberOfLines = 1,
   onPress,
+  onLongPress,
 }: {
   text: string
   resolved: ResolvedName | null
@@ -43,6 +44,8 @@ export function StyledName({
   tag?: string | null
   numberOfLines?: number
   onPress?: () => void
+  /** Menu de la personne (features/userMenu). */
+  onLongPress?: () => void
 }) {
   const cs = resolved?.colors ?? []
   const body = cs.length > 1 ? gradientChars(text, cs).map((c, i) => (
@@ -56,6 +59,7 @@ export function StyledName({
         style={[style, cs.length === 1 && { color: cs[0] }, resolved?.font ? FONTS[resolved.font] : null, resolved ? effectStyle(resolved.effect, cs[0]) : null]}
         numberOfLines={numberOfLines}
         onPress={onPress}
+        onLongPress={onLongPress}
         accessibilityLabel={text}
       >
         {body}
@@ -88,6 +92,7 @@ export function UserName({
   showTag,
   numberOfLines,
   onPress,
+  onLongPress,
 }: {
   userId?: string
   /** Nom connu du contexte (pseudo), affiché tant que le cache n'a rien. */
@@ -101,6 +106,7 @@ export function UserName({
   showTag?: boolean
   numberOfLines?: number
   onPress?: () => void
+  onLongPress?: () => void
 }) {
   const info = useNameStyles((s) => (userId ? s.byId[userId] : undefined))
   useEffect(() => requestNameStyle(userId), [userId])
@@ -119,6 +125,7 @@ export function UserName({
       tag={showTag ? info?.profile_tag : null}
       numberOfLines={numberOfLines}
       onPress={onPress}
+      onLongPress={onLongPress}
     />
   )
 }

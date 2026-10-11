@@ -10,6 +10,8 @@ import { qk, queryClient } from '@/lib/queryClient'
 import { realtime, type RealtimeEvent } from '@/lib/realtime'
 import { hasPushToken, setupNotificationChannels } from '@/services/push'
 import { MESSAGE_CATEGORY } from '@/features/notifications/quickActions'
+import { forumPostWanted, useNotifCenter } from '@/features/notifications/notifCenter'
+import { useLocalPrefs } from '@/features/userMenu/localPrefs'
 import { openRaw } from '@/e2e/conversations'
 import { getMyId, registerSignOutHook, useAuth } from '@/stores/auth'
 import { useCall } from '@/stores/call'
@@ -108,6 +110,10 @@ function context() {
       const c = conv(id)
       return c?.is_group ? c.name : null
     },
+    forumAlert: forumPostWanted,
+    isIgnored: (userId: string) => (useLocalPrefs.getState().byUser[getMyId() ?? '']?.ignored ?? []).includes(userId),
+    channelName: (serverId: string, channelId: string) =>
+      queryClient.getQueryData<{ id: string; name: string }[]>(qk.channels(serverId))?.find((c) => c.id === channelId)?.name ?? null,
   }
 }
 
@@ -125,10 +131,12 @@ export function bindKeepAlive(): () => void {
       : mention && typeof mention.channel_id === 'string'
         ? { ...e, mention: await openRaw('channel', mention.channel_id, mention) }
         : e
+    // Post de forum (rare, sans push serveur) : réglages du centre de notifications relus à chaque fois.
+    if (e.type === 'FORUM_POST_CREATE') await useNotifCenter.getState().fetch().catch(() => undefined)
     const n = noticeFor(ev, context())
     if (n) show(n, 'messages')
   }
-  const offs = ['DM_MESSAGE', 'GROUP_DM_MESSAGE', 'MENTION_CREATE'].map((t) => realtime.on(t, onMessage))
+  const offs = ['DM_MESSAGE', 'GROUP_DM_MESSAGE', 'MENTION_CREATE', 'FORUM_POST_CREATE'].map((t) => realtime.on(t, onMessage))
 
   // Appels entrants : l'écran d'appel existe déjà (Overlays) ; la notification le rend visible et
   // le toucher rouvre l'app dessus (kind « call » : aucune navigation).

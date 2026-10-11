@@ -6,6 +6,8 @@
  * - groupe : chaque message (sourdine du groupe respectée) ;
  * - salon : seulement MENTION_CREATE avec `notify` (le serveur y applique déjà sourdines de
  *   serveur/salon, niveaux de notification, @everyone/@here/rôles, réponses et Ne pas déranger).
+ * - nouveau post de forum (FORUM_POST_CREATE, sans push serveur) : décidé ici par `forumAlert`
+ *   (centre de notifications : salon > catégorie > serveur, sourdines, « posts de forum »).
  * En plus, comme le web : mode focus et heures calmes coupent tout.
  */
 
@@ -23,6 +25,12 @@ export interface NotifyContext {
   isMuted: (conversationId: string) => boolean
   /** Nom d'un groupe d'après les conversations en cache. */
   groupName: (groupId: string) => string | null
+  /** Nouveau post de forum à signaler (features/notifications/notifCenter.forumPostWanted). */
+  forumAlert?: (channelId: string, serverId: string) => boolean
+  /** Personne ignorée (menu utilisateur, sur cet appareil) : jamais d'alerte, comme le web. */
+  isIgnored?: (userId: string) => boolean
+  /** Nom d'un salon d'après le cache du serveur. */
+  channelName?: (serverId: string, channelId: string) => string | null
 }
 
 export interface LocalNotice {
@@ -58,7 +66,7 @@ export function noticeFor(e: { type: string; [k: string]: unknown }, c: NotifyCo
     const m = obj(e.message)
     if (!id || !m || c.dnd || c.isMuted(id)) return null
     const sender = str(m.sender_username) ?? t('store.notify.someone')
-    if (!str(m.sender_id) || m.sender_id === c.myId) return null
+    if (!str(m.sender_id) || m.sender_id === c.myId || c.isIgnored?.(m.sender_id as string)) return null
     if (!group) {
       return {
         id: `msg:${id}`,
@@ -79,13 +87,29 @@ export function noticeFor(e: { type: string; [k: string]: unknown }, c: NotifyCo
     if (e.notify !== true || !m) return null
     const serverId = str(m.server_id)
     const channelId = str(m.channel_id)
-    if (!serverId || !channelId || m.author_id === c.myId) return null
+    if (!serverId || !channelId || m.author_id === c.myId || (str(m.author_id) && c.isIgnored?.(m.author_id as string))) return null
     const author = str(m.author_username) ?? t('store.notify.someone')
     return {
       id: `msg:${channelId}`,
       title: `${str(m.server_name) ?? t('store.notify.server')} · #${str(m.channel_name) ?? t('store.voice.channel')}`,
       body: c.preview ? t('store.notify.preview', { name: author, text: clip(m.content) }) : t('store.notify.mentioned', { name: author }),
       data: { kind: 'channel', server_id: serverId, channel_id: channelId, ...msgId(m.message_id) },
+    }
+  }
+  if (e.type === 'FORUM_POST_CREATE') {
+    const p = obj(e.post)
+    const serverId = str(e.server_id)
+    const channelId = str(e.channel_id)
+    const postId = p && str(p.id)
+    if (!p || !serverId || !channelId || !postId || p.creator_id === c.myId || c.dnd || (str(p.creator_id) && c.isIgnored?.(p.creator_id as string))) return null
+    if (!c.forumAlert?.(channelId, serverId)) return null
+    // Titre chiffré : vide côté serveur, on n'affiche que le salon.
+    const title = str(p.title)
+    return {
+      id: `forum:${postId}`,
+      title: t('ux.nc.forumPost', { channel: c.channelName?.(serverId, channelId) ?? 'forum' }),
+      body: c.preview && title ? clip(title) : '',
+      data: { kind: 'forum', server_id: serverId, channel_id: channelId, post_id: postId },
     }
   }
   return null

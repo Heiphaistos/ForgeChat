@@ -13,6 +13,7 @@ import { autoThreadTitle } from '@/features/chat/messaging'
 import { PERM } from '@/features/servers/perms'
 import { useServerPerms } from '@/features/servers/menus'
 import { useAuth } from '@/stores/auth'
+import { outgoingText } from '@/stores/uxPrefs'
 import { useT } from '@/i18n'
 import { errorMessage } from '@/lib/http'
 import { isUuid, useRouteParams } from '@/lib/params'
@@ -134,9 +135,11 @@ function ThreadConversation({ serverId, channelId, thread }: { serverId: string;
             .then(refresh)
             .catch((e) => Alert.alert(t('chat.reactFailed'), errorMessage(e)))
         }
-        onSend={(body, files) =>
+        onSend={(raw, files) => {
+          // Liens nettoyés et émoticônes converties sur l'appareil, avant le chiffrement.
+          const body = outgoingText(raw)
           // Fichiers chiffrés avant l'envoi (clés dans le message chiffré, §12).
-          withPreparedUploads('channel', channelId, files, (p) =>
+          return withPreparedUploads('channel', channelId, files, (p) =>
             sendWithAttachments(
               body,
               p.uploads,
@@ -145,7 +148,7 @@ function ThreadConversation({ serverId, channelId, thread }: { serverId: string;
               (id) => threadsApi.remove(serverId, channelId, thread.id, id),
             ),
           ).finally(refresh)
-        }
+        }}
         onEdit={(m, body) => threadsApi.edit(serverId, channelId, thread, m, body).then(refresh)}
         onDelete={(m) => threadsApi.remove(serverId, channelId, thread.id, m.id).then(refresh)}
         canModerate={canModerate}

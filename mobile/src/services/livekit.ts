@@ -160,6 +160,20 @@ function releaseScreenTrack(room: Room) {
   }
 }
 
+/** Résolution et images/s RÉELLEMENT envoyées pour le partage d'écran (statistiques WebRTC), null si inconnues. */
+export async function screenShareStats(room: Room | null): Promise<{ width: number; height: number; fps: number } | null> {
+  const track = room?.localParticipant.getTrackPublication(Track.Source.ScreenShare)?.track as
+    | { getSenderStats?: () => Promise<{ frameWidth?: number; frameHeight?: number; framesPerSecond?: number }[]> }
+    | undefined
+  try {
+    // Plusieurs couches (simulcast) : la plus grande.
+    const best = (await track?.getSenderStats?.())?.filter((s) => s.frameWidth).sort((a, b) => (b.frameWidth ?? 0) - (a.frameWidth ?? 0))[0]
+    return best?.frameWidth && best.frameHeight ? { width: best.frameWidth, height: best.frameHeight, fps: Math.round(best.framesPerSecond ?? 0) } : null
+  } catch {
+    return null
+  }
+}
+
 /** Arrête le partage d'écran ET libère la capture (MediaProjection, service, notification). */
 export async function stopScreenShare(room: Room) {
   const release = releaseScreenTrack(room)

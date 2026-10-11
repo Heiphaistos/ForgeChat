@@ -218,11 +218,14 @@ export function Row({
   danger,
   chevron,
   selected,
+  onLongPress,
 }: {
   icon?: IconName
   title: string
   subtitle?: string | null
   onPress?: () => void
+  /** Menu contextuel (ex. menu de la personne). */
+  onLongPress?: () => void
   right?: ReactNode
   danger?: boolean
   chevron?: boolean
@@ -231,8 +234,10 @@ export function Row({
 }) {
   return (
     <Pressable
-      disabled={!onPress}
+      disabled={!onPress && !onLongPress}
       onPress={onPress}
+      onLongPress={onLongPress}
+      delayLongPress={onLongPress ? 300 : undefined}
       accessibilityRole={onPress ? 'button' : undefined}
       // Libellé explicite : sinon Android lit aussi les glyphes des icônes.
       accessibilityLabel={onPress ? [title, subtitle].filter(Boolean).join(', ') : undefined}

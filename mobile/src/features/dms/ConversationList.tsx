@@ -2,20 +2,22 @@ import { Ionicons } from '@expo/vector-icons'
 import { useQuery } from '@tanstack/react-query'
 import { router } from 'expo-router'
 import { useMemo, useState } from 'react'
-import { Alert, FlatList, Pressable, RefreshControl, StyleSheet, Text, TextInput, View } from 'react-native'
+import { FlatList, Pressable, RefreshControl, StyleSheet, Text, TextInput, View } from 'react-native'
 import { dmsApi } from '@/api/dms'
 import { Avatar } from '@/components/Avatar'
 import { UserName } from '@/components/UserName'
-import { Sheet } from '@/components/Sheet'
 import { Badge, EmptyState, ErrorState, IconButton, Loading } from '@/components/ui'
 import { formatShort, unreadLabel } from '@/lib/format'
 import { useT } from '@/i18n'
 import { errorMessage } from '@/lib/http'
-import { qk, queryClient } from '@/lib/queryClient'
+import { qk } from '@/lib/queryClient'
 import { useUnread } from '@/stores/unread'
+import { openConvMenu } from '@/features/userMenu/UserMenuHost'
+import { useMyLocalPrefs } from '@/features/userMenu/localPrefs'
+import { pinnedFirst, stillClosed } from '@/features/userMenu/model'
 import type { ConversationSummary } from '@/types/models'
 import { colors, font, radius, spacing } from '@/theme'
-import { applyConversationSettings, conversationName, filterConversations } from './conversations'
+import { conversationName, filterConversations } from './conversations'
 
 const nameOf = conversationName
 
@@ -31,19 +33,15 @@ export function ConversationList() {
   const counts = useUnread((s) => s.counts)
   const [search, setSearch] = useState('')
   const [showArchived, setShowArchived] = useState(false)
-  const [selected, setSelected] = useState<ConversationSummary | null>(null)
+  const local = useMyLocalPrefs()
 
-  const { items, archivedCount } = useMemo(() => filterConversations(q.data ?? [], search, showArchived), [q.data, search, showArchived])
-
-  // Sourdine / archivage (PATCH /dms/:id/settings, DM et groupes) : mise à jour optimiste.
-  const updateSettings = (c: ConversationSummary, patch: { muted?: boolean; archived?: boolean }) => {
-    const previous = queryClient.getQueryData<ConversationSummary[]>(qk.conversations)
-    if (previous) queryClient.setQueryData(qk.conversations, applyConversationSettings(previous, c.id, patch))
-    dmsApi.setSettings(c.id, patch).catch((e) => {
-      if (previous) queryClient.setQueryData(qk.conversations, previous)
-      Alert.alert(t('common.actionFailed'), errorMessage(e))
-    })
-  }
+  // Épinglées en haut ; fermées masquées jusqu'au prochain message (le serveur ux-menus le fait aussi).
+  const { items, archivedCount } = useMemo(() => {
+    const visible = (q.data ?? []).filter((c) => !stillClosed(local.closed[c.id], c.last_message_at))
+    const r = filterConversations(visible, search, showArchived)
+    const pinned = (c: ConversationSummary) => (c as { is_pinned?: boolean }).is_pinned ?? local.pinned.includes(c.id)
+    return { ...r, items: pinnedFirst(r.items, pinned) }
+  }, [q.data, search, showArchived, local])
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.bgAlt }}>
@@ -104,7 +102,8 @@ export function ConversationList() {
             return (
               <Pressable
                 onPress={() => open(item)}
-                onLongPress={() => setSelected(item)}
+                onLongPress={() => openConvMenu(item)}
+                delayLongPress={300}
                 style={({ pressed }) => [styles.row, pressed && { backgroundColor: colors.bgHover }]}
                 accessibilityRole="button"
                 accessibilityLabel={`${t('dms.with', { name })}${unread ? `, ${unreadLabel(unread)}` : ''}`}
@@ -153,27 +152,6 @@ export function ConversationList() {
           contentContainerStyle={{ paddingBottom: spacing.xl }}
         />
       )}
-      <Sheet
-        visible={!!selected}
-        onClose={() => setSelected(null)}
-        title={selected ? nameOf(selected) : undefined}
-        actions={
-          selected
-            ? [
-                {
-                  label: t(selected.is_muted ? 'dms.unmute' : 'dms.mute'),
-                  icon: selected.is_muted ? 'notifications-outline' : 'notifications-off-outline',
-                  onPress: () => updateSettings(selected, { muted: !selected.is_muted }),
-                },
-                {
-                  label: t(selected.is_archived ? 'dms.unarchive' : 'dms.archive'),
-                  icon: 'archive-outline',
-                  onPress: () => updateSettings(selected, { archived: !selected.is_archived }),
-                },
-              ]
-            : []
-        }
-      />
     </View>
   )
 }

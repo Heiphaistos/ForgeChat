@@ -144,6 +144,8 @@ interface VoiceState {
 }
 
 let room: Room | null = null
+/** Salle LiveKit du salon vocal (statistiques du partage d'écran, components/Overlays). */
+export const voiceRoom = () => room
 let roomName: string | null = null
 // Volume par personne réglé ailleurs (salon, MP, groupe) : appliqué tout de suite ici aussi.
 usePeerVolumes.subscribe(() => applyPeerVolumes(room))

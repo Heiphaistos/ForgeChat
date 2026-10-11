@@ -13,9 +13,19 @@ import { mediaKind } from './media'
 import { AudioAttachment, VideoAttachment } from './MediaPlayers'
 import VoiceTranscript from '@/features/ai/VoiceTranscript'
 import type { FileEntry } from '@/e2e/crypto'
-import { AUTO_DECRYPT_MAX, decryptToCache, displayAttachments, saveToDevice, type DisplayAttachment } from '@/e2e/files'
+import { AUTO_DECRYPT_MAX, decryptToCache, displayAttachments, saveAttachmentAs, type DisplayAttachment } from '@/e2e/files'
 
 const isLocal = (url: string) => /^(file|content|ph|assets-library):/.test(url)
+
+type Viewed = { uri: string; name: string; mime: string }
+
+/** « Enregistrer sous » (dossier au choix sur Android, feuille de partage sur iOS). */
+function saveAs(v: Viewed, t: ReturnType<typeof useT>) {
+  void saveAttachmentAs(v.uri, v.name, v.mime).then(
+    (ok) => ok && Alert.alert(t('e2e.file.saved')),
+    () => Alert.alert(t('e2e.file.saveFailed')),
+  )
+}
 
 function sourceOf(a: Attachment): string | null {
   if (isLocal(a.url)) return a.url // aperçu pendant l'envoi
@@ -57,7 +67,7 @@ function useDecrypted(list: DisplayAttachment[]) {
  * `files` : fichiers chiffrés décrits dans le message déchiffré (clés).
  */
 export function Attachments({ items: raw, files: entries, pending, onLongPress }: { items: Attachment[]; files?: FileEntry[]; pending?: boolean; onLongPress?: () => void }) {
-  const [viewer, setViewer] = useState<string | null>(null)
+  const [viewer, setViewer] = useState<Viewed | null>(null)
   const t = useT()
   const display = useMemo(() => displayAttachments(raw, entries), [raw, entries])
   const { stateOf, open } = useDecrypted(display)
@@ -92,7 +102,7 @@ export function Attachments({ items: raw, files: entries, pending, onLongPress }
             return (
               <Pressable
                 key={a.id}
-                onPress={() => !pending && setViewer(src)}
+                onPress={() => !pending && setViewer({ uri: src, name: a.filename, mime: a.content_type })}
                 onLongPress={onLongPress}
                 delayLongPress={300}
                 accessibilityRole="imagebutton"
@@ -169,12 +179,7 @@ export function Attachments({ items: raw, files: entries, pending, onLongPress }
             style={styles.file}
             disabled={!src || pending || (isLocal(a.url) && !local)}
             onPress={() =>
-              local
-                ? void saveToDevice(a.url, a.filename, a.content_type).then(
-                    (ok) => ok && Alert.alert(t('e2e.file.saved')),
-                    () => Alert.alert(t('e2e.file.saveFailed')),
-                  )
-                : src && void openExternalUrl(src)
+              local ? saveAs({ uri: a.url, name: a.filename, mime: a.content_type }, t) : src && void openExternalUrl(src)
             }
             onLongPress={onLongPress}
             delayLongPress={300}
@@ -188,17 +193,29 @@ export function Attachments({ items: raw, files: entries, pending, onLongPress }
               </Text>
               <Text style={styles.fileMeta}>{pending ? t('panel.att.sending') : formatBytes(a.size)}</Text>
             </View>
-            {!pending ? <Ionicons name={local ? 'download-outline' : 'open-outline'} size={18} color={colors.textMuted} /> : null}
+            {pending ? null : local ? (
+              <Ionicons name="download-outline" size={18} color={colors.textMuted} />
+            ) : (
+              <Pressable
+                onPress={() => saveAs({ uri: a.url, name: a.filename, mime: a.content_type }, t)}
+                hitSlop={10}
+                accessibilityRole="button"
+                accessibilityLabel={t('ux.save.as', { name: a.filename })}
+              >
+                <Ionicons name="download-outline" size={20} color={colors.textMuted} />
+              </Pressable>
+            )}
           </Pressable>
         )
       })}
 
-      <Lightbox uri={viewer} onClose={() => setViewer(null)} />
+      <Lightbox viewed={viewer} onClose={() => setViewer(null)} />
     </View>
   )
 }
 
-function Lightbox({ uri, onClose }: { uri: string | null; onClose: () => void }) {
+function Lightbox({ viewed, onClose }: { viewed: Viewed | null; onClose: () => void }) {
+  const uri = viewed?.uri ?? null
   const insets = useSafeAreaInsets()
   const t = useT()
   return (
@@ -214,6 +231,17 @@ function Lightbox({ uri, onClose }: { uri: string | null; onClose: () => void })
         >
           <Ionicons name="close" size={28} color="#fff" />
         </Pressable>
+        {viewed ? (
+          <Pressable
+            onPress={() => saveAs(viewed, t)}
+            style={[styles.close, { top: insets.top + spacing.md, right: undefined, left: spacing.lg }]}
+            accessibilityRole="button"
+            accessibilityLabel={t('ux.save.as', { name: viewed.name })}
+            hitSlop={12}
+          >
+            <Ionicons name="download-outline" size={26} color="#fff" />
+          </Pressable>
+        ) : null}
       </View>
     </Modal>
   )

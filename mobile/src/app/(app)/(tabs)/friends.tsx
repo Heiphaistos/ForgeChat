@@ -11,6 +11,7 @@ import { friendSections } from '@/features/social/friendSections'
 import { Avatar } from '@/components/Avatar'
 import { EmptyState, ErrorState, IconButton, Loading } from '@/components/ui'
 import { openDmWith } from '@/features/friends/openDm'
+import { openUserMenu } from '@/features/userMenu/UserMenuHost'
 import { useT, type Key } from '@/i18n'
 import { errorMessage } from '@/lib/http'
 import { qk, queryClient } from '@/lib/queryClient'
@@ -149,7 +150,13 @@ export default function FriendsScreen() {
           }
           renderSectionHeader={({ section }) => (section.title ? <Text style={styles.section}>{section.title} — {section.data.length}</Text> : null)}
           renderItem={({ item }) => (
-            <Pressable style={styles.row} onPress={() => router.push(`/user/${item.friend_id}`)} accessibilityRole="button">
+            <Pressable
+              style={styles.row}
+              onPress={() => router.push(`/user/${item.friend_id}`)}
+              onLongPress={() => openUserMenu({ userId: item.friend_id, name: item.custom_nickname || item.username, avatar: item.avatar })}
+              delayLongPress={300}
+              accessibilityRole="button"
+            >
               <Avatar uri={item.avatar} name={item.username} userId={item.friend_id} status={item.user_status} showStatus={item.direction === 'accepted'} size={42} />
               <View style={{ flex: 1 }}>
                 <Text style={styles.name} numberOfLines={1}>

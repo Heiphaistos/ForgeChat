@@ -91,9 +91,11 @@ export default function YouScreen() {
         <Row icon="lock-closed-outline" title={t('you.privacy')} onPress={() => router.push('/settings/privacy')} chevron />
         <Row icon="phone-portrait-outline" title={t('you.sessions')} onPress={() => router.push('/settings/sessions')} chevron />
         <Row icon="notifications-outline" title={t('you.notifications')} onPress={() => router.push('/settings/notifications')} chevron />
+        <Row icon="options-outline" title={t('ux.nc.open')} subtitle={t('ux.nc.openDesc')} onPress={() => router.push('/notifications')} chevron />
         <Row icon="mic-outline" title={t('voiceLot.title')} onPress={() => router.push('/settings/voice')} chevron />
         <Row icon="sparkles-outline" title={t('ai.title')} onPress={() => router.push('/settings/ai')} chevron />
         <Row icon="color-palette-outline" title={t('you.appearance')} onPress={() => router.push('/settings/appearance')} chevron />
+        <Row icon="text-outline" title={t('ux.display.title')} subtitle={t('ux.display.subtitle')} onPress={() => router.push('/settings/display')} chevron />
       </Section>
 
       {DevInfoRow ? (

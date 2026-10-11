@@ -1,5 +1,6 @@
 import { Ionicons } from '@expo/vector-icons'
-import { Tabs } from 'expo-router'
+import { Tabs, router } from 'expo-router'
+import { Pressable } from 'react-native'
 import { useUi } from '@/stores/ui'
 import { directUnread, useUnread } from '@/stores/unread'
 import { useQuery } from '@tanstack/react-query'
@@ -59,6 +60,12 @@ export default function TabsLayout() {
           title: t('tabs.mentions'),
           tabBarAccessibilityLabel: t('tabs.mentions'),
           tabBarIcon: ({ color }) => <Ionicons name="at" size={22} color={color} />,
+          // Centre de notifications, à portée depuis la navigation principale (comme la cloche du web).
+          headerRight: () => (
+            <Pressable onPress={() => router.push('/notifications')} accessibilityRole="button" accessibilityLabel={t('ux.nc.open')} hitSlop={10} style={{ paddingHorizontal: 16 }}>
+              <Ionicons name="options-outline" size={22} color={colors.text} />
+            </Pressable>
+          ),
         }}
       />
       <Tabs.Screen

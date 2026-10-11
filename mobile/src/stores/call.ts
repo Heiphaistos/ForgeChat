@@ -93,6 +93,8 @@ interface CallState {
 }
 
 let room: Room | null = null
+/** Salle LiveKit de l'appel (statistiques du partage d'écran, components/Overlays). */
+export const callRoom = () => room
 // Volume par personne réglé ailleurs (salon, MP, groupe) : appliqué tout de suite ici aussi.
 usePeerVolumes.subscribe(() => applyPeerVolumes(room))
 let ringTimeout: ReturnType<typeof setTimeout> | null = null

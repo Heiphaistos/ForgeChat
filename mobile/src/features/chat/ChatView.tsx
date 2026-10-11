@@ -493,7 +493,7 @@ ${t('e2e.report.notice')}` : t('chat.reportReason'), [
             onSend={async (text, files, opts) => {
               const reply = replyTo
               setReplyTo(null)
-              await conv.send(text, { replyTo: reply, files, expiresInSeconds: opts?.expiresInSeconds ?? null })
+              await conv.send(text, { replyTo: reply, files, expiresInSeconds: opts?.expiresInSeconds ?? null, replyPing: opts?.replyPing })
             }}
             onEdit={conv.edit}
             onTyping={conv.notifyTyping}

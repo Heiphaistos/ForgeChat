@@ -13,10 +13,18 @@ import { SEARCH_DEBOUNCE_MS, fromIndexed, mergeIndexed, searchQuery, withLocalRe
 import { searchLocal } from '@/e2e/searchIndex'
 import { flattenNewestFirst, messagesKey, type MessagesData } from '@/features/chat/cache'
 import { formatShort } from '@/lib/format'
-import { t as tr, useT } from '@/i18n'
+import { t as tr, useT, type Key } from '@/i18n'
 import { errorMessage } from '@/lib/http'
 import { qk, queryClient } from '@/lib/queryClient'
 import { colors, font, radius, spacing } from '@/theme'
+
+type Where = 'all' | 'dms' | 'servers'
+const WHERE: { id: Where; label: Key }[] = [
+  { id: 'all', label: 'ux.search.all' },
+  { id: 'dms', label: 'ux.search.dms' },
+  { id: 'servers', label: 'ux.search.servers' },
+]
+const LOCAL_KINDS: Record<Where, ('dm' | 'group' | 'channel')[] | undefined> = { all: undefined, dms: ['dm', 'group'], servers: ['channel'] }
 
 type Item = { kind: 'message'; v: SearchMessage } | { kind: 'user'; v: SearchUser } | { kind: 'channel'; v: SearchChannel }
 
@@ -53,6 +61,8 @@ export default function SearchScreen() {
   const scopeId = scope ? conversationId(scope) : ''
   const t = useT()
   const [input, setInput] = useState('')
+  // Portée sans conversation : partout, tous les MP et groupes, ou les salons de serveur (comme le web).
+  const [place, setPlace] = useState<Where>('all')
   const [debounced, setDebounced] = useState<string | null>(null)
   useEffect(() => {
     const timer = setTimeout(() => setDebounced(searchQuery(input)), SEARCH_DEBOUNCE_MS)
@@ -60,11 +70,11 @@ export default function SearchScreen() {
   }, [input])
 
   const results = useQuery({
-    queryKey: [...qk.search(debounced ?? ''), scopeId],
+    queryKey: [...qk.search(debounced ?? ''), scopeId, place],
     queryFn: async ({ signal }) => {
-      const r = await searchApi.global(debounced!, signal, scope)
+      const r = await searchApi.global(debounced!, signal, scope, scope ? 'all' : place)
       // Index local des messages déchiffrés sur cet appareil (le texte ne part jamais au serveur).
-      const indexed = (await searchLocal(debounced!, scopeId || undefined)).flatMap((m) => fromIndexed(m) ?? [])
+      const indexed = (await searchLocal(debounced!, scopeId || undefined, scope ? undefined : LOCAL_KINDS[place])).flatMap((m) => fromIndexed(m) ?? [])
       // Salon où je chiffre : le serveur ne cherche que les messages en clair (et par métadonnées).
       if (!scope || (scope.kind === 'channel' && !(await mustEncrypt('channel', scope.channelId).catch(() => false))))
         return { ...r, local: false, messages: mergeIndexed(r.messages, indexed) }
@@ -107,6 +117,21 @@ export default function SearchScreen() {
         />
         {results.isFetching ? <ActivityIndicator size="small" color={colors.textMuted} /> : null}
       </View>
+      {scope ? null : (
+        <View style={styles.chips} accessibilityRole="radiogroup" accessibilityLabel={t('ux.search.scope')}>
+          {WHERE.map((w) => (
+            <Pressable
+              key={w.id}
+              onPress={() => setPlace(w.id)}
+              accessibilityRole="radio"
+              accessibilityState={{ checked: place === w.id }}
+              style={[styles.chip, place === w.id && styles.chipOn]}
+            >
+              <Text style={[styles.chipText, place === w.id && { color: colors.text }]}>{t(w.label)}</Text>
+            </Pressable>
+          ))}
+        </View>
+      )}
       {debounced && results.data?.local ? <Text style={styles.notice}>{t('e2e.search.channelLocal')}</Text> : null}
       {!debounced ? (
         <EmptyState
@@ -178,6 +203,10 @@ export default function SearchScreen() {
 }
 
 const styles = StyleSheet.create({
+  chips: { flexDirection: 'row', gap: spacing.sm, paddingHorizontal: spacing.md, paddingBottom: spacing.sm },
+  chip: { paddingHorizontal: spacing.md, paddingVertical: 4, borderRadius: radius.full, borderWidth: 1, borderColor: colors.border },
+  chipOn: { borderColor: colors.primary, backgroundColor: colors.bgHover },
+  chipText: { color: colors.textMuted, fontSize: font.sm },
   search: {
     flexDirection: 'row',
     alignItems: 'center',
