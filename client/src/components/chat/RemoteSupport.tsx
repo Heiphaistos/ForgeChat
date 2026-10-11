@@ -8,11 +8,12 @@ import toast from 'react-hot-toast'
 import api from '../../api/client'
 import { useChat } from '../../store/chat'
 import { useAuth } from '../../store/auth'
-import { useT, t as tr } from '../../i18n'
+import { useT, t as tr, type Key } from '../../i18n'
 import type { ContextMenuItem } from '../ui/ContextMenu'
+import { confirm } from '../ui/ConfirmModal'
 import {
-  GHD_SITE, connectLink, expired, formatCode, formatId, invite, isDeviceId, newCode, parseSupport, shareLink, webViewerLink,
-  type SupportPayload,
+  GHD_WINDOWS_DOWNLOAD, canHostGhd, connectLink, expired, formatCode, formatId, invite, isDeviceId, newCode, parseSupport,
+  shareLink, webViewerLink, type SupportPayload,
 } from '../../lib/remoteSupport'
 
 type Sender = (rs: SupportPayload) => Promise<void>
@@ -28,22 +29,44 @@ export function useSupportSender(dmId: string | undefined, send: Sender) {
 }
 
 const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
+/** Partager son écran (être aidé) : agent GhostHandDesk, Windows seulement. Aider : partout (visionneuse web). */
+const canHost = canHostGhd(typeof navigator === 'undefined' ? '' : navigator.userAgent)
 const ID_KEY = 'fc_ghd_id'
 const savedId = () => { try { return localStorage.getItem(ID_KEY) ?? '' } catch { return '' } }
 
-/** Ouvre un lien ghosthanddesk:// (appli) ou https (navigateur), y compris depuis l'appli de bureau. */
-async function openExternal(url: string) {
-  // Lien d'application : confirmation explicite avant de lancer un programme local.
-  if (url.startsWith('ghosthanddesk:') && !window.confirm(tr('rs.confirmOpen'))) return
-  if (!/^(https:|ghosthanddesk:)/.test(url)) return
+async function tauri<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
+  const { invoke } = await import('@tauri-apps/api/core')
+  return invoke<T>(cmd, args)
+}
+
+/**
+ * Page https (visionneuse web, téléchargement) : onglet du navigateur, ou navigateur du système
+ * depuis l'appli de bureau (qui refuse les nouvelles fenêtres). Navigateur : à appeler dans le
+ * clic lui-même (aucun `await` avant), sinon la fenêtre est bloquée comme popup.
+ */
+async function openWeb(url: string) {
+  if (!url.startsWith('https://')) return
+  if (!isTauri) { window.open(url, '_blank', 'noopener,noreferrer'); return }
+  await tauri('plugin:shell|open', { path: url }).catch(() => toast.error(tr('rs.openFailed')))
+}
+
+/**
+ * Lance GhostHandDesk par un lien `ghosthanddesk://`, avec toujours un retour visible : un lien
+ * sans appli inscrite est ignoré en silence par le navigateur, et échoue (ou n'aboutit à rien)
+ * dans l'appli de bureau. Celle-ci sait si GhostHandDesk est installé : false = absent.
+ */
+async function launchGhd(url: string, missing: Key = 'rs.notInstalled'): Promise<boolean> {
+  if (!/^ghosthanddesk:\/\/(share|connect)\?/.test(url)) return false
   if (isTauri) {
-    const { invoke } = await import('@tauri-apps/api/core')
-    await invoke('plugin:shell|open', { path: url })
-  } else if (url.startsWith('ghosthanddesk:')) {
-    window.location.href = url
+    // Ancienne appli de bureau sans la commande : on tente l'ouverture quand même.
+    const installed = await tauri<boolean>('ghd_installed').catch(() => true)
+    const opened = installed && await tauri('plugin:shell|open', { path: url }).then(() => true, () => false)
+    if (!opened) { toast.error(tr(missing), { id: 'ghd', duration: 8000 }); return false }
   } else {
-    window.open(url, '_blank', 'noopener,noreferrer')
+    window.location.href = url
   }
+  toast(tr('rs.opening'), { id: 'ghd', duration: 8000 })
+  return true
 }
 
 async function send(dmId: string, rs: SupportPayload) {
@@ -53,12 +76,56 @@ async function send(dmId: string, rs: SupportPayload) {
   try { await s(rs) } catch { /* déjà signalé */ }
 }
 
-/** Hôte : arme le code dans GhostHandDesk puis envoie l'invitation (identifiant + code) chiffrée. */
-async function startHosting(dmId: string, id: string, ref?: string) {
+/** Code armé dans GhostHandDesk (le lien `share` ouvre l'appli, qui affiche l'identifiant). */
+interface Armed { code: string; at: number }
+function arm(code = newCode()): Armed {
+  void launchGhd(shareLink(code))
+  return { code, at: Date.now() }
+}
+
+/** Hôte : envoie l'invitation (identifiant + code déjà armé) chiffrée. */
+async function startHosting(dmId: string, id: string, armed: Armed, ref?: string) {
   try { localStorage.setItem(ID_KEY, id) } catch { /* préférence non mémorisée */ }
-  const code = newCode()
-  openExternal(shareLink(code)).catch(() => {})
-  await send(dmId, invite(id, code, Date.now(), ref))
+  await send(dmId, invite(id, armed.code, armed.at, ref))
+}
+
+/**
+ * Personne aidée : GhostHandDesk vient d'être lancé avec un code ; elle recopie l'identifiant
+ * qu'il affiche. Sans GhostHandDesk : téléchargement direct, puis relance automatique au
+ * retour dans ForgeChat. `armed` null = pas Windows, partage impossible : on l'explique.
+ */
+function HostSetup({ armed: first, onSubmit, onCancel }: { armed: Armed | null; onSubmit: (id: string, armed: Armed) => void; onCancel: () => void }) {
+  const t = useT()
+  const [armed, setArmed] = useState(first)
+  const [downloadedAt, setDownloadedAt] = useState(0)
+  const code = armed?.code
+  useEffect(() => {
+    if (!downloadedAt || !code) return
+    // Retour dans ForgeChat après avoir lancé le fichier téléchargé (pas le simple aller-retour de l'onglet).
+    const retry = () => { if (Date.now() - downloadedAt > 5000) { setDownloadedAt(0); setArmed(arm(code)) } }
+    window.addEventListener('focus', retry)
+    return () => window.removeEventListener('focus', retry)
+  }, [downloadedAt, code])
+  const btn = 'rounded px-3 py-1.5 text-xs font-medium transition'
+  if (!armed) {
+    return (
+      <div className="space-y-2">
+        <p className="text-xs text-fc-text">{t('rs.windowsOnly')}</p>
+        <button type="button" onClick={onCancel} className={`${btn} text-fc-muted hover:text-white`}>{t('rs.cancel')}</button>
+      </div>
+    )
+  }
+  return (
+    <div className="space-y-2">
+      <p className="text-xs text-fc-text">{t('rs.hostSteps')}</p>
+      <div className="flex flex-wrap gap-2">
+        <button type="button" className={`${btn} bg-fc-hover text-white`} onClick={() => setArmed(arm(armed.code))}>{t('rs.rearm')}</button>
+        <button type="button" className={`${btn} text-fc-accent hover:underline`}
+          onClick={() => { void openWeb(GHD_WINDOWS_DOWNLOAD); setDownloadedAt(Date.now()) }}>{t('rs.download')}</button>
+      </div>
+      <IdForm onCancel={onCancel} onSubmit={id => onSubmit(id, armed)} />
+    </div>
+  )
 }
 
 function IdForm({ onSubmit, onCancel }: { onSubmit: (id: string) => void; onCancel: () => void }) {
@@ -102,7 +169,8 @@ export function useRemoteSupportItem() {
 /** Bouton du MP (en-tête, ou barre d'appel avec `round`) : « Aider » ou « Demander de l'aide ». */
 export function RemoteSupportButton({ dmId, autoOpen = false, round = false }: { dmId: string; autoOpen?: boolean; round?: boolean }) {
   const t = useT()
-  const [open, setOpen] = useState<null | 'menu' | 'id'>(null)
+  const [open, setOpen] = useState<null | 'menu' | 'host'>(null)
+  const [armed, setArmed] = useState<Armed | null>(null)
   // Ouvert d'office quand on arrive par « Support à distance » (menu d'un membre, d'un ami…) ;
   // le paramètre est consommé pour qu'une nouvelle demande vers ce même MP le rouvre.
   const [params, setParams] = useSearchParams()
@@ -126,10 +194,10 @@ export function RemoteSupportButton({ dmId, autoOpen = false, round = false }: {
             <div className="flex flex-col">
               <button className="rounded px-2 py-2 text-left text-sm text-fc-text hover:bg-fc-hover"
                 onClick={() => { setOpen(null); send(dmId, { v: 1, k: 'offer' }) }}>{t('rs.help')}</button>
-              <button className="rounded px-2 py-2 text-left text-sm text-fc-text hover:bg-fc-hover" onClick={() => setOpen('id')}>{t('rs.ask')}</button>
+              <button className="rounded px-2 py-2 text-left text-sm text-fc-text hover:bg-fc-hover" onClick={() => { setArmed(canHost ? arm() : null); setOpen('host') }}>{t('rs.ask')}</button>
             </div>
           ) : (
-            <IdForm onCancel={() => setOpen(null)} onSubmit={id => { setOpen(null); startHosting(dmId, id) }} />
+            <HostSetup armed={armed} onCancel={() => setOpen(null)} onSubmit={(id, a) => { setOpen(null); void startHosting(dmId, id, a) }} />
           )}
         </div>
       )}
@@ -150,7 +218,8 @@ export function RemoteSupportCard({ msg, isOwn }: { msg: any; isOwn: boolean }) 
   // Réponses déjà échangées (accept / decline / invite en retour d'une offre).
   const replyKind = useChat(s => (s.messagesByChannel[dmId] ?? []).map(m => parseSupport(m.e2e_body?.rs)).find(r => r?.ref === cmid && r.k !== 'offer')?.k ?? null)
   const reply = replyKind ? { k: replyKind } : null
-  const [askId, setAskId] = useState(false)
+  // Offre acceptée : panneau hôte (false = fermé, null = pas Windows).
+  const [host, setHost] = useState<Armed | null | false>(false)
   const [used, setUsed] = useState(() => wasUsed(cmid))
   const [, tick] = useState(0)
   useEffect(() => {
@@ -168,12 +237,20 @@ export function RemoteSupportCard({ msg, isOwn }: { msg: any; isOwn: boolean }) 
   const time = rs.exp ? new Date(rs.exp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''
   const isExpired = expired(rs)
 
+  // Aidant : visionneuse web (partout, sans installation) ou appli ; appli absente = visionneuse web.
   const join = (how: 'app' | 'web') => {
     if (!rs.id || !rs.code) return
     try { localStorage.setItem(usedKey(cmid), '1') } catch { /* usage unique garanti par GhostHandDesk */ }
     setUsed(true)
-    openExternal(how === 'app' ? connectLink(rs.id, rs.code) : webViewerLink(rs.id, rs.code)).catch(() => {})
+    const web = webViewerLink(rs.id, rs.code)
+    if (how === 'web') void openWeb(web)
+    else void launchGhd(connectLink(rs.id, rs.code), 'rs.webFallback').then(ok => { if (!ok) void openWeb(web) })
     if (!reply) send(dmId, { v: 1, k: 'accept', ref: cmid })
+  }
+  // Personne aidée : confirmation (dans l'appli : confirm() natif est muet sous macOS), puis GhostHandDesk.
+  const acceptOffer = async () => {
+    if (!canHost) { setHost(null); return }
+    if (await confirm({ message: t('rs.confirmOpen', { name }), confirmLabel: t('rs.openGhd'), cancelLabel: t('rs.cancel') })) setHost(arm())
   }
 
   return (
@@ -182,13 +259,13 @@ export function RemoteSupportCard({ msg, isOwn }: { msg: any; isOwn: boolean }) 
       {rs.k === 'offer' && (
         <>
           <p className="text-fc-text">{t(isOwn ? 'rs.card.offerOut' : 'rs.card.offerIn', { name })}</p>
-          {!isOwn && !reply && !askId && (
+          {!isOwn && !reply && host === false && (
             <div className="mt-2 flex flex-wrap gap-2">
-              <button className={`${btn} bg-fc-accent text-white`} onClick={() => setAskId(true)}>{t('rs.accept')}</button>
+              <button className={`${btn} bg-fc-accent text-white`} onClick={() => void acceptOffer()}>{t('rs.accept')}</button>
               <button className={`${btn} text-fc-muted hover:text-white`} onClick={() => send(dmId, { v: 1, k: 'decline', ref: cmid })}>{t('rs.decline')}</button>
             </div>
           )}
-          {askId && !reply && <div className="mt-2"><IdForm onCancel={() => setAskId(false)} onSubmit={id => { setAskId(false); startHosting(dmId, id, cmid) }} /></div>}
+          {host !== false && !reply && <div className="mt-2"><HostSetup armed={host} onCancel={() => setHost(false)} onSubmit={(id, a) => { setHost(false); void startHosting(dmId, id, a, cmid) }} /></div>}
         </>
       )}
       {rs.k === 'invite' && rs.id && rs.code && (
@@ -197,15 +274,15 @@ export function RemoteSupportCard({ msg, isOwn }: { msg: any; isOwn: boolean }) 
           {isOwn ? (
             !isExpired && reply?.k !== 'decline' && (
               <div className="mt-2 flex flex-wrap items-center gap-2">
-                <button className={`${btn} bg-fc-hover text-white`} onClick={() => openExternal(shareLink(rs.code!, Math.max(60, Math.round(((rs.exp ?? 0) - Date.now()) / 1000)))).catch(() => {})}>{t('rs.rearm')}</button>
-                <button className={`${btn} text-fc-accent hover:underline`} onClick={() => openExternal(GHD_SITE).catch(() => {})}>{t('rs.download')}</button>
+                <button className={`${btn} bg-fc-hover text-white`} onClick={() => void launchGhd(shareLink(rs.code!, Math.max(60, Math.round(((rs.exp ?? 0) - Date.now()) / 1000))))}>{t('rs.rearm')}</button>
+                <button className={`${btn} text-fc-accent hover:underline`} onClick={() => void openWeb(GHD_WINDOWS_DOWNLOAD)}>{t('rs.download')}</button>
                 <span className="w-full text-[11px] text-fc-muted">{t('rs.portable')}</span>
               </div>
             )
           ) : !isExpired && !used && reply?.k !== 'decline' && (
             <div className="mt-2 flex flex-wrap gap-2">
-              <button className={`${btn} bg-fc-accent text-white`} onClick={() => join('app')}>{t('rs.openApp')}</button>
-              <button className={`${btn} bg-fc-hover text-white`} onClick={() => join('web')}>{t('rs.openWeb')}</button>
+              <button className={`${btn} bg-fc-accent text-white`} onClick={() => join('web')}>{t('rs.openWeb')}</button>
+              {canHost && <button className={`${btn} bg-fc-hover text-white`} onClick={() => join('app')}>{t('rs.openApp')}</button>}
               {!reply && <button className={`${btn} text-fc-muted hover:text-white`} onClick={() => send(dmId, { v: 1, k: 'decline', ref: cmid })}>{t('rs.decline')}</button>}
             </div>
           )}

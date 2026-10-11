@@ -1,6 +1,7 @@
 //! Réglages « Système » de l'application de bureau : démarrage avec l'ordinateur,
 //! bouton fermer, accélération matérielle, téléchargements (boîte « Enregistrer
-//! sous »), icône d'application personnalisée, détection d'un logiciel de stream.
+//! sous »), icône d'application personnalisée, détection d'un logiciel de stream
+//! et de GhostHandDesk (support à distance).
 //!
 //! Tout tient dans un petit fichier JSON du dossier de configuration de l'appli,
 //! lu AVANT la création de la WebView (l'accélération matérielle se règle par
@@ -414,9 +415,75 @@ pub async fn streaming_software_running() -> bool {
     .unwrap_or(false)
 }
 
+/// GhostHandDesk installé (support à distance) : son lien `ghosthanddesk://`, inscrit par
+/// l'appli à chaque lancement (HKCU), pointe vers un exécutable présent. Sans lui,
+/// l'ouverture du lien échoue sans rien montrer : le front propose alors le téléchargement.
+/// Hors Windows, GhostHandDesk n'existe pas.
+#[tauri::command]
+pub async fn ghd_installed() -> bool {
+    #[cfg(windows)]
+    {
+        lire_hkcu_defaut(r"Software\Classes\ghosthanddesk\shell\open\command")
+            .and_then(|c| exe_de_commande(&c))
+            .is_some_and(|exe| Path::new(&exe).is_file())
+    }
+    #[cfg(not(windows))]
+    {
+        false
+    }
+}
+
+/// Valeur par défaut (REG_SZ) d'une clé de HKEY_CURRENT_USER.
+#[cfg(windows)]
+fn lire_hkcu_defaut(sous_cle: &str) -> Option<String> {
+    use windows_sys::Win32::System::Registry::{RegGetValueW, HKEY_CURRENT_USER, RRF_RT_REG_SZ};
+    let cle: Vec<u16> = sous_cle.encode_utf16().chain(Some(0)).collect();
+    let mut buf = [0u16; 2048];
+    let mut taille = (buf.len() * 2) as u32;
+    // SAFETY : clé terminée par NUL ; tampon et taille (en octets) cohérents ; nom NULL = valeur par défaut.
+    let statut = unsafe {
+        RegGetValueW(
+            HKEY_CURRENT_USER,
+            cle.as_ptr(),
+            std::ptr::null(),
+            RRF_RT_REG_SZ,
+            std::ptr::null_mut(),
+            buf.as_mut_ptr().cast(),
+            &mut taille,
+        )
+    };
+    if statut != 0 {
+        return None;
+    }
+    let n = (taille as usize / 2).saturating_sub(1);
+    Some(String::from_utf16_lossy(&buf[..n]))
+}
+
+/// Exécutable d'une commande `shell\open\command` : `"C:\…\ghd.exe" "%1"` → `C:\…\ghd.exe`.
+#[cfg_attr(not(windows), allow(dead_code))]
+fn exe_de_commande(commande: &str) -> Option<String> {
+    let commande = commande.trim();
+    let exe = match commande.strip_prefix('"') {
+        Some(reste) => reste.split('"').next()?,
+        None => commande.split_whitespace().next()?,
+    };
+    (!exe.is_empty()).then(|| exe.to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn exe_du_lien_ghosthanddesk() {
+        assert_eq!(
+            exe_de_commande(r#""C:\Users\a b\GhostHandDesk.exe" "%1""#).as_deref(),
+            Some(r"C:\Users\a b\GhostHandDesk.exe")
+        );
+        assert_eq!(exe_de_commande(r"C:\ghd.exe %1").as_deref(), Some(r"C:\ghd.exe"));
+        assert_eq!(exe_de_commande(r#""" "%1""#), None);
+        assert_eq!(exe_de_commande("  "), None);
+    }
 
     #[test]
     fn decode_les_noms() {

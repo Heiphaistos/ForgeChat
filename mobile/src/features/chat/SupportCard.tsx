@@ -46,7 +46,7 @@ export function SupportCard({ m, dmId, mine, reply }: { m: ChatMessage; dmId: st
     if (!rs.id || !rs.code) return
     used.add(cmid)
     setOpened(true)
-    void WebBrowser.openBrowserAsync(webViewerLink(rs.id, rs.code), { showTitle: true }).catch(() => undefined)
+    void WebBrowser.openBrowserAsync(webViewerLink(rs.id, rs.code), { showTitle: true }).catch((e) => Alert.alert(t('rs.openFailed'), errorMessage(e)))
     if (!reply) void answer('accept')
   }
   const state = [
