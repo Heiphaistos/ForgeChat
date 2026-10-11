@@ -36,6 +36,7 @@ import { popOut } from '../lib/popout'
 import { isNativeVoice, nativePopOut } from '../lib/nativeVoice'
 import { MobileContext } from '../contexts/MobileContext'
 import { openUserMenu } from '../components/userMenu/store'
+import { hasUxPref, useMyUxPrefs } from '../store/uxPrefs'
 import { t as tr, useT, type Key } from '../i18n'
 import { E2ECallBadge } from '../e2e/E2ECallBadge'
 
@@ -262,7 +263,7 @@ export default function VoiceVideoPage({ channel, serverId }: Props) {
   })
   useEffect(() => {
     const unsub = on('SOUNDBOARD_PLAY', (data: any) => {
-      if (data.channel_id !== channel.id || data.user_id === user?.id) return
+      if (data.channel_id !== channel.id || data.user_id === user?.id || hasUxPref('soundboardMuted', data.user_id)) return
       // Son d'un autre serveur : le serveur joint son adresse (seulement /uploads/).
       const url = typeof data.file_url === 'string' && data.file_url.startsWith('/uploads/') && !data.file_url.includes('..')
         ? data.file_url
@@ -279,6 +280,7 @@ export default function VoiceVideoPage({ channel, serverId }: Props) {
 
   // Enregistrement : mixage sur l'appareil, envoi chiffré (ClipDialog) ou téléchargement.
   const rec = useVoiceRecording()
+  const videoOff = useMyUxPrefs().videoOff
 
   // Clips : un tampon par stream affiché (ceux des autres qu'on regarde, et son
   // propre partage), seulement si l'option est activée. Le tampon s'arrête dès
@@ -344,7 +346,9 @@ export default function VoiceVideoPage({ channel, serverId }: Props) {
 
   const allPeers = [
     { userId: user.id, username: user.username, avatar: user.avatar ?? undefined, stream: localStream, screenStream: screenSharing ? localScreenStream : null, videoUrl: localVideoUrl, screenUrl: localScreenUrl, muted, deafened: false, videoEnabled, screenSharing, isLocal: true },
-    ...peers.map(p => ({ ...p, avatar: p.avatar ?? undefined, isLocal: false })),
+    // « Désactiver la vidéo » (pour moi seulement) : ni caméra ni partage affichés, l'abonnement est retiré dans voiceSfu.
+    ...peers.map(p => ({ ...p, avatar: p.avatar ?? undefined, isLocal: false,
+      ...(videoOff.includes(p.userId) ? { videoEnabled: false, videoUrl: null, screenStream: null, screenUrl: null, screenSharing: false } : {}) })),
   ]
 
   // Chaque participant contribue une tuile caméra + une tuile écran séparée s'il partage —

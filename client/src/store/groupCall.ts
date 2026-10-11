@@ -8,6 +8,7 @@ import api from '../api/client'
 import { useWs } from './ws'
 import { useCallStore, callAudioConstraints, callVideoConstraints } from './call'
 import { useVoice } from './voice'
+import { hasUxPref, useUxPrefs } from './uxPrefs'
 import { routeAudio, dropPlayback } from '../lib/voicePlayback'
 import { clampVolumePct } from '../lib/voiceMix'
 import { webrtcMissing } from '../lib/webrtcSupport'
@@ -48,7 +49,8 @@ const _audioEls = new Map<string, { el: HTMLAudioElement; who: string; stream: M
 
 function _play(sid: string, a: { el: HTMLAudioElement; who: string; stream: MediaStream }) {
   const v = useVoice.getState()
-  routeAudio(a.el, `group:${sid}`, a.stream, 'voice', clampVolumePct(v.userVolumes[a.who] ?? 100) / 100, null, false)
+  const volume = hasUxPref('voiceMuted', a.who) ? 0 : clampVolumePct(v.userVolumes[a.who] ?? 100) / 100
+  routeAudio(a.el, `group:${sid}`, a.stream, 'voice', volume, null, false)
   a.el.muted = v.deafened
 }
 
@@ -185,6 +187,8 @@ async function _connect(lk: { url: string; token: string; e2ee?: boolean }, set:
 useVoice.subscribe((s, prev) => {
   if (s.deafened !== prev.deafened || s.userVolumes !== prev.userVolumes) _audioEls.forEach((a, sid) => _play(sid, a))
 })
+// « Rendre muet » pour moi seulement (menu utilisateur).
+useUxPrefs.subscribe(() => _audioEls.forEach((a, sid) => _play(sid, a)))
 
 export const useGroupCall = create<GroupCallStore>((set, get) => ({
   groupId: null,

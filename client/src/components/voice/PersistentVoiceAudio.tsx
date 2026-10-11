@@ -5,6 +5,7 @@ import { routeAudio, dropPlaybackWhere } from '../../lib/voicePlayback'
 import { spatialAzimuth } from '../../lib/spatialAudio'
 import { clampVolumePct } from '../../lib/voiceMix'
 import { useSpatial } from '../../store/spatial'
+import { useMyUxPrefs } from '../../store/uxPrefs'
 
 /**
  * Lecture audio des pairs en salon vocal — montée une seule fois, hors de
@@ -27,6 +28,8 @@ export default function PersistentVoiceAudio() {
   const screenVolumes = useVoice(s => s.screenVolumes)
   const deafened = useVoice(s => s.deafened)
   const spatial = useSpatial(s => s.on)
+  // « Rendre muet » pour moi seulement (menu utilisateur) : volume gardé, voix coupée.
+  const locallyMuted = useMyUxPrefs().voiceMuted
   const [autoplayBlocked, setAutoplayBlocked] = useState(false)
   const elementsRef = useRef(new Set<HTMLAudioElement>())
 
@@ -57,7 +60,7 @@ export default function PersistentVoiceAudio() {
       <div style={{ display: 'none' }} aria-hidden="true">
         {peers.map((p, i) => {
           const azimuth = spatial ? spatialAzimuth(i, peers.length) : null
-          const micVolume = clampVolumePct(userVolumes[p.userId] ?? 100) / 100
+          const micVolume = locallyMuted.includes(p.userId) ? 0 : clampVolumePct(userVolumes[p.userId] ?? 100) / 100
           const screenVolume = clampVolumePct(screenVolumes[p.userId] ?? 100) / 100
           return (
             <span key={p.userId}>

@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { useWs } from './ws'
 import { useAuth } from './auth'
+import { hasUxPref } from './uxPrefs'
 import api from '../api/client'
 import toast from 'react-hot-toast'
 import { webrtcMissing, openInBrowser, NO_WEBRTC_MESSAGE } from '../lib/webrtcSupport'
@@ -962,7 +963,7 @@ export const useVoice = create<VoiceStore>((set, get) => {
     setUserVolume: (userId, volume) => {
       // Natif : le module audio du système ne règle pas le volume par personne,
       // seulement coupé ou audible.
-      if (isNativeVoice()) void nativeSetPeerAudio(userId, volume > 0).catch(e => warn('volume natif', e))
+      if (isNativeVoice()) void nativeSetPeerAudio(userId, volume > 0 && !hasUxPref('voiceMuted', userId)).catch(e => warn('volume natif', e))
       set(s => {
         const next = { ...s.userVolumes, [userId]: volume }
         saveVolumes(VOLUMES_KEY, next)

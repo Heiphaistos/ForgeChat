@@ -24,6 +24,7 @@ import {
   type NativeTrackEvent, type NativeStateEvent,
 } from '../lib/nativeVoice'
 import { t } from '../i18n'
+import { hasUxPref } from './uxPrefs'
 import { enableMediaE2EE, mediaE2EEError, nativeMediaKey, openMediaE2EE, retryWhenKeyReady, watchOutdated } from '../e2e/media'
 
 export function warn(ctx: string, e: unknown) {
@@ -257,9 +258,10 @@ export function setAutoWatch(on: boolean) {
 
 const isScreenSource = (s: Track.Source) => s === Track.Source.ScreenShare || s === Track.Source.ScreenShareAudio
 
-/** Décide de l'abonnement d'une piste distante. */
+/** Décide de l'abonnement d'une piste distante (« Désactiver la vidéo » : ni caméra ni partage). */
 function applySubscription(pub: RemoteTrackPublication, identity: string, force = false) {
-  const want = !isScreenSource(pub.source) || getAutoWatch() || _watched.has(identity)
+  const videoOff = pub.source !== Track.Source.Microphone && hasUxPref('videoOff', identity)
+  const want = !videoOff && (!isScreenSource(pub.source) || getAutoWatch() || _watched.has(identity))
   if (force || pub.isSubscribed !== want) pub.setSubscribed(want)
 }
 
@@ -278,7 +280,7 @@ export function watchStream(userId: string, on: boolean) {
   else _watched.delete(userId)
   const p = _room?.remoteParticipants.get(userId)
   p?.trackPublications.forEach(pub => {
-    if (isScreenSource(pub.source)) pub.setSubscribed(on)
+    if (isScreenSource(pub.source)) pub.setSubscribed(on && !hasUxPref('videoOff', userId))
   })
   _ctx?.set((s: any) => ({ watchedStreams: [..._watched] }))
 }

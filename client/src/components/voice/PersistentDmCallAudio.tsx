@@ -4,6 +4,7 @@ import { useVoice } from '../../store/voice'
 import { useAudioNotifications } from '../../hooks/useAudioNotifications'
 import { routeAudio, dropPlaybackWhere } from '../../lib/voicePlayback'
 import { clampVolumePct } from '../../lib/voiceMix'
+import { useMyUxPrefs } from '../../store/uxPrefs'
 
 /**
  * Lecture audio d'un appel DM (vocal ou vidéo) — montée une seule fois, hors de
@@ -22,7 +23,9 @@ export default function PersistentDmCallAudio() {
   const deafened = useVoice(s => s.deafened)
   // Volume par personne : le même réglage que dans les salons (fc_user_volumes).
   const partnerId = useCallStore(s => s.partnerId)
-  const volume = useVoice(s => clampVolumePct(partnerId ? s.userVolumes[partnerId] ?? 100 : 100))
+  const storedVolume = useVoice(s => clampVolumePct(partnerId ? s.userVolumes[partnerId] ?? 100 : 100))
+  const locallyMuted = useMyUxPrefs().voiceMuted
+  const volume = partnerId && locallyMuted.includes(partnerId) ? 0 : storedVolume
   const [autoplayBlocked, setAutoplayBlocked] = useState(false)
   const elRef = useRef<HTMLAudioElement | null>(null)
   const { playRingback } = useAudioNotifications()
