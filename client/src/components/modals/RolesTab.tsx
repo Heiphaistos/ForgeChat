@@ -36,6 +36,7 @@ const PERMISSION_GROUPS: { key: string; color: string; perms: { key: string; bit
       { key: 'KICK_MEMBERS',     bit: B(6) },
       { key: 'BAN_MEMBERS',      bit: B(7) },
       { key: 'BAN_TEMP',         bit: B(23) },
+      { key: 'MANAGE_NICKNAMES', bit: B(24) },
     ]
   },
   {

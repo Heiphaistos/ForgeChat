@@ -96,8 +96,8 @@ export default function UserMenuHost() {
         muted: prefs.voiceMuted.includes(userId),
         ...(target.serverId ? { soundboardMuted: prefs.soundboardMuted.includes(userId), videoOff: prefs.videoOff.includes(userId) } : {}),
       } : null,
-      // Le pseudo serveur ne se change que pour soi (PATCH /servers/:id/nickname), dans l'écran du serveur ouvert.
-      canNick: relation === 'self' && !!serverId && serverId === serverInPath(),
+      // Le sien dans l'écran du serveur ouvert ; celui d'un autre avec « Gérer les pseudos » et un rang supérieur.
+      canNick: relation === 'self' ? !!serverId && serverId === serverInPath() : moderation.canRename(userId),
       support: supportItem(userId),
       moderation: serverId ? moderation.itemsFor(userId) : [],
     }, {
@@ -150,7 +150,10 @@ export default function UserMenuHost() {
       soundboardMute: on => setPref('soundboardMuted', on),
       videoOff: on => { setPref('videoOff', on); resubscribeAll() },
       verifyCode: () => setDialog({ kind: 'safety', userId, username }),
-      nickname: () => { window.dispatchEvent(new CustomEvent('forgechat:open-server-settings', { detail: 'profile' })) },
+      nickname: () => {
+        if (relation === 'self') window.dispatchEvent(new CustomEvent('forgechat:open-server-settings', { detail: 'profile' }))
+        else moderation.rename(userId)
+      },
     }, t)
     node = <ContextMenu x={menu.x} y={menu.y} items={target.wrap ? target.wrap(items) : items} onClose={close} />
   }

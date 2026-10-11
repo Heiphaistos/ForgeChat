@@ -1,7 +1,7 @@
 // Menus contextuels « comme Discord » : node --test scripts/uxMenus.test.mjs
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { buildUserMenu, buildModMenu, buildConvMenu, pinnedFirst, tidy, MUTE_MINUTES } from '../src/components/userMenu/model.ts'
+import { buildUserMenu, buildModMenu, buildConvMenu, canRenameMember, pinnedFirst, tidy, MUTE_MINUTES } from '../src/components/userMenu/model.ts'
 import { fr, en } from '../src/i18n/parts/menus.ts'
 
 const t = (k, v) => (v?.name ? `${k}:${v.name}` : k)
@@ -25,6 +25,21 @@ test('soi-même : ni message, ni appel, ni ami, ni blocage', () => {
   assert.deepEqual(l.slice(-3), ['um.copyId', 'um.viewAvatar', 'um.copyUrl'])
   assert.ok(!l.includes('um.verifyCode') && !l.includes('um.changeNick'))
   assert.ok(labels(buildUserMenu(facts({ relation: 'self', canNick: true }), actions, t)).includes('um.changeNick'))
+})
+
+test('pseudo d’un autre membre : « Gérer les pseudos » et rang supérieur', () => {
+  assert.equal(canRenameMember({ self: false, manage: true, above: true }), true)
+  assert.equal(canRenameMember({ self: false, manage: false, above: true }), false)
+  assert.equal(canRenameMember({ self: false, manage: true, above: false }), false)
+  assert.equal(canRenameMember({ self: true, manage: true, above: true }), false)
+  let called = 0
+  const m = buildUserMenu(facts({ canNick: true }), { ...actions, nickname: () => { called++ } }, t)
+  m.find(e => e.label === 'um.changeNick').onClick()
+  assert.equal(called, 1)
+  assert.ok(!labels(buildUserMenu(facts(), actions, t)).includes('um.changeNick'))
+  for (const k of ['um.nickTitle', 'um.nickReset', 'um.nickSave', 'um.nickChanged', 'um.nickCleared', 'perm.MANAGE_NICKNAMES', 'perm.MANAGE_NICKNAMES.desc', 'audit.MEMBER_NICKNAME_CHANGE']) {
+    assert.ok(fr[k] && en[k], k)
+  }
 })
 
 test('inconnu : ajouter en ami, ignorer, bloquer en rouge', () => {

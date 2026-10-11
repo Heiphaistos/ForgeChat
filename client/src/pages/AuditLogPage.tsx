@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react'
 import {
   ScrollText, UserPlus, UserMinus, UserX, ShieldOff, ShieldCheck,
-  Hash, Trash2, Crown, MessageSquareX, Settings, ChevronDown,
+  Hash, Trash2, Crown, MessageSquareX, Settings, ChevronDown, PenLine,
 } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import api from '../api/client'
@@ -27,6 +27,7 @@ const ACTION_CONFIG: Record<string, { label: string; color: string; Icon: React.
   MEMBER_KICK:    { label: 'Membre expulsé',   color: 'text-fc-red',     Icon: UserX },
   MEMBER_BAN:     { label: 'Membre banni',     color: 'text-fc-red',     Icon: ShieldOff },
   MEMBER_UNBAN:   { label: 'Membre débanni',   color: 'text-green-400',  Icon: ShieldCheck },
+  MEMBER_NICKNAME_CHANGE: { label: 'Pseudo modifié', color: 'text-blue-400', Icon: PenLine },
   CHANNEL_CREATE: { label: 'Canal créé',       color: 'text-blue-400',   Icon: Hash },
   CHANNEL_DELETE: { label: 'Canal supprimé',   color: 'text-blue-400',   Icon: Trash2 },
   ROLE_CREATE:    { label: 'Rôle créé',        color: 'text-purple-400', Icon: Crown },

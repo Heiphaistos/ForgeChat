@@ -8,7 +8,7 @@ import { useServerPerms, PERM } from '../../hooks/useServerPerms'
 import { useEscapeKey } from '../../hooks/useEscapeKey'
 import { confirm } from '../ui/ConfirmModal'
 import type { ContextMenuEntry } from '../ui/ContextMenu'
-import { buildModMenu } from '../userMenu/model'
+import { buildModMenu, canRenameMember } from '../userMenu/model'
 import ChannelSettingsModal from '../modals/ChannelSettingsModal'
 import { t as tr, intlLocale } from '../../i18n'
 
@@ -31,7 +31,7 @@ interface Member {
   voice_deafened?: boolean
 }
 
-type Dialog = { kind: 'ban' | 'timeout' | 'notes'; member: Member }
+type Dialog = { kind: 'ban' | 'timeout' | 'notes' | 'nick'; member: Member }
 
 const errorOf = (e: any, fallback: string) => e?.response?.data?.error ?? fallback
 
@@ -116,6 +116,45 @@ function SanctionDialog({ serverId, dialog, canBanForever, onClose, onDone }: {
           {kind === 'ban' ? 'Bannir' : 'Appliquer'}
         </button>
       </div>
+    </Shell>
+  )
+}
+
+/** Pseudo d'un autre membre (« Gérer les pseudos ») ; vide ou « Réinitialiser » = retirer. */
+function NicknameDialog({ serverId, member, onClose }: { serverId: string; member: Member; onClose: () => void }) {
+  const qc = useQueryClient()
+  const [value, setValue] = useState(member.nickname ?? '')
+  const [busy, setBusy] = useState(false)
+  const name = member.nickname ?? member.username
+  const save = async (nickname: string) => {
+    setBusy(true)
+    try {
+      const next = nickname.trim() || null
+      await api.patch(`/servers/${serverId}/members/${member.user_id}/nickname`, { nickname: next })
+      qc.setQueryData<Member[]>(['members', serverId], old => old?.map(m => m.user_id === member.user_id ? { ...m, nickname: next } : m))
+      void qc.invalidateQueries({ queryKey: ['members_detailed', serverId] })
+      toast.success(tr(next ? 'um.nickChanged' : 'um.nickCleared', { name: member.username }))
+      onClose()
+    } catch (e) {
+      toast.error(errorOf(e, tr('mod.refused')))
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <Shell title={tr('um.nickTitle', { name })} onClose={onClose}>
+      <form onSubmit={e => { e.preventDefault(); void save(value) }}>
+        <label className="text-[11px] uppercase font-semibold text-fc-muted" htmlFor="mod-nick">{tr('um.nickLabel')}</label>
+        <input id="mod-nick" value={value} onChange={e => setValue(e.target.value)} maxLength={32} autoFocus
+          placeholder={member.username} className="w-full fc-input text-sm mt-1 mb-1" />
+        <p className="text-xs text-fc-muted mb-4">{tr('um.nickHint', { name: member.username })}</p>
+        <div className="flex gap-2">
+          <button type="button" onClick={() => void save('')} disabled={busy || !member.nickname}
+            className="flex-1 px-3 py-2 rounded-lg bg-fc-hover text-fc-text text-sm disabled:opacity-50">{tr('um.nickReset')}</button>
+          <button type="submit" disabled={busy}
+            className="flex-1 px-3 py-2 rounded-lg bg-fc-accent text-white text-sm font-medium disabled:opacity-50">{tr('um.nickSave')}</button>
+        </div>
+      </form>
     </Shell>
   )
 }
@@ -265,8 +304,19 @@ export function useMemberModeration(serverId?: string) {
     }, tr)
   }
 
+  /** Pseudo d'un autre membre : « Gérer les pseudos » et rang strictement supérieur. */
+  const canRename = (userId: string) => {
+    const m = byId.get(userId)
+    return !!serverId && !!m && canRenameMember({ self: userId === perms.meId, manage: perms.has(PERM.MANAGE_NICKNAMES), above: perms.outranks(m) })
+  }
+  const rename = (userId: string) => {
+    const m = byId.get(userId)
+    if (m) setDialog({ kind: 'nick', member: m })
+  }
+
   const permsChannel = dialog?.kind === 'perms' ? perms.channels.find(c => c.id === dialog.channelId) : undefined
   const node = !serverId || !dialog ? null
+    : dialog.kind === 'nick' ? <NicknameDialog serverId={serverId} member={dialog.member} onClose={() => setDialog(null)} />
     : dialog.kind === 'notes' ? <NotesDialog serverId={serverId} member={dialog.member} onClose={() => setDialog(null)} />
     : dialog.kind === 'perms' ? (permsChannel
       ? <ChannelSettingsModal channel={permsChannel} serverId={serverId} onClose={() => setDialog(null)} initialTab="permissions"
@@ -274,5 +324,5 @@ export function useMemberModeration(serverId?: string) {
       : null)
     : <SanctionDialog serverId={serverId} dialog={dialog as Dialog & { kind: 'ban' | 'timeout' }} canBanForever={perms.has(PERM.BAN_MEMBERS)} onClose={() => setDialog(null)} onDone={refresh} />
 
-  return { itemsFor, node }
+  return { itemsFor, canRename, rename, node }
 }

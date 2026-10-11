@@ -33,7 +33,7 @@ export interface UserMenuFacts {
    * soundboard et vidéo seulement dans un salon vocal de serveur (absents d'un appel privé).
    */
   voiceLocal: { muted: boolean; soundboardMuted?: boolean; videoOff?: boolean } | null
-  /** Je peux changer mon pseudo sur le serveur du contexte (menu sur moi-même). */
+  /** Je peux changer son pseudo sur le serveur du contexte : le mien, ou le sien avec « Gérer les pseudos » et un rang supérieur. */
   canNick: boolean
 }
 
@@ -133,6 +133,11 @@ export function buildUserMenu(f: UserMenuFacts, a: UserMenuActions, t: Tr): Cont
     { label: t('um.copyUrl'), onClick: a.copyUrl },
   ]
   return tidy(entries)
+}
+
+/** Pseudo d'un AUTRE membre : « Gérer les pseudos » et rang strictement supérieur (comme le serveur). */
+export function canRenameMember(f: { self: boolean; manage: boolean; above: boolean }): boolean {
+  return !f.self && f.manage && f.above
 }
 
 /** Ce que je peux faire au membre (permissions réelles et hiérarchie, calculées par l'appelant). */

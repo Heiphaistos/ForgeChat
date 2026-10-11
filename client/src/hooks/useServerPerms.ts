@@ -20,6 +20,7 @@ export const PERM = {
   DELETE_CHANNELS: 1 << 21,
   DELETE_OWN_CHANNELS: 1 << 22,
   BAN_TEMP: 1 << 23,
+  MANAGE_NICKNAMES: 1 << 24,
   ADMINISTRATOR: 1 << 31,
 } as const
 
