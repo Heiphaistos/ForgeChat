@@ -8,11 +8,26 @@ export const MUTE_MINUTES = [15, 60, 180, 480, 1440, 0] as const
 export type RelationKind = 'self' | 'friend' | 'received' | 'sent' | 'blocked' | 'none'
 
 export type UserAction =
-  | 'profile' | 'message' | 'call' | 'note' | 'friendNick' | 'volume' | 'invite'
+  | 'profile' | 'message' | 'call' | 'note' | 'friendNick' | 'volume'
+  | 'voiceMute' | 'soundboardMute' | 'videoOff' | 'safetyCode' | 'invite'
   | 'addFriend' | 'acceptFriend' | 'removeFriend' | 'favorite' | 'unfavorite'
-  | 'mute' | 'unmute' | 'ignore' | 'unignore' | 'block' | 'unblock' | 'viewAvatar' | 'copyId'
+  | 'mute' | 'unmute' | 'ignore' | 'unignore' | 'block' | 'unblock'
+  | 'roles' | 'moveTo' | 'serverMute' | 'serverDeafen' | 'disconnect' | 'kick' | 'ban' | 'timeout'
+  | 'viewAvatar' | 'copyId'
 
 export type ConvAction = 'markRead' | 'pin' | 'unpin' | 'muteGroup' | 'unmuteGroup' | 'archive' | 'unarchive' | 'close' | 'leave' | 'copyConvId'
+
+/** Modération permise sur la personne (perms.ts) ; `inVoice` : elle est dans un salon vocal du serveur. */
+export interface ModFacts {
+  roles: boolean
+  move: boolean
+  mute: boolean
+  deafen: boolean
+  inVoice: boolean
+  kick: boolean
+  ban: boolean
+  timeout: boolean
+}
 
 export interface UserFacts {
   relation: RelationKind
@@ -22,27 +37,44 @@ export interface UserFacts {
   dm: { muted: boolean } | null
   /** Au moins un serveur où l'inviter. */
   canInvite: boolean
-  /** Ouvert depuis un salon vocal ou un appel : réglage du volume de la personne. */
+  /** Ouvert depuis un salon vocal ou un appel : volume, muet / soundboard / vidéo pour moi seul. */
   volume: boolean
   hasAvatar: boolean
+  /** Ouvert depuis un serveur où j'ai des droits sur elle ; null sinon. */
+  mod?: ModFacts | null
 }
 
+/** Même ordre que le web : personne, vocal local, code de vérification, relation, modération, copie. */
 export function buildUserMenu(f: UserFacts): UserAction[] {
   const self = f.relation === 'self'
   const friend = f.relation === 'friend'
-  const out: (UserAction | false)[] = [
+  const voice = f.volume && !self
+  const m = f.mod
+  const out: (UserAction | false | null | undefined)[] = [
     'profile',
     !self && f.relation !== 'blocked' && 'message',
     !self && f.relation !== 'blocked' && 'call',
     !self && 'note',
     friend && 'friendNick',
-    f.volume && !self && 'volume',
+    voice && 'volume',
+    voice && 'voiceMute',
+    voice && 'soundboardMute',
+    voice && 'videoOff',
+    !self && 'safetyCode',
     !self && f.canInvite && f.relation !== 'blocked' && 'invite',
     friend ? 'removeFriend' : f.relation === 'received' ? 'acceptFriend' : f.relation === 'none' && 'addFriend',
     friend && (f.favorite ? 'unfavorite' : 'favorite'),
     !self && !!f.dm && (f.dm.muted ? 'unmute' : 'mute'),
     !self && (f.ignored ? 'unignore' : 'ignore'),
     !self && (f.relation === 'blocked' ? 'unblock' : 'block'),
+    m?.roles && 'roles',
+    m?.move && m.inVoice && 'moveTo',
+    m?.mute && 'serverMute',
+    m?.deafen && 'serverDeafen',
+    m?.move && m.inVoice && 'disconnect',
+    !self && m?.kick && 'kick',
+    !self && m?.ban && 'ban',
+    !self && m?.timeout && 'timeout',
     f.hasAvatar && 'viewAvatar',
     'copyId',
   ]

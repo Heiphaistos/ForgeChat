@@ -1,7 +1,7 @@
 // Menu d'appui long sur une personne (pseudo ou avatar : messages, membres, vocal, MP, amis) ou
 // sur une conversation privée, monté une seule fois (app/(app)/_layout). Même contenu que le
 // menu utilisateur du web : profil, message, appel, note privée (chiffrée, e2e/notes), pseudo
-// d'ami, volume, invitation (lien envoyé chiffré dans le MP), ami, favori, sourdine du MP,
+// d'ami, volume, muet / soundboard / vidéo pour moi seul, code de vérification, modération (MemberMenu), invitation (lien envoyé chiffré dans le MP), ami, favori, sourdine du MP,
 // ignorer, bloquer, avatar, identifiant ; pour une conversation : lu, épingler, fermer…
 import { useQuery } from '@tanstack/react-query'
 import * as Clipboard from 'expo-clipboard'
@@ -22,6 +22,7 @@ import { PeerVolumeSheet } from '@/components/call/PeerVolumeSheet'
 import { Sheet, type SheetAction } from '@/components/Sheet'
 import { Button, TextField, type IconName } from '@/components/ui'
 import { apiOrigin } from '@/config/env'
+import { SafetyCode } from '@/e2e/E2ESettings'
 import { NOTE_LOCKED, loadNote, saveNote } from '@/e2e/notes'
 import { applyConversationSettings } from '@/features/dms/conversations'
 import { openDmWith } from '@/features/friends/openDm'
@@ -35,10 +36,12 @@ import { getMyId } from '@/stores/auth'
 import { useCall } from '@/stores/call'
 import { useGroupCall } from '@/stores/groupCall'
 import { useUnread } from '@/stores/unread'
+import { usePeerVolumes } from '@/stores/peerVolumes'
 import { useVoice } from '@/stores/voice'
 import type { ConversationSummary, DmSummary } from '@/types/models'
 import { colors, font, radius, spacing } from '@/theme'
 import { useLocalPrefs, useMyLocalPrefs } from './localPrefs'
+import { useMemberMenu } from './MemberMenu'
 import { MUTE_MINUTES, buildConvMenu, buildUserMenu, type ConvAction, type RelationKind, type UserAction } from './model'
 
 export interface UserTarget {
@@ -65,16 +68,23 @@ export const openConvMenu = (conv: ConversationSummary) =>
 
 const USER_LABEL: Record<UserAction, Key> = {
   profile: 'ux.um.profile', message: 'ux.um.message', call: 'ux.um.call', note: 'ux.um.note', friendNick: 'ux.um.friendNick',
-  volume: 'ux.um.volume', invite: 'ux.um.invite', addFriend: 'ux.um.addFriend', acceptFriend: 'ux.um.acceptFriend',
+  volume: 'ux.um.volume', voiceMute: 'ux.um.voiceMute', soundboardMute: 'ux.um.soundboardMute', videoOff: 'ux.um.videoOff',
+  safetyCode: 'ux.um.safetyCode', invite: 'ux.um.invite', addFriend: 'ux.um.addFriend', acceptFriend: 'ux.um.acceptFriend',
   removeFriend: 'ux.um.removeFriend', favorite: 'ux.um.favorite', unfavorite: 'ux.um.unfavorite', mute: 'ux.um.mute',
   unmute: 'ux.um.unmute', ignore: 'ux.um.ignore', unignore: 'ux.um.unignore', block: 'ux.um.block', unblock: 'ux.um.unblock',
+  roles: 'ux.um.roles', moveTo: 'ux.um.moveTo', serverMute: 'ux.um.serverMute', serverDeafen: 'ux.um.serverDeafen',
+  disconnect: 'ux.um.disconnect', kick: 'ux.um.kick', ban: 'ux.um.ban', timeout: 'ux.um.timeout',
   viewAvatar: 'ux.um.viewAvatar', copyId: 'ux.um.copyId',
 }
+const DANGER = new Set<UserAction>(['block', 'serverMute', 'serverDeafen', 'disconnect', 'kick', 'ban'])
 const USER_ICON: Record<UserAction, IconName> = {
   profile: 'person-circle-outline', message: 'chatbubble-outline', call: 'call-outline', note: 'create-outline', friendNick: 'pricetag-outline',
-  volume: 'volume-high-outline', invite: 'mail-outline', addFriend: 'person-add-outline', acceptFriend: 'person-add-outline',
+  volume: 'volume-high-outline', voiceMute: 'mic-off-outline', soundboardMute: 'musical-notes-outline', videoOff: 'videocam-off-outline',
+  safetyCode: 'shield-checkmark-outline', invite: 'mail-outline', addFriend: 'person-add-outline', acceptFriend: 'person-add-outline',
   removeFriend: 'person-remove-outline', favorite: 'star-outline', unfavorite: 'star', mute: 'notifications-off-outline',
   unmute: 'notifications-outline', ignore: 'eye-off-outline', unignore: 'eye-outline', block: 'ban', unblock: 'lock-open-outline',
+  roles: 'shield-outline', moveTo: 'swap-horizontal-outline', serverMute: 'mic-off', serverDeafen: 'volume-mute',
+  disconnect: 'call-outline', kick: 'exit-outline', ban: 'ban-outline', timeout: 'time-outline',
   viewAvatar: 'image-outline', copyId: 'copy-outline',
 }
 const CONV_LABEL: Record<ConvAction, Key> = {
@@ -113,6 +123,10 @@ export default function UserMenuHost() {
   const [editor, setEditor] = useState<Editor>(null)
   const [editorUser, setEditorUser] = useState<UserTarget | null>(null)
   const [avatar, setAvatar] = useState<string | null>(null)
+  const [safety, setSafety] = useState<UserTarget | null>(null)
+  const voiceMuted = usePeerVolumes((s) => s.muted)
+  const setVoiceMuted = usePeerVolumes((s) => s.setMuted)
+  const member = useMemberMenu(user)
   const local = useMyLocalPrefs()
   const toggleLocal = useLocalPrefs((s) => s.toggle)
   const setClosed = useLocalPrefs((s) => s.setClosed)
@@ -140,6 +154,10 @@ export default function UserMenuHost() {
       note: () => openEditor(u, 'note'),
       friendNick: () => openEditor(u, 'nick'),
       volume: () => openSub('volume', u, null),
+      voiceMute: () => setVoiceMuted(u.userId, !voiceMuted.includes(u.userId)),
+      soundboardMute: () => toggleLocal('soundboardMuted', u.userId, !local.soundboardMuted.includes(u.userId)),
+      videoOff: () => toggleLocal('videoOff', u.userId, !local.videoOff.includes(u.userId)),
+      safetyCode: () => setSafety(u),
       invite: () => openSub('invite', u, null),
       addFriend: () =>
         void usersApi.get(u.userId)
@@ -158,6 +176,13 @@ export default function UserMenuHost() {
       unblock: () => void friendsApi.unblock(u.userId).then(refreshFriends, fail),
       viewAvatar: () => setAvatar(resolveMediaUrl(u.avatar)),
       copyId: () => void Clipboard.setStringAsync(u.userId),
+      ...member.run,
+    }
+    const selected: Partial<Record<UserAction, boolean>> = {
+      ...member.selected,
+      voiceMute: voiceMuted.includes(u.userId),
+      soundboardMute: local.soundboardMuted.includes(u.userId),
+      videoOff: local.videoOff.includes(u.userId),
     }
     return buildUserMenu({
       relation,
@@ -167,7 +192,8 @@ export default function UserMenuHost() {
       canInvite: (servers.data ?? []).length > 0,
       volume: !!u.volume,
       hasAvatar: !!resolveMediaUrl(u.avatar),
-    }).map((a) => ({ label: t(USER_LABEL[a], { name: u.name }), icon: USER_ICON[a], danger: a === 'block', onPress: run[a] }))
+      mod: member.mod,
+    }).map((a) => ({ label: t(USER_LABEL[a], { name: u.name }), icon: USER_ICON[a], danger: DANGER.has(a), selected: selected[a], onPress: run[a] }))
   }
 
   const convActions = (c: ConversationSummary): SheetAction[] => {
@@ -263,6 +289,8 @@ export default function UserMenuHost() {
         }}
       />
       <AvatarViewer uri={avatar} onClose={() => setAvatar(null)} />
+      {member.node}
+      <SafetyViewer user={safety} onClose={() => setSafety(null)} />
     </>
   )
 }
@@ -303,6 +331,24 @@ function TextEditor({ editor, name, onClose, onSave }: { editor: Editor; name: s
           </View>
         </View>
       </KeyboardAvoidingView>
+    </Modal>
+  )
+}
+
+/** « Voir le code de vérification » : code de sécurité E2E partagé avec la personne, à comparer hors bande. */
+function SafetyViewer({ user, onClose }: { user: UserTarget | null; onClose: () => void }) {
+  const t = useT()
+  return (
+    <Modal visible={!!user} transparent animationType="fade" onRequestClose={onClose} statusBarTranslucent>
+      <View style={styles.backdrop}>
+        <View style={styles.card}>
+          <Text style={styles.title}>{t('ux.um.safetyCode')} · {user?.name}</Text>
+          {user ? <SafetyCode userId={user.userId} /> : null}
+          <View style={styles.buttons}>
+            <Button title={t('common.close')} variant="ghost" onPress={onClose} />
+          </View>
+        </View>
+      </View>
     </Modal>
   )
 }
