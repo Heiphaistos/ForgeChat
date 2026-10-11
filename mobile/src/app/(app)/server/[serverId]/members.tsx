@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react'
 import { FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native'
 import { serversApi } from '@/api/servers'
 import { userRoute } from '@/features/servers/memberProfile'
+import { openUserMenu } from '@/features/userMenu/UserMenuHost'
 import { Avatar } from '@/components/Avatar'
 import { UserName } from '@/components/UserName'
 import { ErrorState, Loading } from '@/components/ui'
@@ -64,6 +65,8 @@ export default function MembersScreen() {
                 ? router.push({ pathname: '/server/[serverId]/settings/member/[userId]', params: { serverId: ids.serverId, userId: item.user_id } })
                 : router.push(userRoute(item.user_id, ids.serverId))
             }
+            onLongPress={() => openUserMenu({ userId: item.user_id, name: item.nickname || item.username, avatar: item.avatar, serverId: ids.serverId })}
+            delayLongPress={300}
             accessibilityRole="button"
             accessibilityLabel={item.is_owner ? t('server.members.owner', { name: item.nickname || item.username }) : item.nickname || item.username}
           >

@@ -23,6 +23,8 @@ import type { SupportPayload } from '@/lib/remoteSupport'
 import type { ThreadSummary } from './threads'
 import { reactionEmojiName, safeEmojiUrl, useCustomEmojis } from './customEmojis'
 import { displayAttachments } from '@/e2e/files'
+import { openUserMenu } from '@/features/userMenu/UserMenuHost'
+import { useMyLocalPrefs } from '@/features/userMenu/localPrefs'
 
 interface Props {
   message: ChatMessage
@@ -212,6 +214,18 @@ export const MessageItem = memo(function MessageItem({
 }: Props) {
   const t = useT()
   const mentioned = m.authorId !== myId && mentionsUser(m.content, myId, myName)
+  // Personne ignorée (menu utilisateur, sur cet appareil) : message replié, affiché au toucher.
+  const ignored = useMyLocalPrefs().ignored.includes(m.authorId)
+  const [revealed, setRevealed] = useState(false)
+  const authorMenu = m.authorIsBot ? undefined : () => openUserMenu({ userId: m.authorId, name: m.authorName, avatar: m.authorAvatar, serverId })
+  if (ignored && !revealed) {
+    return (
+      <Pressable onPress={() => setRevealed(true)} style={styles.ignored} accessibilityRole="button">
+        <Ionicons name="eye-off-outline" size={14} color={colors.textFaint} />
+        <Text style={styles.meta}>{t('ux.um.ignoredMessage')}</Text>
+      </Pressable>
+    )
+  }
   return (
     <View>
       {daySeparator ? (
@@ -234,7 +248,7 @@ export const MessageItem = memo(function MessageItem({
       >
         <View style={styles.gutter}>
           {grouped ? null : (
-            <Pressable onPress={() => onPressAuthor(m.authorId)} accessibilityRole="button" accessibilityLabel={t('msg.authorProfile', { name: m.authorName })}>
+            <Pressable onPress={() => onPressAuthor(m.authorId)} onLongPress={authorMenu} delayLongPress={300} accessibilityRole="button" accessibilityLabel={t('msg.authorProfile', { name: m.authorName })}>
               <Avatar uri={m.authorAvatar} name={m.authorName} size={40} decoration={m.authorDecoration} />
             </Pressable>
           )}
@@ -250,6 +264,7 @@ export const MessageItem = memo(function MessageItem({
                 style={styles.author}
                 showTag
                 onPress={() => onPressAuthor(m.authorId)}
+                onLongPress={authorMenu}
               />
               <RoleIcon icon={decor?.icon} title={decor?.iconTitle} />
               {m.authorIsBot ? <Text style={styles.bot}>BOT</Text> : null}
@@ -349,6 +364,7 @@ export const SUPER_COLOR = '#d946ef'
 
 const styles = StyleSheet.create({
   row: { flexDirection: 'row', paddingHorizontal: spacing.md, paddingTop: spacing.md, paddingBottom: 2, gap: spacing.md },
+  ignored: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.md, paddingVertical: spacing.xs, marginLeft: 40 + spacing.md },
   rowGrouped: { paddingTop: 2 },
   mentioned: { backgroundColor: colors.mention, borderLeftWidth: 2, borderLeftColor: colors.warning },
   gutter: { width: 40 },

@@ -4,6 +4,7 @@ import E2EGate from '@/e2e/E2EGate'
 import KeyChangeDialog from '@/e2e/KeyChangeDialog'
 import AiEngineHost from '@/features/ai/AiEngineHost'
 import { useAppearanceSync } from '@/features/appearance/sync'
+import UserMenuHost from '@/features/userMenu/UserMenuHost'
 import { useT } from '@/i18n'
 import { colors } from '@/theme'
 
@@ -91,6 +92,7 @@ export default function AppLayout() {
       <E2EGate />
       <KeyChangeDialog />
       <AiEngineHost />
+      <UserMenuHost />
     </>
   )
 }

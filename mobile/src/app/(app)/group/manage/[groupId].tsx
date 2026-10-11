@@ -7,6 +7,7 @@ import { friendsApi } from '@/api/friends'
 import { Avatar } from '@/components/Avatar'
 import { Button, ErrorState, IconButton, Loading, Row, Section, TextField } from '@/components/ui'
 import { GROUP_MAX_MEMBERS, GROUP_NAME_MAX, addableFriends, canAddMember, canRemoveMember, normalizeGroupName } from '@/features/groups/rules'
+import { openUserMenu } from '@/features/userMenu/UserMenuHost'
 import { useT } from '@/i18n'
 import { errorMessage } from '@/lib/http'
 import { useRouteParams } from '@/lib/params'
@@ -97,6 +98,7 @@ export default function ManageGroupScreen() {
             key={m.id}
             title={m.id === myId ? t('voice.you', { name: m.username }) : m.username}
             subtitle={m.id === g.owner_id ? t('social.group.owner') : null}
+            onLongPress={() => openUserMenu({ userId: m.id, name: m.username, avatar: m.avatar })}
             right={
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
                 <Avatar uri={m.avatar} name={m.username} size={28} userId={m.id} />
