@@ -29,6 +29,7 @@ mod presence;
 mod session;
 /// Réglages « Système » : démarrage, fermeture, GPU, téléchargements, icône.
 mod systeme;
+mod session_file;
 
 /// Vocal natif de l'application Linux (WebKitGTK sans WebRTC).
 pub mod native_voice;

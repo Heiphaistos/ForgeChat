@@ -37,6 +37,27 @@ export async function refreshAccess(): Promise<string> {
   }
 }
 
+const pause = (ms: number) => new Promise(r => setTimeout(r, ms))
+
+/**
+ * Lancement : jeton d'accès en mémoire, sinon rafraîchi par Rust depuis le trousseau. Rend false
+ * sans jeton. Refus (400/401/403) : Rust a déjà oublié le jeton. Panne passagère (réseau, 5xx) :
+ * réessayée, puis abandonnée sans toucher au trousseau (reprise au lancement ou au retour du réseau).
+ */
+export async function resumeSession(wait = pause): Promise<boolean> {
+  for (let attempt = 0; ; attempt++) {
+    if (await loadAccess()) return true
+    try {
+      await refreshAccess()
+      return true
+    } catch (e) {
+      const s = (e as { response?: { status: number } }).response?.status
+      if (s === 400 || s === 401 || s === 403 || attempt >= 3) return false
+    }
+    await wait(1500 * (attempt + 1))
+  }
+}
+
 /** Efface la session locale (déconnexion) en gardant les autres comptes mis de côté. */
 export async function clearLocalSession() {
   access = null

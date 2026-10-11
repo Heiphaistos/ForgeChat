@@ -5,13 +5,16 @@
 //! Une entrée de trousseau par compte : `refresh:active` pour le compte connecté,
 //! `refresh:<id>` pour chaque compte mis de côté (lib/accounts.ts).
 //!
-//! Trousseau injoignable (Linux sans Secret Service) : la session tient en mémoire pour ce
-//! lancement, il faudra se reconnecter au suivant. Jamais de repli sur un fichier en clair.
+//! Trousseau injoignable : sous Linux (pas de Secret Service), repli sur un fichier chiffré
+//! lié à la machine, protection moindre (session_file.rs) ; ailleurs, la session tient en
+//! mémoire pour ce lancement. Jamais de fichier en clair.
 
 use std::sync::Mutex;
 use std::time::Duration;
 
 use tauri::async_runtime::{spawn_blocking, Mutex as AsyncMutex};
+
+use crate::session_file;
 
 const SERVICE: &str = "org.heiphaistos.forgechat";
 const ACTIVE: &str = "refresh:active";
@@ -46,27 +49,55 @@ fn account_key(id: &str) -> Result<String, String> {
 }
 
 // Les magasins de secrets sont synchrones (D-Bus sous Linux) : hors des threads de tokio.
-async fn kr<T: Send + 'static>(f: impl FnOnce() -> keyring::Result<T> + Send + 'static) -> Result<T, String> {
-    spawn_blocking(f).await.map_err(|e| e.to_string())?.map_err(|e| e.to_string())
+async fn blocking<T: Send + 'static>(f: impl FnOnce() -> T + Send + 'static) -> Result<T, String> {
+    spawn_blocking(f).await.map_err(|e| e.to_string())
+}
+
+fn entry(user: &str) -> keyring::Result<keyring::Entry> {
+    keyring::Entry::new(SERVICE, user)
 }
 
 async fn kr_get(user: String) -> Option<String> {
-    kr(move || keyring::Entry::new(SERVICE, &user)?.get_password())
-        .await
-        .ok()
-        .filter(|t| valid_token(t))
+    blocking(move || match entry(&user).and_then(|e| e.get_password()) {
+        Ok(t) => Some(t),
+        // Absent du trousseau ou trousseau injoignable : peut-être rangé dans le repli Linux.
+        Err(_) => session_file::machine().and_then(|f| f.get(&user)),
+    })
+    .await
+    .ok()
+    .flatten()
+    .filter(|t| valid_token(t))
 }
 
 async fn kr_set(user: String, secret: String) -> Result<(), String> {
-    kr(move || keyring::Entry::new(SERVICE, &user)?.set_password(&secret)).await
+    blocking(move || match entry(&user).and_then(|e| e.set_password(&secret)) {
+        Ok(()) => {
+            // Le trousseau répond de nouveau : plus de copie de repli.
+            if let Some(f) = session_file::machine() {
+                let _ = f.del(&user);
+            }
+            Ok(())
+        }
+        Err(e) => match session_file::machine() {
+            Some(f) => f.set(&user, &secret),
+            None => Err(e.to_string()),
+        },
+    })
+    .await?
 }
 
 async fn kr_del(user: String) -> Result<(), String> {
-    kr(move || match keyring::Entry::new(SERVICE, &user)?.delete_credential() {
-        Err(keyring::Error::NoEntry) => Ok(()),
-        r => r,
+    blocking(move || {
+        if let Some(f) = session_file::machine() {
+            f.del(&user)?;
+        }
+        match entry(&user).and_then(|e| e.delete_credential()) {
+            // Trousseau injoignable : rien n'a pu y être rangé.
+            Ok(()) | Err(keyring::Error::NoEntry | keyring::Error::NoDefaultStore) => Ok(()),
+            Err(e) => Err(e.to_string()),
+        }
     })
-    .await
+    .await?
 }
 
 async fn active_refresh() -> Option<String> {
@@ -124,7 +155,11 @@ pub async fn session_store(access: String, refresh: String) -> Result<(), String
     if !valid_token(&refresh) || !(access.is_empty() || valid_token(&access)) {
         return Err("INVALID_TOKEN".into());
     }
-    set_active(Some(access).filter(|a| !a.is_empty()), refresh).await
+    // Trousseau (et repli) en échec : la connexion vaut quand même pour ce lancement.
+    if let Err(e) = set_active(Some(access).filter(|a| !a.is_empty()), refresh).await {
+        eprintln!("[session] trousseau indisponible, session gardée en mémoire : {e}");
+    }
+    Ok(())
 }
 
 /// Jeton d'accès en mémoire (survit au rechargement de la page, pas au redémarrage).
