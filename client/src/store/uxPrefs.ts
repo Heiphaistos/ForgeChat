@@ -9,10 +9,15 @@ interface Prefs { ignored: string[]; hideMuted: string[] }
 const KEY = 'fc_ux_prefs'
 const EMPTY: Prefs = { ignored: [], hideMuted: [] }
 
+const ids = (v: unknown): string[] => (Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : [])
+
+/** Relu et validé : une valeur abîmée ou d'un ancien format ne casse pas l'affichage. */
 function load(): Record<string, Prefs> {
   try {
     const v: unknown = JSON.parse(localStorage.getItem(KEY) ?? '{}')
-    return v && typeof v === 'object' ? (v as Record<string, Prefs>) : {}
+    if (!v || typeof v !== 'object') return {}
+    return Object.fromEntries(Object.entries(v as Record<string, Partial<Prefs>>)
+      .map(([uid, p]) => [uid, { ignored: ids(p?.ignored), hideMuted: ids(p?.hideMuted) }]))
   } catch { return {} }
 }
 
@@ -29,7 +34,7 @@ export const useUxPrefs = create<UxPrefsState>((set, get) => ({
     const me = useAuth.getState().user?.id
     if (!me) return
     const mine = get().byUser[me] ?? EMPTY
-    const byUser = { ...get().byUser, [me]: { ...mine, [field]: toggle(mine[field] ?? [], id, on) } }
+    const byUser = { ...get().byUser, [me]: { ...mine, [field]: toggle(mine[field], id, on) } }
     try { localStorage.setItem(KEY, JSON.stringify(byUser)) } catch { /* sans mémoire : appliqué pour la session */ }
     set({ byUser })
   },
@@ -39,4 +44,10 @@ export const useUxPrefs = create<UxPrefsState>((set, get) => ({
 export function useMyUxPrefs(): Prefs {
   const me = useAuth(s => s.user?.id)
   return useUxPrefs(s => (me && s.byUser[me]) || EMPTY)
+}
+
+/** Hors composant (alertes) : `userId` est-il ignoré par le compte connecté ? */
+export function isIgnored(userId: string | undefined): boolean {
+  const me = useAuth.getState().user?.id
+  return !!me && !!userId && (useUxPrefs.getState().byUser[me]?.ignored ?? []).includes(userId)
 }

@@ -12,6 +12,7 @@ import api, { mediaUrl } from '../../api/client'
 import { useUnread } from '../../store/unread'
 import { useMyUxPrefs, useUxPrefs } from '../../store/uxPrefs'
 import { useEscapeKey } from '../../hooks/useEscapeKey'
+import { useMobile } from '../../contexts/MobileContext'
 import { intlLocale, useT } from '../../i18n'
 import { ContextMenu, type ContextMenuEntry } from '../ui/ContextMenu'
 import { useServerMenuExtras } from '../community/ServerMenuExtras'
@@ -94,7 +95,8 @@ export default function ServerHeader({ serverId, data, isAdmin, canCreate, open 
   const [modal, setModal] = useState<'notif' | 'info' | null>(null)
   const unread = useUnread(s => s.serverCounts[serverId] ?? 0)
   const hideMuted = useMyUxPrefs().hideMuted.includes(serverId)
-  const extras = useServerMenuExtras(serverId, !!data?.lockdown, onClose)
+  const { closeSidebar } = useMobile()
+  const extras = useServerMenuExtras(serverId, !!data?.lockdown, closeSidebar)
   const { data: settings } = useQuery<{ dm_from_all?: boolean }>({
     queryKey: ['user-settings'],
     queryFn: () => api.get('/user/settings').then(r => r.data),
@@ -164,7 +166,7 @@ export default function ServerHeader({ serverId, data, isAdmin, canCreate, open 
       label: t('sm.copyId'), icon: <Copy size={16} />,
       onClick: () => { void navigator.clipboard.writeText(serverId).then(() => toast.success(t('common.idCopied'))) },
     },
-    ...(isAdmin ? [{ label: t('channels.admin'), icon: <ShieldCheck size={16} />, onClick: () => nav(`/servers/${serverId}/admin`) }] : []),
+    ...(isAdmin ? [{ label: t('channels.admin'), icon: <ShieldCheck size={16} />, onClick: () => { nav(`/servers/${serverId}/admin`); closeSidebar() } }] : []),
   ]
 
   const server = data?.server
