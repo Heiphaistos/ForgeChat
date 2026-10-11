@@ -10,7 +10,7 @@ export const fr = {
   'rs.text.decline': '🛟 Support à distance refusé',
   'rs.card.title': 'Support à distance',
   'rs.card.e2e': 'Identifiant et code chiffrés de bout en bout : ForgeChat ne les voit pas.',
-  'rs.card.offerIn': "{name} propose de prendre la main sur ton ordinateur : accepte depuis ForgeChat sur ordinateur.",
+  'rs.card.offerIn': "{name} propose de prendre la main sur ton ordinateur : accepte depuis ForgeChat sur un ordinateur Windows (GhostHandDesk n'existe que pour Windows).",
   'rs.card.offerOut': 'Tu as proposé ton aide. {name} doit accepter depuis son ordinateur.',
   'rs.card.inviteIn': "{name} demande ton aide : ordinateur {id}, code valable jusqu'à {time}.",
   'rs.card.inviteOut': "Ta demande d'aide (ordinateur {id}), valable jusqu'à {time}.",
@@ -21,6 +21,7 @@ export const fr = {
   'rs.state.expired': 'Code expiré',
   'rs.state.used': 'Code déjà utilisé',
   'rs.sendError': "Impossible d'envoyer la réponse",
+  'rs.openFailed': "Impossible d'ouvrir la visionneuse GhostHandDesk",
 }
 
 export const en: Partial<Record<keyof typeof fr, string>> = {
@@ -34,7 +35,7 @@ export const en: Partial<Record<keyof typeof fr, string>> = {
   'rs.text.decline': '🛟 Remote support declined',
   'rs.card.title': 'Remote support',
   'rs.card.e2e': 'ID and code are end-to-end encrypted: ForgeChat cannot see them.',
-  'rs.card.offerIn': '{name} offers to take control of your computer: accept from ForgeChat on a computer.',
+  'rs.card.offerIn': '{name} offers to take control of your computer: accept from ForgeChat on a Windows computer (GhostHandDesk only exists for Windows).',
   'rs.card.offerOut': 'You offered your help. {name} must accept from their computer.',
   'rs.card.inviteIn': '{name} asks for your help: computer {id}, code valid until {time}.',
   'rs.card.inviteOut': 'Your help request (computer {id}), valid until {time}.',
@@ -45,4 +46,5 @@ export const en: Partial<Record<keyof typeof fr, string>> = {
   'rs.state.expired': 'Code expired',
   'rs.state.used': 'Code already used',
   'rs.sendError': 'Could not send the answer',
+  'rs.openFailed': 'Could not open the GhostHandDesk viewer',
 }
