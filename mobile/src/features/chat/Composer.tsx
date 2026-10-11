@@ -19,6 +19,7 @@ import { voiceFileName, voiceMessageContent } from '@/features/composer/formats'
 import { EmojiPanel, GifPanel, QuickRepliesPanel, StickerPanel, useGifSearchAvailable } from '@/features/composer/Panels'
 import { prepareVoiceRecording, VoiceRecorder } from '@/features/composer/VoiceRecorder'
 import { LIMITS } from '@/config/env'
+import { useUxPrefs } from '@/stores/uxPrefs'
 import { useT } from '@/i18n'
 import { errorMessage } from '@/lib/http'
 import { useKeyboardSafeBottom } from '@/lib/safeBottom'
@@ -62,7 +63,8 @@ interface Props {
   editing: ChatMessage | null
   onCancelReply: () => void
   onCancelEdit: () => void
-  onSend: (text: string, files: LocalAttachment[], opts?: { expiresInSeconds?: number | null }) => Promise<void>
+  /** `replyPing` : réponse dans un salon, notifier l'auteur cité (false = sans mention). */
+  onSend: (text: string, files: LocalAttachment[], opts?: { expiresInSeconds?: number | null; replyPing?: boolean }) => Promise<void>
   onEdit: (id: string, text: string) => Promise<void>
   onTyping: () => void
   draft: string
@@ -114,6 +116,10 @@ export function Composer({
   const [panel, setPanel] = useState<'emoji' | 'gif' | 'sticker' | 'quick' | 'ttl' | 'more' | 'poll' | 'schedule' | null>(null)
   const gifSearch = useGifSearchAvailable()
   const [ttl, setTtl] = useState<number | null>(null)
+  // Réponse : mention de l'auteur cité (réglage par défaut, modifiable pour chaque réponse avec @ON/@OFF).
+  const pingDefault = useUxPrefs((s) => s.replyPing)
+  const [pingFor, setPingFor] = useState<{ id: string; on: boolean } | null>(null)
+  const replyPing = replyTo && pingFor?.id === replyTo.id ? pingFor.on : pingDefault
   const [recording, setRecording] = useState(false)
   const customEmojis = useCustomEmojis()
   const inputRef = useRef<TextInput>(null)
@@ -232,7 +238,7 @@ export function Composer({
   const sendDirect = async (text: string, attached: LocalAttachment[] = []) => {
     setSending(true)
     try {
-      await onSend(text, attached, { expiresInSeconds: serverId ? ttl : null })
+      await onSend(text, attached, { expiresInSeconds: serverId ? ttl : null, replyPing })
       void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
     } catch (e) {
       Alert.alert(t('composer.sendFailed'), errorMessage(e))
@@ -346,7 +352,7 @@ export function Composer({
         setFiles([])
         picked.current.clear()
         try {
-          await onSend(out, toSend, { expiresInSeconds: serverId ? ttl : null })
+          await onSend(out, toSend, { expiresInSeconds: serverId ? ttl : null, replyPing })
         } catch (e) {
           // Ne rien perdre : ce qui n'est pas parti revient dans le composer.
           const back = restoreAfterSendError(e, { text, files: toSend }, { text: draftRef.current, files: filesRef.current })
@@ -381,6 +387,19 @@ export function Composer({
           <Text style={styles.contextText} numberOfLines={1}>
             {editing ? t('composer.editing') : t('composer.replyingTo', { name: replyTo?.authorName ?? '' })}
           </Text>
+          {replyTo && !editing && serverId ? (
+            <Pressable
+              onPress={() => setPingFor({ id: replyTo.id, on: !replyPing })}
+              hitSlop={8}
+              accessibilityRole="switch"
+              accessibilityState={{ checked: replyPing }}
+              accessibilityLabel={t(replyPing ? 'ux.reply.pingOn' : 'ux.reply.pingOff')}
+            >
+              <Text style={{ color: replyPing ? colors.primary : colors.textMuted, fontWeight: '700', textDecorationLine: replyPing ? 'none' : 'line-through' }}>
+                @{replyPing ? 'ON' : 'OFF'}
+              </Text>
+            </Pressable>
+          ) : null}
           <Pressable
             onPress={() => {
               if (editing) {

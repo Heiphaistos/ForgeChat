@@ -13,10 +13,14 @@ import { SignedImage } from './SignedImage'
 import { deceptiveHost } from '@/lib/safeUrl'
 import { formatTimestamp, parseMarkdown, type InlineNode } from '@/lib/markdown'
 import { queryClient } from '@/lib/queryClient'
+import { useUxPrefs } from '@/stores/uxPrefs'
 import { colors, font, isLight, radius, spacing } from '@/theme'
 
 function Spoiler({ children }: { children: ReactNode }) {
-  const [shown, setShown] = useState(false)
+  // Réglage « Afficher le contenu masqué » : au toucher (défaut) ou toujours.
+  const always = useUxPrefs((s) => s.spoilers === 'always')
+  const [clicked, setShown] = useState(false)
+  const shown = clicked || always
   const tr = useT()
   return (
     <Text

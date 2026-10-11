@@ -86,6 +86,7 @@ export default function AppLayout() {
         <Stack.Screen name="settings/notifications" options={{ title: t('you.notifications') }} />
         <Stack.Screen name="notifications" options={{ title: t('ux.nc.title') }} />
         <Stack.Screen name="settings/appearance" options={{ title: t('you.appearance') }} />
+        <Stack.Screen name="settings/display" options={{ title: t('ux.display.title') }} />
         <Stack.Screen name="settings/password" options={{ title: t('screen.password'), presentation: 'modal' }} />
         <Stack.Screen name="settings/delete-account" options={{ title: t('screen.deleteAccount'), presentation: 'modal' }} />
       </Stack>

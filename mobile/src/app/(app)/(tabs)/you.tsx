@@ -95,6 +95,7 @@ export default function YouScreen() {
         <Row icon="mic-outline" title={t('voiceLot.title')} onPress={() => router.push('/settings/voice')} chevron />
         <Row icon="sparkles-outline" title={t('ai.title')} onPress={() => router.push('/settings/ai')} chevron />
         <Row icon="color-palette-outline" title={t('you.appearance')} onPress={() => router.push('/settings/appearance')} chevron />
+        <Row icon="text-outline" title={t('ux.display.title')} subtitle={t('ux.display.subtitle')} onPress={() => router.push('/settings/display')} chevron />
       </Section>
 
       {DevInfoRow ? (

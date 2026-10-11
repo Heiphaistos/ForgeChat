@@ -25,6 +25,7 @@ import { reactionEmojiName, safeEmojiUrl, useCustomEmojis } from './customEmojis
 import { displayAttachments } from '@/e2e/files'
 import { openUserMenu } from '@/features/userMenu/UserMenuHost'
 import { useMyLocalPrefs } from '@/features/userMenu/localPrefs'
+import { useUxPrefs } from '@/stores/uxPrefs'
 
 interface Props {
   message: ChatMessage
@@ -217,6 +218,11 @@ export const MessageItem = memo(function MessageItem({
   // Personne ignorée (menu utilisateur, sur cet appareil) : message replié, affiché au toucher.
   const ignored = useMyLocalPrefs().ignored.includes(m.authorId)
   const [revealed, setRevealed] = useState(false)
+  // Réglages d'affichage : réactions masquées, pièces jointes repliées derrière un bouton.
+  const showReactions = useUxPrefs((s) => s.showReactions)
+  const showAttachments = useUxPrefs((s) => s.showAttachments)
+  const [attachmentsOpened, setAttachmentsOpened] = useState(false)
+  const attachmentCount = m.attachments.length + (m.files?.length ?? 0)
   const authorMenu = m.authorIsBot ? undefined : () => openUserMenu({ userId: m.authorId, name: m.authorName, avatar: m.authorAvatar, serverId })
   if (ignored && !revealed) {
     return (
@@ -312,7 +318,13 @@ export const MessageItem = memo(function MessageItem({
 
           {m.pollId && serverId && channelId ? <PollCard serverId={serverId} channelId={channelId} pollId={m.pollId} myId={myId} /> : null}
 
-          <Attachments items={m.attachments} files={m.files} pending={m.pending} onLongPress={() => onLongPress(m)} />
+          {!showAttachments && !attachmentsOpened && attachmentCount > 0 ? (
+            <Pressable onPress={() => setAttachmentsOpened(true)} accessibilityRole="button" hitSlop={6}>
+              <Text style={[styles.meta, { color: colors.link }]}>{t('ux.display.showAttachmentsBtn', { n: attachmentCount })}</Text>
+            </Pressable>
+          ) : (
+            <Attachments items={m.attachments} files={m.files} pending={m.pending} onLongPress={() => onLongPress(m)} />
+          )}
           {m.awaitingAttachments && m.attachments.length === 0 ? <Text style={styles.meta}>{t('msg.uploading')}</Text> : null}
 
           {m.editedAt ? <Text style={styles.meta}>{t('msg.edited')}</Text> : null}
@@ -346,7 +358,7 @@ export const MessageItem = memo(function MessageItem({
             </Pressable>
           ) : null}
 
-          {m.reactions.length ? (
+          {showReactions && m.reactions.length ? (
             <View style={styles.reactions}>
               {m.reactions.map((r) => (
                 <ReactionChip key={`${r.is_super ? 's' : 'n'}:${r.emoji}`} m={m} r={r} onReact={onReact} onReactionLongPress={onReactionLongPress} />

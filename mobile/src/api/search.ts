@@ -7,6 +7,7 @@ export const searchApi = {
    * GET /search?q=… : partout (messages des salons, DM et groupes, personnes, salons), ou seulement
    * les messages d'une conversation quand `scope` est donné.
    */
-  global: async (q: string, signal?: AbortSignal, scope: ConversationRef | null = null): Promise<SearchResults> =>
-    normalizeSearch(await http.get<unknown>('/search', { query: { q, ...searchScope(scope), ...(scope ? { limit: 50 } : {}) }, signal })),
+  /** `where` (sans conversation) : tous les MP et groupes, ou tous les salons de serveur (search.rs). */
+  global: async (q: string, signal?: AbortSignal, scope: ConversationRef | null = null, where: 'all' | 'dms' | 'servers' = 'all'): Promise<SearchResults> =>
+    normalizeSearch(await http.get<unknown>('/search', { query: { q, ...searchScope(scope), ...(scope ? { limit: 50 } : where !== 'all' ? { scope: where } : {}) }, signal })),
 }
