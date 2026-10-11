@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { immer } from 'zustand/middleware/immer'
 import api from '../api/client'
-import { clearLocalSession, loadAccess, migrateLegacySession, refreshAccess, storeSession } from '../lib/localSession'
+import { clearLocalSession, migrateLegacySession, resumeSession, storeSession } from '../lib/localSession'
 import { useChat, useDraft } from './chat'
 import { usePresence } from './presence'
 import { useUnread } from './unread'
@@ -129,11 +129,8 @@ export const useAuth = create<AuthState>()(
       // mémoire, Rust rafraîchit depuis le trousseau ; aucun jeton enregistré = pas de session.
       if (isTauri) {
         await migrateLegacySession()
-        if (!(await loadAccess())) {
-          const status = await refreshAccess().then(() => 0, (e: { response?: { status: number } }) => e.response?.status ?? 0)
-          // Refus définitif : Rust a déjà oublié le jeton. Réseau ou 503 : on garde et on réessaie.
-          if (status === 400 || status === 401 || status === 403) { set(s => { s.loading = false }); return }
-        }
+        // Jamais de /users/me sans jeton : son 401 passait pour un refus et effaçait la session.
+        if (!(await resumeSession())) { set(s => { s.loading = false }); return }
       }
       // Réseau instable au lancement (réveil de veille, Wi-Fi qui s'accroche) : on réessaie un peu avant
       // d'abandonner, et on ne touche JAMAIS à la session sur une simple erreur réseau.
