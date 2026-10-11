@@ -71,6 +71,9 @@ const mockMustEncrypt = jest.fn()
 jest.mock('@/e2e/conversations', () => ({ mustEncrypt: (...a: unknown[]) => mockMustEncrypt(...a) }))
 
 import * as c from '@/e2e/crypto'
+
+// Chiffrement réel (WebCrypto) : lent quand toute la suite tourne en parallèle.
+jest.setTimeout(30_000)
 import { clearFileCache, decryptToCache, displayAttachments, encryptedMedia, MOBILE_MAX_ENCRYPTED, prepareUploads, thumbUri } from '@/e2e/files'
 
 const pattern = (n: number) => Uint8Array.from({ length: n }, (_, i) => (i * 13 + 5) & 255)
