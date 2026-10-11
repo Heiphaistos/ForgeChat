@@ -110,6 +110,15 @@ export type PlayerReport = Extract<PlayerEvent, { type: 'state' }> & { at: numbe
 /** Script à injecter ; JSON.stringify échappe tout (et videoId est déjà validé). */
 export const playerScript = (c: PlayerCmd) => `window.fcCmd(${JSON.stringify(c)});true;`
 
+/** Page du lecteur : même ORIGINE exacte (un préfixe laissait passer `https://hôte.evil.example`). */
+export function isPlayerPage(url: string, origin: string): boolean {
+  try {
+    return new URL(url).origin === origin
+  } catch {
+    return false
+  }
+}
+
 const num = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v)
 
 export function parsePlayerEvent(raw: string): PlayerEvent | null {

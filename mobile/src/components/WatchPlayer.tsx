@@ -3,7 +3,7 @@ import { StyleSheet, View } from 'react-native'
 import { WebView, type WebViewMessageEvent } from 'react-native-webview'
 import type { ShouldStartLoadRequest } from 'react-native-webview/lib/WebViewTypes'
 import { openExternalUrl } from '@/lib/links'
-import { parsePlayerEvent, playerScript, syncCommands, type PlayerCmd, type PlayerReport, type WatchInfo } from '@/lib/watchTogether'
+import { isPlayerPage, parsePlayerEvent, playerScript, syncCommands, type PlayerCmd, type PlayerReport, type WatchInfo } from '@/lib/watchTogether'
 
 // Lecteur « Regarder ensemble » : page HTML inline avec l'API IFrame YouTube (youtube-nocookie, sans
 // contrôles YouTube : toute action passe par nos boutons, donc par le serveur). Pont :
@@ -34,7 +34,7 @@ onError:function(e){post({type:'error',code:e.data})}}})}
 // Navigation de la page elle-même : seule notre page ; un lien YouTube cliqué s'ouvre hors de l'app.
 // (Les iframes YouTube ne passent pas ici sur Android ; sur iOS on les laisse charger.)
 const onNavigate = (r: ShouldStartLoadRequest) => {
-  if (!r.isTopFrame || r.url === 'about:blank' || r.url.startsWith(ORIGIN)) return true
+  if (!r.isTopFrame || r.url === 'about:blank' || isPlayerPage(r.url, ORIGIN)) return true
   // http(s) seulement, confirmation avec le domaine réel (lib/links.ts).
   void openExternalUrl(r.url)
   return false

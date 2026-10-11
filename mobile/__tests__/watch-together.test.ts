@@ -1,4 +1,5 @@
 import {
+  isPlayerPage,
   needsResync,
   parsePlayerEvent,
   parseWatch,
@@ -89,5 +90,16 @@ describe('Synchronisation', () => {
   it('laisse finir la vidéo terminée', () => {
     const end = parseWatch({ ...ev, position: 299.5 }, 6000)!
     expect(syncCommands(end, 3, report({ playing: false, ended: true, time: 300 }), 6000, false)).toEqual([])
+  })
+})
+
+describe('isPlayerPage', () => {
+  const O = 'https://forgechat.heiphaistos.org'
+  it('seule notre origine exacte reste dans la WebView du lecteur', () => {
+    expect(isPlayerPage(`${O}/`, O)).toBe(true)
+    for (const ko of [`${O}.evil.example/`, `${O}@evil.example/`, `${O}:8443/`, 'http://forgechat.heiphaistos.org/',
+      'javascript:alert(1)', 'data:text/html,<script>alert(1)</script>', 'pas une url']) {
+      expect(isPlayerPage(ko, O)).toBe(false)
+    }
   })
 })
