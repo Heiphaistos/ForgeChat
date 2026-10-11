@@ -1585,6 +1585,7 @@ dependencies = [
  "livekit",
  "nokhwa",
  "reqwest 0.13.4",
+ "ring",
  "rustls",
  "serde",
  "serde_json",

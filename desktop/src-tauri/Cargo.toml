@@ -38,6 +38,8 @@ base64 = "0.22"
 # Jetons de session dans le trousseau de l'OS (audit M10) : Gestionnaire d'identifiants
 # Windows, Trousseau macOS, Secret Service Linux (zbus pur Rust, sans libdbus).
 keyring = "4.2"
+# Repli Linux sans Secret Service (session_file.rs) : ChaCha20-Poly1305, deja compile pour rustls.
+ring = "0.17"
 sysinfo = { version = "0.39", default-features = false, features = ["system"] }
 
 [target.'cfg(windows)'.dependencies]

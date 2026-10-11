@@ -27,6 +27,7 @@ mod diagnostic;
 mod presence;
 /// Jetons de session dans le trousseau de l'OS (audit M10).
 mod session;
+mod session_file;
 
 /// Vocal natif de l'application Linux (WebKitGTK sans WebRTC).
 pub mod native_voice;
