@@ -48,4 +48,12 @@ describe('volume par personne', () => {
     expect(alice.setVolume).toHaveBeenCalledWith(2)
     expect(bob.setVolume).toHaveBeenCalledWith(1)
   })
+
+  it('rendu muet pour moi : 0 appliqué, volume réglé conservé', () => {
+    usePeerVolumes.getState().setVolume('m', 1.5)
+    usePeerVolumes.getState().setMuted('m', true)
+    expect(peerVolume('m')).toBe(0)
+    usePeerVolumes.getState().setMuted('m', false)
+    expect(peerVolume('m')).toBe(1.5)
+  })
 })

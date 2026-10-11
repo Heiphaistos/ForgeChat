@@ -26,21 +26,36 @@ export function withVolume(volumes: Record<string, number>, userId: string, volu
   return keys.length > MAX_KEPT ? Object.fromEntries(keys.slice(-MAX_KEPT).map((k) => [k, next[k]!])) : next
 }
 
-export const usePeerVolumes = create<{ volumes: Record<string, number>; setVolume: (userId: string, volume: number) => void }>()(
+interface PeerVolumesState {
+  volumes: Record<string, number>
+  /** Rendus muets pour moi seul (menu vocal) : silencieux sans perdre leur volume. */
+  muted: string[]
+  setVolume: (userId: string, volume: number) => void
+  setMuted: (userId: string, on: boolean) => void
+}
+
+export const usePeerVolumes = create<PeerVolumesState>()(
   persist(
     (set) => ({
       volumes: {},
+      muted: [],
       setVolume: (userId, volume) => set((s) => ({ volumes: withVolume(s.volumes, userId, volume) })),
+      setMuted: (userId, on) =>
+        set((s) => ({ muted: on ? [...new Set([...s.muted, userId])].slice(-MAX_KEPT) : s.muted.filter((x) => x !== userId) })),
     }),
     {
       name: 'fc.peerVolumes.v1',
       storage: createJSONStorage(() => secureStateStorage),
-      partialize: ({ volumes }) => ({ volumes }),
+      partialize: ({ volumes, muted }) => ({ volumes, muted }),
     },
   ),
 )
 
-export const peerVolume = (userId: string): number => clampVolume(usePeerVolumes.getState().volumes[userId] ?? 1)
+/** Volume appliqué : 0 si rendu muet pour moi, sinon le réglage mémorisé. */
+export const peerVolume = (userId: string): number => {
+  const s = usePeerVolumes.getState()
+  return s.muted.includes(userId) ? 0 : clampVolume(s.volumes[userId] ?? 1)
+}
 
 /** Applique les volumes mémorisés à tous les participants distants d'une salle. */
 export function applyPeerVolumes(room: Room | null | undefined) {

@@ -10,6 +10,7 @@ import { t } from '@/i18n'
 import { registerSignOutHook } from './auth'
 import { E2EE_CLAIM, enableMediaE2EE, mediaE2EEError, openMediaE2EE, watchOutdated, type MediaE2EE } from '@/e2e/media'
 import { audioCaptureDefaults, watchCameraEffect } from '@/services/voiceFx'
+import { hasLocalPref, useLocalPrefs } from '@/features/userMenu/localPrefs'
 import { applyPeerVolumes, peerVolume, usePeerVolumes } from './peerVolumes'
 
 /**
@@ -84,11 +85,16 @@ export const useGroupCall = create<GroupCallState>((set, get) => {
 
   const refresh = (p: RemoteParticipant) => {
     const cam = p.getTrackPublication(Track.Source.Camera)
+    // « Désactiver la vidéo » (menu de la personne) : sa caméra n'est plus reçue.
+    const videoOff = hasLocalPref('videoOff', p.identity)
+    if (cam && cam.isSubscribed === videoOff) cam.setSubscribed(!videoOff)
     set((s) => ({
       remotes: { ...s.remotes, [p.identity]: cam?.isSubscribed && !cam.isMuted ? streamOf(cam.track) : null },
       mutedPeers: { ...s.mutedPeers, [p.identity]: !p.isMicrophoneEnabled },
     }))
   }
+
+  useLocalPrefs.subscribe(() => room?.remoteParticipants.forEach((p) => refresh(p)))
 
   const refreshLocal = () => {
     const cam = room?.localParticipant.getTrackPublication(Track.Source.Camera)

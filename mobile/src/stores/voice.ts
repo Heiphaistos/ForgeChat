@@ -13,6 +13,7 @@ import { getMyId, registerSignOutHook } from './auth'
 import { E2EE_CLAIM, enableMediaE2EE, mediaE2EEError, openMediaE2EE, retryWhenKeyReady, watchOutdated, type MediaE2EE } from '@/e2e/media'
 import { audioCaptureDefaults, watchCameraEffect } from '@/services/voiceFx'
 import { applyPeerVolumes, peerVolume, usePeerVolumes } from './peerVolumes'
+import { hasLocalPref, useLocalPrefs } from '@/features/userMenu/localPrefs'
 
 /**
  * Salons vocaux de serveur — protocole du serveur ForgeChat ≥ 3.251 et du client web
@@ -231,6 +232,12 @@ export const useVoice = create<VoiceState>((set, get) => {
     if (p === room?.localParticipant || !get().peers.some((x) => x.userId === p.identity)) return
     const cam = p.getTrackPublication(Track.Source.Camera)
     const scr = p.getTrackPublication(Track.Source.ScreenShare)
+    // « Désactiver la vidéo » (menu vocal) : caméra et écran de ce pair ni reçus ni affichés.
+    const videoOff = hasLocalPref('videoOff', p.identity)
+    for (const source of [Track.Source.Camera, Track.Source.ScreenShare, Track.Source.ScreenShareAudio]) {
+      const pub = (p as RemoteParticipant).getTrackPublication(source)
+      if (pub && pub.isSubscribed === videoOff) pub.setSubscribed(!videoOff)
+    }
     applyAudio(p as RemoteParticipant)
     patchPeer(p.identity, {
       stream: cam?.isSubscribed && !cam.isMuted ? streamOf(cam.track) : null,
@@ -626,10 +633,14 @@ export const useVoice = create<VoiceState>((set, get) => {
     )
   })
 
+  // Vidéo désactivée ou réactivée pour un pair (menu vocal) : abonnements recalculés.
+  useLocalPrefs.subscribe(() => room?.remoteParticipants.forEach((p) => rebuildPeer(p)))
+
   // Son joué par un autre membre du salon (le nôtre est déjà joué localement).
   realtime.on('SOUNDBOARD_PLAY', (e) => {
     const s = get()
     if (!here(e.channel_id) || !s.joined || s.deafened || e.user_id === getMyId()) return
+    if (isStr(e.user_id) && hasLocalPref('soundboardMuted', e.user_id)) return
     playSoundFile(e.file_url)
   })
 

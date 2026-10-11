@@ -2,6 +2,7 @@
 // conversations épinglées et fermées tant que le serveur ne les connaît pas (la branche web
 // ux-menus les ajoute à PATCH /dms/:id/settings ; un serveur qui renvoie `is_pinned` l'emporte).
 // ponytail: stockage local non synchronisé ; à retirer pour l'épinglage/fermeture dès que le serveur les sert partout.
+import { useMemo } from 'react'
 import { create } from 'zustand'
 import { createJSONStorage, persist } from 'zustand/middleware'
 import { fileStateStorage } from '@/lib/fileStorage'
@@ -10,20 +11,25 @@ import { getMyId } from '@/stores/auth'
 interface Prefs {
   ignored: string[]
   pinned: string[]
+  /** Menu vocal, pour moi seul : sons de soundboard ignorés, caméra et écran non reçus. */
+  soundboardMuted: string[]
+  videoOff: string[]
   /** Conversation → fermeture (ms) : masquée jusqu'au prochain message. */
   closed: Record<string, number>
 }
-const EMPTY: Prefs = { ignored: [], pinned: [], closed: {} }
+const EMPTY: Prefs = { ignored: [], pinned: [], soundboardMuted: [], videoOff: [], closed: {} }
+type ListField = 'ignored' | 'pinned' | 'soundboardMuted' | 'videoOff'
 
 interface State {
   byUser: Record<string, Prefs>
-  toggle: (field: 'ignored' | 'pinned', id: string, on: boolean) => void
+  toggle: (field: ListField, id: string, on: boolean) => void
   setClosed: (id: string, at: number | null) => void
 }
 
 const update = (s: State, fn: (p: Prefs) => Prefs): Partial<State> => {
   const me = getMyId()
-  return me ? { byUser: { ...s.byUser, [me]: fn(s.byUser[me] ?? EMPTY) } } : {}
+  // Comptes enregistrés avant l'ajout d'un champ : complétés par EMPTY.
+  return me ? { byUser: { ...s.byUser, [me]: fn({ ...EMPTY, ...s.byUser[me] }) } } : {}
 }
 
 export const useLocalPrefs = create<State>()(
@@ -48,5 +54,10 @@ export const useLocalPrefs = create<State>()(
 
 /** Préférences du compte connecté (sélecteur React). */
 export function useMyLocalPrefs(): Prefs {
-  return useLocalPrefs((s) => s.byUser[getMyId() ?? ''] ?? EMPTY)
+  const mine = useLocalPrefs((s) => s.byUser[getMyId() ?? ''])
+  return useMemo(() => (mine ? { ...EMPTY, ...mine } : EMPTY), [mine])
 }
+
+/** Hors composant (salon vocal) : `userId` est-il dans la liste `field` du compte connecté ? */
+export const hasLocalPref = (field: ListField, userId: string | undefined): boolean =>
+  !!userId && !!useLocalPrefs.getState().byUser[getMyId() ?? '']?.[field]?.includes(userId)
