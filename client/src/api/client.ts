@@ -78,7 +78,10 @@ api.interceptors.response.use(
     }
     if (status === 426) void onUpgradeRequired()
     const isAuthEndpoint = url.includes('/auth/login') || url.includes('/auth/register') || url.includes('/auth/refresh')
+    // Page publique : pas de rafraîchissement, sauf si la requête portait un jeton (bureau, lancement
+    // sur « / ») : un jeton d'accès simplement périmé ne doit pas effacer la session du trousseau.
     const onPublicPage = typeof window !== 'undefined' && isPublicPath(window.location.pathname)
+      && !err.config?.headers?.Authorization
 
     // Garde anti-boucle : si la requête déjà rejouée après un refresh échoue ENCORE en
     // 401 (bug serveur qui rejette un token pourtant valide, edge case), ne pas
