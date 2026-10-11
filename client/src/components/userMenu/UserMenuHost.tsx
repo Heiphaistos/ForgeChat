@@ -16,11 +16,14 @@ import { useMemberModeration } from '../chat/MemberModeration'
 import { useRemoteSupportItem } from '../chat/RemoteSupport'
 import LightboxModal from '../chat/LightboxModal'
 import { PERM, permsOf } from '../../hooks/useServerPerms'
-import { useUserMenu } from './store'
+import { serverInPath, useUserMenu } from './store'
 import { buildUserMenu, type Relation } from './model'
 import { blockedQuery, dmsQuery, friendGroupsQuery, friendsQuery, serversQuery } from './queries'
 import { dmWith, hasComposer, insertMention, inviteToServer } from './actions'
-import UserNoteDialog from './UserNoteDialog'
+import UserNoteDialog, { SafetyCodeDialog } from './UserNoteDialog'
+import { resubscribeAll } from '../../store/voiceSfu'
+import { isNativeVoice, nativeSetPeerAudio } from '../../lib/nativeVoice'
+import { useVoice } from '../../store/voice'
 
 const failed = (e: unknown) => toast.error(
   (e as { response?: { data?: { error?: string } } })?.response?.data?.error ?? tr('um.actionFailed'))
@@ -34,7 +37,7 @@ export default function UserMenuHost() {
   const close = useUserMenu(s => s.close)
   const serverId = useUserMenu(s => s.serverId)
   const target = menu?.target
-  const [dialog, setDialog] = useState<{ kind: 'note'; userId: string; username: string; friend: boolean } | { kind: 'avatar'; url: string } | null>(null)
+  const [dialog, setDialog] = useState<{ kind: 'note'; userId: string; username: string; friend: boolean } | { kind: 'avatar'; url: string } | { kind: 'safety'; userId: string; username: string } | null>(null)
 
   const open = !!menu
   const { data: friends } = useQuery({ ...friendsQuery, enabled: open })
@@ -53,7 +56,7 @@ export default function UserMenuHost() {
   })
   const moderation = useMemberModeration(serverId)
   const supportItem = useRemoteSupportItem()
-  const ignored = useMyUxPrefs().ignored
+  const prefs = useMyUxPrefs()
 
   const refreshFriends = () => {
     void qc.invalidateQueries({ queryKey: ['friends'] })
@@ -71,7 +74,8 @@ export default function UserMenuHost() {
       : 'none'
     const dm = dms.find(d => !d.is_group && d.other_user_id === userId)
     const isBlocked = blocked.some(b => b.id === userId)
-    const isIgnored = ignored.includes(userId)
+    const isIgnored = prefs.ignored.includes(userId)
+    const setPref = (field: 'voiceMuted' | 'soundboardMuted' | 'videoOff', on: boolean) => useUxPrefs.getState().set(field, userId, on)
     const inviteServers = servers.filter((s, i) => s.owner_id === me || permsOf(serverDetails[i]?.data, me).has(PERM.MANAGE_SERVER))
     const patchDm = (body: object, done: string) => dm && api.patch(`/dms/${dm.id}/settings`, body)
       .then(() => { void qc.invalidateQueries({ queryKey: ['dms'] }); toast.success(done) })
@@ -87,7 +91,13 @@ export default function UserMenuHost() {
       dm: dm ? { muted: dm.is_muted } : null,
       inviteServers,
       friendGroups: groups.map(g => ({ id: g.id, name: g.name, member: g.member_ids.includes(userId) })),
-      volume: target.voice ? volumeMenuItem(userId, username, { clientX: menu.x, clientY: menu.y }) : null,
+      volume: target.voice ? volumeMenuItem(userId, username) : null,
+      voiceLocal: target.voice && relation !== 'self' ? {
+        muted: prefs.voiceMuted.includes(userId),
+        ...(target.serverId ? { soundboardMuted: prefs.soundboardMuted.includes(userId), videoOff: prefs.videoOff.includes(userId) } : {}),
+      } : null,
+      // Le pseudo serveur ne se change que pour soi (PATCH /servers/:id/nickname), dans l'écran du serveur ouvert.
+      canNick: relation === 'self' && !!serverId && serverId === serverInPath(),
       support: supportItem(userId),
       moderation: serverId ? moderation.itemsFor(userId) : [],
     }, {
@@ -132,6 +142,15 @@ export default function UserMenuHost() {
       },
       copyUrl: () => { void navigator.clipboard.writeText(`${window.location.origin}/users/${userId}`).then(() => toast.success(tr('um.copied'))) },
       copyId: () => { void navigator.clipboard.writeText(userId).then(() => toast.success(tr('common.idCopied'))) },
+      localMute: on => {
+        setPref('voiceMuted', on)
+        // Vocal natif : pas de volume par personne, seulement coupé ou audible.
+        if (isNativeVoice()) void nativeSetPeerAudio(userId, !on && (useVoice.getState().userVolumes[userId] ?? 100) > 0).catch(failed)
+      },
+      soundboardMute: on => setPref('soundboardMuted', on),
+      videoOff: on => { setPref('videoOff', on); resubscribeAll() },
+      verifyCode: () => setDialog({ kind: 'safety', userId, username }),
+      nickname: () => { window.dispatchEvent(new CustomEvent('forgechat:open-server-settings', { detail: 'profile' })) },
     }, t)
     node = <ContextMenu x={menu.x} y={menu.y} items={target.wrap ? target.wrap(items) : items} onClose={close} />
   }
@@ -143,6 +162,7 @@ export default function UserMenuHost() {
       {dialog?.kind === 'note' && (
         <UserNoteDialog userId={dialog.userId} username={dialog.username} isFriend={dialog.friend} onClose={() => setDialog(null)} />
       )}
+      {dialog?.kind === 'safety' && <SafetyCodeDialog userId={dialog.userId} username={dialog.username} onClose={() => setDialog(null)} />}
       {dialog?.kind === 'avatar' && <LightboxModal images={[dialog.url]} initialIndex={0} onClose={() => setDialog(null)} />}
     </>
   )

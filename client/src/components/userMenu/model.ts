@@ -24,10 +24,17 @@ export interface UserMenuFacts {
   /** Serveurs où je peux inviter cette personne. */
   inviteServers: { id: string; name: string }[]
   friendGroups: { id: string; name: string; member: boolean }[]
-  /** Entrées déjà prêtes : volume (en vocal), support à distance, modération. */
-  volume: ContextMenuItem | null
+  /** Entrées déjà prêtes : volume (curseur, en vocal), support à distance, modération. */
+  volume: ContextMenuEntry | null
   support: ContextMenuItem | null
   moderation: ContextMenuEntry[]
+  /**
+   * Réglages « pour moi seulement » d'une personne entendue en vocal (null ailleurs ou soi-même) ;
+   * soundboard et vidéo seulement dans un salon vocal de serveur (absents d'un appel privé).
+   */
+  voiceLocal: { muted: boolean; soundboardMuted?: boolean; videoOff?: boolean } | null
+  /** Je peux changer mon pseudo sur le serveur du contexte (menu sur moi-même). */
+  canNick: boolean
 }
 
 export interface UserMenuActions {
@@ -49,6 +56,11 @@ export interface UserMenuActions {
   viewAvatar(): void
   copyUrl(): void
   copyId(): void
+  localMute(on: boolean): void
+  soundboardMute(on: boolean): void
+  videoOff(on: boolean): void
+  verifyCode(): void
+  nickname(): void
 }
 
 const SEP: ContextMenuEntry = { separator: true }
@@ -72,8 +84,10 @@ export function muteSubmenu(t: Tr, onMute: (minutes: number) => void): ContextMe
 export function buildUserMenu(f: UserMenuFacts, a: UserMenuActions, t: Tr): ContextMenuEntry[] {
   const self = f.relation === 'self'
   const friend = f.relation === 'friend'
+  const v = f.voiceLocal
   const entries: ContextMenuEntry[] = [
     { label: t('um.profile'), onClick: a.profile },
+    ...(f.canMention ? [{ label: t('members.mention'), onClick: a.mention }] : []),
     ...(self ? [] : [
       { label: t('msg.sendMessage'), onClick: a.message },
       { label: t('um.call'), onClick: a.call },
@@ -82,7 +96,14 @@ export function buildUserMenu(f: UserMenuFacts, a: UserMenuActions, t: Tr): Cont
     ...(friend ? [{ label: t('um.friendNick'), hint: t('um.onlyYou'), onClick: a.note }] : []),
     SEP,
     ...(f.volume ? [f.volume] : []),
-    ...(f.canMention ? [{ label: t('members.mention'), onClick: a.mention }] : []),
+    ...(v ? [
+      { label: t('um.localMute'), checked: v.muted, onClick: () => a.localMute(!v.muted) },
+      ...(v.soundboardMuted === undefined ? [] : [{ label: t('um.soundboardMute'), checked: v.soundboardMuted, onClick: () => a.soundboardMute(!v.soundboardMuted) }]),
+      ...(v.videoOff === undefined ? [] : [{ label: t('um.videoOff'), checked: v.videoOff, onClick: () => a.videoOff(!v.videoOff) }]),
+    ] : []),
+    SEP,
+    ...(self ? [] : [{ label: t('um.verifyCode'), onClick: a.verifyCode }]),
+    ...(f.canNick ? [{ label: t('um.changeNick'), onClick: a.nickname }] : []),
     SEP,
     ...(self ? [] : [
       ...(f.support ? [f.support] : []),
@@ -102,17 +123,75 @@ export function buildUserMenu(f: UserMenuFacts, a: UserMenuActions, t: Tr): Cont
       ...(f.dm ? [f.dm.muted
         ? { label: t('um.unmute', { name: f.name }), onClick: a.unmute }
         : { label: t('um.mute', { name: f.name }), submenu: muteSubmenu(t, a.mute) }] : []),
-      SEP,
       { label: t(f.ignored ? 'um.unignore' : 'um.ignore'), hint: t('um.ignoreHint'), onClick: () => a.ignore(!f.ignored) },
       { label: t(f.blocked ? 'friends.unblock' : 'friends.block'), danger: !f.blocked, onClick: () => a.block(!f.blocked) },
     ]),
     ...f.moderation,
     SEP,
+    { label: t('um.copyId'), onClick: a.copyId },
     { label: t('um.viewAvatar'), onClick: a.viewAvatar },
     { label: t('um.copyUrl'), onClick: a.copyUrl },
-    { label: t('um.copyId'), onClick: a.copyId },
   ]
   return tidy(entries)
+}
+
+/** Ce que je peux faire au membre (permissions réelles et hiérarchie, calculées par l'appelant). */
+export interface ModFacts {
+  name: string
+  self: boolean
+  /** Je suis strictement au-dessus de lui dans la hiérarchie des rôles. */
+  above: boolean
+  can: { roles: boolean; mute: boolean; deafen: boolean; move: boolean; kick: boolean; ban: boolean; timeout: boolean; notes: boolean; channelPerms: boolean }
+  timedOut: boolean
+  serverMuted: boolean
+  serverDeafened: boolean
+  /** Salon vocal où il se trouve sur ce serveur. */
+  currentVoice: string | null
+  voiceChannels: { id: string; name: string }[]
+  /** Rôles que je peux attribuer (sous le mien), cochés s'il les a. */
+  roles: { id: string; name: string; has: boolean }[]
+}
+
+export interface ModActions {
+  role(roleId: string, on: boolean): void
+  moveTo(channelId: string): void
+  permissions(): void
+  serverMute(on: boolean): void
+  serverDeafen(on: boolean): void
+  disconnect(): void
+  kick(): void
+  ban(): void
+  timeout(): void
+  liftTimeout(): void
+  notes(): void
+}
+
+/** Modération d'un membre, dans l'ordre de Discord ; rien de ce que je n'ai pas le droit de faire. */
+export function buildModMenu(f: ModFacts, a: ModActions, t: Tr): ContextMenuEntry[] {
+  const reach = f.self || f.above
+  const others = f.voiceChannels.filter(c => c.id !== f.currentVoice)
+  const inVoice = f.currentVoice !== null
+  const items: ContextMenuEntry[] = [
+    ...(reach && f.can.roles && f.roles.length ? [{
+      label: t('mod.roles'),
+      submenu: f.roles.map(r => ({ label: r.name, checked: r.has, onClick: () => a.role(r.id, !r.has) })),
+    }] : []),
+    ...(reach && f.can.move && inVoice && others.length ? [{
+      label: t('mod.moveToMenu'),
+      submenu: others.map(c => ({ label: c.name, onClick: () => a.moveTo(c.id) })),
+    }] : []),
+    ...(f.can.channelPerms && inVoice ? [{ label: t('mod.channelPerms'), onClick: a.permissions }] : []),
+    ...(reach && f.can.mute ? [{ label: t('mod.serverMute'), checked: f.serverMuted, danger: true, onClick: () => a.serverMute(!f.serverMuted) }] : []),
+    ...(reach && f.can.deafen ? [{ label: t('mod.serverDeafen'), checked: f.serverDeafened, danger: true, onClick: () => a.serverDeafen(!f.serverDeafened) }] : []),
+    ...(reach && f.can.move && inVoice ? [{ label: t('mod.disconnect'), danger: true, onClick: a.disconnect }] : []),
+    ...(!f.self && f.above && f.can.kick ? [{ label: t('mod.kickName', { name: f.name }), danger: true, onClick: a.kick }] : []),
+    ...(!f.self && f.above && f.can.ban ? [{ label: t('mod.banName', { name: f.name }), danger: true, onClick: a.ban }] : []),
+    ...(!f.self && f.above && f.can.timeout ? [f.timedOut
+      ? { label: t('mod.liftTimeout'), onClick: a.liftTimeout }
+      : { label: t('mod.timeout'), onClick: a.timeout }] : []),
+    ...(!f.self && f.can.notes ? [{ label: t('mod.notes'), onClick: a.notes }] : []),
+  ]
+  return items.length ? [SEP, ...items] : []
 }
 
 export interface ConvFacts {

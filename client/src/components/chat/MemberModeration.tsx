@@ -8,11 +8,14 @@ import { useServerPerms, PERM } from '../../hooks/useServerPerms'
 import { useEscapeKey } from '../../hooks/useEscapeKey'
 import { confirm } from '../ui/ConfirmModal'
 import type { ContextMenuEntry } from '../ui/ContextMenu'
+import { buildModMenu } from '../userMenu/model'
+import ChannelSettingsModal from '../modals/ChannelSettingsModal'
 import { t as tr, intlLocale } from '../../i18n'
 
 /**
- * Actions de modération sur un membre (audit P1-9 / P2-2) : expulser, bannir,
- * timeout, notes de modération et modération vocale. Chaque action n'est
+ * Actions de modération sur un membre (audit P1-9 / P2-2) : rôles, modération
+ * vocale, permissions du salon, expulser, bannir, timeout, notes de modération
+ * (ordre et conditions : buildModMenu). Chaque action n'est
  * proposée que si l'utilisateur a la permission réelle ET est au-dessus du
  * membre dans la hiérarchie des rôles ; le serveur vérifie de nouveau.
  */
@@ -173,6 +176,8 @@ function NotesDialog({ serverId, member, onClose }: { serverId: string; member: 
   )
 }
 
+type ModDialog = Dialog | { kind: 'perms'; member: Member; channelId: string }
+
 export function useMemberModeration(serverId?: string) {
   const perms = useServerPerms(serverId)
   const qc = useQueryClient()
@@ -183,7 +188,7 @@ export function useMemberModeration(serverId?: string) {
     enabled: !!serverId,
     staleTime: 30_000,
   })
-  const [dialog, setDialog] = useState<Dialog | null>(null)
+  const [dialog, setDialog] = useState<ModDialog | null>(null)
   const byId = useMemo(() => new Map(members.map(m => [m.user_id, m])), [members])
   const refresh = () => { void qc.invalidateQueries({ queryKey: ['members', serverId] }) }
 
@@ -200,78 +205,74 @@ export function useMemberModeration(serverId?: string) {
       .then(() => { toast.success(done); refresh() })
       .catch(e => toast.error(errorOf(e, tr('mod.refused'))))
   }
+  const call = (req: Promise<unknown>, done?: string) => {
+    req.then(() => { if (done) toast.success(done); refresh() }).catch(e => toast.error(errorOf(e, tr('mod.refused'))))
+  }
 
-  /** Muet / sourdine imposés, déplacer, déconnecter (MUTE / DEAFEN / MOVE_MEMBERS). */
-  const voiceItemsFor = (userId: string): ContextMenuEntry[] => {
+  /** Rôles, déplacer, permissions du salon, muet / sourdine imposés, déconnecter, expulser, bannir, timeout, notes. */
+  const itemsFor = (userId: string): ContextMenuEntry[] => {
     const m = byId.get(userId)
     if (!serverId || !m) return []
-    const allowed = userId === perms.meId || perms.outranks(m)
-    if (!allowed) return []
-    const current = voiceChannelOf(userId)
+    const name = m.nickname ?? m.username
+    const current = voiceChannelOf(userId) ?? null
     const live = current ? (roomParticipants[current] ?? []).find(p => p.userId === userId) : undefined
     const muted = live?.serverMuted ?? m.voice_muted ?? false
     const deafened = live?.serverDeafened ?? m.voice_deafened ?? false
-    const items: ContextMenuEntry[] = []
-    if (perms.has(PERM.MUTE_MEMBERS)) {
-      items.push({ label: muted ? tr('mod.unmute') : tr('mod.mute'),
-        onClick: () => moderateVoice(userId, { mute: !muted }, muted ? tr('mod.unmuted') : tr('mod.muted')) })
-    }
-    if (perms.has(PERM.DEAFEN_MEMBERS)) {
-      items.push({ label: deafened ? tr('mod.undeafen') : tr('mod.deafen'),
-        onClick: () => moderateVoice(userId, { deafen: !deafened }, deafened ? tr('mod.undeafened') : tr('mod.deafened')) })
-    }
-    if (current && perms.has(PERM.MOVE_MEMBERS)) {
-      items.push({ label: tr('mod.disconnect'), danger: true,
-        onClick: () => moderateVoice(userId, { disconnect: true }, tr('mod.disconnected')) })
-      for (const c of voiceChannels) {
-        if (c.id === current) continue
-        items.push({ label: tr('mod.moveTo', { name: c.name }),
-          onClick: () => moderateVoice(userId, { channel_id: c.id }, tr('mod.movedTo', { name: c.name })) })
-      }
-    }
-    return items.length ? [{ separator: true }, ...items] : []
-  }
-
-  /** Expulser / bannir / timeout / notes, puis la modération vocale. */
-  const itemsFor = (userId: string): ContextMenuEntry[] => {
-    const m = byId.get(userId)
-    if (!serverId || !m || userId === perms.meId) return voiceItemsFor(userId)
-    const name = m.nickname ?? m.username
-    const above = perms.outranks(m)
-    const moderator = perms.has(PERM.MANAGE_MESSAGES)
-    const timedOut = !!m.timeout_until && new Date(m.timeout_until) > new Date()
-    const items: ContextMenuEntry[] = []
-    if (above && perms.has(PERM.KICK_MEMBERS)) {
-      items.push({ label: tr('mod.kick'), danger: true, onClick: async () => {
+    const mine = new Set(m.role_ids ?? [])
+    return buildModMenu({
+      name,
+      self: userId === perms.meId,
+      above: perms.outranks(m),
+      can: {
+        roles: perms.has(PERM.MANAGE_ROLES),
+        mute: perms.has(PERM.MUTE_MEMBERS),
+        deafen: perms.has(PERM.DEAFEN_MEMBERS),
+        move: perms.has(PERM.MOVE_MEMBERS),
+        kick: perms.has(PERM.KICK_MEMBERS),
+        ban: perms.has(PERM.BAN_MEMBERS | PERM.BAN_TEMP),
+        timeout: perms.has(PERM.MANAGE_MESSAGES),
+        notes: perms.has(PERM.MANAGE_MESSAGES),
+        channelPerms: perms.canEditChannels,
+      },
+      timedOut: !!m.timeout_until && new Date(m.timeout_until) > new Date(),
+      serverMuted: muted,
+      serverDeafened: deafened,
+      currentVoice: current,
+      voiceChannels: voiceChannels.map(c => ({ id: String(c.id), name: String(c.name) })),
+      roles: perms.assignableRoles.map(r => ({ id: r.id, name: r.name, has: mine.has(r.id) })),
+    }, {
+      role: (roleId, on) => call(on
+        ? api.put(`/servers/${serverId}/members/${userId}/roles/${roleId}`)
+        : api.delete(`/servers/${serverId}/members/${userId}/roles/${roleId}`)),
+      moveTo: channelId => {
+        const c = voiceChannels.find(x => x.id === channelId)
+        moderateVoice(userId, { channel_id: channelId }, tr('mod.movedTo', { name: c?.name ?? '' }))
+      },
+      permissions: () => { if (current) setDialog({ kind: 'perms', member: m, channelId: current }) },
+      serverMute: on => moderateVoice(userId, { mute: on }, on ? tr('mod.muted') : tr('mod.unmuted')),
+      serverDeafen: on => moderateVoice(userId, { deafen: on }, on ? tr('mod.deafened') : tr('mod.undeafened')),
+      disconnect: () => moderateVoice(userId, { disconnect: true }, tr('mod.disconnected')),
+      kick: async () => {
         if (!(await confirm({ message: tr('mod.kickConfirm', { name }), danger: true, confirmLabel: tr('mod.kick') }))) return
         api.post(`/servers/${serverId}/members/${userId}/kick`)
           .then(() => { toast.success(tr('mod.kicked', { name })); refresh() })
           .catch(e => toast.error(errorOf(e, tr('mod.kickRefused'))))
-      } })
-    }
-    if (above && perms.has(PERM.BAN_MEMBERS | PERM.BAN_TEMP)) {
-      items.push({ label: tr('mod.ban'), danger: true, onClick: () => setDialog({ kind: 'ban', member: m }) })
-    }
-    if (above && moderator) {
-      items.push(timedOut
-        ? { label: tr('mod.liftTimeout'), onClick: () => {
-            api.delete(`/servers/${serverId}/members/${userId}/timeout`)
-              .then(() => { toast.success(tr('mod.timeoutLifted')); refresh() })
-              .catch(e => toast.error(errorOf(e, tr('mod.refused'))))
-          } }
-        : { label: tr('mod.timeout'), onClick: () => setDialog({ kind: 'timeout', member: m }) })
-    }
-    if (moderator) {
-      items.push({ label: tr('mod.notes'), onClick: () => setDialog({ kind: 'notes', member: m }) })
-    }
-    return [...(items.length ? [{ separator: true } as const, ...items] : []), ...voiceItemsFor(userId)]
+      },
+      ban: () => setDialog({ kind: 'ban', member: m }),
+      timeout: () => setDialog({ kind: 'timeout', member: m }),
+      liftTimeout: () => call(api.delete(`/servers/${serverId}/members/${userId}/timeout`), tr('mod.timeoutLifted')),
+      notes: () => setDialog({ kind: 'notes', member: m }),
+    }, tr)
   }
 
-  const node = serverId && dialog
-    ? dialog.kind === 'notes'
-      ? <NotesDialog serverId={serverId} member={dialog.member} onClose={() => setDialog(null)} />
-      : <SanctionDialog serverId={serverId} dialog={dialog as Dialog & { kind: 'ban' | 'timeout' }} canBanForever={perms.has(PERM.BAN_MEMBERS)} onClose={() => setDialog(null)} onDone={refresh} />
-    : null
+  const permsChannel = dialog?.kind === 'perms' ? perms.channels.find(c => c.id === dialog.channelId) : undefined
+  const node = !serverId || !dialog ? null
+    : dialog.kind === 'notes' ? <NotesDialog serverId={serverId} member={dialog.member} onClose={() => setDialog(null)} />
+    : dialog.kind === 'perms' ? (permsChannel
+      ? <ChannelSettingsModal channel={permsChannel} serverId={serverId} onClose={() => setDialog(null)} initialTab="permissions"
+          initialTarget={{ id: dialog.member.user_id, name: dialog.member.nickname ?? dialog.member.username, type: 'member' }} />
+      : null)
+    : <SanctionDialog serverId={serverId} dialog={dialog as Dialog & { kind: 'ban' | 'timeout' }} canBanForever={perms.has(PERM.BAN_MEMBERS)} onClose={() => setDialog(null)} onDone={refresh} />
 
   return { itemsFor, node }
 }

@@ -6,7 +6,7 @@ import VolumeSlider from './VolumeSlider'
 import { useVoice } from '../../store/voice'
 import { useAuth } from '../../store/auth'
 import { t } from '../../i18n'
-import type { ContextMenuItem } from '../ui/ContextMenu'
+import type { ContextMenuCustom } from '../ui/ContextMenu'
 
 interface Target { userId: string; username: string; x: number; y: number }
 
@@ -21,11 +21,29 @@ export function openUserVolume(userId: string, username: string, e?: { clientX: 
   useUserVolume.getState().open({ userId, username, x: e?.clientX ?? 16, y: e?.clientY ?? window.innerHeight - 200 })
 }
 
-/** Entrée de menu contextuel « Régler le volume de … » ; null pour soi-même. */
-export function volumeMenuItem(userId: string, username: string, e: { clientX: number; clientY: number }): ContextMenuItem | null {
+/** Curseur « Volume de l'utilisateur » dans le menu contextuel (0 à 200 %, même réglage que la popover). */
+function InlineVolume({ userId, username }: { userId: string; username: string }) {
+  const volume = useVoice(s => s.userVolumes[userId] ?? 100)
+  const setUserVolume = useVoice(s => s.setUserVolume)
+  const pct = Math.round(volume)
+  return (
+    <label className="block text-sm text-fc-text">
+      <span className="flex items-center justify-between mb-1.5">
+        <span>{t('um.userVolume')}</span>
+        <span className="text-xs font-mono text-fc-muted">{pct}%</span>
+      </span>
+      <input type="range" min={0} max={200} step={1} value={volume}
+        aria-label={t('voice.tile.volumeOf', { name: username })} aria-valuetext={`${pct}%`}
+        onChange={e => setUserVolume(userId, Number(e.target.value))}
+        className="w-full accent-fc-accent h-1.5 rounded cursor-pointer" />
+    </label>
+  )
+}
+
+/** Entrée de menu contextuel « Volume de l'utilisateur » (curseur en ligne) ; null pour soi-même. */
+export function volumeMenuItem(userId: string, username: string): ContextMenuCustom | null {
   if (userId === useAuth.getState().user?.id) return null
-  const at = { clientX: e.clientX, clientY: e.clientY }
-  return { label: t('voice.tile.volumeOf', { name: username }), onClick: () => openUserVolume(userId, username, at) }
+  return { custom: <InlineVolume userId={userId} username={username} /> }
 }
 
 export default function UserVolumePopover() {

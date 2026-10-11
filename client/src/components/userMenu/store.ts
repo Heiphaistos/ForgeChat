@@ -24,7 +24,7 @@ interface UserMenuState {
   close: () => void
 }
 
-const serverInPath = () => window.location.pathname.match(/^\/servers\/([0-9a-fA-F-]{36})/)?.[1]
+export const serverInPath = () => window.location.pathname.match(/^\/servers\/([0-9a-fA-F-]{36})/)?.[1]
 
 export const useUserMenu = create<UserMenuState>(set => ({
   menu: null,

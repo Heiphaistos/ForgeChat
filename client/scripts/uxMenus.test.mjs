@@ -1,7 +1,7 @@
 // Menus contextuels « comme Discord » : node --test scripts/uxMenus.test.mjs
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { buildUserMenu, buildConvMenu, pinnedFirst, tidy, MUTE_MINUTES } from '../src/components/userMenu/model.ts'
+import { buildUserMenu, buildModMenu, buildConvMenu, pinnedFirst, tidy, MUTE_MINUTES } from '../src/components/userMenu/model.ts'
 import { fr, en } from '../src/i18n/parts/menus.ts'
 
 const t = (k, v) => (v?.name ? `${k}:${v.name}` : k)
@@ -9,9 +9,9 @@ const noop = () => {}
 const actions = new Proxy({}, { get: () => noop })
 const facts = over => ({
   name: 'alice', relation: 'none', favorite: false, blocked: false, ignored: false, canMention: false,
-  dm: null, inviteServers: [], friendGroups: [], volume: null, support: null, moderation: [], ...over,
+  dm: null, inviteServers: [], friendGroups: [], volume: null, support: null, moderation: [], voiceLocal: null, canNick: false, ...over,
 })
-const labels = entries => entries.map(e => (e.separator ? '---' : e.header ?? e.label))
+const labels = entries => entries.map(e => (e.separator ? '---' : e.custom ? 'custom' : e.header ?? e.label))
 
 test('séparateurs : jamais en tête, en fin ni en double', () => {
   const S = { separator: true }
@@ -22,7 +22,9 @@ test('soi-même : ni message, ni appel, ni ami, ni blocage', () => {
   const l = labels(buildUserMenu(facts({ relation: 'self' }), actions, t))
   for (const k of ['msg.sendMessage', 'um.call', 'um.addFriend', 'friends.block', 'um.ignore']) assert.ok(!l.includes(k), k)
   assert.deepEqual(l.slice(0, 2), ['um.profile', 'um.note'])
-  assert.deepEqual(l.slice(-3), ['um.viewAvatar', 'um.copyUrl', 'um.copyId'])
+  assert.deepEqual(l.slice(-3), ['um.copyId', 'um.viewAvatar', 'um.copyUrl'])
+  assert.ok(!l.includes('um.verifyCode') && !l.includes('um.changeNick'))
+  assert.ok(labels(buildUserMenu(facts({ relation: 'self', canNick: true }), actions, t)).includes('um.changeNick'))
 })
 
 test('inconnu : ajouter en ami, ignorer, bloquer en rouge', () => {
@@ -67,12 +69,86 @@ test('inviter : sous-menu des serveurs, absent sans serveur', () => {
   assert.ok(!labels(buildUserMenu(facts(), actions, t)).includes('um.invite'))
 })
 
-test('vocal, mention et modération s’insèrent', () => {
-  const l = labels(buildUserMenu(facts({
-    volume: { label: 'vol' }, canMention: true, moderation: [{ separator: true }, { label: 'mod.kick' }],
-  }), actions, t))
-  assert.ok(l.indexOf('vol') < l.indexOf('members.mention'))
-  assert.ok(l.indexOf('mod.kick') < l.indexOf('um.viewAvatar'))
+test('vocal : ordre comme Discord, curseur puis cases locales cochées', () => {
+  let got = null
+  const m = buildUserMenu(facts({
+    relation: 'friend', canMention: true, volume: { custom: 'slider' }, inviteServers: [{ id: 's', name: 'S' }],
+    voiceLocal: { muted: true, soundboardMuted: false, videoOff: false },
+    moderation: [{ separator: true }, { label: 'mod.kickName:alice' }],
+  }), { ...actions, localMute: on => { got = on } }, t)
+  const l = labels(m).filter(x => x !== '---')
+  assert.deepEqual(l, [
+    'um.profile', 'members.mention', 'msg.sendMessage', 'um.call', 'um.note', 'um.friendNick',
+    'custom', 'um.localMute', 'um.soundboardMute', 'um.videoOff',
+    'um.verifyCode',
+    'um.invite', 'um.removeFriend', 'um.favorite', 'um.ignore', 'friends.block',
+    'mod.kickName:alice',
+    'um.copyId', 'um.viewAvatar', 'um.copyUrl',
+  ])
+  const mute = m.find(e => e.label === 'um.localMute')
+  assert.equal(mute.checked, true)
+  mute.onClick()
+  assert.equal(got, false)
+  assert.equal(m.find(e => e.label === 'um.videoOff').checked, false)
+})
+
+test('appel privé : seulement « Rendre muet » parmi les cases locales', () => {
+  const l = labels(buildUserMenu(facts({ voiceLocal: { muted: false } }), actions, t))
+  assert.ok(l.includes('um.localMute'))
+  assert.ok(!l.includes('um.soundboardMute') && !l.includes('um.videoOff'))
+})
+
+test('hors vocal : ni cases locales ni curseur', () => {
+  const l = labels(buildUserMenu(facts(), actions, t))
+  for (const k of ['um.localMute', 'um.soundboardMute', 'um.videoOff', 'custom']) assert.ok(!l.includes(k), k)
+  assert.ok(l.includes('um.verifyCode'))
+})
+
+const mod = over => ({
+  name: 'alice', self: false, above: true, timedOut: false, serverMuted: false, serverDeafened: false,
+  currentVoice: 'v1', voiceChannels: [{ id: 'v1', name: 'Général' }, { id: 'v2', name: 'Jeu' }],
+  roles: [{ id: 'r1', name: 'Membre', has: true }, { id: 'r2', name: 'VIP', has: false }],
+  can: { roles: true, mute: true, deafen: true, move: true, kick: true, ban: true, timeout: true, notes: true, channelPerms: true },
+  ...over,
+})
+
+test('modération : ordre de Discord, tout permis', () => {
+  const m = buildModMenu(mod(), actions, t)
+  assert.deepEqual(labels(m), ['---', 'mod.roles', 'mod.moveToMenu', 'mod.channelPerms', 'mod.serverMute', 'mod.serverDeafen',
+    'mod.disconnect', 'mod.kickName:alice', 'mod.banName:alice', 'mod.timeout', 'mod.notes'])
+  assert.deepEqual(m.find(e => e.label === 'mod.roles').submenu.map(e => [e.label, e.checked]), [['Membre', true], ['VIP', false]])
+  assert.deepEqual(m.find(e => e.label === 'mod.moveToMenu').submenu.map(e => e.label), ['Jeu'])
+  for (const k of ['mod.serverMute', 'mod.serverDeafen']) {
+    const e = m.find(x => x.label === k)
+    assert.equal(e.danger, true)
+    assert.equal(e.checked, false)
+  }
+})
+
+test('modération : actions transmises avec le bon état', () => {
+  const calls = []
+  const rec = new Proxy({}, { get: (_, k) => (...args) => calls.push([k, ...args]) })
+  const m = buildModMenu(mod({ serverMuted: true }), rec, t)
+  m.find(e => e.label === 'mod.serverMute').onClick()
+  m.find(e => e.label === 'mod.roles').submenu[1].onClick()
+  m.find(e => e.label === 'mod.moveToMenu').submenu[0].onClick()
+  assert.deepEqual(calls, [['serverMute', false], ['role', 'r2', true], ['moveTo', 'v2']])
+})
+
+test('modération : rien sans droits, pas au-dessus, hors vocal, soi-même', () => {
+  const none = { roles: false, mute: false, deafen: false, move: false, kick: false, ban: false, timeout: false, notes: false, channelPerms: false }
+  assert.deepEqual(buildModMenu(mod({ can: none }), actions, t), [])
+  // Pas au-dessus : seulement les notes (et les permissions du salon, qui ne dépendent pas du rang).
+  assert.deepEqual(labels(buildModMenu(mod({ above: false }), actions, t)), ['---', 'mod.channelPerms', 'mod.notes'])
+  // Hors vocal : ni déplacer, ni déconnecter, ni permissions du salon.
+  const out = labels(buildModMenu(mod({ currentVoice: null }), actions, t))
+  for (const k of ['mod.moveToMenu', 'mod.disconnect', 'mod.channelPerms']) assert.ok(!out.includes(k), k)
+  // Soi-même : rôles et vocal, jamais expulser / bannir / timeout / notes.
+  const self = labels(buildModMenu(mod({ self: true, above: false }), actions, t))
+  assert.ok(self.includes('mod.roles') && self.includes('mod.serverMute'))
+  for (const k of ['mod.kickName:alice', 'mod.banName:alice', 'mod.timeout', 'mod.notes']) assert.ok(!self.includes(k), k)
+  assert.ok(labels(buildModMenu(mod({ timedOut: true }), actions, t)).includes('mod.liftTimeout'))
+  assert.ok(!labels(buildModMenu(mod({ roles: [] }), actions, t)).includes('mod.roles'))
 })
 
 test('conversation : épingler, fermer, groupe muet / quitter', () => {
