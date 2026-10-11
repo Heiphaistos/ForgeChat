@@ -22,10 +22,14 @@ export interface ContextMenuItem {
 export interface ContextMenuSeparator { separator: true }
 /** En-tête grisé non cliquable. */
 export interface ContextMenuHeader { header: string; separator?: false }
-export type ContextMenuEntry = ContextMenuItem | ContextMenuSeparator | ContextMenuHeader
+/** Contenu libre dans le menu (ex. curseur de volume) : les clics y restent, le menu reste ouvert. */
+export interface ContextMenuCustom { custom: ReactNode; separator?: false }
+export type ContextMenuEntry = ContextMenuItem | ContextMenuSeparator | ContextMenuHeader | ContextMenuCustom
 
 const isSeparator = (e: ContextMenuEntry): e is ContextMenuSeparator => 'separator' in e && e.separator === true
 const isHeader = (e: ContextMenuEntry): e is ContextMenuHeader => 'header' in e && typeof e.header === 'string'
+const isCustom = (e: ContextMenuEntry): e is ContextMenuCustom => 'custom' in e
+const isItem = (e: ContextMenuEntry): e is ContextMenuItem => !isSeparator(e) && !isHeader(e) && !isCustom(e)
 
 interface ContextMenuProps {
   x: number
@@ -47,6 +51,9 @@ function Rows({ items, sheet, onClose, onOpenSub, openSub }: {
         if (isSeparator(item)) return <div key={i} role="separator" className="my-1 border-t border-fc-hover" />
         if (isHeader(item)) {
           return <div key={i} role="presentation" className="px-3 pt-2 pb-1 text-[11px] font-semibold uppercase tracking-wide text-fc-muted truncate">{item.header}</div>
+        }
+        if (isCustom(item)) {
+          return <div key={i} role="none" className="px-3 py-2" onMouseEnter={sheet ? undefined : () => onOpenSub(-1, null)}>{item.custom}</div>
         }
         const hasSub = !!item.submenu?.length
         const activate = (el: HTMLElement) => {
@@ -78,7 +85,7 @@ function Rows({ items, sheet, onClose, onOpenSub, openSub }: {
               {item.hint && <span className="block text-[11px] text-fc-muted truncate">{item.hint}</span>}
             </span>
             {item.checked !== undefined && (
-              <span aria-hidden className={`flex-shrink-0 w-4 h-4 rounded border flex items-center justify-center ${item.checked ? 'bg-fc-accent border-fc-accent text-white' : 'border-fc-muted'}`}>
+              <span aria-hidden className={`flex-shrink-0 w-4 h-4 rounded border flex items-center justify-center ${item.checked ? `${item.danger ? 'bg-fc-red border-fc-red' : 'bg-fc-accent border-fc-accent'} text-white` : item.danger ? 'border-fc-red' : 'border-fc-muted'}`}>
                 {item.checked && <Check size={12} />}
               </span>
             )}
@@ -123,7 +130,7 @@ function Panel({ x, y, anchor, items, onClose, onHover }: {
     else timer.current = setTimeout(() => setSub(null), 200)
   }
   const child = sub ? items[sub.i] : null
-  const childItems = child && !isSeparator(child) && !isHeader(child) ? child.submenu : undefined
+  const childItems = child && isItem(child) ? child.submenu : undefined
 
   return (
     <>
@@ -154,7 +161,7 @@ function Sheet({ items, onClose }: { items: ContextMenuEntry[]; onClose: () => v
   const list = current?.items ?? items
   const openSub = (i: number) => {
     const it = list[i]
-    if (it && !isSeparator(it) && !isHeader(it) && it.submenu) {
+    if (it && isItem(it) && it.submenu) {
       const sub = it.submenu
       setStack(s => [...s, { title: it.label, items: sub }])
     }
