@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Copy, Check, X, Link, RefreshCw, Clock, Users, ChevronDown, Share2 } from 'lucide-react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import api from '../../api/client'
+import QRCode from 'qrcode'
 import toast from 'react-hot-toast'
 import { useEscapeKey } from '../../hooks/useEscapeKey'
 import { useT, t as tr, type Key } from '../../i18n'
@@ -54,6 +55,13 @@ export default function InviteModal({ serverId, serverName, onClose }: Props) {
   const [maxUses, setMaxUses] = useState<number | null>(null)
   const [showExisting, setShowExisting] = useState(false)
   const qc = useQueryClient()
+  // QR dessiné sur l'appareil : le lien d'invitation ne part chez aucun service tiers.
+  const { data: qr } = useQuery({
+    queryKey: ['invite-qr', inviteUrl],
+    queryFn: () => QRCode.toDataURL(inviteUrl, { width: 140, margin: 1, color: { dark: '#ffffff', light: '#1e1f29' } }),
+    enabled: !!inviteUrl,
+    staleTime: Infinity,
+  })
 
   const { data: existingInvites = [] } = useQuery<Invite[]>({
     queryKey: ['invites', serverId],
@@ -202,7 +210,7 @@ export default function InviteModal({ serverId, serverName, onClose }: Props) {
               <div className="flex flex-col items-center gap-2 pt-2 border-t border-fc-hover">
                 <p className="text-[10px] text-fc-muted uppercase font-semibold tracking-wide">QR Code</p>
                 <img
-                  src={`https://api.qrserver.com/v1/create-qr-code/?size=140x140&data=${encodeURIComponent(inviteUrl)}&bgcolor=1e1f29&color=ffffff&qzone=1`}
+                  src={qr}
                   alt={t('invite.qrAlt')}
                   className="w-32 h-32 rounded-lg border border-fc-hover streamer-invite"
                 />

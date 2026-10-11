@@ -220,10 +220,6 @@ export function ConfidentialitePage() {
             depuis le serveur, au service MyMemory (Translated srl, Italie). Votre adresse IP n'est pas transmise.
           </li>
           <li>
-            <strong className="text-white">QR code d'invitation</strong> : l'image est générée par api.qrserver.com (goQR.me, Allemagne), qui reçoit le
-            lien d'invitation et votre adresse IP.
-          </li>
-          <li>
             <strong className="text-white">Notifications push</strong> : si vous les autorisez, les notifications passent par le service push de votre
             navigateur (Google, Mozilla, Apple…), chiffrées de bout en bout entre ce serveur et votre navigateur.
           </li>
