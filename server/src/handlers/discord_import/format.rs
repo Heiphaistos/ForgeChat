@@ -224,6 +224,7 @@ const DISCORD_TO_FORGECHAT: &[(u32, i64)] = &[
     (22, P::MUTE_MEMBERS),
     (23, P::DEAFEN_MEMBERS),
     (24, P::MOVE_MEMBERS),
+    (27, P::MANAGE_NICKNAMES),
     (28, P::MANAGE_ROLES),
 ];
 

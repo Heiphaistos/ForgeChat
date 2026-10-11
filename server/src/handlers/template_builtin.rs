@@ -12,7 +12,7 @@ use crate::models::role::Permissions as P;
 /// Identifiants publics, dans l'ordre d'affichage.
 pub const IDS: &[&str] = &["gaming", "friends", "community", "study", "creator", "jotunheim"];
 
-const MOD: i64 = P::MANAGE_MESSAGES | P::KICK_MEMBERS | P::BAN_TEMP | P::MUTE_MEMBERS
+const MOD: i64 = P::MANAGE_MESSAGES | P::KICK_MEMBERS | P::BAN_TEMP | P::MUTE_MEMBERS | P::MANAGE_NICKNAMES
     | P::DEAFEN_MEMBERS | P::MOVE_MEMBERS | P::MENTION_EVERYONE;
 
 /// Catégories puis salons : `(catégorie, réservée au staff, [(salon, type)])`.

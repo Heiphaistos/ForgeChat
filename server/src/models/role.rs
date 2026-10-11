@@ -84,6 +84,8 @@ impl Permissions {
     pub const DELETE_OWN_CHANNELS: i64 = 1 << 22;
     /// Bannir temporairement (BAN_MEMBERS = définitivement et temporairement).
     pub const BAN_TEMP: i64 = 1 << 23;
+    /// Changer le pseudo d'un autre membre de rang inférieur (MANAGE_NICKNAMES de Discord).
+    pub const MANAGE_NICKNAMES: i64 = 1 << 24;
     /// Partage d'écran / Go Live — déclaré côté UI depuis toujours (RolesTab bit 40)
     pub const STREAM: i64 = 1 << 40;
     pub const ADMINISTRATOR: i64 = 1 << 31;
@@ -98,7 +100,7 @@ impl Permissions {
         | Self::ADD_REACTIONS | Self::CONNECT_VOICE | Self::SPEAK_VOICE
         | Self::MUTE_MEMBERS | Self::DEAFEN_MEMBERS | Self::MOVE_MEMBERS
         | Self::CREATE_CHANNELS | Self::EDIT_CHANNELS
-        | Self::DELETE_CHANNELS | Self::DELETE_OWN_CHANNELS | Self::BAN_TEMP
+        | Self::DELETE_CHANNELS | Self::DELETE_OWN_CHANNELS | Self::BAN_TEMP | Self::MANAGE_NICKNAMES
         | Self::STREAM | Self::ADMINISTRATOR;
 }
 

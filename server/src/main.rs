@@ -560,6 +560,7 @@ fn protected_routes(state: AppState) -> Router<AppState> {
         .route("/servers/:server_id/members/:user_id", get(handlers::servers::get_member))
         .route("/servers/:server_id/members/:user_id/voice", patch(handlers::voice_moderation::moderate_voice))
         .route("/servers/:server_id/members/:user_id/ban", post(handlers::servers::ban_member))
+        .route("/servers/:server_id/members/:user_id/nickname", patch(handlers::nicknames::set_member_nickname).layer(DefaultBodyLimit::max(SMALL_JSON_LIMIT)))
         .route("/servers/:server_id/icon", post(handlers::servers::upload_server_icon))
         .route("/servers/:server_id/banner", post(handlers::servers::upload_server_banner))
         .route("/admin/stats", get(handlers::servers::get_admin_stats))
@@ -825,7 +826,7 @@ fn protected_routes(state: AppState) -> Router<AppState> {
         // OG preview
         .route("/og", get(handlers::audit::og_preview))
         // Nickname
-        .route("/servers/:server_id/nickname", patch(handlers::audit::set_nickname))
+        .route("/servers/:server_id/nickname", patch(handlers::nicknames::set_nickname))
         // DM read receipts
         .route("/dms/:dm_id/read", post(handlers::audit::mark_dm_read))
         .route("/dms/:dm_id/read", get(handlers::audit::get_dm_read))

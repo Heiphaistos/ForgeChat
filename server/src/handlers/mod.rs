@@ -59,6 +59,7 @@ pub mod user_settings;
 pub mod soundboard;
 pub mod events;
 pub mod moderation;
+pub mod nicknames;
 pub mod dm_extras;
 pub mod stickers;
 pub mod totp;
