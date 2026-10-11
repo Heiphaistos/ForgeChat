@@ -24,6 +24,33 @@ pub const ALLOWED_EXTENSIONS: &[&str] = &[
     "bin",
 ];
 
+/// Type affichable tel quel par le navigateur : image matricielle, vidéo, son. Jamais HTML,
+/// SVG, XML, JavaScript, PDF ni texte (un admin peut envoyer n'importe quelle extension).
+fn inline_ok(content_type: &str) -> bool {
+    let t = content_type.split(';').next().unwrap_or("").trim().to_ascii_lowercase();
+    matches!(
+        t.as_str(),
+        "image/png" | "image/apng" | "image/jpeg" | "image/gif" | "image/webp" | "image/avif" | "image/bmp"
+    ) || t.starts_with("video/")
+        || t.starts_with("audio/")
+}
+
+/// En-têtes de tout fichier servi sous /uploads : hors média sûr, téléchargement forcé en
+/// `application/octet-stream` (ni rendu sur notre origine, ni chargeable en `<script>`), et
+/// nosniff partout.
+pub async fn serve_headers(req: axum::extract::Request, next: axum::middleware::Next) -> axum::response::Response {
+    use axum::http::{header, HeaderValue};
+    let mut res = next.run(req).await;
+    let h = res.headers_mut();
+    let ok = h.get(header::CONTENT_TYPE).and_then(|v| v.to_str().ok()).is_some_and(inline_ok);
+    if !ok {
+        h.insert(header::CONTENT_TYPE, HeaderValue::from_static("application/octet-stream"));
+        h.insert(header::CONTENT_DISPOSITION, HeaderValue::from_static("attachment"));
+    }
+    h.insert(header::X_CONTENT_TYPE_OPTIONS, HeaderValue::from_static("nosniff"));
+    res
+}
+
 /// Médias acceptés par les forums et les salons médias (images et vidéos).
 pub const FORUM_EXTENSIONS: &[&str] = &["jpg", "jpeg", "png", "gif", "webp", "mp4", "webm", "mov"];
 
@@ -670,5 +697,56 @@ mod tests {
             Err(AppError::BadRequest(m)) => assert!(m.starts_with("PLAINTEXT_REFUSED ")),
             other => panic!("{other:?}"),
         }
+    }
+
+    /// Fichier piégé envoyé par un admin (extension libre) : jamais rendu ni exécuté sur l'origine.
+    #[tokio::test]
+    async fn fichiers_actifs_servis_en_telechargement() {
+        use tower::Service;
+        let dir = std::env::temp_dir().join(format!("fc-upl-h-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let piege = [
+            ("x.html", "<script>alert(document.cookie)</script>"),
+            ("x.svg", "<svg xmlns='http://www.w3.org/2000/svg' onload='alert(1)'/>"),
+            ("x.js", "alert(1)"),
+            ("x.xml", "<x:script xmlns:x='http://www.w3.org/1999/xhtml'>alert(1)</x:script>"),
+            ("x.pdf", "%PDF-1.4"),
+            ("x.txt", "<script>alert(1)</script>"),
+            ("x.enc", "blob"),
+        ];
+        for (n, c) in piege {
+            std::fs::write(dir.join(n), c).unwrap();
+        }
+        for n in ["a.png", "v.mp4", "s.mp3"] {
+            std::fs::write(dir.join(n), b"media").unwrap();
+        }
+        let app = axum::Router::new().nest_service(
+            "/uploads",
+            tower::ServiceBuilder::new()
+                .layer(axum::middleware::from_fn(serve_headers))
+                .service(tower_http::services::ServeDir::new(&dir)),
+        );
+        let get = |n: &str| {
+            let mut app = app.clone();
+            let uri = format!("/uploads/{n}");
+            async move {
+                let r = app.call(axum::http::Request::get(uri).body(axum::body::Body::empty()).unwrap()).await.unwrap();
+                let h = |k: axum::http::HeaderName| r.headers().get(k).map(|v| v.to_str().unwrap().to_string());
+                (h(axum::http::header::CONTENT_TYPE), h(axum::http::header::CONTENT_DISPOSITION), h(axum::http::header::X_CONTENT_TYPE_OPTIONS))
+            }
+        };
+        for (n, _) in piege {
+            let (ct, cd, ns) = get(n).await;
+            assert_eq!(ct.as_deref(), Some("application/octet-stream"), "{n}");
+            assert_eq!(cd.as_deref(), Some("attachment"), "{n}");
+            assert_eq!(ns.as_deref(), Some("nosniff"), "{n}");
+        }
+        for (n, t) in [("a.png", "image/png"), ("v.mp4", "video/mp4"), ("s.mp3", "audio/mpeg")] {
+            let (ct, cd, ns) = get(n).await;
+            assert_eq!(ct.as_deref(), Some(t), "{n}");
+            assert_eq!(cd, None, "{n}");
+            assert_eq!(ns.as_deref(), Some("nosniff"), "{n}");
+        }
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

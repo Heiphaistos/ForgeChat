@@ -296,10 +296,8 @@ async fn main() -> anyhow::Result<()> {
         .nest_service(
             "/uploads",
             tower::ServiceBuilder::new()
-                .layer(SetResponseHeaderLayer::if_not_present(
-                    header::X_CONTENT_TYPE_OPTIONS,
-                    HeaderValue::from_static("nosniff"),
-                ))
+                // nosniff + téléchargement forcé de tout ce qui n'est pas image/vidéo/son.
+                .layer(axum::middleware::from_fn(handlers::uploads::serve_headers))
                 .layer(SetResponseHeaderLayer::if_not_present(
                     header::CONTENT_SECURITY_POLICY,
                     HeaderValue::from_static("default-src 'none'; sandbox"),
