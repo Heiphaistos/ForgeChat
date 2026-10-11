@@ -1635,6 +1635,8 @@ dependencies = [
  "tokio",
  "tungstenite",
  "webkit2gtk",
+ "webview2-com",
+ "windows-core 0.61.2",
  "windows-sys 0.59.0",
  "zune-jpeg",
 ]

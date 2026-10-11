@@ -30,6 +30,8 @@ mod session;
 /// Réglages « Système » : démarrage, fermeture, GPU, téléchargements, icône.
 mod systeme;
 mod session_file;
+/// Navigation, liens externes et permissions média de la vue web.
+mod garde_web;
 
 /// Vocal natif de l'application Linux (WebKitGTK sans WebRTC).
 pub mod native_voice;
@@ -395,29 +397,17 @@ pub fn run() {
 
     // WebRTC dans WebView2 (Windows uniquement).
     //
-    // `--use-fake-ui-for-media-stream` auto-accepte le prompt de permission
-    // **getUserMedia** (micro + caméra) ; les périphériques restent réels.
-    // Il ne couvre PAS `getDisplayMedia` : le partage d'écran passe par le
-    // sélecteur de source de Chromium, qui n'est pas un prompt de permission
-    // et s'affiche quoi qu'il arrive (correctif S12 — le commentaire précédent
-    // affirmait le contraire et donnait un faux sentiment de couverture).
-    //
-    // `--auto-select-desktop-capture-source=<titre>` existe et supprimerait ce
-    // sélecteur, mais il impose une source unique choisie par nous : on ne
-    // l'ajoute PAS, ce serait une régression fonctionnelle (l'utilisateur ne
-    // pourrait plus choisir quel écran ou quelle fenêtre partager). C'est un
-    // drapeau de harnais de test, pas de production ; s'il devient nécessaire
-    // pour les tests automatisés, il devra être conditionné à
-    // FORGECHAT_FAKE_MEDIA comme --use-fake-device-for-media-stream ci-dessous.
+    // Micro et caméra : accordés sans invite à l'origine de l'appli SEULEMENT, par
+    // le gestionnaire PermissionRequested (garde_web::permissions_appli_seulement).
+    // `--use-fake-ui-for-media-stream` n'est plus passé : il accordait getUserMedia
+    // à toute origine chargée dans la vue (iframe tierce, page externe).
+    // Le partage d'écran (getDisplayMedia) garde le sélecteur de source de Chromium.
     //
     // Linux/WebKitGTK n'a pas d'équivalent WEBVIEW2_* : la capture y est
     // autorisée par le handler `permission-request` posé dans `setup()`.
     #[cfg(windows)]
     let browser_args = {
-        let mut browser_args = String::from(
-            "--use-fake-ui-for-media-stream \
-             --enable-features=WebRTC-H264WithOpenH264FFmpeg",
-        );
+        let mut browser_args = String::from("--enable-features=WebRTC-H264WithOpenH264FFmpeg");
         // Harnais de test (VM sans micro/caméra) : périphériques média factices
         if std::env::var("FORGECHAT_FAKE_MEDIA").as_deref() == Ok("1") {
             browser_args.push_str(" --use-fake-device-for-media-stream");
@@ -535,14 +525,21 @@ pub fn run() {
             }
             main_builder
                 .visible(!demarrer_reduit)
+                // La fenêtre principale n'affiche que l'appli (garde_web::navigation_interne).
+                .on_navigation(garde_web::filtrer_navigation)
                 .on_new_window(|url, _features| {
                     if url.as_str() == "about:blank" {
                         tauri::webview::NewWindowResponse::Allow
                     } else {
+                        // Lien target=_blank : navigateur du système, http(s) seulement.
+                        garde_web::ouvrir_externe(&url);
                         tauri::webview::NewWindowResponse::Deny
                     }
                 })
                 .build()?;
+
+            #[cfg(windows)]
+            garde_web::permissions_appli_seulement(app.handle());
 
             // window-state peut réafficher la fenêtre en restaurant son état.
             if demarrer_reduit {
