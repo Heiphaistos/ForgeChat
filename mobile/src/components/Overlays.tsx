@@ -13,13 +13,18 @@ import { errorMessage, useApiHealth } from '@/lib/http'
 import { useConnection } from '@/lib/realtime'
 import { useOffline } from '@/lib/offline'
 import { useAuth } from '@/stores/auth'
-import { useCall } from '@/stores/call'
+import { callRoom, useCall } from '@/stores/call'
 import { useGroupCall } from '@/stores/groupCall'
 import { useLock } from '@/stores/lock'
-import { useVoice } from '@/stores/voice'
+import { useVoice, voiceRoom } from '@/stores/voice'
 import { colors, font, radius, spacing } from '@/theme'
 import { Avatar } from './Avatar'
-import { Button, Loading } from './ui'
+import { Button, Loading, type IconName } from './ui'
+import { useQuery } from '@tanstack/react-query'
+import { useShallow } from 'zustand/react/shallow'
+import { serversApi } from '@/api/servers'
+import { qk } from '@/lib/queryClient'
+import { screenShareStats } from '@/services/livekit'
 
 /** Écran de démarrage / hors-ligne au-dessus de la navigation. */
 export function BootOverlay() {
@@ -208,6 +213,19 @@ export function GroupRingOverlay() {
   )
 }
 
+/** Résolution et images/s réellement envoyées pendant le partage d'écran, relues toutes les 2 s. */
+function useShareStats(active: boolean) {
+  const [stats, setStats] = useState<{ width: number; height: number; fps: number } | null>(null)
+  useEffect(() => {
+    if (!active) return
+    const read = () => void screenShareStats(callRoom() ?? voiceRoom()).then(setStats)
+    read()
+    const timer = setInterval(read, 2000)
+    return () => clearInterval(timer)
+  }, [active])
+  return active ? stats : null
+}
+
 /** Partage d'écran en cours (appel ou vocal) : bandeau rouge avec Arrêter. La notification
  *  système du service mediaProjection reste aussi affichée hors de l'app. */
 export function ScreenShareBanner() {
@@ -215,6 +233,7 @@ export function ScreenShareBanner() {
   const callSharing = useCall((s) => s.screenSharing)
   const voiceSharing = useVoice((s) => s.screenSharing)
   const insets = useSafeAreaInsets()
+  const stats = useShareStats(callSharing || voiceSharing)
   if (!callSharing && !voiceSharing) return null
   const stop = () => {
     if (callSharing) useCall.getState().stopScreenShare()
@@ -223,7 +242,10 @@ export function ScreenShareBanner() {
   return (
     <View style={[styles.shareBar, { top: insets.top + 4 }]} accessibilityLiveRegion="polite">
       <Ionicons name="tv-outline" size={16} color="#fff" />
-      <Text style={styles.shareText}>{t('overlay.sharing')}</Text>
+      <Text style={styles.shareText}>
+        {t('overlay.sharing')}
+        {stats ? ` · ${stats.width}×${stats.height} · ${t('ux.call.fps', { n: stats.fps })}` : ''}
+      </Text>
       <Pressable onPress={stop} accessibilityRole="button" accessibilityLabel={t('voice.stopShare')} style={styles.shareStop} hitSlop={6}>
         <Text style={styles.shareStopText}>{t('overlay.stop')}</Text>
       </Pressable>
@@ -231,57 +253,63 @@ export function ScreenShareBanner() {
   )
 }
 
-/** Barre « appel en cours » / « vocal connecté » quand on navigue ailleurs. */
+/** Barre « appel en cours » / « vocal connecté », visible partout ailleurs dans l'appli : nom du
+ *  salon et du serveur (ou de la personne, du groupe), micro, haut-parleur et raccrocher. */
 export function ActiveCallBar() {
   const t = useT()
   const pathname = usePathname()
-  const groupId = useGroupCall((s) => s.groupId)
-  const groupName = useGroupCall((s) => s.groupName)
-  const callSharing = useCall((s) => s.screenSharing)
-  const voiceSharing = useVoice((s) => s.screenSharing)
-  const sharing = callSharing || voiceSharing
-  const phase = useCall((s) => s.phase)
-  const partner = useCall((s) => s.partnerName)
-  const connectedAt = useCall((s) => s.connectedAt)
-  const voiceChannel = useVoice((s) => s.channelName)
-  const voiceServer = useVoice((s) => s.serverId)
-  const voiceChannelId = useVoice((s) => s.channelId)
-  const now = useNow(1000, phase === 'connected')
   const insets = useSafeAreaInsets()
+  // Seulement les champs affichés : la liste des orateurs change sans cesse pendant un appel.
+  const call = useCall(useShallow((c) => ({ phase: c.phase, partnerName: c.partnerName, connectedAt: c.connectedAt, micMuted: c.micMuted, speaker: c.speaker, screenSharing: c.screenSharing, toggleMic: c.toggleMic, toggleSpeaker: c.toggleSpeaker, hangup: c.hangup })))
+  const group = useGroupCall(useShallow((g) => ({ groupId: g.groupId, groupName: g.groupName, micMuted: g.micMuted, speaker: g.speaker, toggleMic: g.toggleMic, toggleSpeaker: g.toggleSpeaker, leave: g.leave })))
+  const voice = useVoice(useShallow((v) => ({ serverId: v.serverId, channelId: v.channelId, channelName: v.channelName, muted: v.muted, speaker: v.speaker, screenSharing: v.screenSharing, toggleMute: v.toggleMute, toggleSpeaker: v.toggleSpeaker, leave: v.leave })))
+  const servers = useQuery({ queryKey: qk.servers, queryFn: serversApi.list, enabled: !!voice.serverId })
+  const now = useNow(1000, call.phase === 'connected')
 
   // Le bandeau de partage d'écran prend cette place ; inutile sur l'écran d'appel lui-même.
-  if (sharing || pathname === '/call' || pathname === '/group-call') return null
-  if (phase !== 'idle') {
-    return (
-      <Pressable style={[styles.activeBar, { top: insets.top }]} onPress={() => router.push('/call')} accessibilityRole="button">
-        <Ionicons name="call" size={14} color="#fff" />
-        <Text style={styles.activeText}>
-          {partner} · {phase === 'connected' && connectedAt ? formatDuration(now - connectedAt) : t('overlay.calling')}
-        </Text>
-      </Pressable>
-    )
+  if (call.screenSharing || voice.screenSharing || pathname === '/call' || pathname === '/group-call') return null
+  let bar: { icon: IconName; label: string; open: () => void; muted: boolean; speaker: boolean; toggleMic: () => void; toggleSpeaker: () => void; hangup: () => void } | null = null
+  if (call.phase !== 'idle') {
+    bar = {
+      icon: 'call',
+      label: `${call.partnerName ?? ''} · ${call.phase === 'connected' && call.connectedAt ? formatDuration(now - call.connectedAt) : t('overlay.calling')}`,
+      open: () => router.push('/call'),
+      muted: call.micMuted, speaker: call.speaker, toggleMic: call.toggleMic, toggleSpeaker: call.toggleSpeaker, hangup: call.hangup,
+    }
+  } else if (group.groupId) {
+    bar = {
+      icon: 'people',
+      label: group.groupName ? t('overlay.groupCallNamed', { name: group.groupName }) : t('overlay.groupCall'),
+      open: () => router.push('/group-call'),
+      muted: group.micMuted, speaker: group.speaker, toggleMic: group.toggleMic, toggleSpeaker: group.toggleSpeaker, hangup: group.leave,
+    }
+  } else if (voice.channelName && voice.serverId && voice.channelId && !pathname.startsWith('/voice/')) {
+    const { serverId, channelId, channelName } = voice
+    const server = servers.data?.find((x) => x.id === serverId)?.name
+    bar = {
+      icon: 'volume-high',
+      label: server ? `${channelName} · ${server}` : t('overlay.voice', { name: channelName }),
+      open: () => router.push({ pathname: '/voice/[serverId]/[channelId]', params: { serverId, channelId, name: channelName } }),
+      muted: voice.muted, speaker: voice.speaker, toggleMic: voice.toggleMute, toggleSpeaker: voice.toggleSpeaker, hangup: voice.leave,
+    }
   }
-  if (groupId) {
-    return (
-      <Pressable style={[styles.activeBar, { top: insets.top }]} onPress={() => router.push('/group-call')} accessibilityRole="button">
-        <Ionicons name="people" size={14} color="#fff" />
-        <Text style={styles.activeText}>{groupName ? t('overlay.groupCallNamed', { name: groupName }) : t('overlay.groupCall')}</Text>
+  if (!bar) return null
+  const button = (icon: IconName, label: string, onPress: () => void, bg = 'rgba(0,0,0,0.25)') => (
+    <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={label} hitSlop={6} style={[styles.barButton, { backgroundColor: bg }]}>
+      <Ionicons name={icon} size={16} color="#fff" />
+    </Pressable>
+  )
+  return (
+    <View style={[styles.activeBar, { top: insets.top }]} accessibilityLiveRegion="polite">
+      <Pressable onPress={bar.open} accessibilityRole="button" style={styles.barLabel} hitSlop={4}>
+        <Ionicons name={bar.icon} size={14} color="#fff" />
+        <Text style={styles.activeText} numberOfLines={1}>{bar.label}</Text>
       </Pressable>
-    )
-  }
-  if (voiceChannel && voiceServer && voiceChannelId && !pathname.startsWith('/voice/')) {
-    return (
-      <Pressable
-        style={[styles.activeBar, { top: insets.top }]}
-        onPress={() => router.push({ pathname: '/voice/[serverId]/[channelId]', params: { serverId: voiceServer, channelId: voiceChannelId, name: voiceChannel } })}
-        accessibilityRole="button"
-      >
-        <Ionicons name="volume-high" size={14} color="#fff" />
-        <Text style={styles.activeText}>{t('overlay.voice', { name: voiceChannel })}</Text>
-      </Pressable>
-    )
-  }
-  return null
+      {button(bar.muted ? 'mic-off' : 'mic', t(bar.muted ? 'ux.call.unmute' : 'ux.call.mute'), bar.toggleMic)}
+      {button(bar.speaker ? 'volume-high' : 'ear-outline', t(bar.speaker ? 'ux.call.earpiece' : 'ux.call.speaker'), bar.toggleSpeaker)}
+      {button('call', t('ux.call.hangup'), bar.hangup, colors.danger)}
+    </View>
+  )
 }
 
 const styles = StyleSheet.create({
@@ -301,14 +329,18 @@ const styles = StyleSheet.create({
   activeBar: {
     position: 'absolute',
     alignSelf: 'center',
+    maxWidth: '94%',
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
     backgroundColor: colors.success,
     borderRadius: radius.full,
-    paddingHorizontal: spacing.md,
-    paddingVertical: 5,
+    paddingLeft: spacing.md,
+    paddingRight: 4,
+    paddingVertical: 3,
     zIndex: 40,
   },
-  activeText: { color: '#fff', fontWeight: '700', fontSize: font.xs },
+  barLabel: { flexShrink: 1, flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 4 },
+  barButton: { width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
+  activeText: { flexShrink: 1, color: '#fff', fontWeight: '700', fontSize: font.xs },
 })
