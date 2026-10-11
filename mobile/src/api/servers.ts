@@ -66,6 +66,9 @@ export const serversApi = {
     http.post(path`/servers/${id}/transfer`, { user_id: userId, ...(await passwordProof(password)), server_key_owner_wrapped: await serverKeyForNewOwner(id, userId) }),
   /** Pseudo sur ce serveur ; null = retirer. */
   setNickname: (id: string, nickname: string | null) => http.patch(path`/servers/${id}/nickname`, { nickname }),
+  /** Pseudo d'un autre membre (« Gérer les pseudos ») ; null = retirer. */
+  setMemberNickname: (id: string, userId: string, nickname: string | null) =>
+    http.patch(path`/servers/${id}/members/${userId}/nickname`, { nickname }),
   /** Profil propre à ce serveur : bio (null = celle du compte). */
   setServerBio: (id: string, bio: string | null) => http.patch(path`/servers/${id}/profile`, { bio }),
   /** Avatar ou bannière propre à ce serveur (8 / 10 Mo, PNG JPG GIF WEBP). */

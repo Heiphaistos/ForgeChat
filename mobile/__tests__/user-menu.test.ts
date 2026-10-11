@@ -26,7 +26,7 @@ describe('buildUserMenu', () => {
     expect(blocked).toContain('unblock')
   })
 
-  const allMod: ModFacts = { roles: true, move: true, mute: true, deafen: true, inVoice: true, kick: true, ban: true, timeout: true }
+  const allMod: ModFacts = { roles: true, move: true, mute: true, deafen: true, inVoice: true, kick: true, ban: true, timeout: true, nickname: true }
 
   it('modération : après le blocage, dans l’ordre de Discord ; déplacer / déconnecter seulement en vocal', () => {
     const m = buildUserMenu(facts({ volume: true, mod: allMod }))
@@ -36,11 +36,14 @@ describe('buildUserMenu', () => {
     expect(away).not.toContain('disconnect')
     expect(away).toContain('serverMute')
     expect(buildUserMenu(facts({ mod: null }))).not.toContain('kick')
+    // « Changer le pseudo » juste après le code de vérification, comme le web.
+    expect(m[m.indexOf('safetyCode') + 1]).toBe('nickname')
+    expect(buildUserMenu(facts({ mod: { ...allMod, nickname: false } }))).not.toContain('nickname')
   })
 
   it('moi en vocal : ni volume ni réglages locaux, mais muet serveur permis ; jamais m’expulser', () => {
     expect(buildUserMenu(facts({ relation: 'self', volume: true, hasAvatar: false, mod: allMod }))).toEqual([
-      'profile', 'roles', 'moveTo', 'serverMute', 'serverDeafen', 'disconnect', 'copyId',
+      'profile', 'nickname', 'roles', 'moveTo', 'serverMute', 'serverDeafen', 'disconnect', 'copyId',
     ])
   })
 

@@ -73,7 +73,7 @@ const USER_LABEL: Record<UserAction, Key> = {
   removeFriend: 'ux.um.removeFriend', favorite: 'ux.um.favorite', unfavorite: 'ux.um.unfavorite', mute: 'ux.um.mute',
   unmute: 'ux.um.unmute', ignore: 'ux.um.ignore', unignore: 'ux.um.unignore', block: 'ux.um.block', unblock: 'ux.um.unblock',
   roles: 'ux.um.roles', moveTo: 'ux.um.moveTo', serverMute: 'ux.um.serverMute', serverDeafen: 'ux.um.serverDeafen',
-  disconnect: 'ux.um.disconnect', kick: 'ux.um.kick', ban: 'ux.um.ban', timeout: 'ux.um.timeout',
+  disconnect: 'ux.um.disconnect', kick: 'ux.um.kick', ban: 'ux.um.ban', timeout: 'ux.um.timeout', nickname: 'ux.um.changeNick',
   viewAvatar: 'ux.um.viewAvatar', copyId: 'ux.um.copyId',
 }
 const DANGER = new Set<UserAction>(['block', 'serverMute', 'serverDeafen', 'disconnect', 'kick', 'ban'])
@@ -84,7 +84,7 @@ const USER_ICON: Record<UserAction, IconName> = {
   removeFriend: 'person-remove-outline', favorite: 'star-outline', unfavorite: 'star', mute: 'notifications-off-outline',
   unmute: 'notifications-outline', ignore: 'eye-off-outline', unignore: 'eye-outline', block: 'ban', unblock: 'lock-open-outline',
   roles: 'shield-outline', moveTo: 'swap-horizontal-outline', serverMute: 'mic-off', serverDeafen: 'volume-mute',
-  disconnect: 'call-outline', kick: 'exit-outline', ban: 'ban-outline', timeout: 'time-outline',
+  disconnect: 'call-outline', kick: 'exit-outline', ban: 'ban-outline', timeout: 'time-outline', nickname: 'pencil-outline',
   viewAvatar: 'image-outline', copyId: 'copy-outline',
 }
 const CONV_LABEL: Record<ConvAction, Key> = {

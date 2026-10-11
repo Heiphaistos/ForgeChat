@@ -18,6 +18,7 @@ const LABELS: Record<string, Key> = {
   MEMBER_KICK: 'serverSettings.audit.MEMBER_KICK',
   MEMBER_BAN: 'serverSettings.audit.MEMBER_BAN',
   MEMBER_UNBAN: 'serverSettings.audit.MEMBER_UNBAN',
+  MEMBER_NICKNAME_CHANGE: 'serverSettings.audit.MEMBER_NICKNAME_CHANGE',
   CHANNEL_CREATE: 'serverSettings.audit.CHANNEL_CREATE',
   CHANNEL_DELETE: 'serverSettings.audit.CHANNEL_DELETE',
   ROLE_CREATE: 'serverSettings.audit.ROLE_CREATE',

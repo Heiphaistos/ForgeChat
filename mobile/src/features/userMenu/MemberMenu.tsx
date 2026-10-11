@@ -4,18 +4,20 @@
 import { useQuery } from '@tanstack/react-query'
 import { router } from 'expo-router'
 import { useState } from 'react'
-import { Alert } from 'react-native'
+import { Alert, KeyboardAvoidingView, Modal, Platform, StyleSheet, Text, View } from 'react-native'
 import { moderationApi } from '@/api/moderation'
 import { serversApi } from '@/api/servers'
 import { Sheet, type SheetAction } from '@/components/Sheet'
+import { Button, TextField } from '@/components/ui'
 import { useServerDetail, useServerPerms } from '@/features/servers/menus'
 import { PERM, memberActions } from '@/features/servers/perms'
 import { t as tr, useT } from '@/i18n'
 import { errorMessage } from '@/lib/http'
 import { qk, queryClient } from '@/lib/queryClient'
+import { colors, font, radius, spacing } from '@/theme'
 import type { ModFacts, UserAction } from './model'
 
-type ModAction = Extract<UserAction, 'roles' | 'moveTo' | 'serverMute' | 'serverDeafen' | 'disconnect' | 'kick' | 'ban' | 'timeout'>
+type ModAction = Extract<UserAction, 'roles' | 'moveTo' | 'serverMute' | 'serverDeafen' | 'disconnect' | 'kick' | 'ban' | 'timeout' | 'nickname'>
 
 const fail = (e: unknown) => Alert.alert(tr('common.actionFailed'), errorMessage(e))
 
@@ -28,6 +30,7 @@ export function useMemberMenu(target: { userId: string; name: string; serverId?:
   const members = useQuery({ queryKey: qk.members(sid), queryFn: () => serversApi.members(sid), enabled: on, staleTime: 30_000 })
   const voice = useQuery({ queryKey: ['voice-state'], queryFn: moderationApi.voiceState, enabled: on })
   const [sub, setSub] = useState<'roles' | 'moveTo' | null>(null)
+  const [nickOpen, setNickOpen] = useState(false)
 
   const member = target ? members.data?.find((m) => m.user_id === target.userId) : undefined
   const room = target ? voice.data?.channels.find((c) => c.server_id === sid && c.participants.some((p) => p.user_id === target.userId)) : undefined
@@ -49,6 +52,7 @@ export function useMemberMenu(target: { userId: string; name: string; serverId?:
       kick: can.kick,
       ban: can.ban,
       timeout: can.timeout,
+      nickname: member.user_id === perms.meId || can.nickname,
     }
   }
 
@@ -70,6 +74,7 @@ export function useMemberMenu(target: { userId: string; name: string; serverId?:
       ]),
     ban: manage,
     timeout: manage,
+    nickname: () => (uid === perms.meId ? router.push({ pathname: '/server/[serverId]/nickname', params: { serverId: sid } }) : setNickOpen(true)),
   }
   const selected: Partial<Record<UserAction, boolean>> = { serverMute: !!live?.server_muted, serverDeafen: !!live?.server_deafened }
 
@@ -84,8 +89,56 @@ export function useMemberMenu(target: { userId: string; name: string; serverId?:
         }))
       : voiceChannels.map((c) => ({ label: c.name, icon: 'volume-medium-outline', onPress: () => voiceRun({ channel_id: c.id }) }))
 
+  const saveNick = (nickname: string) => {
+    if (!member) return
+    const next = nickname.trim() || null
+    serversApi.setMemberNickname(sid, uid, next).then(() => {
+      queryClient.setQueryData<typeof members.data>(qk.members(sid), (old) => old?.map((m) => (m.user_id === uid ? { ...m, nickname: next } : m)))
+      refreshMembers()
+      setNickOpen(false)
+      Alert.alert(t(next ? 'ux.um.nickChanged' : 'ux.um.nickCleared', { name: member.username }))
+    }, fail)
+  }
+
   const node = (
-    <Sheet visible={sub !== null} onClose={() => setSub(null)} title={t(sub === 'roles' ? 'ux.um.roles' : 'ux.um.moveTo')} actions={subActions} />
+    <>
+      <Sheet visible={sub !== null} onClose={() => setSub(null)} title={t(sub === 'roles' ? 'ux.um.roles' : 'ux.um.moveTo')} actions={subActions} />
+      {nickOpen && member ? (
+        <NicknameDialog name={member.nickname || member.username} username={member.username} initial={member.nickname ?? ''} onClose={() => setNickOpen(false)} onSave={saveNick} />
+      ) : null}
+    </>
   )
   return { mod, run, selected, node }
 }
+
+/** Pseudo d'un autre membre : champ prérempli, « Réinitialiser » retire le pseudo. */
+function NicknameDialog({ name, username, initial, onClose, onSave }: {
+  name: string; username: string; initial: string; onClose: () => void; onSave: (nickname: string) => void
+}) {
+  const t = useT()
+  const [text, setText] = useState(initial)
+  return (
+    <Modal visible transparent animationType="fade" onRequestClose={onClose} statusBarTranslucent>
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.backdrop}>
+        <View style={styles.card}>
+          <Text style={styles.title}>{t('ux.um.nickTitle', { name })}</Text>
+          <TextField value={text} onChangeText={setText} maxLength={32} placeholder={username} autoCorrect={false} autoFocus />
+          <Text style={styles.hint}>{t('ux.um.nickHint', { name: username })}</Text>
+          <View style={styles.buttons}>
+            <Button title={t('common.cancel')} variant="ghost" onPress={onClose} />
+            <Button title={t('ux.um.nickReset')} variant="ghost" disabled={!initial} onPress={() => onSave('')} />
+            <Button title={t('ux.um.save')} onPress={() => onSave(text)} />
+          </View>
+        </View>
+      </KeyboardAvoidingView>
+    </Modal>
+  )
+}
+
+const styles = StyleSheet.create({
+  backdrop: { flex: 1, backgroundColor: colors.overlay, justifyContent: 'center', padding: spacing.xl },
+  card: { backgroundColor: colors.bgAlt, borderRadius: radius.lg, padding: spacing.lg, gap: spacing.sm },
+  title: { color: colors.text, fontSize: font.md, fontWeight: '700' },
+  hint: { color: colors.textMuted, fontSize: font.xs },
+  buttons: { flexDirection: 'row', justifyContent: 'flex-end', flexWrap: 'wrap', gap: spacing.sm },
+})

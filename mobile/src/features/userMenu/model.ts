@@ -13,7 +13,7 @@ export type UserAction =
   | 'addFriend' | 'acceptFriend' | 'removeFriend' | 'favorite' | 'unfavorite'
   | 'mute' | 'unmute' | 'ignore' | 'unignore' | 'block' | 'unblock'
   | 'roles' | 'moveTo' | 'serverMute' | 'serverDeafen' | 'disconnect' | 'kick' | 'ban' | 'timeout'
-  | 'viewAvatar' | 'copyId'
+  | 'nickname' | 'viewAvatar' | 'copyId'
 
 export type ConvAction = 'markRead' | 'pin' | 'unpin' | 'muteGroup' | 'unmuteGroup' | 'archive' | 'unarchive' | 'close' | 'leave' | 'copyConvId'
 
@@ -27,6 +27,8 @@ export interface ModFacts {
   kick: boolean
   ban: boolean
   timeout: boolean
+  /** Changer son pseudo : le mien (écran du pseudo) ou le sien avec « Gérer les pseudos » et un rang supérieur. */
+  nickname: boolean
 }
 
 export interface UserFacts {
@@ -61,6 +63,7 @@ export function buildUserMenu(f: UserFacts): UserAction[] {
     voice && 'soundboardMute',
     voice && 'videoOff',
     !self && 'safetyCode',
+    m?.nickname && 'nickname',
     !self && f.canInvite && f.relation !== 'blocked' && 'invite',
     friend ? 'removeFriend' : f.relation === 'received' ? 'acceptFriend' : f.relation === 'none' && 'addFriend',
     friend && (f.favorite ? 'unfavorite' : 'favorite'),

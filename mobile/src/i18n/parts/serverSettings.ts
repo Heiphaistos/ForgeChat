@@ -54,6 +54,7 @@ export const fr = {
   'serverSettings.perm.kick': 'Expulser des membres',
   'serverSettings.perm.banForever': 'Bannir définitivement',
   'serverSettings.perm.banTemp': 'Bannir temporairement',
+  'serverSettings.perm.manageNicknames': 'Gérer les pseudos',
   'serverSettings.perm.viewChannels': 'Voir les salons',
   'serverSettings.perm.viewChannel': 'Voir le salon',
   'serverSettings.perm.readHistory': "Lire l'historique",
@@ -313,6 +314,7 @@ export const fr = {
   'serverSettings.audit.SERVER_UPDATE': 'Serveur modifié',
   'serverSettings.audit.OWNER_TRANSFER': 'Propriété transférée',
   'serverSettings.audit.PURGE_MESSAGES': 'Messages purgés',
+  'serverSettings.audit.MEMBER_NICKNAME_CHANGE': 'Pseudo modifié',
   'serverSettings.audit.empty': 'Aucune action enregistrée',
   // --- AutoMod ---
   'serverSettings.automod.atMost': '{n} au plus',
@@ -443,6 +445,7 @@ export const en: Partial<Record<keyof typeof fr, string>> = {
   'serverSettings.perm.kick': 'Kick members',
   'serverSettings.perm.banForever': 'Ban permanently',
   'serverSettings.perm.banTemp': 'Ban temporarily',
+  'serverSettings.perm.manageNicknames': 'Manage nicknames',
   'serverSettings.perm.viewChannels': 'View channels',
   'serverSettings.perm.viewChannel': 'View channel',
   'serverSettings.perm.readHistory': 'Read message history',
@@ -702,6 +705,7 @@ export const en: Partial<Record<keyof typeof fr, string>> = {
   'serverSettings.audit.SERVER_UPDATE': 'Server updated',
   'serverSettings.audit.OWNER_TRANSFER': 'Ownership transferred',
   'serverSettings.audit.PURGE_MESSAGES': 'Messages purged',
+  'serverSettings.audit.MEMBER_NICKNAME_CHANGE': 'Nickname changed',
   'serverSettings.audit.empty': 'No actions recorded',
   // --- AutoMod ---
   'serverSettings.automod.atMost': 'Up to {n}',

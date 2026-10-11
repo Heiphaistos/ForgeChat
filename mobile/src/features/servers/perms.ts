@@ -26,6 +26,7 @@ export const PERM = {
   DELETE_CHANNELS: 2 ** 21,
   DELETE_OWN_CHANNELS: 2 ** 22,
   BAN_TEMP: 2 ** 23,
+  MANAGE_NICKNAMES: 2 ** 24,
   ADMINISTRATOR: 2 ** 31,
   STREAM: 2 ** 40,
 } as const
@@ -51,6 +52,7 @@ export const PERMISSION_GROUPS: { label: Key; perms: { bit: number; label: Key }
       { bit: PERM.KICK_MEMBERS, label: 'serverSettings.perm.kick' },
       { bit: PERM.BAN_MEMBERS, label: 'serverSettings.perm.banForever' },
       { bit: PERM.BAN_TEMP, label: 'serverSettings.perm.banTemp' },
+      { bit: PERM.MANAGE_NICKNAMES, label: 'serverSettings.perm.manageNicknames' },
     ],
   },
   {
@@ -168,6 +170,8 @@ export function memberActions(p: ServerPerms, target: MemberRank) {
     ban: above && p.has(PERM.BAN_MEMBERS | PERM.BAN_TEMP),
     banForever: above && p.has(PERM.BAN_MEMBERS),
     timeout: above && p.has(PERM.MANAGE_MESSAGES),
+    /** Pseudo d'un autre membre (PATCH .../members/:id/nickname). */
+    nickname: above && p.has(PERM.MANAGE_NICKNAMES),
   }
 }
 

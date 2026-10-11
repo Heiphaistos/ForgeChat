@@ -92,6 +92,18 @@ describe('permissions affichées', () => {
     expect(p.roleBelow(roles[0]!)).toBe(false) // son propre rôle
   })
 
+  it('pseudo d’un autre membre : « Gérer les pseudos » et rang supérieur', () => {
+    expect(PERM.MANAGE_NICKNAMES).toBe(2 ** 24)
+    const roles = [role('nick', PERM.MANAGE_NICKNAMES, 2), role('vip', 0, 3), role('low', 0, 1)]
+    const p = serverPerms(detail(['nick'], roles), ME)
+    expect(memberActions(p, { user_id: 'x', role_ids: ['low'] })).toMatchObject({ nickname: true, kick: false })
+    expect(memberActions(p, { user_id: 'x', role_ids: ['vip'] }).nickname).toBe(false)
+    expect(memberActions(p, { user_id: 'x', role_ids: ['nick'] }).nickname).toBe(false) // rang égal
+    expect(memberActions(p, { user_id: OWNER, is_owner: true }).nickname).toBe(false)
+    const plain = serverPerms(detail(['low'], roles), ME)
+    expect(memberActions(plain, { user_id: 'x' }).nickname).toBe(false)
+  })
+
   it('bits au-delà de 32 bits (STREAM = 2^40) conservés', () => {
     expect(hasBit(BASE, PERM.STREAM)).toBe(true)
     expect(toggleBit(BASE, PERM.STREAM)).toBe(PERM.VIEW_CHANNEL | PERM.SEND_MESSAGES)
