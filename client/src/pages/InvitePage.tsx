@@ -54,7 +54,7 @@ export default function InvitePage() {
     <div
       className="flex items-center justify-center min-h-screen bg-fc-bg px-4 bg-cover bg-center"
       // Fond d'invitation : la bannière du serveur, assombrie pour garder la carte lisible.
-      style={serverInfo.server.banner ? { backgroundImage: `linear-gradient(rgba(0,0,0,.55), rgba(0,0,0,.55)), url(${mediaUrl(serverInfo.server.banner)})` } : undefined}
+      style={serverInfo.server.banner ? { backgroundImage: `linear-gradient(rgba(0,0,0,.55), rgba(0,0,0,.55)), url(${JSON.stringify(mediaUrl(serverInfo.server.banner) ?? '')})` } : undefined}
     >
       <div
         role="main"
