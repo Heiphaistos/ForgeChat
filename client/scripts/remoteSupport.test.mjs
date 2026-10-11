@@ -41,3 +41,11 @@ test('contenus refusés (jamais d\'affichage partiel)', () => {
     { v: 1, k: 'invite', id: '482915036&x=1', code: '7K2MQ9XR4TVB', exp: 1 },
   ]) assert.equal(rs.parseSupport(bad), null, JSON.stringify(bad))
 })
+
+test("partager son écran : agent GhostHandDesk sous Windows seulement ; téléchargement direct en https", () => {
+  assert.equal(rs.canHostGhd('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Edg/141.0'), true)
+  assert.equal(rs.canHostGhd('ForgeChat/3.27.0 (Desktop) Mozilla/5.0 (Windows NT 10.0; Win64; x64)'), true)
+  for (const ua of ['Mozilla/5.0 (Macintosh; Intel Mac OS X 14_5) AppleWebKit/605.1.15', 'Mozilla/5.0 (X11; Linux x86_64)', 'Mozilla/5.0 (Linux; Android 15)', ''])
+    assert.equal(rs.canHostGhd(ua), false, ua)
+  assert.match(rs.GHD_WINDOWS_DOWNLOAD, /^https:\/\/ghd\.heiphaistos\.org\/download\/v[\d.]+\/GhostHandDesk_[\d.]+_portable_x64\.exe$/)
+})

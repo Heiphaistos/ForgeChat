@@ -27,3 +27,9 @@ test('MP déchiffré : la carte vient du contenu chiffré, jamais d\'un message 
   expect(fromDmMessage({ ...base, e2e: 'locked', e2e_body: { t: '', rs: { v: 1, k: 'offer' } } } as unknown as DmMessage).support).toBeUndefined()
   expect(fromDmMessage({ ...ok, e2e_body: { t: 'x', rs: { v: 1, k: 'pwn' } } } as unknown as DmMessage).support).toBeUndefined()
 })
+
+test('partager son écran : Windows seulement (jamais depuis le téléphone)', () => {
+  expect(rs.canHostGhd('Mozilla/5.0 (Windows NT 10.0; Win64; x64)')).toBe(true)
+  expect(rs.canHostGhd('Mozilla/5.0 (Linux; Android 15)')).toBe(false)
+  expect(rs.GHD_WINDOWS_DOWNLOAD.startsWith('https://ghd.heiphaistos.org/download/')).toBe(true)
+})

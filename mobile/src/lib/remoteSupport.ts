@@ -22,6 +22,9 @@ export interface SupportPayload {
 
 export const GHD_SITE = 'https://ghd.heiphaistos.org'
 export const GHD_WEB_VIEWER = `${GHD_SITE}/app/`
+/** Agent GhostHandDesk (Windows seulement) : portable, sans installation. Il se met à jour
+ *  tout seul ; à suivre quand une version change le protocole des liens. */
+export const GHD_WINDOWS_DOWNLOAD = `${GHD_SITE}/download/v0.9.0/GhostHandDesk_0.9.0_portable_x64.exe`
 /** Durée de validité d'un code (secondes), comme le défaut de GhostHandDesk. */
 export const CODE_TTL = 600
 const ALPHABET = '0123456789ABCDEFGHJKMNPQRSTVWXYZ'
@@ -32,6 +35,9 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 export function newCode(random: (n: number) => Uint8Array = n => crypto.getRandomValues(new Uint8Array(n))): string {
   return Array.from(random(12), b => ALPHABET[b & 31]).join('')
 }
+
+/** Partager son écran exige l'agent GhostHandDesk, qui n'existe que sous Windows. */
+export const canHostGhd = (userAgent: string) => /\bWindows NT\b/.test(userAgent)
 
 export const formatCode = (code: string) => code.match(/.{1,4}/g)?.join('-') ?? code
 export const cleanId = (id: string) => id.replace(/[\s-]/g, '')
