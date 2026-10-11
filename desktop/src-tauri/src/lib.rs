@@ -499,7 +499,8 @@ pub fn run() {
             systeme::pick_download_dir,
             systeme::clear_download_dir,
             systeme::set_app_icon,
-            systeme::streaming_software_running
+            systeme::streaming_software_running,
+            systeme::ghd_installed
         ]);
 
     builder
