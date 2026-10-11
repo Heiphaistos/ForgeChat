@@ -7,6 +7,7 @@ import toast from 'react-hot-toast'
 import Logo3D from '../components/Logo3D'
 import { useT } from '../i18n'
 import { SavedAccountsLogin } from '../components/AccountSwitcher'
+import { safeRedirect } from '../utils/safeUrl'
 
 // Dans l'application bureau, « / » redirige vers /login : le lien bouclerait sur lui-même.
 const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
@@ -31,8 +32,7 @@ export default function LoginPage() {
       await login(email, password, needTotp ? totpCode : undefined)
       setPassword('')
       try { localStorage.setItem('fc_last_email', email.trim()) } catch { /* stockage indisponible */ }
-      const redirect = searchParams.get('redirect')
-      nav(redirect && redirect.startsWith('/') && !redirect.startsWith('//') ? redirect : '/friends')
+      nav(safeRedirect(searchParams.get('redirect'), '/friends'))
     } catch (err: any) {
       const msg = err.response?.data?.error ?? ''
       if (msg === 'totp_required') {

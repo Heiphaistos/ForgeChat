@@ -32,3 +32,33 @@ export function deceptiveHost(label: string, href: string): string | null {
   const s = bare(shown)
   return r === s || r.endsWith(`.${s}`) ? null : real
 }
+
+const RASTER_DATA = /^data:image\/(?:png|jpe?g|gif|webp|avif|bmp)[;,]/i
+
+/**
+ * Adresse de média (avatar, pièce jointe, emoji, bannière) affichable ET ouvrable : chemin de
+ * l'origine courante, http(s), blob: (fichier déchiffré) ou image matricielle data:. Refusés :
+ * javascript:/vbscript:, data:text/html, data:image/svg+xml (script), et les faux chemins
+ * relatifs que le navigateur lit comme une autre origine (`//h`, `/\h`, `/<tab>/h`).
+ */
+export function isMediaUrl(u: string | null | undefined): u is string {
+  if (!u) return false
+  try {
+    if (u.startsWith('/')) return new URL(u, 'http://origine.invalid').host === 'origine.invalid'
+    const p = new URL(u).protocol
+    return p === 'https:' || p === 'http:' || p === 'blob:' || (p === 'data:' && RASTER_DATA.test(u))
+  } catch {
+    return false
+  }
+}
+
+/** `?redirect=` après connexion : chemin de l'appli seulement (pas `//h`, `/\h`, ni schéma), sinon `fallback`. */
+export function safeRedirect(path: string | null | undefined, fallback: string): string {
+  if (!path?.startsWith('/')) return fallback
+  try {
+    const u = new URL(path, 'http://origine.invalid')
+    return u.host === 'origine.invalid' ? u.pathname + u.search + u.hash : fallback
+  } catch {
+    return fallback
+  }
+}
