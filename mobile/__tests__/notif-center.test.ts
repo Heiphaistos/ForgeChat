@@ -28,6 +28,15 @@ describe('resolveLevel', () => {
   })
 })
 
+describe('noticeFor : personne ignorée', () => {
+  const ctx: NotifyContext = { myId: 'me', dnd: false, focus: false, quiet: false, preview: false, isMuted: () => false, groupName: () => null, isIgnored: (id) => id === 'bob' }
+  it('ni MP ni mention de sa part', () => {
+    expect(noticeFor({ type: 'DM_MESSAGE', dm_id: 'd1', message: { id: 'm', sender_id: 'bob', sender_username: 'bob', content: 'x' } }, ctx)).toBeNull()
+    expect(noticeFor({ type: 'DM_MESSAGE', dm_id: 'd1', message: { id: 'm', sender_id: 'eve', sender_username: 'eve', content: 'x' } }, ctx)).not.toBeNull()
+    expect(noticeFor({ type: 'MENTION_CREATE', notify: true, mention: { server_id: 's', channel_id: 'c', author_id: 'bob', content: 'x' } }, ctx)).toBeNull()
+  })
+})
+
 describe('noticeFor FORUM_POST_CREATE', () => {
   const ME = '11111111-1111-1111-1111-111111111111'
   const ctx = (patch: Partial<NotifyContext> = {}): NotifyContext => ({
@@ -44,5 +53,6 @@ describe('noticeFor FORUM_POST_CREATE', () => {
     expect(noticeFor(ev(ME), ctx())).toBeNull()
     expect(noticeFor(ev(), ctx({ dnd: true }))).toBeNull()
     expect(noticeFor(ev(), ctx({ quiet: true }))).toBeNull()
+    expect(noticeFor(ev(), ctx({ isIgnored: (id) => id === 'bob' }))).toBeNull()
   })
 })

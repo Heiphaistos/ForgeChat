@@ -222,7 +222,7 @@ export const MessageItem = memo(function MessageItem({
   const showReactions = useUxPrefs((s) => s.showReactions)
   const showAttachments = useUxPrefs((s) => s.showAttachments)
   const [attachmentsOpened, setAttachmentsOpened] = useState(false)
-  const attachmentCount = m.attachments.length + (m.files?.length ?? 0)
+  const attachmentCount = displayAttachments(m.attachments, m.files).length
   const authorMenu = m.authorIsBot ? undefined : () => openUserMenu({ userId: m.authorId, name: m.authorName, avatar: m.authorAvatar, serverId })
   if (ignored && !revealed) {
     return (

@@ -11,6 +11,7 @@ import { realtime, type RealtimeEvent } from '@/lib/realtime'
 import { hasPushToken, setupNotificationChannels } from '@/services/push'
 import { MESSAGE_CATEGORY } from '@/features/notifications/quickActions'
 import { forumPostWanted, useNotifCenter } from '@/features/notifications/notifCenter'
+import { useLocalPrefs } from '@/features/userMenu/localPrefs'
 import { openRaw } from '@/e2e/conversations'
 import { getMyId, registerSignOutHook, useAuth } from '@/stores/auth'
 import { useCall } from '@/stores/call'
@@ -110,6 +111,7 @@ function context() {
       return c?.is_group ? c.name : null
     },
     forumAlert: forumPostWanted,
+    isIgnored: (userId: string) => (useLocalPrefs.getState().byUser[getMyId() ?? '']?.ignored ?? []).includes(userId),
     channelName: (serverId: string, channelId: string) =>
       queryClient.getQueryData<{ id: string; name: string }[]>(qk.channels(serverId))?.find((c) => c.id === channelId)?.name ?? null,
   }
