@@ -7,6 +7,7 @@
 // Android : chiffrement natif en flux (ForgeCallService, FileCrypto.java), rien en mémoire ;
 // ailleurs (iOS, anciennes versions natives) : même calcul en JavaScript, morceau par morceau.
 import { requireOptionalNativeModule } from 'expo'
+import { Platform, Share } from 'react-native'
 import * as Crypto from 'expo-crypto'
 import type { UploadFile } from '@/api/messages'
 import { resolveMediaUrl, uploadPath } from '@/lib/links'
@@ -252,15 +253,21 @@ export function decryptedBase64(localUri: string, max = 8 * 1024 * 1024): string
 }
 
 /**
- * Enregistre un fichier déchiffré dans un dossier choisi par l'utilisateur (sélecteur du
- * système) : une autre appli ne peut pas ouvrir le cache privé de ForgeChat. Rend faux si annulé.
+ * « Enregistrer sous » : Android, dossier choisi dans le sélecteur du système (Storage Access
+ * Framework) ; iOS, feuille de partage (« Enregistrer dans Fichiers », AirDrop…). Une autre
+ * appli ne peut pas ouvrir le cache privé de ForgeChat. Fichier chiffré : ce sont les octets
+ * DÉCHIFFRÉS du cache qui sont écrits. Rend faux si annulé.
  */
 export async function saveToDevice(localUri: string, name: string, mime: string): Promise<boolean> {
+  if (Platform.OS === 'ios') {
+    const r = await Share.share({ url: localUri, title: name })
+    return r.action !== Share.dismissedAction
+  }
   if (!fs?.pickDirectoryAsync) throw new Error('E2E_FILES_UNAVAILABLE')
   const dir = await fs.pickDirectoryAsync().catch(() => null)
   if (!dir) return false
   const input = new fs.FileSystemFile(localUri).open('r')
-  const output = dir.createFile(name, mime).open('w')
+  const output = dir.createFile(name.replace(/[\\/:*?"<>|]/g, '_') || 'fichier', mime || null).open('w')
   try {
     for (;;) {
       const b = input.readBytes(1024 * 1024)
@@ -271,4 +278,19 @@ export async function saveToDevice(localUri: string, name: string, mime: string)
     input.close()
     output.close()
   }
+}
+
+/** Pièce jointe en clair (servie par le serveur) téléchargée dans le cache, pour « Enregistrer sous ». */
+export async function downloadToCache(url: string, name: string): Promise<string> {
+  const src = resolveMediaUrl(await signUpload(url))
+  if (!fs || !src) throw new Error('E2E_FILES_UNAVAILABLE')
+  const out = cacheFile(`${Crypto.randomUUID()}.${extOf(name)}`)
+  await fs.downloadFileAsync(src, out, { idempotent: true })
+  return out.uri
+}
+
+/** Fichier local (déjà déchiffré) ou adresse du serveur : enregistré où l'utilisateur le choisit. */
+export async function saveAttachmentAs(uri: string, name: string, mime: string): Promise<boolean> {
+  const local = /^(file|content):/.test(uri) ? uri : await downloadToCache(uri, name)
+  return saveToDevice(local, name, mime)
 }

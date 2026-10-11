@@ -60,6 +60,7 @@ export const fr = {
   'ux.search.all': 'Partout',
   'ux.search.dms': 'Tous les MP',
   'ux.search.servers': 'Serveurs',
+  'ux.save.as': 'Enregistrer {name} sous…',
   // --- Appel en cours ---
   'ux.call.mute': 'Couper le micro',
   'ux.call.unmute': 'Réactiver le micro',
@@ -166,6 +167,7 @@ export const en: Partial<Record<keyof typeof fr, string>> = {
   'ux.search.all': 'Everywhere',
   'ux.search.dms': 'All DMs',
   'ux.search.servers': 'Servers',
+  'ux.save.as': 'Save {name} as…',
   'ux.call.mute': 'Mute microphone',
   'ux.call.unmute': 'Unmute microphone',
   'ux.call.speaker': 'Switch to speaker',
