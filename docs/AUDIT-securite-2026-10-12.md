@@ -140,3 +140,24 @@ pour `reply_to_content` en clair.
 « 100 % sécurisé » n'existe pas. L'objectif réaliste : un serveur compromis ne doit pouvoir ni lire, ni falsifier
 **sans être vu**. Après H2, H3 et M1-M4, la limite restante sera celle déjà assumée : le client **web** est servi par
 le serveur. Pour les conversations sensibles, il faut utiliser les applis bureau et mobile signées.
+
+---
+
+## Correctifs appliqués (branche `ccr-0cffbb8b-8y1c4w`, 2026-10-12)
+
+| # | État | Ce qui a changé |
+|---|---|---|
+| H1 | **Corrigé** | La grâce rend le **même** successeur (chiffré dans Redis par une clé tirée de l'ancien jeton), n'est jamais prolongée (`SET NX`), tombe dès que la session est fermée ou le compte révoqué. `verify_email` ouvre une session visible. Test sur vraie base : `refresh_grace_db`. |
+| H2 | **Atténué** | Une clé de récupération de serveur jamais vue n'est plus épinglée en silence : rien (ni historique) ne lui est enveloppé avant acceptation explicite (boîte de dialogue avec empreinte), web et mobile. Reste à faire : signature de la clé par la clé de compte du propriétaire (changement de protocole). |
+| H3 | **Corrigé** | « Non chiffré » calculé sur l'appareil (`openMessage`, `plainFields`), jamais d'après le serveur ; alerte rouge « authenticité non garantie » en MP et groupe. |
+| M1 | **Corrigé** | Liste blanche `previewAllowed` vérifiée sur l'appareil avant tout `/og` ; les groupes web ne demandent plus `/og` pour un message déchiffré. |
+| M2 | **Corrigé** | Plus d'image dans un aperçu fourni par l'expéditeur ; `referrerPolicy="no-referrer"`. |
+| M3 | **Partiel** | 12 caractères, pas de bases courantes ni pseudo/e-mail, 3 sortes de caractères sous 16 caractères (web, mobile, y compris réinitialisation mobile). Reste : Argon2id à la place de PBKDF2. |
+| M4 | **Corrigé** | Confirmation explicite avant d'envoyer une commande de bot en clair (une fois par commande et par session). |
+| M5 | **Corrigé** | `Zone.Identifier` (Windows) / `com.apple.quarantine` (macOS) sur chaque fichier enregistré ; jamais d'exécutable déposé sans boîte « Enregistrer sous ». |
+| M6 | **Corrigé** | Le domaine du serveur est retiré de `script-src` et `style-src` de la CSP du bureau. |
+| M7 | Ouvert | IPA iOS : à télécharger et vérifier dans l'appli avant AltStore. |
+| M8 | Ouvert (infra) | Déploiement : vérifier `git verify-commit`/`verify-tag` sur le VPS avant d'aligner `/opt/forgechat` ; protection de branche et 2FA matérielle sur GitHub. |
+| Faibles | **Corrigés** : verrouillage de compte (limite par compte **et** adresse, plafond 100/h par compte), sessions invisibles, CSRF entre sous-domaines (contrôle `Origin`/`Sec-Fetch-Site` des écritures par cookie, et `accounts/stash`), WebSocket (`VIEW_CHANNEL`, fil vérifié, limites de débit), dossier temporaire privé des mises à jour Linux, plages IPv6 du filtre SSRF. **Ouverts** : recherche globale d'utilisateurs, support à distance réservé aux amis, archivage des dépôts iOS/Android périmés, formulation sur IndexedDB. |
+
+Vérifié : `cargo test` serveur (174 tests, plus 21 tests sur vraie base PostgreSQL + Redis), `tsc`, `eslint` et tests `node --test` du web, `tsc` et `jest` du mobile (635 tests). Le crate bureau n'a pas pu être compilé ici (libwebrtc exige clang 21) : les fonctions modifiées ont été compilées et testées à part.
