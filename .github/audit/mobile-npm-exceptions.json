@@ -1,0 +1,13 @@
+{
+  "_doc": "Avis npm examinés pour mobile/ (scripts/npm-audit-gate.mjs). Chaque exception expire et doit être réexaminée.",
+  "advisories": {
+    "GHSA-86w9-cpqp-85rv": {
+      "reason": "node-forge n'est utilisé que par @expo/cli (outil de build, signature de mises à jour EAS non utilisée) ; jamais embarqué dans l'appli. Aucune version corrigée publiée au 2026-10-12.",
+      "until": "2027-01-12"
+    },
+    "GHSA-vfj7-8cjw-p6xm": {
+      "reason": "braces vient de jest/micromatch (tests et Metro), motifs fournis par nos fichiers de config, jamais par un utilisateur. Aucune version corrigée publiée au 2026-10-12.",
+      "until": "2027-01-12"
+    }
+  }
+}
