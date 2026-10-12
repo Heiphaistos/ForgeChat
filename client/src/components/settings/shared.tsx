@@ -10,9 +10,14 @@ export function Field({ label, hint, children }: { label: string; hint?: string;
   )
 }
 
-export function Toggle({ value, onChange }: { value: boolean; onChange: (v: boolean) => void }) {
+/** Interrupteur ; `label` : nom lu par les lecteurs d'écran (WCAG 4.1.2, amélioration n° 41). */
+export function Toggle({ value, onChange, label }: { value: boolean; onChange: (v: boolean) => void; label?: string }) {
   return (
     <button
+      type="button"
+      role="switch"
+      aria-checked={value}
+      aria-label={label}
       onClick={() => onChange(!value)}
       className={`relative inline-flex h-5 w-9 rounded-full transition-colors ${value ? 'bg-fc-accent' : 'bg-fc-hover'}`}
     >

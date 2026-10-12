@@ -207,7 +207,7 @@ export default function AppearanceSection() {
         <H>{t('settings.appearance.options')}</H>
         <div className="p-4 bg-fc-channel rounded-xl border border-fc-hover flex items-center justify-between">
           <span className="text-sm text-fc-text">{t('settings.appearance.roleColors')}</span>
-          <Toggle value={showRoleColors} onChange={setShowRoleColors} />
+          <Toggle value={showRoleColors} onChange={setShowRoleColors} label={t('settings.appearance.roleColors')} />
         </div>
       </section>
 

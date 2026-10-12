@@ -74,9 +74,9 @@ const isText = (t: string) => ['text', 'announcement', 'forum', 'media'].include
 
 type TabId = 'general' | 'permissions' | 'advanced'
 
-function Toggle({ value, onChange }: { value: boolean; onChange: (v: boolean) => void }) {
+function Toggle({ value, onChange, label }: { value: boolean; onChange: (v: boolean) => void; label?: string }) {
   return (
-    <button onClick={() => onChange(!value)}
+    <button type="button" role="switch" aria-checked={value} aria-label={label} onClick={() => onChange(!value)}
       className={`relative inline-flex h-6 w-11 rounded-full transition-colors flex-shrink-0 ${value ? 'bg-fc-accent' : 'bg-fc-hover'}`}>
       <span className={`inline-block h-[18px] w-[18px] mt-[3px] rounded-full bg-white shadow transition-transform ${value ? 'translate-x-[23px]' : 'translate-x-[3px]'}`} />
     </button>
@@ -488,7 +488,7 @@ export default function ChannelSettingsModal({ channel, serverId, onClose, initi
                       <div className="text-sm font-medium text-white">{t('chset.requireTag')}</div>
                       <div className="text-xs text-fc-muted">{t('chset.requireTagDesc')}</div>
                     </div>
-                    <Toggle value={requireTag} onChange={setRequireTag} />
+                    <Toggle value={requireTag} onChange={setRequireTag} label={t('chset.requireTag')} />
                   </div>
 
                   <div>
@@ -575,14 +575,14 @@ export default function ChannelSettingsModal({ channel, serverId, onClose, initi
                         <div className="text-sm font-medium text-white">{t('chset.autoCreate')}</div>
                         <div className="text-xs text-fc-muted">{t('chset.autoCreateDesc')}</div>
                       </div>
-                      <Toggle value={isAutoCreate} onChange={setIsAutoCreate} />
+                      <Toggle value={isAutoCreate} onChange={setIsAutoCreate} label={t('chset.autoCreate')} />
                     </div>
                     <div className="flex items-center justify-between">
                       <div>
                         <div className="text-sm font-medium text-white">{t('chset.waitingRoom')}</div>
                         <div className="text-xs text-fc-muted">{t('chset.waitingRoomDesc')}</div>
                       </div>
-                      <Toggle value={waitingRoom} onChange={setWaitingRoom} />
+                      <Toggle value={waitingRoom} onChange={setWaitingRoom} label={t('chset.waitingRoom')} />
                     </div>
                     {isAutoCreate && (
                       <input value={autoCreateName} onChange={e => setAutoCreateName(e.target.value)}
@@ -601,7 +601,7 @@ export default function ChannelSettingsModal({ channel, serverId, onClose, initi
                   <div className="text-sm font-medium text-white">{t('createChannel.nsfw')}</div>
                   <div className="text-xs text-fc-muted">{t('chset.nsfwDesc')}</div>
                 </div>
-                <Toggle value={isNsfw} onChange={setIsNsfw} />
+                <Toggle value={isNsfw} onChange={setIsNsfw} label={t('createChannel.nsfw')} />
               </div>}
             </div>
           )}

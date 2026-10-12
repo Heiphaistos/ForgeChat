@@ -17,7 +17,7 @@ export default function StreamerSection() {
           <div className="text-xs text-fc-muted mt-1">{t('ux.streamer.shortcutHint')}</div>
         </div>
         {/* Enregistré sur le compte tout de suite (comme le raccourci). */}
-        <Toggle value={active} onChange={v => setStreamerMode(v, true)} />
+        <Toggle value={active} onChange={v => setStreamerMode(v, true)} label={t('settings.section.streamer')} />
       </div>
 
       <StreamerPrefs />

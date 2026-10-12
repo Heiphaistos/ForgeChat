@@ -49,7 +49,7 @@ export default function PrivacySection() {
             <div className="text-sm font-medium text-white">{item.label}</div>
             <div className="text-xs text-fc-muted">{item.desc}</div>
           </div>
-          <Toggle value={item.value} onChange={item.onChange} />
+          <Toggle value={item.value} onChange={item.onChange} label={item.label} />
         </div>
       ))}
 
@@ -59,7 +59,7 @@ export default function PrivacySection() {
             <div className="text-sm font-medium text-white">{t('settings.privacy.game')}</div>
             <div className="text-xs text-fc-muted">{t('settings.privacy.gameDesc')}</div>
           </div>
-          <Toggle value={autoActivity} onChange={v => { setAutoActivity(v); try { localStorage.setItem(AUTO_ACTIVITY_KEY, String(v)) } catch { /* réglage non mémorisé */ } }} />
+          <Toggle value={autoActivity} onChange={v => { setAutoActivity(v); try { localStorage.setItem(AUTO_ACTIVITY_KEY, String(v)) } catch { /* réglage non mémorisé */ } }} label={t('settings.privacy.game')} />
         </div>
       )}
 

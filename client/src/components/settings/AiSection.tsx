@@ -36,7 +36,7 @@ export default function AiSection() {
         <p className="text-sm text-fc-text">{label}</p>
         {hint && <p className="text-xs text-fc-muted">{hint}</p>}
       </div>
-      <Toggle value={value} onChange={onChange} />
+      <Toggle value={value} onChange={onChange} label={label} />
     </div>
   )
 

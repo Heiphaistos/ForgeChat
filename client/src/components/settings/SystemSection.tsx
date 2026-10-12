@@ -78,9 +78,9 @@ export default function SystemSection({ onOpenKeybindings }: { onOpenKeybindings
     <div className="space-y-8">
       <section className="space-y-2">
         <H>{t('system.startup.title')}</H>
-        <Row label={t('system.autostart')}><Toggle value={sys.autostart} onChange={setAutostart} /></Row>
+        <Row label={t('system.autostart')}><Toggle value={sys.autostart} onChange={setAutostart} label={t('system.autostart')} /></Row>
         <Row label={t('system.startMinimized')}>
-          <Toggle value={sys.start_minimized} onChange={v => update({ start_minimized: v })} />
+          <Toggle value={sys.start_minimized} onChange={v => update({ start_minimized: v })} label={t('system.startMinimized')} />
         </Row>
       </section>
 
@@ -102,7 +102,7 @@ export default function SystemSection({ onOpenKeybindings }: { onOpenKeybindings
         <section className="space-y-2">
           <H>{t('system.gpu.title')}</H>
           <Row label={t('system.gpu.label')} hint={t('system.gpu.hint')}>
-            <Toggle value={sys.hardware_acceleration} onChange={v => update({ hardware_acceleration: v })} />
+            <Toggle value={sys.hardware_acceleration} onChange={v => update({ hardware_acceleration: v })} label={t('system.gpu.label')} />
           </Row>
           {gpuAtStart !== null && gpuAtStart !== sys.hardware_acceleration && (
             <div role="status" className="p-3 rounded-xl border border-fc-accent/40 bg-fc-accent/10 flex items-center justify-between gap-3">
@@ -118,7 +118,7 @@ export default function SystemSection({ onOpenKeybindings }: { onOpenKeybindings
       <section className="space-y-2">
         <H>{t('system.downloads.title')}</H>
         <Row label={t('system.downloads.ask')}>
-          <Toggle value={sys.ask_save} onChange={v => update({ ask_save: v })} />
+          <Toggle value={sys.ask_save} onChange={v => update({ ask_save: v })} label={t('system.downloads.ask')} />
         </Row>
         <Row label={t('system.downloads.dir')} hint={sys.download_dir ?? t('system.downloads.none')}>
           <div className="flex gap-2">
@@ -131,7 +131,7 @@ export default function SystemSection({ onOpenKeybindings }: { onOpenKeybindings
       <section>
         <H>{t('system.dnd.title')}</H>
         <Row label={t('system.dnd.label')} hint={t('system.dnd.hint')}>
-          <Toggle value={dnd} onChange={v => { setDragDropEnabled(v); setDnd(v) }} />
+          <Toggle value={dnd} onChange={v => { setDragDropEnabled(v); setDnd(v) }} label={t('system.dnd.label')} />
         </Row>
       </section>
 

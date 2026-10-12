@@ -51,7 +51,7 @@ export default function AccessibilitySection() {
             <div className="text-sm font-medium text-white">{item.label}</div>
             <div className="text-xs text-fc-muted">{item.desc}</div>
           </div>
-          <Toggle value={item.value} onChange={item.onChange} />
+          <Toggle value={item.value} onChange={item.onChange} label={item.label} />
         </div>
       ))}
 

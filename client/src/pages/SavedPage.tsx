@@ -280,7 +280,7 @@ export default function SavedPage() {
               {filter === 'all' ? t('saved.none') : t('saved.noneOfType', { type: filter })}
             </p>
             {filter === 'all' && (
-              <p className="text-fc-muted/60 text-xs max-w-xs">
+              <p className="text-fc-muted text-xs max-w-xs">
                 {t('saved.hint')}
               </p>
             )}

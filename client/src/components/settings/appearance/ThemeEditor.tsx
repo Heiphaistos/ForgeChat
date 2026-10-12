@@ -182,7 +182,7 @@ export default function ThemeEditor({ initial, onClose }: { initial: CustomTheme
           format={v => `${v} %`} onChange={v => patch({ opacity: v / 100 })} />}
         {translucentBg && <Slider label={t('themes.glass')} value={draft.blur} min={0} max={40} format={v => `${v}px`} onChange={v => patch({ blur: v })} />}
         <Slider label={t('themes.radius')} value={draft.radius} min={0} max={2} step={0.25} format={v => `×${v}`} onChange={v => patch({ radius: v })} />
-        <Row label={t('themes.outline')}><Toggle value={draft.outline} onChange={v => patch({ outline: v })} /></Row>
+        <Row label={t('themes.outline')}><Toggle value={draft.outline} onChange={v => patch({ outline: v })} label={t('themes.outline')} /></Row>
       </Box>
 
       <div className={`flex items-start gap-2 p-3 rounded-lg text-xs border ${weak ? 'border-fc-yellow/50 text-fc-yellow' : 'border-fc-green/40 text-fc-green'}`}>

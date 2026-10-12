@@ -45,7 +45,7 @@ function WebPushBlock() {
         <div className="text-sm text-white">{t('settings.notif.push')}</div>
         <div className="text-xs text-fc-muted">{t('settings.notif.pushDesc')}</div>
       </div>
-      <Toggle value={active} onChange={() => { if (!busy) toggle() }} />
+      <Toggle value={active} onChange={() => { if (!busy) toggle() }} label={t('settings.notif.push')} />
     </div>
   )
 }
@@ -180,7 +180,7 @@ export default function NotificationsSection() {
                 {t('settings.audio.test')}
               </button>
             )}
-            <Toggle value={audioEnabled} onChange={setAudioEnabled} />
+            <Toggle value={audioEnabled} onChange={setAudioEnabled} label={t('settings.notif.sounds')} />
           </div>
         </div>
       </div>
@@ -190,7 +190,7 @@ export default function NotificationsSection() {
             <div className="text-sm font-medium text-white flex items-center gap-2"><Moon size={14} /> {t('settings.notif.quiet')}</div>
             <div className="text-xs text-fc-muted">{t('settings.notif.quietDesc')}</div>
           </div>
-          <Toggle value={quietEnabled} onChange={setQuietEnabled} />
+          <Toggle value={quietEnabled} onChange={setQuietEnabled} label={t('settings.notif.quiet')} />
         </div>
 
         {quietEnabled && (
@@ -219,7 +219,7 @@ export default function NotificationsSection() {
             </div>
             <div className="col-span-2 flex items-center justify-between">
               <span className="text-xs text-fc-muted">{t('dnd.favorites')}</span>
-              <Toggle value={allowFavorites} onChange={setAllowFavorites} />
+              <Toggle value={allowFavorites} onChange={setAllowFavorites} label={t('dnd.favorites')} />
             </div>
             <p className="col-span-2 text-xs text-fc-muted">{t('dnd.serverSide')}</p>
           </div>
