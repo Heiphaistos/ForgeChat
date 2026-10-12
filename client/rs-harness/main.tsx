@@ -12,9 +12,13 @@ const DM = 'dm-banc'
 const w = window as unknown as { sent: SupportPayload[] }
 w.sent = []
 const send = async (rs: SupportPayload) => { w.sent.push(rs) }
+const ALICE = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
 const msg = (cmid: string, rs: SupportPayload) => ({
-  id: cmid, channel_id: DM, client_msg_id: cmid, author_username: 'alice', e2e_body: { t: '', rs },
+  id: cmid, channel_id: DM, client_msg_id: cmid, author_id: ALICE, author_username: 'alice', e2e_body: { t: '', rs },
 })
+// Support à distance réservé aux amis : alice en est une (pas de serveur dans le banc).
+const qc = new QueryClient()
+qc.setQueryData(['profile', ALICE], { relationship: 'friend' })
 
 function Banc() {
   useSupportSender(DM, send)
@@ -29,7 +33,7 @@ function Banc() {
 }
 
 createRoot(document.getElementById('root')!).render(
-  <QueryClientProvider client={new QueryClient()}>
+  <QueryClientProvider client={qc}>
     <MemoryRouter><Banc /><ConfirmModal /><Toaster /></MemoryRouter>
   </QueryClientProvider>,
 )

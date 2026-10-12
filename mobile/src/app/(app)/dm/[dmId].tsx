@@ -37,17 +37,17 @@ export default function DmScreen() {
   useEffect(() => { if (ids.dmId) rememberConvName(ids.dmId, name) }, [ids.dmId, name])
   // Arrivée par « Support à distance » (profil, appel, salon vocal) : menu déplié une fois.
   useEffect(() => {
-    if (!ids.dmId || text.support !== '1') return
+    if (!ids.dmId || text.support !== '1' || !otherId) return
     router.setParams({ support: undefined })
-    promptSupport(ids.dmId)
-  }, [ids.dmId, text.support])
+    void promptSupport(ids.dmId, otherId)
+  }, [ids.dmId, text.support, otherId])
   const status = usePresenceOf(otherId, summary && !summary.is_group ? summary.status : undefined)
   const activity = useActivityOf(otherId)
   const startCall = useCall((s) => s.start)
 
   if (!valid) return <ErrorState message={t('conv.invalidDm')} />
 
-  const support = () => promptSupport(ids.dmId)
+  const support = () => void promptSupport(ids.dmId, otherId)
 
   const call = async (type: CallType) => {
     if (!otherId) return

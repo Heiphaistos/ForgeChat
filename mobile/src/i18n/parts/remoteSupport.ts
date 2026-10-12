@@ -20,6 +20,8 @@ export const fr = {
   'rs.state.declined': 'Refusée',
   'rs.state.expired': 'Code expiré',
   'rs.state.used': 'Code déjà utilisé',
+  'rs.friendsOnly': "Support à distance réservé aux amis : ajoute cette personne en ami pour l'utiliser.",
+  'rs.scam': "⚠ Personne de ForgeChat, d'une banque ou d'un service technique ne te demandera de prendre la main sur ton ordinateur. Refuse si tu ne connais pas cette personne en vrai.",
   'rs.sendError': "Impossible d'envoyer la réponse",
   'rs.openFailed': "Impossible d'ouvrir la visionneuse GhostHandDesk",
 }
@@ -45,6 +47,8 @@ export const en: Partial<Record<keyof typeof fr, string>> = {
   'rs.state.declined': 'Declined',
   'rs.state.expired': 'Code expired',
   'rs.state.used': 'Code already used',
+  'rs.friendsOnly': 'Remote support is for friends only: add this person as a friend to use it.',
+  'rs.scam': '⚠ Nobody from ForgeChat, a bank or a tech support service will ever ask to take control of your computer. Refuse if you do not know this person in real life.',
   'rs.sendError': 'Could not send the answer',
   'rs.openFailed': 'Could not open the GhostHandDesk viewer',
 }

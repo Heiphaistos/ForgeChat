@@ -131,7 +131,7 @@ export default function CallScreen() {
       ) : null}
       <CallButton icon={route.icon} label={route.label} onPress={route.open} active={route.onSpeaker} />
       {s.partnerId ? <CallButton icon="volume-high" label={t('call.volume')} onPress={() => setVolumeOpen(true)} /> : null}
-      {s.dmId ? <CallButton icon="help-buoy-outline" label={t('rs.button')} onPress={() => promptSupport(s.dmId!)} /> : null}
+      {s.dmId ? <CallButton icon="help-buoy-outline" label={t('rs.button')} onPress={() => void promptSupport(s.dmId!, s.partnerId ?? undefined)} /> : null}
       <CallButton icon="call" label={t('call.hangUp')} onPress={s.hangup} danger />
     </>
   )
