@@ -25,7 +25,7 @@ services:
       retries: 10
 
   redis:
-    image: redis:7-alpine@sha256:858f009f9709ce576febc734aa78b8f6d624b82571f9ddb6bda4377c833b3499
+    image: redis:8-alpine@sha256:3811787313eba226a2ef38658c6ccb91cd5e110edc89c37767de373120a0e5a0
     logging: *logging
     restart: unless-stopped
     # Aucune persistance : compteurs anti-abus et jetons éphémères ne survivent pas à un redémarrage.
@@ -118,7 +118,7 @@ services:
   # Serveur média (SFU) : tout le son et la vidéo transitent par lui, plus aucun
   # pair-à-pair. Signalisation derrière nginx (/livekit/), média en UDP direct.
   livekit:
-    image: livekit/livekit-server:v1.13.7@sha256:6fd3b7088874c4d119160dd688798dfec852bc014786d392caad15f6f63912a3
+    image: livekit/livekit-server:v1.13.9@sha256:d0c04791bf63ca8dcea123571827d56ba9504bd57c8d5de60ee03b5408cc3154
     logging: *logging
     # Pas de root : aucun volume, ports tous au-dessus de 1024.
     user: "65534:65534"
