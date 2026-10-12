@@ -10,6 +10,11 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    # Une version majeure de PostgreSQL ne relit pas le volume existant : montée manuelle
+    # par sauvegarde/restauration (docs/MIGRATION-POSTGRES-18.md), jamais par Dependabot.
+    ignore:
+      - dependency-name: postgres
+        update-types: [version-update:semver-major]
   - package-ecosystem: github-actions
     directory: /
     schedule:
