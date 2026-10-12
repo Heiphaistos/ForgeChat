@@ -588,3 +588,47 @@ async fn product_reminders_dnd_status() {
     assert_eq!(body["components"]["voice"], "off");
     assert!(body.get("version").is_none(), "aucun détail interne");
 }
+
+#[tokio::test]
+#[ignore]
+async fn product_report_quick_actions() {
+    // Amélioration n° 39 (2026-10-12) : actions rapides depuis un signalement, historique.
+    let (state, db) = setup().await;
+    let (owner, author, reporter) = (user(&db).await, user(&db).await, user(&db).await);
+    let claims = |u: Uuid| axum::Extension(crate::middleware::auth::Claims { sub: u, exp: i64::MAX, iss: "forgechat".into(), iat: 0, sid: None });
+    let s: Uuid = sqlx::query_scalar("INSERT INTO servers (name, owner_id) VALUES ('mod', $1) RETURNING id").bind(owner).fetch_one(&db).await.unwrap();
+    sqlx::query("INSERT INTO roles (server_id, name, permissions, is_everyone) VALUES ($1, '@everyone', $2, TRUE)")
+        .bind(s).bind(Permissions::VIEW_CHANNEL | Permissions::SEND_MESSAGES | Permissions::READ_HISTORY).execute(&db).await.unwrap();
+    for (m, o) in [(owner, true), (author, false), (reporter, false)] {
+        sqlx::query("INSERT INTO server_members (user_id, server_id, is_owner) VALUES ($1, $2, $3)").bind(m).bind(s).bind(o).execute(&db).await.unwrap();
+    }
+    let chan: Uuid = sqlx::query_scalar("INSERT INTO channels (server_id, name) VALUES ($1, 'c') RETURNING id").bind(s).fetch_one(&db).await.unwrap();
+    let report = |db: PgPool| async move {
+        let msg: Uuid = sqlx::query_scalar("INSERT INTO messages (channel_id, user_id, content) VALUES ($1, $2, 'vilain') RETURNING id")
+            .bind(chan).bind(author).fetch_one(&db).await.unwrap();
+        let r: Uuid = sqlx::query_scalar("INSERT INTO message_reports (message_id, server_id, reporter_id, reason) VALUES ($1, $2, $3, 'spam') RETURNING id")
+            .bind(msg).bind(s).bind(reporter).fetch_one(&db).await.unwrap();
+        (msg, r)
+    };
+    let act = |who: Uuid, r: Uuid, action: &str| crate::handlers::reports::report_action(
+        axum::extract::State(state.clone()), claims(who), axum::extract::Path((s, r)),
+        axum::Json(crate::handlers::reports::ReportActionInput { action: action.into(), duration_minutes: Some(30), reason: Some("règle 2".into()) }));
+
+    let (msg, r1) = report(db.clone()).await;
+    assert!(act(reporter, r1, "delete").await.is_err(), "membre sans droit");
+    act(owner, r1, "delete").await.unwrap();
+    let left: i64 = sqlx::query_scalar("SELECT count(*) FROM messages WHERE id=$1").bind(msg).fetch_one(&db).await.unwrap();
+    assert_eq!(left, 0);
+    let (_, r2) = report(db.clone()).await;
+    act(owner, r2, "timeout").await.unwrap();
+    let list = crate::handlers::reports::list_reports(axum::extract::State(state.clone()), claims(owner), axum::extract::Path(s)).await.unwrap().0;
+    let entry = list.iter().find(|e| e["id"] == serde_json::json!(r2)).unwrap();
+    assert_eq!(entry["status"], "resolved");
+    assert_eq!(entry["actions"][0]["action"], "timeout");
+    assert_eq!(entry["actions"][0]["detail"], "30 min");
+    assert_eq!(entry["author_id"], serde_json::json!(author));
+    // Message supprimé : seule la clôture reste possible.
+    let r1_again = act(owner, r1, "kick").await;
+    assert!(r1_again.is_err());
+    act(owner, r1, "dismiss").await.unwrap();
+}
