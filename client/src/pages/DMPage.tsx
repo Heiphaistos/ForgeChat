@@ -3,7 +3,8 @@ import NativeVideo from '../components/voice/NativeVideo'
 import FullscreenVideo from '../components/voice/FullscreenVideo'
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Phone, Video, Search, Mic, MicOff, PhoneOff, VideoOff, ChevronLeft, Pin, X, Maximize2, Captions, Volume2 } from 'lucide-react'
+import { Phone, Video, Search, Mic, MicOff, PhoneOff, VideoOff, ChevronLeft, Pin, X, Maximize2, Captions, Volume2, Images } from 'lucide-react'
+import MediaGallery from '../components/chat/MediaGallery'
 import { openUserVolume } from '../components/voice/UserVolumePopover'
 import { openUserMenu, userMenuProps } from '../components/userMenu/store'
 import LiveCaptions from '../components/ai/LiveCaptions'
@@ -70,6 +71,7 @@ export default function DMPage() {
   const { formatShort } = useFormatDate()
   const { encrypted } = useConvEncrypted('dm', dmId)
   const [showSearch, setShowSearch] = useState(false)
+  const [showGallery, setShowGallery] = useState(false)
   const [hasMoreDM, setHasMoreDM] = useState(true)
   const localVideoRef = useRef<HTMLVideoElement>(null)
   const remoteVideoRef = useRef<HTMLVideoElement>(null)
@@ -489,6 +491,15 @@ export default function DMPage() {
           >
             <Pin size={18} />
           </button>
+          <button
+            onClick={() => setShowGallery(g => !g)}
+            className={`min-w-[44px] min-h-[44px] md:min-w-0 md:min-h-0 flex items-center justify-center p-1.5 rounded transition ${showGallery ? 'text-white bg-fc-hover' : 'text-fc-muted hover:text-white hover:bg-fc-hover'}`}
+            title={t('gallery.title')}
+            aria-label={t('gallery.title')}
+            aria-pressed={showGallery}
+          >
+            <Images size={18} />
+          </button>
         </div>
       </div>
 
@@ -614,6 +625,11 @@ export default function DMPage() {
             </button>
           </div>
         </div>
+      )}
+
+      {showGallery && dmId && (
+        <MediaGallery dmId={dmId} onClose={() => setShowGallery(false)}
+          onJump={id => { setShowGallery(false); nav(`/dms/${dmId}?highlight=${id}`) }} />
       )}
 
       {/* Panneau de recherche DM */}
