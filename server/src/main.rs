@@ -825,7 +825,7 @@ fn protected_routes(state: AppState) -> Router<AppState> {
         // Tags de clan
         .route("/servers/:server_id/tags", get(handlers::server_settings::list_tags))
         .route("/servers/:server_id/tags", post(handlers::server_settings::create_tag))
-        .route("/servers/:server_id/tags/:tag_id", delete(handlers::server_settings::delete_tag))
+        .route("/servers/:server_id/tags/:tag_id", delete(handlers::server_settings::delete_tag).patch(handlers::server_settings::update_tag))
         .route("/servers/:server_id/members/:user_id/tags/:tag_id", put(handlers::server_settings::assign_tag))
         .route("/servers/:server_id/members/:user_id/tags/:tag_id", delete(handlers::server_settings::remove_tag))
         // Membres détaillés (avec rôles + tags)

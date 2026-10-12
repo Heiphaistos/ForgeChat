@@ -10,6 +10,7 @@ import * as uxSettings from './parts/uxSettings.ts'
 import * as menus from './parts/menus.ts'
 import * as accountGuard from './parts/accountGuard.ts'
 import { profileEn } from './profileEn.ts'
+import { profileStyleEn } from './profileStyleEn.ts'
 import { socialEn } from './socialEn.ts'
 import { comfortEn } from './comfort.ts'
 import { voiceLotEn } from './voiceLotEn.ts'
@@ -19,6 +20,7 @@ import { systemDeskEn } from './systemDesk.ts'
 
 export const en: Partial<Record<Key, string>> = {
   ...profileEn,
+  ...profileStyleEn,
   ...socialEn,
   ...comfortEn,
   ...voiceLotEn,

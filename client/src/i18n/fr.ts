@@ -9,6 +9,7 @@ import * as uxSettings from './parts/uxSettings.ts'
 import * as menus from './parts/menus.ts'
 import * as accountGuard from './parts/accountGuard.ts'
 import { profileFr } from './profileFr.ts'
+import { profileStyleFr } from './profileStyleFr.ts'
 import { socialFr } from './socialFr.ts'
 import { comfortFr } from './comfort.ts'
 import { voiceLotFr } from './voiceLotFr.ts'
@@ -18,6 +19,7 @@ import { systemDeskFr } from './systemDesk.ts'
 
 export const fr = {
   ...profileFr,
+  ...profileStyleFr,
   ...socialFr,
   ...comfortFr,
   ...voiceLotFr,

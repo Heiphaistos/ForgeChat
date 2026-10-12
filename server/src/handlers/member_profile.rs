@@ -1,6 +1,6 @@
-//! Profil par serveur (« Mon profil sur ce serveur ») : avatar, bannière et bio
-//! propres à un serveur, en plus du surnom (audit::set_nickname). NULL = profil
-//! global du compte. Chaque changement est diffusé aux membres du serveur
+//! Profil par serveur (« Mon profil sur ce serveur ») : avatar, bannière, bio,
+//! anneau d'avatar et style du pseudo propres à un serveur, en plus du surnom
+//! (audit::set_nickname). NULL = profil global du compte. Chaque changement est diffusé aux membres du serveur
 //! (MEMBER_PROFILE_UPDATE).
 
 use axum::{extract::{Multipart, Path, State}, Extension, Json};
@@ -39,7 +39,8 @@ pub fn normalize_bio(bio: Option<String>) -> Result<Option<String>> {
 /// Relit le profil de serveur du membre et le diffuse aux membres du serveur.
 async fn publish(state: &AppState, server_id: Uuid, user_id: Uuid) -> Result<Json<serde_json::Value>> {
     let row = sqlx::query(
-        "SELECT server_avatar, server_banner, server_bio FROM server_members WHERE server_id=$1 AND user_id=$2"
+        "SELECT server_avatar, server_banner, server_bio, server_avatar_ring, server_name_style
+         FROM server_members WHERE server_id=$1 AND user_id=$2"
     ).bind(server_id).bind(user_id).fetch_one(&state.db).await?;
     let profile = serde_json::json!({
         "server_id": server_id,
@@ -47,6 +48,8 @@ async fn publish(state: &AppState, server_id: Uuid, user_id: Uuid) -> Result<Jso
         "server_avatar": row.get::<Option<String>, _>("server_avatar"),
         "server_banner": row.get::<Option<String>, _>("server_banner"),
         "server_bio": row.get::<Option<String>, _>("server_bio"),
+        "server_avatar_ring": row.get::<Option<serde_json::Value>, _>("server_avatar_ring"),
+        "server_name_style": row.get::<Option<serde_json::Value>, _>("server_name_style"),
     });
     let mut event = profile.clone();
     event["type"] = "MEMBER_PROFILE_UPDATE".into();
@@ -56,10 +59,32 @@ async fn publish(state: &AppState, server_id: Uuid, user_id: Uuid) -> Result<Jso
 
 #[derive(Deserialize)]
 pub struct ProfileBody {
-    pub bio: Option<String>,
+    /// Absent = inchangée ; null ou vide = bio du compte.
+    #[serde(default, deserialize_with = "crate::models::serde_helpers::deserialize_double_option")]
+    pub bio: Option<Option<String>>,
+    /// Absent = inchangé ; `{}` = pas d'anneau (models/profile_style::parse_avatar_ring).
+    #[serde(default)]
+    pub avatar_ring: Option<serde_json::Value>,
+    /// Absent = inchangé ; `{}` = style du compte (models/profile_style::parse_name_style).
+    #[serde(default)]
+    pub name_style: Option<serde_json::Value>,
 }
 
-/// PATCH /servers/:server_id/profile { bio } — null ou vide : bio du compte.
+/// Anneau et style validés par liste blanche : `None` = champ absent (inchangé),
+/// `Some(None)` = effacer.
+type Styles = (Option<Option<serde_json::Value>>, Option<Option<serde_json::Value>>);
+
+pub fn parse_styles(body: &ProfileBody) -> Result<Styles> {
+    use crate::models::profile_style as ps;
+    let bad = |e: &'static str| AppError::BadRequest(e.into());
+    Ok((
+        body.avatar_ring.as_ref().map(ps::parse_avatar_ring).transpose().map_err(bad)?,
+        body.name_style.as_ref().map(ps::parse_name_style).transpose().map_err(bad)?,
+    ))
+}
+
+/// PATCH /servers/:server_id/profile { bio?, avatar_ring?, name_style? } — champ absent :
+/// inchangé ; bio null ou vide : bio du compte.
 pub async fn update_profile(
     State(state): State<AppState>,
     Extension(claims): Extension<Claims>,
@@ -67,9 +92,20 @@ pub async fn update_profile(
     Json(body): Json<ProfileBody>,
 ) -> Result<Json<serde_json::Value>> {
     require_member(&state, claims.sub, server_id).await?;
-    let bio = normalize_bio(body.bio)?;
-    sqlx::query("UPDATE server_members SET server_bio=$1 WHERE server_id=$2 AND user_id=$3")
-        .bind(&bio).bind(server_id).bind(claims.sub).execute(&state.db).await?;
+    let (ring, style) = parse_styles(&body)?;
+    let has_bio = body.bio.is_some();
+    let bio = normalize_bio(body.bio.flatten())?;
+    sqlx::query(
+        "UPDATE server_members SET server_bio = CASE WHEN $8 THEN $1 ELSE server_bio END,
+            server_avatar_ring = CASE WHEN $4 THEN $5 ELSE server_avatar_ring END,
+            server_name_style = CASE WHEN $6 THEN $7 ELSE server_name_style END
+         WHERE server_id=$2 AND user_id=$3",
+    )
+    .bind(&bio).bind(server_id).bind(claims.sub)
+    .bind(ring.is_some()).bind(ring.flatten())
+    .bind(style.is_some()).bind(style.flatten())
+    .bind(has_bio)
+    .execute(&state.db).await?;
     publish(&state, server_id, claims.sub).await
 }
 
@@ -116,6 +152,22 @@ mod tests {
         assert_eq!(image_column("banner").unwrap().0, "server_banner");
         assert!(image_column("nickname").is_err());
         assert!(image_column("server_avatar=NULL--").is_err());
+    }
+
+    #[test]
+    fn anneau_et_style_valides() {
+        let body = |v: serde_json::Value| serde_json::from_value::<ProfileBody>(v).unwrap();
+        let (ring, style) = parse_styles(&body(serde_json::json!({ "bio": null }))).unwrap();
+        assert!(ring.is_none() && style.is_none());
+        assert_eq!(body(serde_json::json!({ "bio": null })).bio, Some(None));
+        assert_eq!(body(serde_json::json!({})).bio, None);
+        let (ring, style) = parse_styles(&body(serde_json::json!({ "avatar_ring": {}, "name_style": {} }))).unwrap();
+        assert_eq!(ring, Some(None));
+        assert_eq!(style, Some(None));
+        let (ring, _) = parse_styles(&body(serde_json::json!({ "avatar_ring": { "colors": [16711680], "style": "glow", "width": 4 } }))).unwrap();
+        assert_eq!(ring.unwrap().unwrap()["style"], "glow");
+        assert!(parse_styles(&body(serde_json::json!({ "avatar_ring": { "colors": ["red"] } }))).is_err());
+        assert!(parse_styles(&body(serde_json::json!({ "name_style": { "font": "x;y" } }))).is_err());
     }
 
     #[test]

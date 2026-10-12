@@ -236,14 +236,38 @@ pub struct UpdateProfileRequest {
     pub custom_status_clear_after: Option<i64>,
 }
 
-/// Catalogue des décorations d'avatar (mêmes identifiants côté web et mobile).
+/// Catalogue des décorations d'avatar (mêmes identifiants côté web et mobile :
+/// client/src/components/ui/ProfileDecor.tsx, mobile/src/features/account/profileDecor.ts).
 pub const AVATAR_DECORATIONS: &[&str] = &[
     "gold", "silver", "neon", "rainbow", "fire", "ice", "emerald",
     "sakura", "void", "sunset", "ocean", "dashed", "double", "glow",
+    // Holographiques / irisées
+    "holo", "iridescent", "prism", "opal", "pearl", "aurora", "chroma", "mirage",
+    // Éléments
+    "inferno", "ember", "frost", "glacier", "lightning", "storm", "tide", "magma",
+    "terra", "zephyr", "toxic", "plasma",
+    // Néon
+    "neon_pink", "neon_cyan", "neon_lime", "synthwave", "cyberpunk", "laser",
+    // Pixel
+    "pixel", "pixel_rainbow", "arcade",
+    // Saisons et fêtes
+    "halloween", "christmas", "winter", "spring", "summer", "autumn", "valentine",
+    "easter", "newyear", "lunar",
+    // Cosmos
+    "galaxy", "nebula", "starry", "moonlit", "solar", "orbit", "comet",
+    // Pierres
+    "royal", "diamond", "ruby", "sapphire", "amethyst",
 ];
 
-/// Effets animés de la fiche profil.
-pub const PROFILE_EFFECTS: &[&str] = &["sparkles", "snow", "hearts", "stars", "bubbles"];
+/// Effets animés de la fiche profil (même catalogue côté web et mobile).
+pub const PROFILE_EFFECTS: &[&str] = &[
+    "sparkles", "snow", "hearts", "stars", "bubbles",
+    "rain", "storm", "sakura", "leaves", "confetti", "fireworks", "embers", "fire",
+    "aurora", "matrix", "galaxy", "meteors", "fireflies", "notes", "coins", "gems",
+    "petals", "lightning", "sunrays", "moonlight", "love", "soap", "blizzard", "pixels",
+    "glitch", "rainbow", "mist", "spooky", "festive", "synthwave", "stardust", "plasma",
+    "ocean",
+];
 
 impl UpdateProfileRequest {
     /// Liste blanche stricte de la personnalisation du profil.
@@ -280,7 +304,21 @@ mod tests {
         assert!(req(serde_json::json!({ "avatar_decoration": "", "profile_effect": "" })).validate_cosmetics().is_ok());
         assert!(req(serde_json::json!({ "avatar_decoration": "<script>" })).validate_cosmetics().is_err());
         assert!(req(serde_json::json!({ "avatar_decoration": "Gold" })).validate_cosmetics().is_err());
-        assert!(req(serde_json::json!({ "profile_effect": "confetti" })).validate_cosmetics().is_err());
+        assert!(req(serde_json::json!({ "profile_effect": "Confetti" })).validate_cosmetics().is_err());
+        assert!(req(serde_json::json!({ "profile_effect": "confetti", "avatar_decoration": "pixel_rainbow" })).validate_cosmetics().is_ok());
+    }
+
+    #[test]
+    fn catalogues_valides() {
+        // Identifiants courts (VARCHAR(32)), sans doublon, sûrs dans un nom de classe CSS.
+        for list in [AVATAR_DECORATIONS, PROFILE_EFFECTS] {
+            let mut seen = std::collections::HashSet::new();
+            for id in list {
+                assert!(!id.is_empty() && id.len() <= 32 && id.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_'), "{id}");
+                assert!(seen.insert(id), "doublon {id}");
+            }
+        }
+        assert!(AVATAR_DECORATIONS.len() >= 54 && PROFILE_EFFECTS.len() >= 35);
     }
 
     #[test]
