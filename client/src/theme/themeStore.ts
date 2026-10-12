@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import api from '../api/client'
 import {
-  DEFAULT_SPEC, DEFAULT_THEME_ID, findTheme, isHex, sanitizeCustomList, withAccent,
+  DEFAULT_SPEC, DEFAULT_THEME_ID, findTheme, isHex, sanitizeCustomList, tuneTheme, withAccent,
   type CustomTheme, type ThemeSpec,
 } from './themeCore'
 import { applyLayoutToDom, applyThemeToDom, DEFAULT_LAYOUT, sanitizeLayout, type LayoutPrefs } from './applyTheme'
@@ -108,7 +108,7 @@ function serverThemeId(s: Pick<ThemeState, 'servers' | 'serverId' | 'customs'>):
   return id && findTheme(id, s.customs) ? id : null
 }
 
-/** Thème réellement affiché : aperçu en cours, sinon celui du serveur affiché, sinon celui de ForgeChat. */
+/** Thème choisi (sans réglage de saturation appliqué) : celui qu'on duplique ou exporte. */
 export function resolveTheme(s: Pick<ThemeState, 'activeId' | 'customs' | 'accent' | 'preview' | 'servers' | 'serverId'>): ThemeSpec {
   if (s.preview) return s.preview
   const id = serverThemeId(s) ?? s.activeId
@@ -120,7 +120,8 @@ export function resolveTheme(s: Pick<ThemeState, 'activeId' | 'customs' | 'accen
 function render() {
   const s = useThemeStore.getState()
   const id = serverThemeId(s) ?? s.activeId
-  applyThemeToDom(findTheme(id, s.customs) ? id : DEFAULT_THEME_ID, resolveTheme(s))
+  // Thème affiché : saturation appliquée (puis contraste revérifié).
+  applyThemeToDom(findTheme(id, s.customs) ? id : DEFAULT_THEME_ID, tuneTheme(resolveTheme(s)))
   applyCategoryToDom((s.serverId && s.servers[s.serverId]?.category) || s.category)
 }
 

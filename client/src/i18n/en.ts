@@ -10,6 +10,7 @@ import * as uxSettings from './parts/uxSettings.ts'
 import * as menus from './parts/menus.ts'
 import * as accountGuard from './parts/accountGuard.ts'
 import * as discordSync from './parts/discordSync.ts'
+import * as themesMore from './parts/themesMore.ts'
 import { profileEn } from './profileEn.ts'
 import { socialEn } from './socialEn.ts'
 import { comfortEn } from './comfort.ts'
@@ -33,6 +34,7 @@ export const en: Partial<Record<Key, string>> = {
   ...menus.en,
   ...accountGuard.en,
   ...discordSync.en,
+  ...themesMore.en,
   // --- Connexion, inscription, mot de passe oublié ---
   'auth.email': 'Email',
   'auth.password': 'Password',

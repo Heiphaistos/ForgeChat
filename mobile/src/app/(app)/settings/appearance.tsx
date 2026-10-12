@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { Alert, Platform, Pressable, ScrollView, Share, StyleSheet, Text, View } from 'react-native'
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { settingsApi, settingsKey, type ServerSideSettings } from '@/api/settings'
 import { Button, Row, Section, SwitchRow, TextField } from '@/components/ui'
 import { shareCode, studioWithImport } from '@/features/appearance/themeShare'
@@ -13,7 +13,7 @@ import { queryClient } from '@/lib/queryClient'
 import { colors, font, radius, spacing } from '@/theme'
 import { paletteFromSpec, THEMES, type Palette } from '@/theme/palettes'
 import { appearance, deviceCustom, DENSITIES, saveAppearance, TEXT_SCALES, useAppearance, type AppearancePrefs } from '@/theme/prefs'
-import { cssGradient, findTheme, type PresetGroup, type ThemeSpec } from '@/theme/themeCore'
+import { cssGradient, findPreset, findTheme, PRESET_GROUPS, PRESETS, type PresetGroup, type ThemeSpec } from '@/theme/themeCore'
 
 /** Langues traduites (libellés dans leur propre langue, jamais traduits). */
 const LANGS: { code: Lang; label: string }[] = [
@@ -32,11 +32,9 @@ const needsRestart = (p: AppearancePrefs) =>
   p.density !== appearance.density ||
   JSON.stringify(p.custom) !== JSON.stringify(appearance.custom)
 
-const GROUPS: { id: PresetGroup; title: 'appearance.themeBase' | 'appearance.themeGradient' | 'appearance.themeClassic' }[] = [
-  { id: 'base', title: 'appearance.themeBase' },
-  { id: 'gradient', title: 'appearance.themeGradient' },
-  { id: 'classic', title: 'appearance.themeClassic' },
-]
+/** Vignettes affichées d'un coup : plus de 1 200 thèmes, rangés en collections. */
+const PAGE = 24
+const fold = (v: string) => v.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase()
 
 interface CardTheme {
   id: string
@@ -113,6 +111,15 @@ export default function AppearanceScreen() {
     if (current) void Share.share({ message: shareCode(current) })
   }
 
+  // Galerie : collection choisie (celle du thème actif au départ), recherche, pages.
+  const [group, setGroup] = useState<PresetGroup>(() => findPreset(prefs.theme)?.group ?? 'base')
+  const [query, setQuery] = useState('')
+  const [limit, setLimit] = useState(PAGE)
+  const shown = useMemo(() => {
+    const q = fold(query.trim())
+    return THEMES.filter((th) => (q ? fold(`${th.label.fr} ${th.label.en}`).includes(q) : th.group === group))
+  }, [group, query])
+
   const restart = () => {
     if (!restartApp()) Alert.alert(t('appearance.themeSaved'), t('appearance.reopenForTheme'))
   }
@@ -143,20 +150,58 @@ export default function AppearanceScreen() {
         ))}
       </Section>
 
-      {GROUPS.map((g) => (
-        <Section key={g.id} title={t(g.title)} footer={g.id === 'base' ? t('appearance.themeFooter') : undefined}>
-          <View style={styles.grid}>
-            {THEMES.filter((th) => th.group === g.id).map((th) => (
-              <ThemeCard
-                key={th.id}
-                th={{ ...th, label: th.label[lang] }}
-                selected={prefs.theme === th.id}
-                onPress={() => pickTheme(th.id)}
-              />
-            ))}
+      <Section title={t('appearance.theme')} footer={t('appearance.themeFooter')}>
+        <View style={{ paddingHorizontal: spacing.md, paddingTop: spacing.md, gap: spacing.sm }}>
+          <TextField
+            label={t('themesMore.search', { n: PRESETS.length })}
+            value={query}
+            onChangeText={(v) => {
+              setQuery(v)
+              setLimit(PAGE)
+            }}
+            autoCapitalize="none"
+            autoCorrect={false}
+          />
+          {query.trim() ? null : (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
+              {PRESET_GROUPS.map((g) => (
+                <Pressable
+                  key={g}
+                  onPress={() => {
+                    setGroup(g)
+                    setLimit(PAGE)
+                  }}
+                  accessibilityRole="tab"
+                  accessibilityState={{ selected: group === g }}
+                  style={[styles.chip, group === g ? { backgroundColor: colors.primary, borderColor: colors.primary } : null]}
+                >
+                  <Text style={[styles.chipText, group === g ? { color: '#ffffff' } : null]}>{t(`themesMore.tab.${g}`)}</Text>
+                </Pressable>
+              ))}
+            </ScrollView>
+          )}
+          <Text style={styles.count}>{shown.length ? t('themesMore.count', { n: shown.length }) : t('themesMore.noMatch')}</Text>
+        </View>
+        <View style={styles.grid}>
+          {shown.slice(0, limit).map((th) => (
+            <ThemeCard
+              key={th.id}
+              th={{ id: th.id, label: th.label[lang], palette: th.palette, gradient: th.gradient }}
+              selected={prefs.theme === th.id}
+              onPress={() => pickTheme(th.id)}
+            />
+          ))}
+        </View>
+        {shown.length > limit ? (
+          <View style={{ padding: spacing.md }}>
+            <Button
+              title={t('themesMore.showMore', { n: shown.length - limit })}
+              variant="secondary"
+              onPress={() => setLimit((l) => l + PAGE * 2)}
+            />
           </View>
-        </Section>
-      ))}
+        ) : null}
+      </Section>
 
       <Section title={t('appearance.themeCustom')} footer={t('appearance.customFooter')}>
         {customs.length ? (
@@ -276,6 +321,10 @@ const styles = StyleSheet.create({
   swatch: { flex: 1, height: 18, borderRadius: 4 },
   cardLabel: { fontSize: font.xs, fontWeight: '700' },
   check: { position: 'absolute', top: 4, right: 4 },
+  chips: { gap: spacing.xs, paddingVertical: spacing.xs },
+  chip: { paddingHorizontal: spacing.md, paddingVertical: 6, borderRadius: radius.full, borderWidth: 1, borderColor: colors.border },
+  chipText: { color: colors.textMuted, fontSize: font.sm, fontWeight: '600' },
+  count: { color: colors.textMuted, fontSize: font.xs },
   accents: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md, padding: spacing.lg },
   accent: { width: 36, height: 36, borderRadius: radius.full, borderWidth: 3, alignItems: 'center', justifyContent: 'center' },
 })

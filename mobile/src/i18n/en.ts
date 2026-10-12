@@ -16,6 +16,7 @@ import * as remoteSupport from './parts/remoteSupport'
 import * as ai from './parts/ai'
 import * as uxMobile from './parts/uxMobile'
 import * as accountGuard from './parts/accountGuard'
+import * as themesMore from './parts/themesMore'
 
 export const en: Partial<Record<Key, string>> = {
   ...settings.en,
@@ -34,6 +35,7 @@ export const en: Partial<Record<Key, string>> = {
   ...ai.en,
   ...uxMobile.en,
   ...accountGuard.en,
+  ...themesMore.en,
 
   // --- Commun ---
   'common.cancel': 'Cancel',
