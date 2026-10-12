@@ -1,0 +1,7 @@
+# cargo audit : avis examinés et sans objet pour ce serveur.
+[advisories]
+ignore = [
+  # rsa (Marvin) : listé dans Cargo.lock comme dépendance optionnelle de sqlx-mysql, qui n'est
+  # pas compilé (`cargo tree -i rsa --target all` est vide). JWT en HS256, VAPID en ES256 (p256).
+  "RUSTSEC-2023-0071",
+]
