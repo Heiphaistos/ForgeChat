@@ -1,4 +1,5 @@
 import type { ChatMessage, ConversationRef, DmMessage, GroupMessage, ServerMessage } from '@/types/models'
+import { geoOf } from '@/lib/geo'
 import { firstUrl } from '@/e2e/channelText'
 import { fileEntries } from '@/e2e/crypto'
 import { normalizeOg } from './messageExtras'
@@ -84,8 +85,11 @@ export function plainFields(m: { enc?: unknown; e2e?: unknown; purged?: unknown;
 
 /** Champs du chiffrement de bout en bout (le texte est déjà déchiffré dans `content`, les clés des fichiers dans `files`). */
 function e2eFields(m: { client_msg_id?: string | null; e2e?: 'ok' | 'locked' }) {
-  const files = fileEntries((m as { e2e_body?: unknown }).e2e_body)
-  return { clientMsgId: m.client_msg_id ?? null, ...(m.e2e ? { e2e: m.e2e } : {}), ...(files.length ? { files } : {}) }
+  const body = (m as { e2e_body?: unknown }).e2e_body
+  const files = fileEntries(body)
+  // Position partagée (amélioration n° 34) : seulement depuis un corps chiffré déchiffré.
+  const geo = m.e2e === 'ok' ? geoOf(body) : null
+  return { clientMsgId: m.client_msg_id ?? null, ...(m.e2e ? { e2e: m.e2e } : {}), ...(files.length ? { files } : {}), ...(geo ? { geo } : {}) }
 }
 
 export function fromGroupMessage(m: GroupMessage): ChatMessage {

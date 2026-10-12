@@ -291,6 +291,8 @@ export interface ChatMessage {
   unencryptedWarn?: boolean
   /** Message chiffré : aperçu de lien calculé par l'expéditeur (jamais demandé au serveur). */
   preview?: LinkPreviewData | null
+  /** Position partagée (corps chiffré `g`). */
+  geo?: import('@/lib/geo').Geo | null
   /** Message système du lot communauté : carte de bienvenue ou référence du starboard. */
   system?: { kind: 'welcome' | 'starboard'; meta: Record<string, unknown> }
   /** MP : carte « Support à distance » (contenu chiffré `rs`, validé). */
