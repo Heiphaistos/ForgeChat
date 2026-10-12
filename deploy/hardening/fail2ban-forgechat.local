@@ -1,0 +1,28 @@
+# /etc/fail2ban/jail.d/forgechat.local (amélioration n° 17, 2026-10-12).
+# - sshd : 4 échecs en 10 min = 1 h de bannissement, récidive = 1 semaine ;
+# - nginx-limit-req : l'IP qui dépasse sans cesse les limites de débit de nginx (connexion,
+#   inscription, envois) est bannie 1 h. nginx n'écrit pas de journal d'accès (anonymat) : seul
+#   le journal d'erreurs, qui contient les rejets « limiting requests », est lu.
+[DEFAULT]
+bantime = 1h
+findtime = 10m
+banaction = ufw
+ignoreip = 127.0.0.1/8 ::1
+
+[sshd]
+enabled = true
+maxretry = 4
+backend = systemd
+
+[nginx-limit-req]
+enabled = true
+port = http,https
+logpath = /var/log/nginx/error.log
+maxretry = 30
+findtime = 5m
+
+[recidive]
+enabled = true
+bantime = 1w
+findtime = 1d
+maxretry = 3
