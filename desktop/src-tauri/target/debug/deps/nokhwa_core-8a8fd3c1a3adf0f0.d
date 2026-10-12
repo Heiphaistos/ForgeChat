@@ -1,0 +1,12 @@
+/home/user/ForgeChat/desktop/src-tauri/target/debug/deps/nokhwa_core-8a8fd3c1a3adf0f0.d: /root/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nokhwa-core-0.1.9/src/lib.rs /root/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nokhwa-core-0.1.9/src/buffer.rs /root/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nokhwa-core-0.1.9/src/error.rs /root/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nokhwa-core-0.1.9/src/pixel_format.rs /root/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nokhwa-core-0.1.9/src/traits.rs /root/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nokhwa-core-0.1.9/src/types.rs
+
+/home/user/ForgeChat/desktop/src-tauri/target/debug/deps/libnokhwa_core-8a8fd3c1a3adf0f0.rlib: /root/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nokhwa-core-0.1.9/src/lib.rs /root/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nokhwa-core-0.1.9/src/buffer.rs /root/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nokhwa-core-0.1.9/src/error.rs /root/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nokhwa-core-0.1.9/src/pixel_format.rs /root/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nokhwa-core-0.1.9/src/traits.rs /root/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nokhwa-core-0.1.9/src/types.rs
+
+/home/user/ForgeChat/desktop/src-tauri/target/debug/deps/libnokhwa_core-8a8fd3c1a3adf0f0.rmeta: /root/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nokhwa-core-0.1.9/src/lib.rs /root/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nokhwa-core-0.1.9/src/buffer.rs /root/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nokhwa-core-0.1.9/src/error.rs /root/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nokhwa-core-0.1.9/src/pixel_format.rs /root/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nokhwa-core-0.1.9/src/traits.rs /root/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nokhwa-core-0.1.9/src/types.rs
+
+/root/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nokhwa-core-0.1.9/src/lib.rs:
+/root/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nokhwa-core-0.1.9/src/buffer.rs:
+/root/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nokhwa-core-0.1.9/src/error.rs:
+/root/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nokhwa-core-0.1.9/src/pixel_format.rs:
+/root/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nokhwa-core-0.1.9/src/traits.rs:
+/root/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/nokhwa-core-0.1.9/src/types.rs:

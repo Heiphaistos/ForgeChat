@@ -712,17 +712,9 @@ async fn handle_ws_message(
                     if exists { return; }
                     let _: () = redis.set_ex(&rate_key, 1u8, 3).await.unwrap_or(());
                 }
-                // Vérifier que l'utilisateur est membre du serveur du canal
-                let is_member: bool = sqlx::query_scalar(
-                    "SELECT EXISTS(
-                        SELECT 1 FROM channels c
-                        JOIN server_members sm ON sm.server_id = c.server_id
-                        WHERE c.id = $1 AND sm.user_id = $2
-                    )"
-                )
-                .bind(channel_id).bind(user_id)
-                .fetch_one(&state.db).await.unwrap_or(false);
-                if !is_member { return; }
+                // Salon visible (VIEW_CHANNEL, surcharges comprises), pas seulement le serveur :
+                // sinon « X écrit… » révélait l'activité d'un salon masqué.
+                if visible_channel(state, user_id, channel_id).await.is_none() { return; }
                 let event = serde_json::json!({
                     "type": "TYPING_START",
                     "channel_id": channel_id,
@@ -759,6 +751,8 @@ async fn handle_ws_message(
                     conv_str.parse::<Uuid>(),
                     msg_str.parse::<Uuid>(),
                 ) {
+                    // Écritures en base à chaque accusé : borné (une conversation ouverte en envoie peu).
+                    if !rate_ok(state, format!("rl:dmread:{user_id}"), 60, 60).await { return; }
                     // Récupérer l'autre participant + infos du lecteur
                     let row = sqlx::query(
                         "SELECT
@@ -802,6 +796,8 @@ async fn handle_ws_message(
         Some("TYPING") => {
             if let Some(conv_id_str) = msg["conversation_id"].as_str() {
                 if let Ok(conv_uuid) = conv_id_str.parse::<Uuid>() {
+                    // Même cadence que TYPING_START (1 / 3 s par conversation).
+                    if !rate_ok(state, format!("rl:typing:{user_id}:{conv_uuid}"), 1, 3).await { return; }
                     let event = serde_json::json!({
                         "type": "TYPING",
                         "conversation_id": conv_uuid,
@@ -846,19 +842,23 @@ async fn handle_ws_message(
             let thread_id = msg["thread_id"].as_str().and_then(|s| s.parse::<Uuid>().ok());
             let server_id = msg["server_id"].as_str().and_then(|s| s.parse::<Uuid>().ok());
             if let (Some(tid), Some(sid)) = (thread_id, server_id) {
-                let is_member: bool = sqlx::query_scalar(
-                    "SELECT EXISTS(SELECT 1 FROM server_members WHERE server_id=$1 AND user_id=$2)"
+                if !rate_ok(state, format!("rl:ttyping:{user_id}:{tid}"), 1, 3).await { return; }
+                // Fil de ce serveur, dans un salon que l'auteur voit.
+                let parent: Option<Uuid> = sqlx::query_scalar(
+                    "SELECT t.channel_id FROM threads t JOIN channels c ON c.id = t.channel_id WHERE t.id=$1 AND c.server_id=$2"
                 )
-                .bind(sid).bind(user_id)
-                .fetch_one(&state.db).await.unwrap_or(false);
-                if is_member {
+                .bind(tid).bind(sid)
+                .fetch_optional(&state.db).await.ok().flatten();
+                let Some(parent) = parent else { return };
+                if visible_channel(state, user_id, parent).await.is_some() {
                     let event = serde_json::json!({
                         "type": "THREAD_TYPING",
                         "thread_id": tid,
                         "user_id": user_id,
                         "username": cached_username,
                     });
-                    state.broadcast_to_server_members(sid, event.to_string()).await;
+                    // Seuls ceux qui voient le salon du fil (pas tout le serveur).
+                    state.broadcast_to_channel_members(parent, event.to_string()).await;
                 }
             }
         }

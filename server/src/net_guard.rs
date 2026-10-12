@@ -33,12 +33,23 @@ pub fn is_public_ip(ip: IpAddr) -> bool {
                 return is_public_ip(IpAddr::V4(v4));
             }
             let s = v6.segments();
+            // IPv4 compatible (::a.b.c.d, déprécié) et 6to4 (2002:AABB:CCDD::) portent une IPv4 :
+            // elle doit être publique elle aussi.
+            if s[..6].iter().all(|&x| x == 0) && (s[6] != 0 || s[7] > 1) {
+                return is_public_ip(IpAddr::V4(std::net::Ipv4Addr::new((s[6] >> 8) as u8, s[6] as u8, (s[7] >> 8) as u8, s[7] as u8)));
+            }
+            if s[0] == 0x2002 {
+                return is_public_ip(IpAddr::V4(std::net::Ipv4Addr::new((s[1] >> 8) as u8, s[1] as u8, (s[2] >> 8) as u8, s[2] as u8)));
+            }
             !(v6.is_loopback()
                 || v6.is_unspecified()
                 || v6.is_multicast()
                 || (s[0] & 0xfe00) == 0xfc00 // fc00::/7 (ULA)
                 || (s[0] & 0xffc0) == 0xfe80 // fe80::/10 (lien local)
-                || (s[0] == 0x64 && s[1] == 0xff9b) // NAT64
+                || (s[0] == 0x64 && s[1] == 0xff9b) // NAT64 (64:ff9b::/96 et 64:ff9b:1::/48)
+                || (s[0] & 0xffc0) == 0xfec0 // fec0::/10 (site local, déprécié)
+                || (s[0] == 0x2001 && s[1] == 0) // 2001::/32 (Teredo)
+                || s[0] == 0x0100 && s[1..4].iter().all(|&x| x == 0) // 100::/64 (rejet)
                 || (s[0] == 0x2001 && s[1] == 0x0db8)) // documentation
         }
     }
@@ -144,6 +155,16 @@ mod tests {
         assert!(read_capped(c.get(&url).send().await.unwrap(), 4096).await.is_none());
         let url = serve(vec![b'a'; 100]).await;
         assert_eq!(read_capped(c.get(&url).send().await.unwrap(), 4096).await.map(|b| b.len()), Some(100));
+    }
+
+    #[test]
+    fn ipv6_wrapping_private_ipv4_refused() {
+        for ip in ["2002:7f00:1::", "2002:a00:1::", "::127.0.0.1", "::10.0.0.1", "fec0::1", "2001:0::1", "64:ff9b:1::a00:1", "100::1"] {
+            assert!(!is_public_ip(ip.parse().unwrap()), "{ip}");
+        }
+        for ip in ["2002:808:808::", "2606:4700::1111", "::8.8.8.8"] {
+            assert!(is_public_ip(ip.parse().unwrap()), "{ip}");
+        }
     }
 
     #[test]

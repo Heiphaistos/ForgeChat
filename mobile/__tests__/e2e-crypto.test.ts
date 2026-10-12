@@ -177,5 +177,11 @@ test('connexion v2 : master, auth, wrapKey et enveloppe v2 (NFKC), mêmes octets
   const other = await k.deriveSecrets('autre mot de passe', x.kdfSalt, x.iterations)
   await expect(k.unwrapKeyV2(x.wrapped, other.wrapKey, x.userId)).rejects.toThrow()
   expect(k.passwordProblem('123456789')).not.toBeNull()
-  expect(k.passwordProblem('1234567890')).toBeNull()
+  expect(k.passwordProblem('Mot de passe de test 42!')).toBeNull()
+  // Trop court, répétitif, courant, basé sur le pseudo, une seule sorte de caractères.
+  for (const pw of ['Abcdef12!', 'aaaaaaaaaaaaaaaa', 'Azerty123456!', 'Momo2885652!x', 'abcdefghijkl']) {
+    expect(k.passwordProblem(pw, ['momo2885652', 'momo@gmail.com'])).not.toBeNull()
+  }
+  // Une phrase longue passe sans symbole.
+  expect(k.passwordProblem('le chat dort sur la radio')).toBeNull()
 })

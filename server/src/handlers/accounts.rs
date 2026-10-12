@@ -111,6 +111,10 @@ pub async fn stash(
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
     headers: HeaderMap,
 ) -> Result<(HeaderMap, Json<serde_json::Value>)> {
+    // POST sans corps : pas de pré-vol CORS, l'origine est vérifiée ici.
+    if !crate::middleware::auth::same_origin_headers(&headers, &state.config.frontend_url) {
+        return Err(AppError::Forbidden);
+    }
     rate_limit(&state, &headers, &addr).await?;
     let current = cookies(&headers).into_iter().find(|(k, _)| k == "refresh_token").map(|(_, v)| v);
     let current = current.ok_or(AppError::Unauthorized)?;
