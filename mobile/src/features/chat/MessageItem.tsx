@@ -17,6 +17,7 @@ import { RoleIcon } from '@/features/servers/roleDecor'
 import type { RoleDecor } from '@/features/servers/perms'
 import { Attachments } from './Attachments'
 import { LinkPreview } from './LinkPreview'
+import { LocationCard } from './LocationCard'
 import { PollCard } from './PollCard'
 import { SupportCard } from './SupportCard'
 import type { SupportPayload } from '@/lib/remoteSupport'
@@ -189,6 +190,7 @@ function TextWithPreview({ m, myName }: { m: ChatMessage; myName: string }) {
     <>
       <MessageText content={content} myName={myName} />
       {url ? <LinkPreview url={url} given={m.e2e ? (m.preview ?? null) : undefined} /> : null}
+      {m.geo ? <LocationCard g={m.geo} /> : null}
     </>
   )
 }

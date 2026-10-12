@@ -9,6 +9,8 @@ import { useUxPrefs } from '../../lib/uxPrefs'
 import ReminderModal from './ReminderModal'
 import PollDisplay from './PollDisplay'
 import LinkPreview from './LinkPreview'
+import LocationCard from './LocationCard'
+import { geoOf } from '../../lib/geo'
 import { parseStickerMessage } from './StickerPicker'
 import { gifMessage, GifMessage } from './gif-utils'
 import { handleMarkdownShortcut, stripMarkdown } from '../../utils/mdShortcuts'
@@ -434,6 +436,9 @@ function MessageRow({
 
               {/* Support à distance (MP) : carte du contenu chiffré `rs` */}
               {!serverId && msg.e2e_body?.rs != null && <RemoteSupportCard msg={msg} isOwn={isOwn} />}
+
+              {/* Position partagée (chiffrée, amélioration n° 34) */}
+              {(() => { const g = msg.enc ? geoOf(msg.e2e_body) : null; return g ? <LocationCard g={g} /> : null })()}
 
               {/* Link preview */}
               {linkPreviewEnabled && msg.content && !msg.attachments?.length && !msg.poll_id && (() => {

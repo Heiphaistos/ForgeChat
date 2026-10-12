@@ -1,7 +1,7 @@
 ﻿import { useRef, useState, useEffect, useCallback, useMemo, lazy, Suspense } from 'react'
 import {
   Plus, SmilePlus, Send, X, CornerUpLeft, Clock, Image, Film, File, Trash2, CalendarClock, Slash,
-  Bold, Italic, Strikethrough, Code, Terminal, Quote, Link, Mic, Zap, Edit3, Paperclip, BarChart3,
+  Bold, Italic, Strikethrough, Code, Terminal, Quote, Link, Mic, Zap, Edit3, Paperclip, BarChart3, MapPin,
 } from 'lucide-react'
 import { useDropzone } from 'react-dropzone'
 import { Link as RouterLink } from 'react-router-dom'
@@ -27,7 +27,8 @@ import VoiceMessageRecorder from './VoiceMessageRecorder'
 import QuickReplies from './QuickReplies'
 import PickerShell, { PickerFallback } from '../ui/PickerShell'
 import { t as tr, useT, type Key } from '../../i18n'
-import { openMessages, withSeal } from '../../e2e/conversations'
+import { mustEncrypt, openMessages, withSeal } from '../../e2e/conversations'
+import { currentGeo } from '../../lib/geo'
 import { channelSendError, postMessage, sendChannel } from '../../e2e/channels'
 import { sealPoll } from '../../e2e/channelScopes'
 import { outgoingText, useUxPrefs } from '../../lib/uxPrefs'
@@ -868,6 +869,21 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
     }
   }, [channelId, serverId])
 
+  // Partage de position (amélioration n° 34) : coordonnées dans le corps chiffré (`g`). Conversation
+  // non chiffrée : refus, la position ne part jamais en clair.
+  const shareLocation = useCallback(async () => {
+    const kind = serverId ? 'channel' : 'dm'
+    try {
+      if (!await mustEncrypt(kind, channelId)) { toast.error(tr('geo.needsE2E')); return }
+      const g = await currentGeo()
+      const extra = { g }
+      if (serverId) await postMessage(serverId, channelId, tr('geo.text'), body => api.post(`/servers/${serverId}/channels/${channelId}/messages`, body), extra)
+      else await withSeal('dm', channelId, tr('geo.text'), body => api.post(`/dms/${channelId}/messages`, body), null, { extra })
+    } catch (e) {
+      toast.error(e instanceof GeolocationPositionError ? tr('geo.denied') : channelSendError(e, tr('geo.failed')))
+    }
+  }, [channelId, serverId])
+
   const closeAllPickers = () => {
     setShowEmojiPicker(false)
     setShowGifPicker(false)
@@ -1418,6 +1434,15 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
             )}
           </div>
           )}
+
+          <button
+            onClick={() => { closeAllPickers(); void shareLocation() }}
+            className="p-1.5 rounded transition text-fc-muted hover:text-white"
+            title={t('geo.share')}
+            aria-label={t('geo.share')}
+          >
+            <MapPin size={18} />
+          </button>
 
           {/* Bouton Sondage — server-only (polls.channel_id référence `channels`),
               masqué sur petits écrans et en DM comme "Programmer un message" ci-dessus */}
