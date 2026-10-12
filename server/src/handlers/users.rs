@@ -426,13 +426,41 @@ pub async fn search_users(
         .await?
     };
 
+    // Recherche hors serveur : présence et statut personnalisé seulement pour les amis et les
+    // membres d'un serveur commun (avant : tout compte voyait ceux de n'importe qui).
+    let related: std::collections::HashSet<uuid::Uuid> = if server_id.is_some() {
+        users.iter().map(|u| u.id).collect()
+    } else {
+        let ids: Vec<uuid::Uuid> = users.iter().map(|u| u.id).collect();
+        sqlx::query_scalar(
+            "SELECT u FROM UNNEST($1::uuid[]) AS u WHERE
+                EXISTS(SELECT 1 FROM server_members a JOIN server_members b ON a.server_id=b.server_id
+                       WHERE a.user_id=$2 AND b.user_id=u)
+             OR EXISTS(SELECT 1 FROM friendships f WHERE f.status='accepted'
+                       AND ((f.user_id=$2 AND f.friend_id=u) OR (f.friend_id=$2 AND f.user_id=u)))",
+        )
+        .bind(&ids)
+        .bind(claims.sub)
+        .fetch_all(&state.db)
+        .await?
+        .into_iter()
+        .collect()
+    };
+
     // Fiches d'autres comptes : même masquage que get_user (date de naissance, 2FA),
     // et pas d'activité (son réglage de visibilité n'est pas évalué ici).
     Ok(Json(users.into_iter().map(|u| {
+        let known = related.contains(&u.id);
         let mut p = UserPublic::from(u).for_others();
         p.activity_type = None;
         p.activity_name = None;
         p.activity_detail = None;
+        if !known {
+            p.status = "offline".into();
+            p.custom_status = None;
+            p.custom_status_emoji = None;
+            p.custom_status_expires_at = None;
+        }
         p
     }).collect()))
 }

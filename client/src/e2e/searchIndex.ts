@@ -3,7 +3,9 @@
 // déchiffrement (e2e/conversations.ts), vidé à la déconnexion et au changement de compte,
 // purgé des messages supprimés ou échus (messages éphémères). Le texte, l'auteur et le nom de
 // la conversation sont chiffrés au repos (AES-GCM, clé NON extractible rangée dans la base,
-// effacée avec elle) : une copie du disque ne livre pas le texte déchiffré en clair.
+// effacée avec elle). « Non extractible » vaut pour le JavaScript, pas pour le disque : le
+// navigateur garde la clé dans son profil, avec la base. Cela évite le texte en clair dans les
+// fichiers, sans protéger d'une copie du profil ni d'un script exécuté dans la page.
 import { useAuth } from '../store/auth'
 import { isEmptyQuery, matches, parseQuery, type IndexedMsg } from './searchQuery'
 
