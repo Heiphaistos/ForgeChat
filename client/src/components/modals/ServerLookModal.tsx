@@ -1,12 +1,16 @@
 // « Apparence de ce serveur » : thème et style des catégories propres à un serveur, pour soi seul.
 // Sans choix, le serveur reprend l'apparence de ForgeChat. Appliqué en direct, synchronisé avec le compte.
+import { useState } from 'react'
 import { createPortal } from 'react-dom'
-import { X } from 'lucide-react'
+import { Search, X } from 'lucide-react'
 import { useLang, useT } from '../../i18n'
 import CategoryStyleEditor from '../settings/appearance/CategoryStyleEditor'
 import { PRESETS, type ThemeSpec } from '../../theme/themeCore'
 import { DEFAULT_CATEGORY } from '../../theme/serverLook'
 import { useThemeStore } from '../../theme/themeStore'
+
+const PAGE = 60
+const fold = (s: string) => s.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase()
 
 function Swatch({ spec }: { spec: ThemeSpec }) {
   return (
@@ -23,10 +27,16 @@ export default function ServerLookModal({ serverId, serverName, onClose }: { ser
   const lang = useLang(s => s.lang)
   const { servers, customs, category, setServerLook } = useThemeStore()
   const look = servers[serverId.toLowerCase()] ?? {}
-  const themes = [
-    ...customs.map(c => ({ id: c.id, name: c.name, spec: c as ThemeSpec })),
-    ...PRESETS.map(p => ({ id: p.id, name: p.label[lang], spec: p.spec })),
-  ]
+  const [query, setQuery] = useState('')
+  const [limit, setLimit] = useState(PAGE)
+  // Plus de 1 200 thèmes : recherche par nom et affichage par pages (thème choisi toujours en tête).
+  const q = fold(query.trim())
+  const all = [
+    ...customs.map(c => ({ id: c.id, name: c.name, spec: () => c as ThemeSpec })),
+    ...PRESETS.map(p => ({ id: p.id, name: p.label[lang], spec: () => p.spec })),
+  ].filter(th => !q || fold(th.name).includes(q))
+  const chosen = all.find(th => th.id === look.theme)
+  const themes = [...(chosen ? [chosen] : []), ...all.filter(th => th !== chosen)]
   const setTheme = (theme: string | undefined) => setServerLook(serverId, { ...look, theme })
   const ownCategory = !!look.category
 
@@ -45,18 +55,29 @@ export default function ServerLookModal({ serverId, serverName, onClose }: { ser
 
         <section className="space-y-2">
           <h3 className="text-sm font-semibold text-fc-text">{t('serverLook.theme')}</h3>
+          <label className="flex items-center gap-2 px-3 h-9 rounded-lg bg-fc-input text-sm">
+            <Search size={14} className="text-fc-muted shrink-0" aria-hidden />
+            <input value={query} onChange={e => { setQuery(e.target.value); setLimit(PAGE) }} type="search"
+              aria-label={t('themes.search')} placeholder={t('themes.searchPlaceholder', { n: PRESETS.length + customs.length })}
+              className="flex-1 min-w-0 bg-transparent outline-none text-fc-text placeholder:text-fc-muted" />
+          </label>
           <div role="radiogroup" aria-label={t('serverLook.theme')} className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 max-h-64 overflow-y-auto pr-1">
             <button role="radio" aria-checked={!look.theme} onClick={() => setTheme(undefined)}
               className={`flex items-center gap-2 px-2.5 py-2 rounded-lg border text-sm text-left transition ${!look.theme ? 'border-fc-accent bg-fc-accent/10 text-fc-text' : 'border-fc-hover text-fc-muted hover:text-white'}`}>
               {t('serverLook.sameAsApp')}
             </button>
-            {themes.map(th => (
+            {themes.slice(0, limit).map(th => (
               <button key={th.id} role="radio" aria-checked={look.theme === th.id} onClick={() => setTheme(th.id)}
                 className={`flex items-center gap-2 px-2.5 py-2 rounded-lg border text-sm text-left transition ${look.theme === th.id ? 'border-fc-accent bg-fc-accent/10 text-fc-text' : 'border-fc-hover text-fc-muted hover:text-white'}`}>
-                <Swatch spec={th.spec} />
+                <Swatch spec={th.spec()} />
                 <span className="truncate">{th.name}</span>
               </button>
             ))}
+            {themes.length > limit && (
+              <button onClick={() => setLimit(l => l + PAGE * 2)} className="px-2.5 py-2 rounded-lg border border-fc-hover text-sm text-fc-text hover:bg-fc-hover sm:col-span-2">
+                {t('themes.showMore', { n: themes.length - limit })}
+              </button>
+            )}
           </div>
         </section>
 

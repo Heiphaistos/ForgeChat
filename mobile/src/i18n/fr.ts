@@ -17,6 +17,7 @@ import * as remoteSupport from './parts/remoteSupport'
 import * as ai from './parts/ai'
 import * as uxMobile from './parts/uxMobile'
 import * as accountGuard from './parts/accountGuard'
+import * as themesMore from './parts/themesMore'
 
 export const fr = {
   ...settings.fr,
@@ -35,6 +36,7 @@ export const fr = {
   ...ai.fr,
   ...uxMobile.fr,
   ...accountGuard.fr,
+  ...themesMore.fr,
 
   // --- Commun ---
   'common.cancel': 'Annuler',

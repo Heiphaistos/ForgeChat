@@ -291,7 +291,7 @@ function MessageRow({
                   )
                 }
                 return (
-                  <div className={`text-fc-text text-sm break-words leading-relaxed ${msg.logged_deleted ? 'opacity-60 line-through' : ''}`}>
+                  <div className={`fc-msg-body text-fc-text text-sm break-words leading-relaxed ${msg.logged_deleted ? 'opacity-60 line-through' : ''}`}>
                     {/* Journal local (Extras) : anciennes versions, jamais envoyées ni gardées */}
                     {msg.logged_edits?.map((old: string, i: number) => (
                       <div key={i} className="text-fc-muted opacity-70 no-underline" title={t('ux.logger.oldVersion')}>{old}</div>

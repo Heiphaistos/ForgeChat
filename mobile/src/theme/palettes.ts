@@ -2,7 +2,7 @@
  * Palettes du mobile, tirées du catalogue partagé avec le web et le bureau (./themeCore, copie
  * conforme de client/src/theme/themeCore.ts). Module pur : testé par __tests__/theme.test.ts.
  */
-import { cssGradient, findTheme, isHex, isTranslucent, mix, over, PRESETS, type ThemeSpec } from './themeCore'
+import { cssGradient, findPreset, findTheme, isHex, isTranslucent, mix, over, PRESETS, tuneTheme, type Preset, type ThemeSpec } from './themeCore'
 
 export type ColorKey =
   | 'bg'
@@ -90,7 +90,9 @@ const rgba = (hex: string, a: number) => {
  * « posés » sur une couleur du dégradé (barre, écran, cartes : chacun la sienne) ; sur une image,
  * sur le pire cas du voile (le mobile n'affiche pas l'image derrière les écrans).
  */
-export function paletteFromSpec(s: ThemeSpec): Palette {
+export function paletteFromSpec(raw: ThemeSpec): Palette {
+  // Saturation du thème appliquée (contraste revérifié) ; motif et second accent : propres au web.
+  const s = tuneTheme(raw)
   const c = s.colors
   const a = isTranslucent(s) ? s.opacity : 1
   const stops = s.gradient?.stops ?? []
@@ -121,18 +123,44 @@ export function paletteFromSpec(s: ThemeSpec): Palette {
   }
 }
 
+export interface ThemeEntry {
+  id: string
+  group: Preset['group']
+  label: Preset['label']
+  readonly spec: ThemeSpec
+  readonly palette: Palette
+  /** Dégradé du thème (experimental_backgroundImage), null pour un thème uni. */
+  readonly gradient: string | null
+}
+
+const paletteCache = new Map<string, Palette>()
+/** Palette d'un préréglage, calculée à la première demande (plus de 1 200 thèmes). */
+function presetPalette(p: Preset): Palette {
+  if (p.id === 'dark') return DARK
+  if (p.id === 'light') return LIGHT
+  let pal = paletteCache.get(p.id)
+  if (!pal) {
+    pal = paletteFromSpec(p.spec)
+    paletteCache.set(p.id, pal)
+  }
+  return pal
+}
+
 /** Thèmes du web (ordre et libellés du catalogue partagé). Sombre et Clair gardent la palette du mobile. */
-export const THEMES = PRESETS.map((p) => ({
+export const THEMES: ThemeEntry[] = PRESETS.map((p) => ({
   id: p.id,
   group: p.group,
   label: p.label,
-  spec: p.spec,
-  palette: p.id === 'dark' ? DARK : p.id === 'light' ? LIGHT : paletteFromSpec(p.spec),
-  /** Dégradé du thème (experimental_backgroundImage), null pour un thème uni. */
-  gradient: p.spec.gradient ? cssGradient(p.spec.gradient) : null,
+  get spec() {
+    return p.spec
+  },
+  get palette() {
+    return presetPalette(p)
+  },
+  get gradient() {
+    return p.spec.gradient ? cssGradient(p.spec.gradient) : null
+  },
 }))
-
-const PALETTES: Record<string, Palette> = Object.fromEntries(THEMES.map((t) => [t.id, t.palette]))
 
 /** Thème clair : thèmes prédéfinis par identifiant, thème perso par son style. */
 export const isLightTheme = (id: string, custom?: ThemeSpec | null) =>
@@ -148,6 +176,7 @@ export const isOutlined = (id: string, custom?: ThemeSpec | null) =>
  */
 export function resolvePalette(id: string, accent?: string | null, custom?: ThemeSpec | null): Palette {
   if (custom && id.startsWith('c-')) return paletteFromSpec(custom)
-  const base = PALETTES[id] ?? DARK
+  const preset = findPreset(id)
+  const base = preset ? presetPalette(preset) : DARK
   return isHexColor(accent) ? { ...base, primary: accent, primaryPressed: mix(accent, '#000000', 0.2) } : { ...base }
 }

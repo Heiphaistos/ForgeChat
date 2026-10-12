@@ -8,6 +8,7 @@ import * as notifCenter from './parts/notifCenter.ts'
 import * as uxSettings from './parts/uxSettings.ts'
 import * as menus from './parts/menus.ts'
 import * as accountGuard from './parts/accountGuard.ts'
+import * as themesMore from './parts/themesMore.ts'
 import { profileFr } from './profileFr.ts'
 import { socialFr } from './socialFr.ts'
 import { comfortFr } from './comfort.ts'
@@ -30,6 +31,7 @@ export const fr = {
   ...systemDeskFr,
   ...menus.fr,
   ...accountGuard.fr,
+  ...themesMore.fr,
   // --- Connexion, inscription, mot de passe oublié ---
   'auth.email': 'Email',
   'auth.password': 'Mot de passe',

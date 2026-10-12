@@ -67,6 +67,20 @@ export default function LayoutSettings() {
           { id: 'floating', label: 'layout.composer.floating' },
           { id: 'attached', label: 'layout.composer.attached' },
         ]} />
+      <Choice title={t('layout.bubbles')} value={layout.bubbles} onChange={set('bubbles')}
+        options={[
+          { id: 'flat', label: 'layout.bubbles.flat' },
+          { id: 'cards', label: 'layout.bubbles.cards' },
+          { id: 'bubbles', label: 'layout.bubbles.bubbles' },
+        ]} />
+      <Choice title={t('layout.chatWidth')} value={layout.chatWidth} onChange={set('chatWidth')}
+        options={[{ id: 'full', label: 'layout.chatWidth.full' }, { id: 'centered', label: 'layout.chatWidth.centered' }]} />
+      <Choice title={t('layout.scrollbars')} value={layout.scrollbars} onChange={set('scrollbars')}
+        options={[
+          { id: 'normal', label: 'layout.scrollbars.normal' },
+          { id: 'thin', label: 'layout.scrollbars.thin' },
+          { id: 'hidden', label: 'layout.scrollbars.hidden' },
+        ]} />
       <div className="space-y-1.5">
         <h4 className="text-sm text-fc-text">{t('catStyle.title')}</h4>
         <p className="text-xs text-fc-muted">{t('catStyle.hint')}</p>

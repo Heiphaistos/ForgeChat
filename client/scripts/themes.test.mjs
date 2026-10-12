@@ -6,6 +6,7 @@ import { readFileSync } from 'node:fs'
 import {
   PRESETS, COLOR_KEYS, contrast, contrastReport, decodeTheme, encodeTheme, findTheme, fixContrast,
   isSafeImageUrl, MAX_CUSTOM_THEMES, sanitizeCustomList, sanitizeTheme, toExport, withAccent,
+  FAMILIES, HUES, PRESET_GROUPS, familyTheme, tuneTheme, hsl, toHsl,
 } from '../src/theme/themeCore.ts'
 
 const HEX = /^#[0-9a-f]{6}$/
@@ -23,6 +24,55 @@ test('catalogue : 4 thèmes de base, au moins 25 dégradés, identifiants unique
   // Les anciens identifiants restent valides (thème déjà choisi par les utilisateurs).
   for (const id of ['dracula', 'nord', 'catppuccin', 'retro', 'winter', 'matrix']) assert.ok(findTheme(id), id)
   for (const p of PRESETS) for (const k of COLOR_KEYS) assert.match(p.spec.colors[k], HEX, `${p.id}.${k}`)
+})
+
+test('catalogue étendu : au moins 20 fois les 59 thèmes d\'origine, familles × 48 teintes', () => {
+  assert.ok(PRESETS.length >= 59 * 20, `${PRESETS.length} thèmes`)
+  assert.equal(HUES.length, 48)
+  for (const g of PRESET_GROUPS) assert.ok(PRESETS.some(p => p.group === g), g)
+  for (const p of PRESETS) {
+    assert.ok(PRESET_GROUPS.includes(p.group), p.id)
+    // Identifiant accepté par le serveur (/user/theme) et par l'apparence par serveur.
+    assert.match(p.id, /^[a-z0-9-]{1,40}$/, p.id)
+    assert.ok(p.label.fr && p.label.en, p.id)
+  }
+  for (const f of FAMILIES) assert.equal(PRESETS.filter(p => p.family === f.id).length, HUES.length, f.id)
+  const glow = findTheme('ag-ruby')
+  assert.ok(glow.outline && glow.accent2 && glow.colors.bg === '#000000')
+  assert.equal(findTheme('ne-cyan').pattern, 'grid')
+  assert.equal(familyTheme('inconnue', 10, 'x'), null)
+  assert.equal(familyTheme('pp', 200, 'Papier perso').name, 'Papier perso')
+})
+
+test('teintes : hsl et toHsl réciproques', () => {
+  assert.equal(hsl(0, 100, 50), '#ff0000')
+  assert.equal(hsl(120, 100, 25), '#008000')
+  assert.equal(hsl(-120, 100, 50), '#0000ff')
+  const [h, s, l] = toHsl('#3366cc')
+  assert.equal(hsl(h, s, l), '#3366cc')
+})
+
+test('saturation : niveaux de gris à 0, contraste conservé', () => {
+  const t = tuneTheme({ ...findTheme('tn-ruby'), saturation: 0 })
+  for (const k of COLOR_KEYS) { const [, s] = toHsl(t.colors[k]); assert.ok(s < 1, `${k} ${t.colors[k]}`) }
+  const r = contrastReport(t)
+  assert.ok(r.text >= 4.5 && r.muted >= 4.5 && r.link >= 4.5)
+  const base = findTheme('nord')
+  assert.equal(tuneTheme(base), base)
+})
+
+test('effets : anciens codes sans les nouveaux champs → valeurs neutres ; nouveaux champs bornés', () => {
+  const old = sanitizeTheme({ colors: { bg: '#101010' } })
+  assert.equal(old.accent2, null)
+  assert.equal(old.pattern, 'none')
+  assert.equal(old.saturation, 1)
+  const s = sanitizeTheme({ colors: {}, accent2: 'url(x)', pattern: 'evil;}', patternOpacity: 9, saturation: -3 })
+  assert.equal(s.accent2, null)
+  assert.equal(s.pattern, 'none')
+  assert.equal(s.patternOpacity, 0.4)
+  assert.equal(s.saturation, 0)
+  const ok = sanitizeTheme({ colors: {}, accent2: '#AA00FF', pattern: 'waves', patternOpacity: 0.12, saturation: 1.4 })
+  assert.deepEqual([ok.accent2, ok.pattern, ok.patternOpacity, ok.saturation], ['#aa00ff', 'waves', 0.12, 1.4])
 })
 
 test('contraste AA (4,5:1) du texte, du texte secondaire et des liens sur tous les fonds de chaque thème', () => {
@@ -77,7 +127,7 @@ test('validation : seules des couleurs hexadécimales et des nombres bornés pas
   assert.deepEqual(s.gradient, { angle: 360, stops: ['#000000', '#ffffff', '#111111'] })
   assert.equal(s.name.length, 40)
   assert.ok(!s.name.includes('\u0000'))
-  assert.deepEqual(Object.keys(s).sort(), ['blur', 'colors', 'gradient', 'image', 'name', 'opacity', 'outline', 'radius', 'scheme'])
+  assert.deepEqual(Object.keys(s).sort(), ['accent2', 'blur', 'colors', 'gradient', 'image', 'name', 'opacity', 'outline', 'pattern', 'patternOpacity', 'radius', 'saturation', 'scheme'])
   for (const v of Object.values(s.colors)) assert.match(v, HEX)
 })
 
