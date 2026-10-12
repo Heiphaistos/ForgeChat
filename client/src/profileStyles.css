@@ -251,6 +251,9 @@
 }
 .fc-banner-img { position: relative; display: block; width: 100%; height: 100%; object-fit: contain; }
 
+/* ── SÉLECTEURS (ProfileCosmetics.tsx) : calque d'effet figé dans une vignette ── */
+.fc-fx-ov.fc-fx-still { animation: none !important; opacity: 1; }
+
 /* ── RÉDUIRE LES ANIMATIONS ──────────────────────────────────────────── */
 @media (prefers-reduced-motion: reduce) {
   .fc-deco-spinrev, .fc-deco-hue, .fc-deco-flicker, .fc-deco-flash, .fc-deco-steps, .fc-deco-breathe,

@@ -2,9 +2,9 @@ import { useState } from 'react'
 import { useMutation } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
 import api, { mediaUrl } from '../../api/client'
-import { Field, Select } from './shared'
+import { Field } from './shared'
 import { useT } from '../../i18n'
-import { AvatarDecoration, DECORATIONS, PROFILE_EFFECTS, ProfileEffect, hexColor, profileThemeBackground } from '../ui/ProfileDecor'
+import { AvatarDecoration, DECORATIONS, DECO_GROUPS, PROFILE_EFFECTS, ProfileEffect, hexColor, profileThemeBackground, type ProfileFx } from '../ui/ProfileDecor'
 
 interface Props {
   user: any
@@ -12,6 +12,24 @@ interface Props {
 }
 
 const toInt = (hex: string) => parseInt(hex.slice(1), 16)
+
+/**
+ * Vignette fixe d'un effet (aucune animation : 38 effets animés en même temps seraient
+ * lourds) : ses glyphes dans ses couleurs, ou le calque de l'effet figé. L'effet complet se
+ * joue dans l'aperçu de la fiche quand on le choisit.
+ */
+function EffectSwatch({ fx }: { fx: ProfileFx | null }) {
+  return (
+    <span aria-hidden className="relative w-12 h-9 rounded-md overflow-hidden bg-black/40 flex items-center justify-center gap-0.5">
+      {fx?.overlay && <span className={`fc-fx-ov fc-fx-ov-${fx.overlay} fc-fx-still`} />}
+      {fx
+        ? fx.chars.slice(0, 3).map((ch, i) => (
+            <span key={i} className="relative text-sm leading-none" style={{ color: fx.colors[i % fx.colors.length] }}>{ch}</span>
+          ))
+        : <span className="text-fc-muted text-sm">∅</span>}
+    </span>
+  )
+}
 
 /** Décoration d'avatar, thème et effet de la fiche profil — gratuits, avec aperçu. */
 export default function ProfileCosmetics({ user, updateMe }: Props) {
@@ -60,20 +78,33 @@ export default function ProfileCosmetics({ user, updateMe }: Props) {
         </div>
       </div>
 
-      <Field label={t('settings.cosmetics.decoration')}>
-        <div className="grid grid-cols-4 sm:grid-cols-5 gap-3">
-          {[{ id: '', label: t('settings.cosmetics.noneF') }, ...DECORATIONS.map(d => ({ id: d.id, label: t(d.label) }))].map(d => (
-            <button
-              key={d.id || 'none'}
-              type="button"
-              onClick={() => setDecoration(d.id)}
-              aria-pressed={decoration === d.id}
-              title={d.label}
-              className={`flex flex-col items-center gap-1.5 p-2 rounded-lg border transition ${decoration === d.id ? 'border-fc-accent bg-fc-accent/10' : 'border-fc-hover hover:border-fc-muted'}`}
-            >
-              <AvatarDecoration id={d.id} size={36}>{avatar(36)}</AvatarDecoration>
-              <span className="text-[10px] text-fc-muted truncate max-w-full">{d.label}</span>
-            </button>
+      <Field label={t('settings.cosmetics.decoration')} hint={t('pedit.deco.count', { n: DECORATIONS.length })}>
+        <div className="space-y-4" role="radiogroup" aria-label={t('settings.cosmetics.decoration')}>
+          {[{ id: 'none', label: null as string | null, ids: [''] }, ...DECO_GROUPS.map(g => ({ id: g.id, label: t(g.label) as string | null, ids: g.ids }))].map(g => (
+            <div key={g.id}>
+              {g.label && <p className="text-[11px] font-semibold text-fc-muted mb-2">{g.label}</p>}
+              <div className="grid grid-cols-4 sm:grid-cols-6 gap-2">
+                {g.ids.map(id => {
+                  const d = DECORATIONS.find(x => x.id === id)
+                  if (id && !d) return null
+                  const label = d ? t(d.label) : t('settings.cosmetics.noneF')
+                  return (
+                    <button
+                      key={id || 'none'}
+                      type="button"
+                      role="radio"
+                      onClick={() => setDecoration(id)}
+                      aria-checked={decoration === id}
+                      title={label}
+                      className={`flex flex-col items-center gap-1.5 p-2 rounded-lg border transition ${decoration === id ? 'border-fc-accent bg-fc-accent/10' : 'border-fc-hover hover:border-fc-muted'}`}
+                    >
+                      <span className="p-1.5"><AvatarDecoration id={id} size={36}>{avatar(36)}</AvatarDecoration></span>
+                      <span className="text-[10px] text-fc-muted truncate max-w-full">{label}</span>
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
           ))}
         </div>
       </Field>
@@ -100,12 +131,27 @@ export default function ProfileCosmetics({ user, updateMe }: Props) {
       </Field>
 
       <Field label={t('settings.cosmetics.effect')} hint={t('settings.cosmetics.effectHint')}>
-        <div className="flex flex-wrap items-center gap-3">
-          <Select
-            value={effect}
-            onChange={setEffect}
-            options={[{ value: '', label: t('settings.access.none') }, ...PROFILE_EFFECTS.map(e => ({ value: e.id, label: t(e.label) }))]}
-          />
+        <div className="space-y-3">
+          <div role="radiogroup" aria-label={t('settings.cosmetics.effect')} className="grid grid-cols-3 sm:grid-cols-5 gap-2">
+            {[null, ...PROFILE_EFFECTS].map(fx => {
+              const id = fx?.id ?? ''
+              const label = fx ? t(fx.label) : t('pedit.fx.none')
+              return (
+                <button
+                  key={id || 'none'}
+                  type="button"
+                  role="radio"
+                  aria-checked={effect === id}
+                  title={label}
+                  onClick={() => { setEffect(id); setReplay(n => n + 1) }}
+                  className={`flex flex-col items-center gap-1 p-2 rounded-lg border transition ${effect === id ? 'border-fc-accent bg-fc-accent/10' : 'border-fc-hover hover:border-fc-muted'}`}
+                >
+                  <EffectSwatch fx={fx} />
+                  <span className="text-[10px] text-fc-muted truncate max-w-full">{label}</span>
+                </button>
+              )
+            })}
+          </div>
           {effect && (
             <button type="button" onClick={() => setReplay(n => n + 1)} className="text-xs text-fc-muted hover:text-white underline">
               {t('settings.cosmetics.replay')}

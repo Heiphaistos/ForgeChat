@@ -2,7 +2,7 @@
 // Le mobile vérifie les mêmes règles (mobile/__tests__/nameStyle.test.ts).
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { cleanStyle, contrast, nameCss, pickNameStyle, readable, shownName, stillUrl, MIN_CONTRAST, DEFAULT_BG } from '../src/lib/nameStyle.ts'
+import { clampInt, cleanStyle, colorFromInput, contrast, nameCss, pickNameStyle, readable, shownName, stillUrl, MIN_CONTRAST, DEFAULT_BG } from '../src/lib/nameStyle.ts'
 
 test('dégradé : couleurs lisibles, angle, texte découpé', () => {
   const css = nameCss({ colors: [0xff0000, 0x00ff00, 0x0000ff], angle: 45 })
@@ -64,4 +64,20 @@ test('nom affiché et version fixe des images animées', () => {
   assert.equal(stillUrl('/uploads/avatars/a_0b1c2d3e-aaaa-bbbb-cccc-111122223333.gif'), '/uploads/avatars/a_0b1c2d3e-aaaa-bbbb-cccc-111122223333_s.gif')
   assert.equal(stillUrl('/uploads/avatars/0b1c2d3e.png'), null)
   assert.equal(stillUrl('/uploads/banners/a_x.jpg'), null)
+})
+
+test('éditeurs : couleur de sélecteur validée, nombres bornés, contour comme le serveur', () => {
+  assert.equal(colorFromInput('#ff8800'), 0xff8800)
+  assert.equal(colorFromInput('#FF8800'), 0xff8800)
+  for (const bad of ['red', '#fff', '#ff8800;x', 'url(x)', '', '#12345g']) assert.equal(colorFromInput(bad), null)
+  assert.equal(clampInt(9, 1, 8), 8)
+  assert.equal(clampInt(-3, 0, 4), 0)
+  assert.equal(clampInt(NaN, 1, 8), 1)
+  assert.equal(clampInt(2.6, 0, 4), 3)
+  // Contour : épaisseur bornée à 4, retiré sans épaisseur, noir par défaut.
+  assert.deepEqual(cleanStyle({ outline_width: 9, outline: 0xffffff }), { colors: [], angle: 90, effect: '', font: '', outline_width: 4, outline: 0xffffff })
+  assert.equal(cleanStyle({ outline: 0xffffff }), null)
+  assert.equal(nameCss(cleanStyle({ outline_width: 2 })).WebkitTextStroke, '2px #000000')
+  // Marque : identifiants inconnus et couleurs hors bornes écartés.
+  assert.deepEqual(cleanStyle({ tag: { badge: 'neon', icon: '<img>', font: 'x;y', color2: 0x1000000, color: 0x00ff00 } }).tag, { color: 0x00ff00, badge: 'neon' })
 })

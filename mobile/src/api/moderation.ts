@@ -67,6 +67,8 @@ export interface ClanTag {
   id: string
   name: string
   color: number
+  /** Style de marque (models/profile_style::parse_tag_style), relu par components/ClanTag. */
+  style?: unknown
 }
 
 export interface DetailedMember {

@@ -4,8 +4,13 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
 import api, { mediaUrl } from '../../api/client'
 import { useAuth } from '../../store/auth'
-import { Field } from '../settings/shared'
+import { Field, Toggle } from '../settings/shared'
 import { useT } from '../../i18n'
+import AvatarRing, { cleanRing, type AvatarRingData } from '../ui/AvatarRing'
+import StyledNameText from '../ui/StyledNameText'
+import AvatarRingFields from '../settings/AvatarRingFields'
+import NameStyleFields, { EMPTY_STYLE } from '../settings/NameStyleFields'
+import { cleanStyle, shownName, type NameStyle } from '../../lib/nameStyle'
 
 type ImageKind = 'avatar' | 'banner'
 
@@ -24,11 +29,19 @@ export default function MyServerProfileTab({ serverId }: { serverId: string }) {
   })
   const [nickname, setNickname] = useState('')
   const [bio, setBio] = useState('')
+  // Apparence propre au serveur : null = aucun anneau / style du compte.
+  const [ring, setRing] = useState<AvatarRingData | null>(null)
+  const [ownStyle, setOwnStyle] = useState(false)
+  const [nameStyle, setNameStyle] = useState<NameStyle>(EMPTY_STYLE)
   useEffect(() => {
     if (!member) return
     setNickname(member.nickname ?? '')
     setBio(member.server_bio ?? '')
-  }, [member])
+    setRing(cleanRing(member.server_avatar_ring))
+    const st = cleanStyle(member.server_name_style)
+    setOwnStyle(!!st)
+    setNameStyle(st ?? cleanStyle(me?.name_style) ?? EMPTY_STYLE)
+  }, [member, me?.name_style])
 
   const refresh = () => {
     qc.invalidateQueries({ queryKey: ['member', serverId] })
@@ -42,6 +55,15 @@ export default function MyServerProfileTab({ serverId }: { serverId: string }) {
       api.patch(`/servers/${serverId}/profile`, { bio: bio.trim() || null }),
     ]),
     onSuccess: () => { refresh(); toast.success(t('myProfile.saved')) },
+    onError,
+  })
+  // Champs absents de la requête : bio inchangée. {} = pas d'anneau / style du compte.
+  const saveLook = useMutation({
+    mutationFn: () => api.patch(`/servers/${serverId}/profile`, {
+      avatar_ring: cleanRing(ring) ?? {},
+      name_style: ownStyle ? cleanStyle(nameStyle) ?? {} : {},
+    }),
+    onSuccess: () => { refresh(); toast.success(t('pedit.server.lookSaved')) },
     onError,
   })
   const upload = useMutation({
@@ -62,6 +84,13 @@ export default function MyServerProfileTab({ serverId }: { serverId: string }) {
   if (!me) return null
   const avatar = member?.server_avatar ?? me.avatar
   const banner = member?.server_banner ?? me.banner
+  const avatarImg = (size: number) => (
+    <span className="rounded-full bg-fc-accent flex items-center justify-center font-bold text-white overflow-hidden flex-shrink-0" style={{ width: size, height: size, fontSize: size * 0.4 }}>
+      {avatar ? <img src={mediaUrl(avatar)} alt="" className="w-full h-full object-cover" /> : me.username.charAt(0).toUpperCase()}
+    </span>
+  )
+  const previewName = shownName(me.username, me.display_name, nickname)
+  const previewStyle = ownStyle ? nameStyle : cleanStyle(me.name_style)
   const picker = (kind: ImageKind, ref: React.RefObject<HTMLInputElement>) => (
     <input
       ref={ref}
@@ -155,6 +184,41 @@ export default function MyServerProfileTab({ serverId }: { serverId: string }) {
       >
         {t('common.record')}
       </button>
+
+      <section className="space-y-5 border-t border-fc-hover pt-6" aria-labelledby="srv-look-title">
+        <div>
+          <h3 id="srv-look-title" className="text-base font-semibold text-white">{t('pedit.server.lookTitle')}</h3>
+          <p className="text-sm text-fc-muted mt-1">{t('pedit.server.lookIntro')}</p>
+        </div>
+
+        <div className="rounded-xl border border-fc-hover bg-fc-bg px-4 py-4 flex items-center gap-4" aria-live="polite">
+          <span className="p-2"><AvatarRing ring={ring} size={56}>{avatarImg(56)}</AvatarRing></span>
+          <div className="min-w-0">
+            <p className="text-xs text-fc-muted mb-0.5">{t('pedit.server.preview')}</p>
+            <StyledNameText text={previewName} style={previewStyle} className="text-lg font-semibold text-white" />
+          </div>
+        </div>
+
+        <Field label={t('pedit.ring.title')}>
+          <AvatarRingFields value={ring} onChange={setRing} avatar={avatarImg} />
+        </Field>
+
+        <Field label={t('pedit.nameStyle.title')} hint={t('pedit.nameStyle.ownHint')}>
+          <div className="flex items-center gap-3">
+            <Toggle value={ownStyle} onChange={setOwnStyle} label={t('pedit.nameStyle.own')} />
+            <span className="text-sm text-fc-text">{t('pedit.nameStyle.own')}</span>
+          </div>
+        </Field>
+        {ownStyle && <NameStyleFields value={nameStyle} onChange={setNameStyle} sample={previewName} />}
+
+        <button
+          onClick={() => saveLook.mutate()}
+          disabled={saveLook.isPending}
+          className="px-4 py-2 bg-fc-accent hover:bg-fc-accent/80 disabled:opacity-50 rounded text-white text-sm font-medium transition"
+        >
+          {saveLook.isPending ? t('common.saving') : t('pedit.server.saveLook')}
+        </button>
+      </section>
     </div>
   )
 }

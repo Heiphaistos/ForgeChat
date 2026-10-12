@@ -4,9 +4,10 @@ import { Shield, Tag, UserMinus } from 'lucide-react'
 import api, { mediaUrl } from '../../api/client'
 import toast from 'react-hot-toast'
 import { useT } from '../../i18n'
+import ClanTag from '../ui/ClanTag'
 
 interface Role { id: string; name: string; color: number }
-interface MemberTag { id: string; name: string; color: number }
+interface MemberTag { id: string; name: string; color: number; style?: unknown }
 interface Member {
   user_id: string
   username: string
@@ -149,11 +150,7 @@ export default function MembersTab({ serverId }: { serverId: string }) {
                     </span>
                   ))}
                   {m.tags.map(tg => (
-                    <span key={tg.id} className="text-xs px-1.5 py-0.5 rounded font-medium border"
-                      style={{ borderColor: colorIntToHex(tg.color), color: colorIntToHex(tg.color) }}
-                    >
-                      [{tg.name}]
-                    </span>
+                    <ClanTag key={tg.id} name={tg.name} color={tg.color} style={tg.style} />
                   ))}
                 </div>
               </div>
@@ -204,7 +201,7 @@ export default function MembersTab({ serverId }: { serverId: string }) {
                       <Tag size={11} aria-hidden /> {t('srv.tab.tags')}
                     </div>
                     <div className="flex flex-wrap gap-1.5">
-                      {tags.map((tg: any) => {
+                      {tags.map(tg => {
                         const has = m.tags.some(mt => mt.id === tg.id)
                         return (
                           <button key={tg.id}
@@ -212,11 +209,10 @@ export default function MembersTab({ serverId }: { serverId: string }) {
                               ? removeTagMutation.mutate({ userId: m.user_id, tagId: tg.id })
                               : assignTag.mutate({ userId: m.user_id, tagId: tg.id })}
                             aria-pressed={has}
-                            style={{ borderColor: colorIntToHex(tg.color), color: has ? colorIntToHex(tg.color) : undefined }}
-                            className={`text-xs px-2 py-1 rounded transition font-medium border
-                              ${has ? 'bg-white/5' : 'border-fc-hover text-fc-muted hover:text-white'}`}
+                            aria-label={tg.name}
+                            className={`px-1.5 py-1 rounded transition border ${has ? 'border-fc-accent bg-white/5' : 'border-fc-hover opacity-60 hover:opacity-100'}`}
                           >
-                            [{tg.name}]
+                            <ClanTag name={tg.name} color={tg.color} style={tg.style} />
                           </button>
                         )
                       })}

@@ -297,3 +297,13 @@ export function stillUrl(url: string): string | null {
   const m = url.match(/^(.*\/a_[0-9a-f-]+)\.(gif|png|webp)$/i)
   return m ? `${m[1]}_s.${m[2]}` : null
 }
+
+/** Valeur d'un <input type="color"> (« #rrggbb ») → entier 0xRRGGBB ; null si invalide. */
+export function colorFromInput(v: string): number | null {
+  return /^#[0-9a-f]{6}$/i.test(v) ? parseInt(v.slice(1), 16) : null
+}
+
+/** Entier borné (curseurs, épaisseurs) : NaN → `min`. */
+export function clampInt(v: number, min: number, max: number): number {
+  return Number.isFinite(v) ? Math.min(max, Math.max(min, Math.round(v))) : min
+}

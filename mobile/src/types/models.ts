@@ -380,6 +380,12 @@ export interface Member {
   /** Profil propre à ce serveur ; `avatar` y est déjà substitué par le serveur. */
   server_banner?: string | null
   server_bio?: string | null
+  /** Profil de serveur (migration 129) : anneau d'avatar et style du pseudo, JSON validé
+   *  par le serveur et relu par components/AvatarRing::cleanRing / lib/nameStyle::cleanNameStyle. */
+  server_avatar_ring?: unknown
+  server_name_style?: unknown
+  /** Marques de clan du membre (couleur 0xRRGGBB + style validé). */
+  tags?: { id: string; name: string; color: number; style?: unknown }[]
   is_owner?: boolean
   role_ids?: string[]
   timeout_until?: string | null

@@ -7,6 +7,7 @@ import { friendsApi } from '@/api/friends'
 import { serversApi } from '@/api/servers'
 import { usersApi } from '@/api/users'
 import { Avatar } from '@/components/Avatar'
+import { AvatarRing } from '@/components/AvatarRing'
 import { SafetyCode } from '@/e2e/E2ESettings'
 import { useAccountKey } from '@/e2e/accountKey'
 import { NOTE_LOCKED, loadNote, saveNote } from '@/e2e/notes'
@@ -23,7 +24,7 @@ import { useT } from '@/i18n'
 import { formatUntil } from '@/lib/format'
 import { errorMessage } from '@/lib/http'
 import { openExternalUrl } from '@/lib/links'
-import { displayNameOf } from '@/lib/nameStyle'
+import { cleanNameStyle, displayNameOf } from '@/lib/nameStyle'
 import { isUuid, useRouteParams } from '@/lib/params'
 import { qk, queryClient } from '@/lib/queryClient'
 import { useAuth } from '@/stores/auth'
@@ -45,7 +46,10 @@ export default function UserScreen() {
   if (q.isLoading) return <Loading />
   if (q.error || !q.data) return <ErrorState message={errorMessage(q.error, t('social.user.notFound'))} onRetry={() => void q.refetch()} />
   const u = q.data
-  const shown = shownProfile(u, members.data?.find((m) => m.user_id === u.id))
+  const member = members.data?.find((m) => m.user_id === u.id)
+  const shown = shownProfile(u, member)
+  // Style du pseudo propre au serveur s'il existe, sinon celui du compte (tous deux relus par liste blanche).
+  const nameStyle = cleanNameStyle(member?.server_name_style) ?? cleanNameStyle(u.name_style)
   const isMe = u.id === me?.id
   // Thème du profil : texte clair sur le voile sombre de la fiche colorée.
   const themed = u.profile_color_primary != null || u.profile_color_accent != null
@@ -65,13 +69,17 @@ export default function UserScreen() {
         <ProfileEffect id={u.profile_effect} />
         <ProfileBanner uri={shown.banner} name={u.username} />
         <View style={styles.header}>
-          <Avatar uri={shown.avatar} name={u.username} size={96} userId={u.id} status={u.status} showStatus decoration={u.avatar_decoration} />
+          <AvatarRing ring={member?.server_avatar_ring} size={96}>
+            <Avatar uri={shown.avatar} name={u.username} size={96} userId={u.id} status={u.status} showStatus decoration={u.avatar_decoration} />
+          </AvatarRing>
           <View style={styles.nameRow}>
             <StyledName
-              text={displayNameOf(u, members.data?.find((m) => m.user_id === u.id)?.nickname)}
-              resolved={previewName(u.name_style ?? null)}
+              text={displayNameOf(u, member?.nickname)}
+              resolved={previewName(nameStyle)}
               style={[styles.name, themed && styles.onTheme]}
               tag={u.profile_tag}
+              tagStyle={nameStyle?.tag ?? null}
+              clanTags={member?.tags}
               numberOfLines={2}
             />
           </View>
