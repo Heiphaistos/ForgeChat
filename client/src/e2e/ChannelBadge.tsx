@@ -21,12 +21,22 @@ export function ChannelLock({ channelId }: { channelId: string }) {
   )
 }
 
-export function UnencryptedBadge() {
+/**
+ * Mention « non chiffré ». `warn` (MP, groupe) : aucun envoi légitime n'y est en clair, donc ce
+ * message vient peut-être du serveur et non de la personne affichée : avertissement appuyé.
+ */
+export function UnencryptedBadge({ warn = false }: { warn?: boolean }) {
   const t = useT()
+  const title = warn ? t('e2e.unencrypted.warnTitle') : t('e2e.unencrypted.title')
   return (
-    <span title={t('e2e.unencrypted.title')} className="ml-1.5 align-middle text-[10px] text-fc-muted border border-fc-hover rounded px-1 select-none">
-      <span className="sr-only">{t('e2e.unencrypted.title')}</span>
-      <span aria-hidden>{t('e2e.unencrypted')}</span>
+    <span
+      title={title}
+      className={warn
+        ? 'ml-1.5 align-middle text-[10px] font-semibold text-red-300 bg-red-500/15 border border-red-500/60 rounded px-1 select-none'
+        : 'ml-1.5 align-middle text-[10px] text-fc-muted border border-fc-hover rounded px-1 select-none'}
+    >
+      <span className="sr-only">{title}</span>
+      <span aria-hidden>{warn ? t('e2e.unencrypted.warn') : t('e2e.unencrypted')}</span>
     </span>
   )
 }

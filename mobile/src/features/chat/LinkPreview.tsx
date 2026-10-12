@@ -2,6 +2,7 @@ import { Ionicons } from '@expo/vector-icons'
 import { useQuery } from '@tanstack/react-query'
 import { Pressable, StyleSheet, Text } from 'react-native'
 import { messagesApi } from '@/api/messages'
+import { previewAllowed } from '@/e2e/channelText'
 import type { LinkPreviewData } from './messageExtras'
 import { useT } from '@/i18n'
 import { openExternalUrl } from '@/lib/links'
@@ -21,7 +22,7 @@ export function LinkPreview({ url, given }: { url: string; given?: LinkPreviewDa
     staleTime: 3_600_000,
     gcTime: 3_600_000,
     retry: false,
-    enabled: given === undefined,
+    enabled: given === undefined && previewAllowed(url),
   })
   const data = given === undefined ? query.data : given
   if (!data) return null

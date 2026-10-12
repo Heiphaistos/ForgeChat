@@ -75,6 +75,12 @@ export interface KeyAlert {
   fp: string
   /** Le contact avait été marqué vérifié : alerte rouge. */
   verified: boolean
+  /**
+   * Clé de récupération de serveur JAMAIS vue : rien n'est enveloppé pour elle (ni la nouvelle
+   * époque, ni l'historique) avant acceptation explicite. Un serveur compromis ne peut donc plus
+   * s'inventer une « clé du serveur » et recevoir en silence les clés de tous les salons.
+   */
+  fresh?: boolean
 }
 export const useKeyAlerts = create<{ alerts: KeyAlert[] }>(() => ({ alerts: [] }))
 /** Refus de la session (« pas maintenant ») : pas de nouvelle alerte pour cette clé, toujours exclue. */
@@ -138,14 +144,16 @@ export async function trustedMembers<T extends MemberLike>(list: T[]) {
   return trusted
 }
 
-/** Clé de récupération d'un serveur, avec l'empreinte recalculée ; null si elle a changé (enveloppe refusée). */
+/**
+ * Clé de récupération d'un serveur, avec l'empreinte recalculée ; null si elle a changé ou si elle
+ * n'a jamais été acceptée sur cet appareil (enveloppe refusée, boîte de dialogue ouverte).
+ */
 export async function trustedServerKey<T extends { server_id: string; public: string }>(sk: T, serverName?: string): Promise<(T & { fingerprint: string }) | null> {
   const account = me()
   if (!account) return null
   const r = await checkServerKey(sk, s => getPin(account, s))
-  if (r.fresh) await savePin(account, serverSubject(sk.server_id), { fp: r.fp })
-  if (r.ok) return { ...sk, fingerprint: r.fp }
-  raise({ subject: serverSubject(sk.server_id), name: serverName ?? sk.server_id, kind: 'server', pub: sk.public, fp: r.fp, verified: r.verified })
+  if (r.ok && !r.fresh) return { ...sk, fingerprint: r.fp }
+  raise({ subject: serverSubject(sk.server_id), name: serverName ?? sk.server_id, kind: 'server', pub: sk.public, fp: r.fp, verified: r.verified, fresh: r.fresh })
   return null
 }
 

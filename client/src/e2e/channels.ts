@@ -3,9 +3,10 @@
 // « je chiffre ici ». Le texte déchiffré ne quitte jamais l'appareil.
 import { useQuery } from '@tanstack/react-query'
 import api from '../api/client'
+import { confirm } from '../components/ui/ConfirmModal'
 import { t } from '../i18n'
 import { useAccountKey } from './accountKey'
-import { automodBlock, firstUrl, mentionMeta, type AutoModBlock, type AutoModRules } from './channelText'
+import { automodBlock, firstUrl, mentionMeta, previewAllowed, type AutoModBlock, type AutoModRules } from './channelText'
 import { completeChannelKeys, lockedText, mustEncrypt, openText, sendErrorText, withSeal } from './conversations'
 import type { EncPayload } from './crypto'
 
@@ -40,14 +41,36 @@ export class AutoModError extends Error {
   constructor(readonly reason: AutoModBlock) { super('AUTOMOD') }
 }
 
+/** Commande de bot refusée par l'utilisateur (elle aurait été envoyée en clair). */
+export class PlainCommandCancelled extends Error {
+  constructor() { super('PLAIN_COMMAND_CANCELLED') }
+}
+
+/** Commandes déjà confirmées pendant cette session (serveur|commande). */
+const confirmedCommands = new Set<string>()
+
+/**
+ * Une commande de bot part en clair (le bot doit la lire) et la liste des commandes vient du
+ * serveur : confirmation explicite, une fois par commande et par session, avant tout envoi.
+ */
+async function confirmPlainCommand(serverId: string, cmd: string): Promise<boolean> {
+  const k = `${serverId}|${cmd}`
+  if (confirmedCommands.has(k)) return true
+  const ok = await confirm({ message: t('e2e.botCommand.confirm', { cmd }), confirmLabel: t('e2e.botCommand.send') })
+  if (ok) confirmedCommands.add(k)
+  return ok
+}
+
 /** Texte d'erreur d'un envoi dans un salon : règle AutoMod précise, sinon comme les MP. */
 export const channelSendError = (e: unknown, fallback: string) =>
-  e instanceof AutoModError ? t(`e2e.automod.${e.reason}`) : sendErrorText(e, fallback)
+  e instanceof AutoModError ? t(`e2e.automod.${e.reason}`)
+    : e instanceof PlainCommandCancelled ? t('e2e.botCommand.cancelled')
+      : sendErrorText(e, fallback)
 
 /** Aperçu du premier lien, demandé par l'expéditeur (court délai, erreurs ignorées). */
 async function linkPreview(text: string): Promise<Record<string, unknown> | null> {
   const url = firstUrl(text)
-  if (!url) return null
+  if (!url || !previewAllowed(url)) return null
   try {
     const { data } = await api.get(`/og?url=${encodeURIComponent(url)}`, { timeout: 4000 })
     return data && (data.title || data.description || data.image) ? data : null
@@ -81,7 +104,10 @@ interface SendOpts {
  */
 export async function sendChannel<T>(channelId: string, text: string, post: (body: ChannelBody) => Promise<T>, o: SendOpts): Promise<T> {
   const cmd = o.command && text.startsWith('/') ? text.slice(1).split(/\s+/)[0]?.toLowerCase() : ''
-  if (cmd && (await botCommands(o.serverId)).has(cmd)) return post({ content: text })
+  if (cmd && (await botCommands(o.serverId)).has(cmd)) {
+    if (!(await confirmPlainCommand(o.serverId, cmd))) throw new PlainCommandCancelled()
+    return post({ content: text })
+  }
   const encrypt = await mustEncrypt('channel', channelId)
   const now = Date.now()
   const recent = (recentSent.get(o.serverId) ?? []).filter(r => now - r.at < 10_000)
