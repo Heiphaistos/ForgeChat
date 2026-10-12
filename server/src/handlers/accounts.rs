@@ -7,7 +7,7 @@
 //! n'utilisent pas de cookies, gardent ces jetons dans leur propre stockage sécurisé.
 use axum::{
     extract::{ConnectInfo, State},
-    http::{HeaderMap, HeaderValue, header::SET_COOKIE},
+    http::HeaderMap,
     Json,
 };
 use chrono::Utc;
@@ -24,38 +24,23 @@ use crate::{
 
 /// Comptes mis de côté au plus (en plus du compte actif).
 pub const MAX_ALT_ACCOUNTS: usize = 4;
-const ALT_PREFIX: &str = "fc_alt_";
-
-/// Cookies `nom=valeur` de la requête.
-fn cookies(headers: &HeaderMap) -> Vec<(String, String)> {
-    headers
-        .get_all("cookie")
-        .iter()
-        .filter_map(|v| v.to_str().ok())
-        .flat_map(|s| s.split(';'))
-        .filter_map(|p| p.trim().split_once('=').map(|(k, v)| (k.to_string(), v.to_string())))
-        .collect()
-}
-
-/// Comptes mis de côté : (id annoncé par le nom du cookie, jeton).
-pub fn alt_cookies(headers: &HeaderMap) -> Vec<(Uuid, String)> {
-    cookies(headers)
+/// Comptes mis de côté : (id annoncé par le nom du cookie, jeton). Noms préfixés en HTTPS
+/// (`__Secure-fc_alt_<id>`, crate::cookies), anciens noms pendant la transition.
+pub fn alt_cookies(headers: &HeaderMap, secure: bool) -> Vec<(Uuid, String)> {
+    crate::cookies::alt_tokens(headers, secure, Utc::now().timestamp())
         .into_iter()
-        .filter_map(|(k, v)| Some((Uuid::parse_str(k.strip_prefix(ALT_PREFIX)?).ok()?, v)))
+        .filter_map(|(id, v)| Some((Uuid::parse_str(&id).ok()?, v)))
         .filter(|(_, v)| !v.is_empty() && v.len() <= 128)
         .collect()
 }
 
-fn alt_cookie(user_id: Uuid, token: &str, secure: bool) -> String {
-    let flag = if secure { "; Secure" } else { "" };
-    let max_age = if token.is_empty() { 0 } else { 30 * 86400 };
-    format!("{ALT_PREFIX}{}={token}; HttpOnly{flag}; SameSite=Strict; Path=/api/auth; Max-Age={max_age}", user_id.simple())
+/// Jeton de rafraîchissement du compte actif (cookie de session).
+fn current_refresh(headers: &HeaderMap, secure: bool) -> Option<String> {
+    crate::cookies::refresh_token(headers, secure, Utc::now().timestamp())
 }
 
-fn push_cookie(headers: &mut HeaderMap, cookie: &str) {
-    if let Ok(v) = HeaderValue::from_str(cookie) {
-        headers.append(SET_COOKIE, v);
-    }
+fn set_alt(headers: &mut HeaderMap, user_id: Uuid, token: &str, secure: bool) {
+    crate::cookies::alt(headers, &user_id.simple().to_string(), token, secure)
 }
 
 /// Compte d'un jeton de rafraîchissement encore valide (sans le consommer).
@@ -86,10 +71,10 @@ pub async fn list(State(state): State<AppState>, headers: HeaderMap) -> Result<(
     let mut out = Vec::new();
     let mut resp = HeaderMap::new();
     let secure = is_secure(&state);
-    for (id, token) in alt_cookies(&headers) {
+    for (id, token) in alt_cookies(&headers, secure) {
         if token_owner(&state, &token).await? != Some(id) {
             // Jeton expiré, révoqué ou ne correspondant pas au nom du cookie : on l'efface.
-            push_cookie(&mut resp, &alt_cookie(id, "", secure));
+            set_alt(&mut resp, id, "", secure);
             continue;
         }
         let user = sqlx::query_as::<_, (String, String, Option<String>)>(
@@ -116,18 +101,15 @@ pub async fn stash(
         return Err(AppError::Forbidden);
     }
     rate_limit(&state, &headers, &addr).await?;
-    let current = cookies(&headers).into_iter().find(|(k, _)| k == "refresh_token").map(|(_, v)| v);
-    let current = current.ok_or(AppError::Unauthorized)?;
+    let secure = is_secure(&state);
+    let current = current_refresh(&headers, secure).ok_or(AppError::Unauthorized)?;
     let owner = token_owner(&state, &current).await?.ok_or(AppError::Unauthorized)?;
-    let others = alt_cookies(&headers).into_iter().filter(|(id, _)| *id != owner).count();
+    let others = alt_cookies(&headers, secure).into_iter().filter(|(id, _)| *id != owner).count();
     if others >= MAX_ALT_ACCOUNTS {
         return Err(AppError::BadRequest("Nombre maximal de comptes atteint".into()));
     }
-    let secure = is_secure(&state);
-    let mut resp = HeaderMap::new();
-    push_cookie(&mut resp, &alt_cookie(owner, &current, secure));
-    push_cookie(&mut resp, "access_token=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0");
-    push_cookie(&mut resp, "refresh_token=; HttpOnly; SameSite=Strict; Path=/api/auth; Max-Age=0");
+    let mut resp = crate::cookies::clear_session(secure);
+    set_alt(&mut resp, owner, &current, secure);
     Ok((resp, Json(serde_json::json!({ "ok": true }))))
 }
 
@@ -144,21 +126,21 @@ pub async fn switch(
     Json(body): Json<AccountBody>,
 ) -> Result<(HeaderMap, Json<serde_json::Value>)> {
     rate_limit(&state, &headers, &addr).await?;
-    let target = alt_cookies(&headers).into_iter().find(|(id, _)| *id == body.user_id).map(|(_, t)| t);
+    let secure = is_secure(&state);
+    let target = alt_cookies(&headers, secure).into_iter().find(|(id, _)| *id == body.user_id).map(|(_, t)| t);
     let target = target.ok_or_else(|| AppError::NotFound("Compte inconnu sur ce navigateur".into()))?;
     // Le nom du cookie n'est qu'une annonce : le jeton doit bien appartenir à ce compte.
     if token_owner(&state, &target).await? != Some(body.user_id) {
         return Err(AppError::Unauthorized);
     }
     let (user_id, refresh, access) = rotate_refresh_token(&state, &target).await?;
-    let secure = is_secure(&state);
     let mut resp = session_cookie_headers(&access, &refresh, secure);
-    push_cookie(&mut resp, &alt_cookie(user_id, "", secure));
+    set_alt(&mut resp, user_id, "", secure);
     // Compte actif encore valide : mis de côté à son tour.
-    if let Some(current) = cookies(&headers).into_iter().find(|(k, _)| k == "refresh_token").map(|(_, v)| v) {
+    if let Some(current) = current_refresh(&headers, secure) {
         if let Some(owner) = token_owner(&state, &current).await? {
             if owner != user_id {
-                push_cookie(&mut resp, &alt_cookie(owner, &current, secure));
+                set_alt(&mut resp, owner, &current, secure);
             }
         }
     }
@@ -171,7 +153,8 @@ pub async fn forget(
     headers: HeaderMap,
     Json(body): Json<AccountBody>,
 ) -> Result<(HeaderMap, Json<serde_json::Value>)> {
-    if let Some((_, token)) = alt_cookies(&headers).into_iter().find(|(id, _)| *id == body.user_id) {
+    let secure = is_secure(&state);
+    if let Some((_, token)) = alt_cookies(&headers, secure).into_iter().find(|(id, _)| *id == body.user_id) {
         let hash = hash_token(&token);
         sqlx::query("DELETE FROM refresh_tokens WHERE token_hash = $1 AND user_id = $2")
             .bind(&hash)
@@ -185,13 +168,14 @@ pub async fn forget(
             .await?;
     }
     let mut resp = HeaderMap::new();
-    push_cookie(&mut resp, &alt_cookie(body.user_id, "", is_secure(&state)));
+    set_alt(&mut resp, body.user_id, "", secure);
     Ok((resp, Json(serde_json::json!({ "ok": true }))))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use axum::http::{header::SET_COOKIE, HeaderValue};
 
     #[test]
     fn alt_cookies_are_parsed_strictly() {
@@ -200,21 +184,21 @@ mod tests {
         h.insert(
             "cookie",
             HeaderValue::from_str(&format!(
-                "refresh_token=abc; fc_alt_{}=tok1; fc_alt_pasunid=tok2; fc_alt_{}=",
+                "refresh_token=abc; __Secure-fc_alt_{}=tok1; __Secure-fc_alt_pasunid=tok2; __Secure-fc_alt_{}=",
                 id.simple(),
                 Uuid::nil().simple()
             ))
             .unwrap(),
         );
-        assert_eq!(alt_cookies(&h), vec![(id, "tok1".to_string())]);
+        assert_eq!(alt_cookies(&h, true), vec![(id, "tok1".to_string())]);
     }
 
     #[test]
     fn alt_cookie_is_httponly_and_scoped() {
-        let id = Uuid::nil();
-        let c = alt_cookie(id, "tok", true);
-        assert!(c.starts_with("fc_alt_00000000000000000000000000000000=tok;"));
+        let mut h = HeaderMap::new();
+        set_alt(&mut h, Uuid::nil(), "tok", true);
+        let c = h.get_all(SET_COOKIE).iter().next().unwrap().to_str().unwrap().to_string();
+        assert!(c.starts_with("__Secure-fc_alt_00000000000000000000000000000000=tok;"));
         assert!(c.contains("HttpOnly") && c.contains("Secure") && c.contains("SameSite=Strict") && c.contains("Path=/api/auth"));
-        assert!(alt_cookie(id, "", false).contains("Max-Age=0"));
     }
 }

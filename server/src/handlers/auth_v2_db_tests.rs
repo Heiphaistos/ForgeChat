@@ -284,7 +284,7 @@ async fn auth_v2_upgrade_kdf() {
     let kdf: String = sqlx::query_scalar("SELECT kdf FROM users WHERE id=$1").bind(id).fetch_one(&db).await.unwrap();
     assert_eq!(kdf, "pbkdf2");
     // Bonne preuve : tout bascule ensemble.
-    upgrade_kdf(State(state.clone()), Extension(claims.clone()), Json(body(AUTH, wrapped.clone()))).await.expect("bascule");
+    let _ = upgrade_kdf(State(state.clone()), Extension(claims.clone()), Json(body(AUTH, wrapped.clone()))).await.expect("bascule");
     let u = user(&db, id).await;
     assert!(bcrypt::verify(AUTH2, u.auth_hash.as_deref().unwrap()).unwrap());
     let (kdf, salt, w): (String, String, Value) =

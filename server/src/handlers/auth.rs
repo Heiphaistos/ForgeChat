@@ -1,6 +1,6 @@
 use axum::{
     extract::{ConnectInfo, State},
-    http::{HeaderMap, HeaderValue, header::SET_COOKIE},
+    http::HeaderMap,
     Json,
 };
 use bcrypt::verify;
@@ -76,22 +76,9 @@ fn auth_reply(req_headers: &HeaderMap, mut auth: AuthResponse, secure: bool) -> 
     (headers, Json(auth))
 }
 
-/// Cookies HttpOnly de session (accès + rafraîchissement).
+/// Cookies HttpOnly de session (accès + rafraîchissement), noms préfixés en HTTPS (crate::cookies).
 pub(crate) fn session_cookie_headers(access_token: &str, refresh_token: &str, secure: bool) -> HeaderMap {
-    let flag = if secure { "; Secure" } else { "" };
-    let access = format!("access_token={}; HttpOnly{}; SameSite=Strict; Path=/; Max-Age=86400", access_token, flag);
-    let refresh = format!(
-        "refresh_token={}; HttpOnly{}; SameSite=Strict; Path=/api/auth; Max-Age={}",
-        refresh_token, flag, 30 * 86400
-    );
-    let mut headers = HeaderMap::new();
-    if let Ok(v) = HeaderValue::from_str(&access) {
-        headers.insert(SET_COOKIE, v);
-    }
-    if let Ok(v) = HeaderValue::from_str(&refresh) {
-        headers.append(SET_COOKIE, v);
-    }
-    headers
+    crate::cookies::session(access_token, refresh_token, secure)
 }
 
 pub(crate) fn is_secure(state: &AppState) -> bool {
@@ -463,14 +450,7 @@ pub async fn refresh(
     Json(body): Json<serde_json::Value>,
 ) -> Result<(HeaderMap, Json<serde_json::Value>)> {
     // Accepter le refresh_token depuis le cookie OU le corps JSON (compatibilité Tauri)
-    let token = req_headers
-        .get("cookie")
-        .and_then(|v| v.to_str().ok())
-        .and_then(|s| {
-            s.split(';').find_map(|p| {
-                p.trim().strip_prefix("refresh_token=").map(|t| t.to_string())
-            })
-        })
+    let token = crate::cookies::refresh_token(&req_headers, is_secure(&state), Utc::now().timestamp())
         .or_else(|| body["refresh_token"].as_str().map(|s| s.to_string()))
         .ok_or_else(|| AppError::BadRequest("refresh_token requis".into()))?;
 
@@ -836,16 +816,8 @@ pub async fn logout(
         }
     }
 
-    // Effacer les cookies côté client
-    let clear = "access_token=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0";
-    let clear_refresh = "refresh_token=; HttpOnly; SameSite=Strict; Path=/api/auth; Max-Age=0";
-    let mut resp_headers = HeaderMap::new();
-    if let Ok(v) = HeaderValue::from_str(clear) {
-        resp_headers.insert(SET_COOKIE, v);
-    }
-    if let Ok(v) = HeaderValue::from_str(clear_refresh) {
-        resp_headers.append(SET_COOKIE, v);
-    }
+    // Effacer les cookies côté client (noms préfixés et anciens noms).
+    let resp_headers = crate::cookies::clear_session(is_secure(&state));
 
     Ok((resp_headers, Json(serde_json::json!({ "ok": true }))))
 }
@@ -956,6 +928,7 @@ async fn store_refresh_token(state: &AppState, user_id: Uuid, token: &str) -> Re
 #[cfg(test)]
 mod cookie_only_tests {
     use super::*;
+    use axum::http::{header::SET_COOKIE, HeaderValue};
 
     fn reply(header: Option<&str>) -> (HeaderMap, serde_json::Value) {
         let mut req = HeaderMap::new();
@@ -980,8 +953,8 @@ mod cookie_only_tests {
         assert!(body.get("access_token").is_none() && body.get("refresh_token").is_none());
         assert_eq!(body["user"]["username"], "u");
         let cookies: Vec<_> = h.get_all(SET_COOKIE).iter().map(|v| v.to_str().unwrap().to_string()).collect();
-        assert!(cookies.iter().any(|c| c.starts_with("access_token=acc;")), "cookies toujours posés");
-        assert!(cookies.iter().any(|c| c.starts_with("refresh_token=ref;")));
+        assert!(cookies.iter().any(|c| c.starts_with("__Host-access_token=acc;")), "cookies toujours posés");
+        assert!(cookies.iter().any(|c| c.starts_with("__Secure-refresh_token=ref;")));
         // Sans l'en-tête (bureau, mobile) : inchangé.
         let (_, body) = reply(None);
         assert_eq!(body["access_token"], "acc");

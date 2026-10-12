@@ -15,6 +15,8 @@ mod crypto;
 mod email_crypto;
 mod upload_sign;
 mod jwt;
+mod security_headers;
+mod cookies;
 
 use axum::{
     middleware as axum_middleware,
@@ -310,6 +312,7 @@ async fn main() -> anyhow::Result<()> {
         // corps JSON est lu entier en mémoire. Seules les pièces jointes, écrites sur le disque au
         // fil de l'eau, ont droit à ATTACHMENT_BODY_LIMIT (route par route).
         .layer(DefaultBodyLimit::max(12 * 1024 * 1024))
+        .layer(axum::middleware::from_fn(security_headers::apply))
         .layer(cors)
         .layer(TraceLayer::new_for_http())
         .with_state(state);
