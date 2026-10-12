@@ -2,6 +2,7 @@ import { Ionicons } from '@expo/vector-icons'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { Alert, Platform, Pressable, ScrollView, Share, StyleSheet, Text, View } from 'react-native'
 import { useState } from 'react'
+import { router } from 'expo-router'
 import { settingsApi, settingsKey, type ServerSideSettings } from '@/api/settings'
 import { Button, Row, Section, SwitchRow, TextField } from '@/components/ui'
 import { shareCode, studioWithImport } from '@/features/appearance/themeShare'
@@ -179,6 +180,10 @@ export default function AppearanceScreen() {
           <TextField label={t('themeShare.code')} value={code} onChangeText={setCode} autoCapitalize="none" autoCorrect={false} multiline />
           <Button title={t('themeShare.import')} icon="download-outline" disabled={!code.trim()} loading={importTheme.isPending} onPress={() => importTheme.mutate()} />
         </View>
+      </Section>
+
+      <Section>
+        <Row icon="apps-outline" title={t('appIcon.open')} subtitle={t('appIcon.openDesc')} onPress={() => router.push('/settings/app-icon')} chevron />
       </Section>
 
       <Section title={t('appearance.accent')} footer={t('appearance.syncedF')}>

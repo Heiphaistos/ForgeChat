@@ -1,5 +1,6 @@
 import * as SecureStore from 'expo-secure-store'
 import { create } from 'zustand'
+import { isAppIconId, type AppIconId } from '../features/appearance/appIconIds'
 import { DEFAULT_THEME, isHexColor } from './palettes'
 import { sanitizeTheme, type ThemeSpec } from './themeCore'
 
@@ -23,6 +24,8 @@ export interface AppearancePrefs {
   density: Density
   /** Catégories des serveurs repliées à l'ouverture (seuls leurs noms visibles) : réglage de cet appareil. */
   categoriesFolded: boolean
+  /** Icône de l'application choisie (`preset:N` comme le web, null = icône d'origine) : cet appareil. */
+  appIcon: AppIconId | null
 }
 
 export type Density = 'compact' | 'normal' | 'comfortable'
@@ -48,7 +51,7 @@ export const TEXT_SCALES = [
   { value: 1.3, label: 'appearance.textXLarge' },
 ] as const
 
-export const DEFAULT_PREFS: AppearancePrefs = { theme: DEFAULT_THEME, accent: null, timeFormat: '24h', textScale: 1, streamerMode: false, custom: null, density: 'normal', categoriesFolded: true }
+export const DEFAULT_PREFS: AppearancePrefs = { theme: DEFAULT_THEME, accent: null, timeFormat: '24h', textScale: 1, streamerMode: false, custom: null, density: 'normal', categoriesFolded: true, appIcon: null }
 
 /** Valeur stockée → préférences valides (tout champ invalide reprend sa valeur par défaut). */
 export function parsePrefs(raw: string | null | undefined): AppearancePrefs {
@@ -68,6 +71,7 @@ export function parsePrefs(raw: string | null | undefined): AppearancePrefs {
     custom: v.custom ? deviceCustom(v.custom) : null,
     density: DENSITIES.some((d) => d.value === v.density) ? (v.density as Density) : 'normal',
     categoriesFolded: v.categoriesFolded !== false,
+    appIcon: isAppIconId(v.appIcon) ? v.appIcon : null,
   }
 }
 
