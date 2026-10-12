@@ -711,6 +711,7 @@ fn protected_routes(state: AppState) -> Router<AppState> {
         .route("/messages/:id/report", post(handlers::reports::create_report))
         .route("/servers/:server_id/reports", get(handlers::reports::list_reports))
         .route("/servers/:server_id/reports/:report_id", patch(handlers::reports::update_report))
+        .route("/servers/:server_id/reports/:report_id/action", post(handlers::reports::report_action))
         // Uploads
         .route("/servers/:server_id/channels/:channel_id/messages/:msg_id/attachments", post(handlers::uploads::upload_file).layer(DefaultBodyLimit::max(ATTACHMENT_BODY_LIMIT)))
         // Roles

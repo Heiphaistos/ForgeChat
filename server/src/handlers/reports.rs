@@ -120,9 +120,15 @@ pub async fn list_reports(
         "SELECT r.id, r.reason, r.comment, r.status, r.created_at,
                 r.message_id, COALESCE(r.content, m.content) as message_content,
                 (m.enc IS NOT NULL) AS encrypted,
-                u.username as reporter_username, u.id as reporter_id
+                u.username as reporter_username, u.id as reporter_id,
+                m.user_id AS author_id, au.username AS author_username, m.channel_id,
+                COALESCE((SELECT json_agg(json_build_object('action', a.action, 'detail', a.detail, 'at', a.created_at,
+                                                            'moderator', mu.username) ORDER BY a.created_at)
+                          FROM report_actions a LEFT JOIN users mu ON mu.id = a.moderator_id
+                          WHERE a.report_id = r.id), '[]'::json) AS actions
          FROM message_reports r
          LEFT JOIN messages m ON m.id = r.message_id
+         LEFT JOIN users au ON au.id = m.user_id
          JOIN users u ON u.id = r.reporter_id
          WHERE r.server_id = $1
          ORDER BY r.created_at DESC
@@ -147,6 +153,10 @@ pub async fn list_reports(
                 "encrypted": r.get::<Option<bool>, _>("encrypted").unwrap_or(false),
                 "reporter_username": r.get::<String, _>("reporter_username"),
                 "reporter_id": r.get::<Uuid, _>("reporter_id"),
+                "author_id": r.get::<Option<Uuid>, _>("author_id"),
+                "author_username": r.get::<Option<String>, _>("author_username"),
+                "channel_id": r.get::<Option<Uuid>, _>("channel_id"),
+                "actions": r.get::<serde_json::Value, _>("actions"),
             })
         })
         .collect();
@@ -192,6 +202,85 @@ pub async fn update_report(
     }
 
     Ok(Json(serde_json::json!({ "ok": true, "status": body.status })))
+}
+
+#[derive(serde::Deserialize)]
+pub struct ReportActionInput {
+    /// delete | timeout | kick | ban | resolve | dismiss
+    pub action: String,
+    pub duration_minutes: Option<i32>,
+    pub reason: Option<String>,
+}
+
+/// POST /servers/:sid/reports/:rid/action — action rapide depuis un signalement (amélioration
+/// n° 39) : supprimer le message, exclure temporairement, expulser, bannir, ou clore. Chaque
+/// action passe par le même code (et les mêmes permissions) que depuis le reste de l'appli ; le
+/// signalement est clos et l'action inscrite à son historique.
+pub async fn report_action(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+    Path((server_id, report_id)): Path<(Uuid, Uuid)>,
+    Json(body): Json<ReportActionInput>,
+) -> Result<Json<serde_json::Value>> {
+    crate::handlers::servers::require_permission(&state, claims.sub, server_id, Permissions::BAN_MEMBERS | Permissions::BAN_TEMP).await?;
+    let report: Option<(Uuid, Option<Uuid>, Option<Uuid>)> = sqlx::query_as(
+        "SELECT r.message_id, m.user_id, m.channel_id FROM message_reports r
+         LEFT JOIN messages m ON m.id = r.message_id
+         WHERE r.id = $1 AND r.server_id = $2",
+    )
+    .bind(report_id)
+    .bind(server_id)
+    .fetch_optional(&state.db)
+    .await?;
+    let (message_id, author, channel) = report.ok_or_else(|| AppError::NotFound("Signalement introuvable".into()))?;
+    let reason: Option<String> = body.reason.as_deref().map(str::trim).filter(|r| !r.is_empty()).map(|r| r.chars().take(300).collect());
+    let gone = || AppError::BadRequest("Le message n'existe plus : seule la clôture est possible.".into());
+    let (st, cl) = (State(state.clone()), Extension(claims.clone()));
+    let (status, detail) = match body.action.as_str() {
+        "delete" => {
+            let channel = channel.ok_or_else(gone)?;
+            // Preuve gardée avec le signalement (texte en clair seulement : un message chiffré
+            // n'est lisible que par la copie fournie par le signaleur).
+            sqlx::query(
+                "UPDATE message_reports r SET content = m.content FROM messages m
+                 WHERE r.id = $1 AND m.id = r.message_id AND r.content IS NULL AND m.enc IS NULL",
+            )
+            .bind(report_id)
+            .execute(&state.db)
+            .await?;
+            crate::handlers::messages::delete_message(st, cl, Path((server_id, channel, message_id))).await?;
+            ("resolved", None)
+        }
+        "timeout" => {
+            let author = author.ok_or_else(gone)?;
+            let minutes = body.duration_minutes.unwrap_or(60).clamp(1, 40_320);
+            crate::handlers::moderation::create_timeout(cl, Path((server_id, author)), st,
+                Json(crate::handlers::moderation::CreateTimeout { duration_minutes: minutes, reason: reason.clone() })).await?;
+            ("resolved", Some(format!("{minutes} min")))
+        }
+        "kick" => {
+            let author = author.ok_or_else(gone)?;
+            crate::handlers::servers::kick_member(st, cl, Path((server_id, author))).await?;
+            ("resolved", None)
+        }
+        "ban" => {
+            let author = author.ok_or_else(gone)?;
+            crate::handlers::servers::ban_member(st, cl, Path((server_id, author)), Json(serde_json::json!({ "reason": reason }))).await?;
+            ("resolved", None)
+        }
+        "resolve" => ("resolved", None),
+        "dismiss" => ("dismissed", None),
+        _ => return Err(AppError::BadRequest("Action inconnue".into())),
+    };
+    sqlx::query("UPDATE message_reports SET status=$1 WHERE id=$2").bind(status).bind(report_id).execute(&state.db).await?;
+    sqlx::query("INSERT INTO report_actions (report_id, moderator_id, action, detail) VALUES ($1, $2, $3, $4)")
+        .bind(report_id)
+        .bind(claims.sub)
+        .bind(&body.action)
+        .bind(detail.or(reason))
+        .execute(&state.db)
+        .await?;
+    Ok(Json(serde_json::json!({ "ok": true, "status": status })))
 }
 
 /// Signalement d'un message privé 1-à-1 : seuls les deux participants peuvent le signaler ; il part

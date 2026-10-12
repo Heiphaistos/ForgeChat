@@ -39,6 +39,9 @@ interface Report {
   comment: string | null
   status: string
   created_at: string
+  author_id?: string | null
+  author_username?: string | null
+  actions?: { action: string; detail: string | null; at: string; moderator: string | null }[]
 }
 
 interface Channel {
@@ -130,12 +133,23 @@ function ReportsTab({ serverId }: { serverId: string }) {
     queryFn: () => api.get(`/servers/${serverId}/reports`).then(r => r.data),
   })
 
-  const updateReport = useMutation({
-    mutationFn: ({ id, status }: { id: string; status: string }) =>
-      api.patch(`/servers/${serverId}/reports/${id}`, { status }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['server-reports', serverId] }),
-    onError: () => toast.error('Erreur lors de la mise à jour'),
+  // Actions rapides (amélioration n° 39) : même code et mêmes permissions qu'ailleurs, signalement
+  // clos et action inscrite à son historique.
+  const act = useMutation({
+    mutationFn: ({ id, action, duration_minutes }: { id: string; action: string; duration_minutes?: number }) =>
+      api.post(`/servers/${serverId}/reports/${id}/action`, { action, duration_minutes }),
+    onSuccess: () => { toast.success('Action appliquée'); qc.invalidateQueries({ queryKey: ['server-reports', serverId] }) },
+    onError: (e: any) => toast.error(e.response?.data?.error ?? 'Action impossible'),
   })
+  const ACTION_LABEL: Record<string, string> = {
+    delete: 'message supprimé', timeout: 'exclusion temporaire', kick: 'expulsion', ban: 'bannissement',
+    resolve: 'clos', dismiss: 'rejeté',
+  }
+  const quick = async (r: Report, action: string, label: string, duration_minutes?: number) => {
+    if (await confirm({ message: `${label} ${r.author_username ? `(${r.author_username})` : ''} ?`, title: 'Signalement', danger: true, confirmLabel: label })) {
+      act.mutate({ id: r.id, action, duration_minutes })
+    }
+  }
 
   const REASON_LABEL: Record<string, string> = {
     spam: 'Spam',
@@ -177,20 +191,42 @@ function ReportsTab({ serverId }: { serverId: string }) {
             {r.comment && (
               <p className="text-xs text-fc-muted mt-1 truncate">{r.comment}</p>
             )}
+            {r.author_username && <p className="text-xs text-fc-muted mt-1">Auteur : {r.author_username}</p>}
+            {r.status === 'pending' && r.author_id && (
+              <div className="flex flex-wrap gap-1 mt-2">
+                <button onClick={() => quick(r, 'delete', 'Supprimer le message')} disabled={act.isPending}
+                  className="px-2 py-0.5 text-xs rounded bg-fc-hover text-white hover:bg-fc-red/30">Supprimer le message</button>
+                <button onClick={() => quick(r, 'timeout', 'Exclure 1 h', 60)} disabled={act.isPending}
+                  className="px-2 py-0.5 text-xs rounded bg-fc-hover text-white hover:bg-fc-red/30">Exclure 1 h</button>
+                <button onClick={() => quick(r, 'timeout', 'Exclure 24 h', 1440)} disabled={act.isPending}
+                  className="px-2 py-0.5 text-xs rounded bg-fc-hover text-white hover:bg-fc-red/30">Exclure 24 h</button>
+                <button onClick={() => quick(r, 'kick', 'Expulser')} disabled={act.isPending}
+                  className="px-2 py-0.5 text-xs rounded bg-fc-hover text-white hover:bg-fc-red/30">Expulser</button>
+                <button onClick={() => quick(r, 'ban', 'Bannir')} disabled={act.isPending}
+                  className="px-2 py-0.5 text-xs rounded bg-fc-red/80 text-white hover:bg-fc-red">Bannir</button>
+              </div>
+            )}
+            {!!r.actions?.length && (
+              <ul className="mt-2 text-[11px] text-fc-muted space-y-0.5">
+                {r.actions.map((a, i) => (
+                  <li key={i}>• {new Date(a.at).toLocaleString(intlLocale(), { dateStyle: 'short', timeStyle: 'short' })} — {a.moderator ?? '?'} : {ACTION_LABEL[a.action] ?? a.action}{a.detail ? ` (${a.detail})` : ''}</li>
+                ))}
+              </ul>
+            )}
           </div>
           {r.status === 'pending' && (
             <div className="flex gap-1 flex-shrink-0">
               <button
-                onClick={() => updateReport.mutate({ id: r.id, status: 'resolved' })}
-                disabled={updateReport.isPending}
+                onClick={() => act.mutate({ id: r.id, action: 'resolve' })}
+                disabled={act.isPending}
                 title="Marquer comme résolu"
                 className="p-1 rounded hover:bg-fc-green/20 text-fc-green transition"
               >
                 <CheckCircle size={16} />
               </button>
               <button
-                onClick={() => updateReport.mutate({ id: r.id, status: 'dismissed' })}
-                disabled={updateReport.isPending}
+                onClick={() => act.mutate({ id: r.id, action: 'dismiss' })}
+                disabled={act.isPending}
                 title="Rejeter"
                 className="p-1 rounded hover:bg-fc-hover text-fc-muted transition"
               >
