@@ -240,6 +240,18 @@ async fn main() -> anyhow::Result<()> {
         }
     });
 
+    // Synchronisation Discord -> ForgeChat : passages échus (24 ou 48 h) toutes les 10 minutes,
+    // un verrou Redis par serveur (handlers/discord_import/sync.rs).
+    let discord_sync_state = state.clone();
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(Duration::from_secs(600));
+        interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+        loop {
+            interval.tick().await;
+            handlers::discord_import::sync::run_due(&discord_sync_state).await;
+        }
+    });
+
     // Anniversaires du jour (toutes les heures, une seule fête par an : birthdays.rs)
     let birthday_state = state.clone();
     tokio::spawn(async move {
@@ -627,6 +639,12 @@ fn protected_routes(state: AppState) -> Router<AppState> {
         .route("/servers/join/:code", post(handlers::servers::join_server))
         .route("/servers/import-discord", post(handlers::discord_import::start_import))
         .route("/servers/import-discord/:id", get(handlers::discord_import::get_import))
+        .route("/servers/:server_id/discord-sync", get(handlers::discord_import::sync::get_config)
+            .put(handlers::discord_import::sync::put_config)
+            .delete(handlers::discord_import::sync::delete_config)
+            .layer(DefaultBodyLimit::max(SMALL_JSON_LIMIT)))
+        .route("/servers/:server_id/discord-sync/run", post(handlers::discord_import::sync::run_now))
+        .route("/servers/:server_id/discord-sync/categories", get(handlers::discord_import::sync::list_categories))
         .route("/servers/:id/leave", post(handlers::servers::leave_server))
         .route("/servers/:id/members", get(handlers::servers::get_members))
         .route("/servers/:server_id/members/:user_id/kick", post(handlers::servers::kick_member))

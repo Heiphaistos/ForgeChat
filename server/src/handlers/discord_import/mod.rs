@@ -5,8 +5,11 @@
 //! fond télécharge le ZIP, l'importe (voir `importer`) et met à jour
 //! `server_imports`, que le client sonde via `GET /api/servers/import-discord/:id`.
 
+mod discord_api;
 mod format;
 mod importer;
+pub mod sync;
+mod sync_rules;
 #[cfg(test)]
 mod e2e_test;
 
