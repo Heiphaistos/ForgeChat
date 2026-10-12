@@ -40,7 +40,7 @@ export default function ResetPasswordScreen() {
     try {
       // Le nouveau mot de passe ne part pas : seulement sa preuve et le nouveau sel.
       const kdfSalt = newKdfSalt()
-      const s = await deriveSecrets(pw, kdfSalt)
+      const s = await deriveSecrets(pw, kdfSalt, 'argon2id')
       s.wrapKey.fill(0)
       await authApi.resetPassword(token, s.auth, kdfSalt)
       // Le serveur a révoqué toutes les sessions, y compris celle-ci le cas échéant.

@@ -302,5 +302,16 @@
     "signer_public": "BGyywmr0tbXpVhIvMmezfanDUzTiNBTj75j8swgL38JFfrboCpHNuAAFyX17Hhv3_BEKWKNqA-F0nB5TC_hn4_Y",
     "signature": "NmL5SvM_SM1ia7Rkwd2PLCzRwVrpB0Me0dWjzK72APJxyeZ-YWLgtSQHVcTaQxdNPbJ3tZvgHNyAsZF5lNARUw",
     "signature_high_s": "NmL5SvM_SM1ia7Rkwd2PLCzRwVrpB0Me0dWjzK72APKONhmAnp0fS9v4qjslvOiyfzSC-As3gahzCDlJZ5MT_g"
+  },
+  "authArgon2": {
+    "password": "Ｍot de passe ﬁable 42!",
+    "kdfSalt": "Hh8gISIjJCUmJygpKissLQ",
+    "params": {
+      "t": 2,
+      "m": 19456,
+      "p": 1
+    },
+    "auth": "jA6pKC8MSJhA4ldFPAsBvn8CPm_YdCp0vhf6nsm-hD8",
+    "wrapKey": "zEzUR9dujjRHrum_8U7LwqGPW50bOBCy4uPr-t-ZtnU"
   }
 }

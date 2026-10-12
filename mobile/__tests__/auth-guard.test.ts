@@ -17,7 +17,7 @@ jest.mock('@/lib/http', () => ({
   http: { post: (...a: unknown[]) => mockPost(...a), get: (...a: unknown[]) => mockGet(...a), put: jest.fn() },
 }))
 
-import { accountTag, guardKdf, guardPrelogin, markMigrated, markUserMigrated } from '@/e2e/authGuard'
+import { accountTag, guardArgon, guardKdf, guardPrelogin, markMigrated, markUserMigrated } from '@/e2e/authGuard'
 import { passwordProof, prelogin } from '@/e2e/accountKey'
 import { tokens } from '@/lib/tokens'
 
@@ -68,4 +68,12 @@ test('passwordProof : jamais le mot de passe en clair pour un compte connu migr√
   mockStore.clear()
   await tokens.setUserId(UID)
   await expect(passwordProof('secret')).resolves.toEqual({ password: 'secret' })
+})
+
+test('anti-retour PBKDF2 pour un compte vu en Argon2id (audit M3)', async () => {
+  await guardArgon('argon@gmail.com', 'pbkdf2') // jamais vu : accept√©
+  await guardArgon('argon@gmail.com', 'argon2id')
+  await expect(guardArgon('argon@gmail.com', 'pbkdf2')).rejects.toThrow('AUTH_DOWNGRADE')
+  await expect(guardArgon('argon@gmail.com', undefined)).rejects.toThrow('AUTH_DOWNGRADE')
+  await guardArgon('autre@gmail.com', 'pbkdf2')
 })

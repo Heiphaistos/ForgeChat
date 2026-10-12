@@ -30,6 +30,16 @@ export async function checkKdf(store: TagStore, userId: string, info: { legacy: 
 
 export const markUserIn = async (store: TagStore, userId: string) => store.add(await userTag(userId))
 
+/**
+ * Même principe pour la dérivation (audit 2026-10-12, M3) : un compte vu en Argon2id sur cet
+ * appareil n'accepte plus qu'on lui annonce PBKDF2 (plus faible). `subject` : e-mail, ou `user|<id>`.
+ */
+export async function checkArgon(store: TagStore, subject: string, kdf: string | undefined) {
+  const tag = await accountTag(`argon2id|${subject}`)
+  if (kdf === 'argon2id') return store.add(tag)
+  if (await store.has(tag)) throw new Error('AUTH_DOWNGRADE')
+}
+
 function idb<T>(mode: IDBTransactionMode, op: (s: IDBObjectStore) => IDBRequest): Promise<T> {
   return new Promise((resolve, reject) => {
     const open = indexedDB.open('forgechat-v2', 1)
@@ -55,3 +65,5 @@ export const markMigrated = (email: string) => markIn(idbStore, email)
 export const markUserMigrated = (userId: string) => markUserIn(idbStore, userId)
 /** Avant d'envoyer une preuve de mot de passe : mémorise l'état migré, refuse le retour arrière. */
 export const guardKdf = (userId: string, info: { legacy: boolean }) => checkKdf(idbStore, userId, info)
+/** Refuse un retour à PBKDF2 pour un compte vu en Argon2id ; mémorise Argon2id. */
+export const guardArgon = (subject: string, kdf: string | undefined) => checkArgon(idbStore, subject, kdf)

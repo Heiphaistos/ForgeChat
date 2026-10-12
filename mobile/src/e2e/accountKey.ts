@@ -6,8 +6,8 @@ import * as SecureStore from 'expo-secure-store'
 import { create } from 'zustand'
 import { ApiError, http } from '@/lib/http'
 import * as c from './crypto'
-import { type AccountSecrets, type AnyWrapped, deriveSecrets, newKdfSalt, passwordProblem, unwrapAny, wrapKeyV2 } from './authKdf'
-import { guardKdf, guardPrelogin, markMigrated } from './authGuard'
+import { type AccountSecrets, type AnyWrapped, asKdf, deriveSecrets, newKdfSalt, passwordProblem, unwrapAny, wrapKeyV2 } from './authKdf'
+import { guardArgon, guardKdf, guardPrelogin, markMigrated } from './authGuard'
 import { tokens } from '@/lib/tokens'
 import { t } from '@/i18n'
 
@@ -58,7 +58,7 @@ function passwordOr(pw?: string): string {
 }
 
 // ─── Connexion v2 : sel du compte et preuve du mot de passe ─────────────────
-export interface KdfInfo { kdf_salt: string | null; legacy: boolean }
+export interface KdfInfo { kdf_salt: string | null; legacy: boolean; kdf?: string }
 
 /**
  * Sel avant connexion ; e-mail inconnu = sel factice et `legacy` (le serveur ne révèle rien).
@@ -67,6 +67,7 @@ export interface KdfInfo { kdf_salt: string | null; legacy: boolean }
 export async function prelogin(email: string): Promise<KdfInfo> {
   const k = await http.post<KdfInfo>('/auth/prelogin', { email: email.trim().toLowerCase() }, { auth: false })
   await guardPrelogin(email, k)
+  if (!k.legacy) await guardArgon(email.trim().toLowerCase(), k.kdf)
   if (!k.legacy) await markMigrated(email)
   return k
 }
@@ -84,7 +85,8 @@ async function secretsFor(password: string): Promise<AccountSecrets | null> {
   // Sans identifiant (session très ancienne) : aucun état migré connu, rien à comparer.
   if (userId) await guardKdf(userId, k).catch(() => { throw refuse() })
   if (k.legacy || !k.kdf_salt) return null
-  return deriveSecrets(password, k.kdf_salt)
+  if (userId) await guardArgon(`user|${userId}`, k.kdf).catch(() => { throw refuse() })
+  return deriveSecrets(password, k.kdf_salt, asKdf(k.kdf))
 }
 
 const proofOf = (password: string, s: AccountSecrets | null) => (s ? { auth: s.auth } : { password })
@@ -254,19 +256,46 @@ export const changePassword = (userId: string, oldPw: string, newPw: string) => 
   if (problem) throw new Error(problem)
   const old = await secretsFor(oldPw)
   const newSalt = newKdfSalt()
-  const next = await deriveSecrets(newPw, newSalt)
+  const next = await deriveSecrets(newPw, newSalt, 'argon2id')
   try {
     const priv = useAccountKey.getState().priv
     const wrapped = priv ? await wrapKeyV2(priv, next.wrapKey, userId) : null
     await http.post('/auth/change-password', {
       ...(old ? { old_auth: old.auth } : { old_password: oldPw }),
-      new_auth: next.auth, new_kdf_salt: newSalt, wrapped,
+      new_auth: next.auth, new_kdf_salt: newSalt, new_kdf: 'argon2id', wrapped,
     })
+    await guardArgon(`user|${userId}`, 'argon2id')
   } finally {
     next.wrapKey.fill(0)
     if (old !== typed?.secrets) old?.wrapKey.fill(0)
   }
 })
+
+/**
+ * Juste après une connexion PBKDF2 réussie : le compte passe à Argon2id (même mot de passe,
+ * nouveau sel, clé E2E re-scellée), en une requête atomique. Rend les nouveaux secrets, ou null
+ * si la bascule n'a pas pu se faire (on réessaiera à la prochaine connexion).
+ */
+export async function upgradeKdf(userId: string, password: string, old: AccountSecrets, email?: string): Promise<AccountSecrets | null> {
+  const salt = newKdfSalt()
+  const next = await deriveSecrets(password, salt, 'argon2id')
+  try {
+    let wrapped: AnyWrapped | null = null
+    const k = await fetchKeys()
+    if (k) {
+      const priv = await unwrapAny(k.wrapped, password, old, userId)
+      wrapped = await wrapKeyV2(priv, next.wrapKey, userId)
+      priv.fill(0)
+    }
+    await http.post('/auth/upgrade-kdf', { old_auth: old.auth, new_auth: next.auth, new_kdf_salt: salt, kdf: 'argon2id', wrapped })
+    await guardArgon(`user|${userId}`, 'argon2id')
+    if (email) await guardArgon(email.trim().toLowerCase(), 'argon2id')
+    return next
+  } catch {
+    next.wrapKey.fill(0)
+    return null
+  }
+}
 
 /** Déconnexion : plus de clé pour ce compte sur cet appareil. `keep` (changement de compte) :
  *  la clé reste rangée, seule la mémoire est vidée. */

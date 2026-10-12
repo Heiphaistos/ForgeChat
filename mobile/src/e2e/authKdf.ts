@@ -3,6 +3,7 @@
 // auth = HKDF(master, "forgechat auth v2") est envoyé au serveur (il en garde un bcrypt) ;
 // wrapKey = HKDF(master, "forgechat wrap v2") reste ici et scelle la clé privée de compte.
 // Mêmes octets sur le web (client/src/e2e/authKdf.ts), vecteurs `authV2` de docs/e2e-vectors.json.
+import { argon2idAsync } from '@noble/hashes/argon2.js'
 import * as c from './crypto'
 
 export const AUTH_INFO = 'forgechat auth v2'
@@ -21,8 +22,25 @@ export interface AccountSecrets { auth: string; wrapKey: Uint8Array }
 
 const EMPTY = new Uint8Array(0)
 
-export async function deriveSecrets(password: string, kdfSalt: string, iterations?: number): Promise<AccountSecrets> {
-  const master = await c.pbkdf2(password.normalize('NFKC'), c.b64uDecode(kdfSalt), iterations)
+/**
+ * Dérivation du mot de passe (audit 2026-10-12, M3) : `argon2id` pour tout mot de passe choisi
+ * depuis (inscription, changement, réinitialisation, migration à la connexion) ; `pbkdf2`
+ * (600 000 itérations) pour les comptes pas encore basculés. Argon2id coûte 19 Mio de mémoire
+ * par essai : une attaque hors ligne sur carte graphique (serveur compromis) devient bien plus chère.
+ * Paramètres « m = 19 Mio, t = 2, p = 1 » (minimum OWASP), tenables par une appli mobile en JS pur.
+ */
+export type Kdf = 'pbkdf2' | 'argon2id'
+export const ARGON2 = { t: 2, m: 19456, p: 1 } as const
+/** Dérivation annoncée par le serveur ; inconnue ou absente = `pbkdf2`. */
+export const asKdf = (v: unknown): Kdf => (v === 'argon2id' ? 'argon2id' : 'pbkdf2')
+
+/** `kdf` : dérivation, ou nombre d'itérations PBKDF2 (vecteurs de test). */
+export async function deriveSecrets(password: string, kdfSalt: string, kdf: Kdf | number = 'pbkdf2'): Promise<AccountSecrets> {
+  const pw = password.normalize('NFKC')
+  const salt = c.b64uDecode(kdfSalt)
+  const master = kdf === 'argon2id'
+    ? await argon2idAsync(new TextEncoder().encode(pw), salt, { ...ARGON2, dkLen: 32 })
+    : await c.pbkdf2(pw, salt, typeof kdf === 'number' ? kdf : undefined)
   try {
     const auth = c.b64uEncode(await c.hkdf(master, EMPTY, AUTH_INFO))
     const wrapKey = await c.hkdf(master, EMPTY, WRAP_INFO)

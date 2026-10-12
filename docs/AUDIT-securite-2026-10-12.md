@@ -152,7 +152,7 @@ le serveur. Pour les conversations sensibles, il faut utiliser les applis bureau
 | H3 | **Corrigé** | « Non chiffré » calculé sur l'appareil (`openMessage`, `plainFields`), jamais d'après le serveur ; alerte rouge « authenticité non garantie » en MP et groupe. |
 | M1 | **Corrigé** | Liste blanche `previewAllowed` vérifiée sur l'appareil avant tout `/og` ; les groupes web ne demandent plus `/og` pour un message déchiffré. |
 | M2 | **Corrigé** | Plus d'image dans un aperçu fourni par l'expéditeur ; `referrerPolicy="no-referrer"`. |
-| M3 | **Partiel** | 12 caractères, pas de bases courantes ni pseudo/e-mail, 3 sortes de caractères sous 16 caractères (web, mobile, y compris réinitialisation mobile). Reste : Argon2id à la place de PBKDF2. |
+| M3 | **Corrigé** | Argon2id (m = 19 Mio, t = 2, p = 1) à l'inscription, au changement et à la réinitialisation ; comptes PBKDF2 basculés automatiquement à la connexion (`POST /auth/upgrade-kdf`, atomique, migration 123) ; anti-retour vers PBKDF2 sur l'appareil. Règles de mot de passe : 12 caractères, pas de bases courantes ni pseudo/e-mail, 3 sortes de caractères sous 16. Vecteur `authArgon2` recoupé avec l'implémentation de référence. |
 | M4 | **Corrigé** | Confirmation explicite avant d'envoyer une commande de bot en clair (une fois par commande et par session). |
 | M5 | **Corrigé** | `Zone.Identifier` (Windows) / `com.apple.quarantine` (macOS) sur chaque fichier enregistré ; jamais d'exécutable déposé sans boîte « Enregistrer sous ». |
 | M6 | **Corrigé** | Le domaine du serveur est retiré de `script-src` et `style-src` de la CSP du bureau. |

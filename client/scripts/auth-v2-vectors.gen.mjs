@@ -32,5 +32,10 @@ V.authV2 = {
   aad: k.keyAadV2(userId),
   wrapped: await k.wrapKeyV2(c.b64uDecode(V.wrap.priv), s.wrapKey, userId, iv),
 }
+// Argon2id (audit 2026-10-12, M3) : mêmes entrées, paramètres de production (m = 19 Mio, t = 2, p = 1).
+{
+  const a = await k.deriveSecrets(password, kdfSalt, 'argon2id')
+  V.authArgon2 = { password, kdfSalt, params: k.ARGON2, auth: a.auth, wrapKey: e(a.wrapKey) }
+}
 writeFileSync(url, JSON.stringify(V, null, 2) + '\n')
 console.log(V.authV2)

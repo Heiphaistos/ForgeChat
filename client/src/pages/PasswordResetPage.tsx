@@ -97,9 +97,9 @@ function ResetForm({ token }: { token: string }) {
     try {
       // Le nouveau mot de passe ne part pas : seulement sa preuve et le nouveau sel.
       const new_kdf_salt = newKdfSalt()
-      const s = await deriveSecrets(pw, new_kdf_salt)
+      const s = await deriveSecrets(pw, new_kdf_salt, 'argon2id')
       s.wrapKey.fill(0)
-      await api.post('/auth/reset-password', { token, new_auth: s.auth, new_kdf_salt })
+      await api.post('/auth/reset-password', { token, new_auth: s.auth, new_kdf_salt, new_kdf: 'argon2id' })
       toast.success(t('auth.reset.done'))
       nav('/login')
     } catch (err: any) {
