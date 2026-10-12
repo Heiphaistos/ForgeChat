@@ -100,7 +100,7 @@ export default function TextDisplaySection() {
           <div className="text-sm font-medium text-white">{t('settings.text.links')}</div>
           <div className="text-xs text-fc-muted">{t('settings.text.linksDesc')}</div>
         </div>
-        <Toggle value={linkPreview} onChange={setLinkPreview} />
+        <Toggle value={linkPreview} onChange={setLinkPreview} label={t('settings.text.links')} />
       </div>
 
       <button

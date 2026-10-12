@@ -18,7 +18,7 @@ export function PrefToggle({ k, label, desc }: { k: BoolKey; label: Key; desc?: 
         <div className="text-sm font-medium text-white">{t(label)}</div>
         {desc && <div className="text-xs text-fc-muted">{t(desc)}</div>}
       </div>
-      <Toggle value={value} onChange={v => set({ [k]: v } as Partial<UxPrefs>)} />
+      <Toggle value={value} onChange={v => set({ [k]: v } as Partial<UxPrefs>)} label={t(label)} />
     </div>
   )
 }

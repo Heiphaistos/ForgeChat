@@ -39,7 +39,7 @@ export default function NotificationsEmailSection() {
               {t('settings.email.digestDesc')}
             </div>
           </div>
-          <Toggle value={dmNotify} onChange={setDmNotify} />
+          <Toggle value={dmNotify} onChange={setDmNotify} label={t('settings.email.digest')} />
         </div>
       </div>
 
