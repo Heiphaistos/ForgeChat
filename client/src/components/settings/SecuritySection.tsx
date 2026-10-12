@@ -7,6 +7,7 @@ import toast from 'react-hot-toast'
 import { useT } from '../../i18n'
 import { E2EKeySection } from '../../e2e/E2ESettings'
 import AppLockSection from './AppLockSection'
+import PasskeysSection from './PasskeysSection'
 
 export default function SecuritySection() {
   const t = useT()
@@ -155,6 +156,8 @@ export default function SecuritySection() {
           )}
         </div>
       )}
+
+      {is2faEnabled && <PasskeysSection />}
 
       {step === 'setup' && setupData && (
         <div className="p-4 bg-fc-channel rounded-xl border border-fc-hover space-y-4">

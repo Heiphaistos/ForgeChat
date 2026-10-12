@@ -29,6 +29,10 @@ pub enum AppError {
     SlowMode(i64),
     #[error("totp_required")]
     TotpRequired,
+    /// 403 `totp_required` avec les options d'une clé d'accès (connexion web, amélioration n° 3).
+    /// Les anciennes applis ne lisent que `error` et demandent le code, comme avant.
+    #[error("totp_required")]
+    SecondFactorRequired(serde_json::Value),
     /// 426 : appli trop ancienne pour ce compte (connexion v2), message lisible.
     #[error("{0}")]
     UpgradeRequired(String),
@@ -60,6 +64,9 @@ impl IntoResponse for AppError {
                 ).into_response();
             }
             AppError::TotpRequired => (StatusCode::FORBIDDEN, "totp_required".into()),
+            AppError::SecondFactorRequired(passkey) => {
+                return (StatusCode::FORBIDDEN, Json(json!({ "error": "totp_required", "passkey": passkey }))).into_response();
+            }
             AppError::UpgradeRequired(m) => (StatusCode::UPGRADE_REQUIRED, m.clone()),
             AppError::Unavailable(m) => (StatusCode::SERVICE_UNAVAILABLE, m.clone()),
             AppError::Internal(e) => {

@@ -458,7 +458,7 @@ async fn security_new_device_and_panic_lock() {
     let token = new_panic_token(&state, u).await.unwrap();
     let addr = axum::extract::ConnectInfo("127.0.0.1:1".parse::<std::net::SocketAddr>().unwrap());
     let body = || axum::Json(serde_json::json!({ "token": token }));
-    panic_with_token(axum::extract::State(state.clone()), addr, HeaderMap::new(), body()).await.expect("verrouillage");
+    let _ = panic_with_token(axum::extract::State(state.clone()), addr, HeaderMap::new(), body()).await.expect("verrouillage");
     assert!(panic_with_token(axum::extract::State(state.clone()), addr, HeaderMap::new(), body()).await.is_err(), "usage unique");
     let (locked, sessions, devices): (bool, i64, i64) = sqlx::query_as(
         "SELECT (SELECT locked_at IS NOT NULL FROM users WHERE id=$1),
@@ -467,4 +467,52 @@ async fn security_new_device_and_panic_lock() {
     ).bind(u).fetch_one(&db).await.unwrap();
     assert!(locked);
     assert_eq!((sessions, devices), (0, 0));
+}
+
+#[tokio::test]
+#[ignore]
+async fn security_passkey_second_factor() {
+    // Amélioration n° 3 (2026-10-12) : clé d'accès enregistrée puis utilisée à la connexion.
+    use crate::webauthn::tests::{client_data, SoftKey};
+    std::env::set_var("FRONTEND_URL", "https://forgechat.example");
+    let (state, db) = setup().await;
+    let u = user(&db).await;
+    let claims = || axum::Extension(crate::middleware::auth::Claims { sub: u, exp: i64::MAX, iss: "forgechat".into(), iat: 0, sid: None });
+    let origin = "https://forgechat.example";
+
+    // Sans TOTP : refus (le code reste le secours).
+    assert!(crate::handlers::passkeys::register_start(axum::extract::State(state.clone()), claims()).await.is_err());
+    sqlx::query("UPDATE users SET totp_enabled=TRUE WHERE id=$1").bind(u).execute(&db).await.unwrap();
+    let opts = crate::handlers::passkeys::register_start(axum::extract::State(state.clone()), claims()).await.unwrap().0;
+    let ch = opts["challenge"].as_str().unwrap().to_string();
+    assert_eq!(opts["rp"]["id"], "forgechat.example");
+    let mut key = SoftKey::new();
+    let b = crate::webauthn::b64u;
+    let body = crate::handlers::passkeys::RegisterFinish {
+        name: "Clé de test".into(),
+        client_data_json: b(&client_data("webauthn.create", &ch, origin)),
+        attestation_object: b(&key.attestation("forgechat.example")),
+    };
+    crate::handlers::passkeys::register_finish(axum::extract::State(state.clone()), claims(), axum::Json(body)).await.expect("enregistrée");
+
+    // Connexion : options liées au compte, assertion acceptée une fois.
+    let opts = crate::handlers::passkeys::login_options(&state, u).await.unwrap().expect("options");
+    let ch = opts["challenge"].as_str().unwrap().to_string();
+    let cd = client_data("webauthn.get", &ch, origin);
+    let (ad, sig) = key.assert("forgechat.example", &cd);
+    let a = crate::handlers::passkeys::Assertion { id: b(&key.id), client_data_json: b(&cd), authenticator_data: b(&ad), signature: b(&sig) };
+    assert!(crate::handlers::passkeys::check_assertion(&state, u, &a).await.unwrap());
+    assert!(!crate::handlers::passkeys::check_assertion(&state, u, &a).await.unwrap(), "défi à usage unique");
+    // Défi d'un autre compte : refusé.
+    let other = user(&db).await;
+    sqlx::query("UPDATE users SET totp_enabled=TRUE WHERE id=$1").bind(other).execute(&db).await.unwrap();
+    let ch = crate::webauthn::new_challenge();
+    {
+        let mut r = state.redis.lock().await;
+        let _: () = redis::AsyncCommands::set_ex(&mut *r, format!("passkey_login:{ch}"), other.to_string(), 60).await.unwrap();
+    }
+    let cd = client_data("webauthn.get", &ch, origin);
+    let (ad, sig) = key.assert("forgechat.example", &cd);
+    let a = crate::handlers::passkeys::Assertion { id: b(&key.id), client_data_json: b(&cd), authenticator_data: b(&ad), signature: b(&sig) };
+    assert!(!crate::handlers::passkeys::check_assertion(&state, u, &a).await.unwrap());
 }

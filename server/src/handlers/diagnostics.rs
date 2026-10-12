@@ -297,7 +297,7 @@ pub async fn csp_report(
         crate::security_events::record(&state, "csp").await;
         let message = format!("{} a bloqué : {}", c.directive, if c.blocked.is_empty() { "(inline)" } else { &c.blocked });
         let fp = fingerprint(&["web", "csp", &c.directive, &c.blocked, &c.sample]);
-        let _ = sqlx::query(
+        let saved = sqlx::query(
             "INSERT INTO client_reports (platform, kind, message, stack, user_agent, url, fingerprint)
              VALUES ('web', 'csp', $1, $2, $3, $4, $5)
              ON CONFLICT (fingerprint) DO UPDATE SET count = client_reports.count + 1, last_seen = NOW()",
@@ -309,6 +309,9 @@ pub async fn csp_report(
         .bind(&fp)
         .execute(&state.db)
         .await;
+        if let Err(e) = saved {
+            tracing::warn!("rapport CSP non enregistré : {e}");
+        }
     }
     StatusCode::NO_CONTENT
 }

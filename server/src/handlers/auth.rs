@@ -442,10 +442,23 @@ pub async fn login(
 
     // Double authentification : anti-rejeu, codes de secours, 5 échecs / 15 min par compte.
     if user.totp_enabled {
-        let Some(code) = body.totp_code.as_deref() else { return Err(AppError::TotpRequired) };
-        if !crate::handlers::totp::check_code(&state, user.id, code).await? {
-            crate::security_events::record(&state, "totp_failed").await;
-            return Err(AppError::Unauthorized);
+        if let Some(assertion) = body.passkey.as_ref() {
+            // Clé d'accès (amélioration n° 3) : défi lié au compte, signature, compteur.
+            if !crate::handlers::passkeys::check_assertion(&state, user.id, assertion).await? {
+                crate::security_events::record(&state, "totp_failed").await;
+                return Err(AppError::Unauthorized);
+            }
+        } else {
+            let Some(code) = body.totp_code.as_deref() else {
+                return Err(match crate::handlers::passkeys::login_options(&state, user.id).await? {
+                    Some(options) => AppError::SecondFactorRequired(options),
+                    None => AppError::TotpRequired,
+                });
+            };
+            if !crate::handlers::totp::check_code(&state, user.id, code).await? {
+                crate::security_events::record(&state, "totp_failed").await;
+                return Err(AppError::Unauthorized);
+            }
         }
     }
 

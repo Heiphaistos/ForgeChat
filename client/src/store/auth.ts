@@ -14,6 +14,7 @@ import { queryClient } from '../main'
 import { clearAccountKey, prelogin, rememberLogin, upgradeKdf } from '../e2e/accountKey'
 import { asKdf, deriveSecrets, newKdfSalt, passwordProblem } from '../e2e/authKdf'
 import { pwnedProblem } from '../e2e/pwned'
+import type { PasskeyAssertion } from '../lib/passkey'
 import { clearSearchIndex } from '../e2e/searchIndex'
 import { guardArgon, markMigrated, markUserMigrated } from '../e2e/authGuard'
 
@@ -43,7 +44,7 @@ interface User {
 interface AuthState {
   user: User | null
   loading: boolean
-  login: (email: string, password: string, totpCode?: string) => Promise<void>
+  login: (email: string, password: string, totpCode?: string, passkey?: PasskeyAssertion) => Promise<void>
   /** Envoie le code de vérification ; le compte naît à /verify-email. */
   register: (username: string, email: string, password: string, inviteCode?: string) => Promise<void>
   logout: () => Promise<void>
@@ -56,7 +57,7 @@ export const useAuth = create<AuthState>()(
     user: null,
     loading: true,
 
-    login: async (email, password, totpCode) => {
+    login: async (email, password, totpCode, passkey) => {
       // Connexion v2 : seul `auth` part. Compte pas encore migré : le mot de passe part une
       // dernière fois avec la nouvelle preuve, et le serveur bascule le compte.
       const pre = await prelogin(email)
@@ -68,9 +69,10 @@ export const useAuth = create<AuthState>()(
         ? { email, password, auth_new: secrets.auth, kdf_salt_new: salt, kdf_new: 'argon2id' }
         : { email, auth: secrets.auth }
       if (totpCode) body.totp_code = totpCode
+      const payload: Record<string, unknown> = passkey ? { ...body, passkey } : body
       let data: any
       try {
-        data = (await api.post('/auth/login', body)).data
+        data = (await api.post('/auth/login', payload)).data
       } catch (err) {
         secrets.wrapKey.fill(0)
         throw err
