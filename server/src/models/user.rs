@@ -185,6 +185,9 @@ pub struct LoginRequest {
     #[serde(default)]
     pub kdf_new: Option<String>,
     pub totp_code: Option<String>,
+    /// Second facteur par clé d'accès (web) au lieu du code.
+    #[serde(default)]
+    pub passkey: Option<crate::handlers::passkeys::Assertion>,
 }
 
 #[derive(Debug, Serialize)]

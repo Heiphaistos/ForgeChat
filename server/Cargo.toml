@@ -48,6 +48,7 @@ zip = { version = "8.6.0", default-features = false, features = ["deflate"] }
 # dans push.rs (ES256 via p256) : la fonctionnalité `vapid` tirait jwt-simple -> superboring -> rsa.
 web-push-native = { version = "0.5", default-features = false }
 p256 = { version = "0.13", default-features = false, features = ["ecdsa", "std"] }
+ciborium = "0.2"
 
 [profile.release]
 opt-level = 3

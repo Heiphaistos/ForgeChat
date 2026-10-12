@@ -249,6 +249,10 @@ pub async fn disable_totp(
         .bind(claims.sub)
         .execute(&state.db).await
         .map_err(|e| AppError::Internal(anyhow::anyhow!("{}", e)))?;
+    // Les clés d'accès complètent le code et ne vivent pas sans lui (handlers/passkeys.rs).
+    sqlx::query("DELETE FROM webauthn_credentials WHERE user_id = $1")
+        .bind(claims.sub)
+        .execute(&state.db).await?;
 
     Ok(Json(serde_json::json!({ "enabled": false })))
 }

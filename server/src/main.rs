@@ -18,6 +18,7 @@ mod jwt;
 mod security_headers;
 mod cookies;
 mod security_events;
+mod webauthn;
 
 use axum::{
     middleware as axum_middleware,
@@ -569,6 +570,10 @@ fn protected_routes(state: AppState) -> Router<AppState> {
         .route("/auth/2fa/disable", post(handlers::totp::disable_totp))
         .route("/auth/2fa/backup-codes", post(handlers::totp::regenerate_backup_codes))
         .route("/auth/2fa/status", get(handlers::totp::totp_status))
+        .route("/auth/passkeys", get(handlers::passkeys::list))
+        .route("/auth/passkeys/register/start", post(handlers::passkeys::register_start))
+        .route("/auth/passkeys/register/finish", post(handlers::passkeys::register_finish))
+        .route("/auth/passkeys/:id", delete(handlers::passkeys::delete))
         .route("/auth/ws-ticket", post(handlers::auth::ws_ticket))
         // Users
         .route("/users/me", get(handlers::users::get_me))

@@ -8,6 +8,7 @@ import Logo3D from '../components/Logo3D'
 import { useT } from '../i18n'
 import { SavedAccountsLogin } from '../components/AccountSwitcher'
 import { safeRedirect } from '../utils/safeUrl'
+import { getPasskey, passkeySupported } from '../lib/passkey'
 
 // Dans l'application bureau, « / » redirige vers /login : le lien bouclerait sur lui-même.
 const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
@@ -19,6 +20,8 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false)
   const [totpCode, setTotpCode] = useState('')
   const [needTotp, setNeedTotp] = useState(false)
+  // Options de clé d'accès renvoyées avec `totp_required` (compte qui en a, navigateur compatible).
+  const [passkeyOptions, setPasskeyOptions] = useState<Record<string, any> | null>(null)
   const [loading, setLoading] = useState(false)
   const { login } = useAuth()
   const nav = useNavigate()
@@ -38,12 +41,43 @@ export default function LoginPage() {
       if (msg === 'totp_required') {
         setNeedTotp(true)
         setTotpCode('')
+        setPasskeyOptions(passkeySupported() ? err.response?.data?.passkey ?? null : null)
         toast(t('auth.login.enterTotp'))
       } else {
         setPassword('')
         setNeedTotp(false)
         toast.error(msg || t(err?.message === 'AUTH_DOWNGRADE' ? 'auth.login.downgrade' : 'auth.login.error'))
       }
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // Second facteur par clé d'accès : le défi est à usage unique (2 min) ; en cas d'échec, un
+  // nouvel essai redemande des options au serveur avec le même mot de passe.
+  const signInWithPasskey = async () => {
+    setLoading(true)
+    try {
+      let options = passkeyOptions
+      if (!options) return
+      let assertion
+      try {
+        assertion = await getPasskey(options)
+      } catch {
+        toast.error(t('guard.passkey.failed'))
+        return
+      }
+      try {
+        await login(email, password, undefined, assertion)
+      } catch (err: any) {
+        if (err.response?.data?.error === 'totp_required') options = err.response.data.passkey ?? null
+        setPasskeyOptions(options)
+        toast.error(t('guard.passkey.failed'))
+        return
+      }
+      setPassword('')
+      try { localStorage.setItem('fc_last_email', email.trim()) } catch { /* stockage indisponible */ }
+      nav(safeRedirect(searchParams.get('redirect'), '/friends'))
     } finally {
       setLoading(false)
     }
@@ -105,6 +139,19 @@ export default function LoginPage() {
             </>
           ) : (
             <div>
+              {passkeyOptions && (
+                <div className="mb-4 space-y-2">
+                  <button
+                    type="button"
+                    onClick={() => void signInWithPasskey()}
+                    disabled={loading}
+                    className="w-full py-2.5 bg-fc-green/90 hover:bg-fc-green text-white font-medium rounded transition disabled:opacity-50"
+                  >
+                    {t('guard.passkey.use')}
+                  </button>
+                  <p className="text-center text-xs text-fc-muted">{t('guard.passkey.orCode')}</p>
+                </div>
+              )}
               <p className="text-fc-muted text-sm mb-3">
                 {t('auth.login.totpHelp')}
               </p>
@@ -112,7 +159,7 @@ export default function LoginPage() {
               <input
                 type="text"
                 inputMode="text"
-                maxLength={9}
+                maxLength={19}
                 value={totpCode}
                 onChange={e => setTotpCode(e.target.value.replace(/[^0-9a-fA-F-]/g, ''))}
                 autoFocus
@@ -123,7 +170,7 @@ export default function LoginPage() {
               />
               <button
                 type="button"
-                onClick={() => setNeedTotp(false)}
+                onClick={() => { setNeedTotp(false); setPasskeyOptions(null) }}
                 className="mt-2 text-xs text-fc-muted hover:text-white transition"
               >
                 {t('auth.login.back')}
