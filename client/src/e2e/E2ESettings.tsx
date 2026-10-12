@@ -9,6 +9,8 @@ import { regenerateRecoveryCode, useAccountKey } from './accountKey'
 import * as c from './crypto'
 import { fpOf, markVerified, pinOf, trustedMembers, useKeyAlerts } from './keyPins'
 import { RecoveryCodeModal } from './E2EGate'
+import { SafetyQrImage, SafetyQrScanner } from './SafetyQr'
+import type { SafetyScan } from './safetyQr'
 
 /** 60 chiffres en 12 groupes de 5, comme Signal. */
 const groups = (code: string) => code.match(/.{5}/g) ?? []
@@ -107,6 +109,15 @@ export function SafetyCode({ userId }: { userId: string }) {
   const verify = async () => {
     if (info && await markVerified(userId, info.pub)) setTick(n => n + 1)
   }
+  // Scan en personne (amélioration n° 11) : seule une égalité stricte marque la clé vérifiée.
+  const onScan = async (r: SafetyScan) => {
+    if (r === 'match') {
+      await verify()
+      toast.success(t('guard.qr.match'))
+    } else {
+      toast.error(t(r === 'mismatch' ? 'guard.qr.mismatch' : 'guard.qr.invalid'), { duration: 8000 })
+    }
+  }
   return (
     <div className="bg-fc-channel rounded-xl p-5 mt-4">
       <h2 className="text-xs font-semibold text-fc-muted uppercase tracking-wide mb-2 flex items-center gap-1.5">
@@ -118,6 +129,10 @@ export function SafetyCode({ userId }: { userId: string }) {
             {groups(info.code).map((g, i) => <span key={i}>{g}</span>)}
           </div>
           <p className="text-xs text-fc-muted">{t('e2e.safety.desc')}</p>
+          <div className="mt-3 flex flex-col items-start gap-1">
+            <SafetyQrImage code={info.code} />
+            <p className="text-xs text-fc-muted">{t('guard.qr.hint')}</p>
+          </div>
           {info.changed && (
             <p className="text-xs text-red-300 mt-2 flex items-center gap-1"><ShieldAlert size={13} aria-hidden />{t('e2e.safety.changed')}</p>
           )}
@@ -127,6 +142,7 @@ export function SafetyCode({ userId }: { userId: string }) {
           {!info.changed && !info.verified && (
             <button type="button" onClick={verify} className="mt-2 px-3 py-1.5 text-xs bg-fc-hover text-white rounded-lg">{t('e2e.safety.verify')}</button>
           )}
+          {!info.changed && <SafetyQrScanner code={info.code} onResult={r => void onScan(r)} />}
         </>
       ) : (
         <p className="text-xs text-fc-muted">{t(ready ? 'e2e.safety.none' : 'e2e.settings.locked')}</p>

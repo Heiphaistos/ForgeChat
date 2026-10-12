@@ -34,6 +34,11 @@ export const fr = {
   'guard.passkey.unsupported': 'Ce navigateur ne gère pas les clés d’accès.',
   'guard.passkey.lastUsed': 'utilisée {when}',
   'guard.passkey.neverUsed': 'jamais utilisée',
+  'guard.qr.hint': 'En personne : l’autre scanne ce QR code avec ForgeChat, ou vous comparez les chiffres.',
+  'guard.qr.scan': 'Scanner son code',
+  'guard.qr.match': 'Codes identiques : contact vérifié.',
+  'guard.qr.mismatch': 'Les codes NE correspondent PAS : quelqu’un s’interpose peut-être, ou une clé a changé. Rien n’a été vérifié.',
+  'guard.qr.invalid': 'Ce QR code n’est pas un code de sécurité ForgeChat (ou la caméra est indisponible).',
 }
 export const en: Partial<Record<keyof typeof fr, string>> = {
   'guard.lock.title': 'Lock my account',
@@ -69,4 +74,9 @@ export const en: Partial<Record<keyof typeof fr, string>> = {
   'guard.passkey.unsupported': 'This browser does not support passkeys.',
   'guard.passkey.lastUsed': 'used {when}',
   'guard.passkey.neverUsed': 'never used',
+  'guard.qr.hint': 'In person: the other person scans this QR code with ForgeChat, or you compare the digits.',
+  'guard.qr.scan': 'Scan their code',
+  'guard.qr.match': 'Codes match: contact verified.',
+  'guard.qr.mismatch': 'The codes do NOT match: someone may be intercepting, or a key changed. Nothing was verified.',
+  'guard.qr.invalid': 'This QR code is not a ForgeChat safety code (or the camera is unavailable).',
 }

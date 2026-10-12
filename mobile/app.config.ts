@@ -117,7 +117,7 @@ const buildConfig = ({ config }: ConfigContext): ExpoConfig => ({
     supportsTablet: true,
     associatedDomains: apiHost ? [`applinks:${apiHost}`] : [],
     infoPlist: {
-      NSCameraUsageDescription: 'ForgeChat utilise la caméra pour les appels vidéo et pour envoyer des photos.',
+      NSCameraUsageDescription: 'ForgeChat utilise la caméra pour les appels vidéo, pour envoyer des photos et pour scanner le code de sécurité d’un contact.',
       NSMicrophoneUsageDescription: 'ForgeChat utilise le micro pour les appels et les salons vocaux.',
       NSPhotoLibraryUsageDescription: 'ForgeChat accède à tes photos uniquement quand tu choisis d’en envoyer.',
       // Maintient l'audio d'un appel en cours quand l'app passe en arrière-plan.
@@ -200,7 +200,7 @@ const buildConfig = ({ config }: ConfigContext): ExpoConfig => ({
         photosPermission: 'ForgeChat accède à tes photos uniquement quand tu choisis d’en envoyer.',
         // Mêmes textes que le plugin WebRTC : ces plugins écrivent les mêmes clés Info.plist
         // et ne doivent surtout pas retirer RECORD_AUDIO (indispensable aux appels).
-        cameraPermission: 'ForgeChat utilise la caméra pour les appels vidéo et pour envoyer des photos.',
+        cameraPermission: 'ForgeChat utilise la caméra pour les appels vidéo, pour envoyer des photos et pour scanner le code de sécurité d’un contact.',
         microphonePermission: 'ForgeChat utilise le micro pour les appels et les salons vocaux.',
       },
     ],
@@ -210,7 +210,7 @@ const buildConfig = ({ config }: ConfigContext): ExpoConfig => ({
     [
       '@config-plugins/react-native-webrtc',
       {
-        cameraPermission: 'ForgeChat utilise la caméra pour les appels vidéo et pour envoyer des photos.',
+        cameraPermission: 'ForgeChat utilise la caméra pour les appels vidéo, pour envoyer des photos et pour scanner le code de sécurité d’un contact.',
         microphonePermission: 'ForgeChat utilise le micro pour les appels et les salons vocaux.',
       },
     ],
@@ -242,6 +242,8 @@ const buildConfig = ({ config }: ConfigContext): ExpoConfig => ({
     // premier enregistrement). Même texte micro que WebRTC (clés Info.plist partagées).
     // Pas de lecture en arrière-plan : évite le service de premier plan « mediaPlayback » et ses
     // permissions (FOREGROUND_SERVICE_MEDIA_PLAYBACK), à justifier auprès de Google Play.
+    // Scan du QR code de sécurité d'un contact (amélioration n° 11) ; pas de micro pour ce module.
+    ['expo-camera', { cameraPermission: 'ForgeChat utilise la caméra pour les appels vidéo, pour envoyer des photos et pour scanner le code de sécurité d’un contact.', recordAudioAndroid: false, barcodeScannerEnabled: true }],
     [
       'expo-audio',
       { microphonePermission: 'ForgeChat utilise le micro pour les appels, les salons vocaux et les messages vocaux.', enableBackgroundPlayback: false },
