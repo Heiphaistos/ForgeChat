@@ -3,6 +3,7 @@ import { BrowserRouter, Navigate, Route, Routes, useLocation, useNavigate } from
 import { useAuth } from './store/auth'
 import E2EGate from './e2e/E2EGate'
 import KeyChangeDialog from './e2e/KeyChangeDialog'
+import KeyTransparencyMonitor from './e2e/KeyTransparencyMonitor'
 import type { EncPayload } from './e2e/crypto'
 import { openText } from './e2e/conversations'
 import { channelPreview } from './e2e/channels'
@@ -1105,6 +1106,7 @@ function AppInner() {
         {user && <VoiceHotkeys />}
         {user && <E2EGate />}
         {user && <KeyChangeDialog />}
+        {user && <KeyTransparencyMonitor />}
         {showQuickSwitcher && <QuickSwitcher onClose={() => setShowQuickSwitcher(false)} />}
         <CommandPalette isOpen={showCommandPalette} onClose={() => setShowCommandPalette(false)} />
         {showKeyboardShortcuts && <KeyboardShortcutsModal onClose={() => setShowKeyboardShortcuts(false)} />}

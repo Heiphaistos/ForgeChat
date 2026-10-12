@@ -36,9 +36,11 @@ fn bad(msg: &str) -> AppError {
     AppError::BadRequest(format!("Clé d'accès refusée : {msg}"))
 }
 
+type KeyRow = (Uuid, String, chrono::DateTime<chrono::Utc>, Option<chrono::DateTime<chrono::Utc>>);
+
 /// GET /auth/passkeys : clés du compte (jamais les clés publiques).
 pub async fn list(State(state): State<AppState>, Extension(claims): Extension<Claims>) -> Result<Json<Value>> {
-    let rows: Vec<(Uuid, String, chrono::DateTime<chrono::Utc>, Option<chrono::DateTime<chrono::Utc>>)> = sqlx::query_as(
+    let rows: Vec<KeyRow> = sqlx::query_as(
         "SELECT id, name, created_at, last_used_at FROM webauthn_credentials WHERE user_id=$1 ORDER BY created_at",
     )
     .bind(claims.sub)

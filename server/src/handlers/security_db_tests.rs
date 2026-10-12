@@ -516,3 +516,37 @@ async fn security_passkey_second_factor() {
     let a = crate::handlers::passkeys::Assertion { id: b(&key.id), client_data_json: b(&cd), authenticator_data: b(&ad), signature: b(&sig) };
     assert!(!crate::handlers::passkeys::check_assertion(&state, u, &a).await.unwrap());
 }
+
+#[tokio::test]
+#[ignore]
+async fn security_key_transparency_log() {
+    // Amélioration n° 10 (2026-10-12) : journal chaîné, en ajout seul, rattrapage des clés.
+    use crate::key_log::*;
+    let (_state, db) = setup().await;
+    let u = user(&db).await;
+    sqlx::query("INSERT INTO user_keys (user_id, public_key, fingerprint, wrapped) VALUES ($1, 'BAAAAA-test', 'fp', '{}')")
+        .bind(u).execute(&db).await.unwrap();
+    reconcile(&db).await.unwrap();
+    let seq = latest_seq(&db, u).await.expect("clé inscrite");
+    assert_eq!(reconcile(&db).await.unwrap(), 0, "rien de neuf au second passage");
+    // Chaîne entière vérifiable de bout en bout.
+    let rows: Vec<(i64, String, String, String, String)> =
+        sqlx::query_as("SELECT seq, user_tag, key_hash, prev_hash, hash FROM key_transparency_log ORDER BY seq").fetch_all(&db).await.unwrap();
+    let mut prev = GENESIS.to_string();
+    for (i, (s, tag, kh, p, h)) in rows.iter().enumerate() {
+        assert_eq!(*s, i as i64 + 1, "numérotation sans trou");
+        assert_eq!(p, &prev);
+        assert_eq!(h, &entry_hash(*s, tag, kh, p));
+        prev = h.clone();
+    }
+    let (tag, kh): (String, String) = sqlx::query_as("SELECT user_tag, key_hash FROM key_transparency_log WHERE seq=$1")
+        .bind(seq).fetch_one(&db).await.unwrap();
+    assert_eq!((tag, kh), (user_tag(u), key_hash("BAAAAA-test")));
+    // Ajout seul : ni modification ni suppression.
+    assert!(sqlx::query("UPDATE key_transparency_log SET key_hash=key_hash WHERE seq=$1").bind(seq).execute(&db).await.is_err());
+    assert!(sqlx::query("DELETE FROM key_transparency_log WHERE seq=$1").bind(seq).execute(&db).await.is_err());
+    // Nouvelle clé (réinitialisation) : nouvelle entrée.
+    sqlx::query("UPDATE user_keys SET public_key='BAAAAA-new' WHERE user_id=$1").bind(u).execute(&db).await.unwrap();
+    reconcile(&db).await.unwrap();
+    assert!(latest_seq(&db, u).await.unwrap() > seq);
+}

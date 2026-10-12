@@ -10,6 +10,7 @@ import * as c from './crypto'
 import { fpOf, markVerified, pinOf, trustedMembers, useKeyAlerts } from './keyPins'
 import { RecoveryCodeModal } from './E2EGate'
 import { SafetyQrImage, SafetyQrScanner } from './SafetyQr'
+import { contactKeyLogged, type KtEntry } from './keyTransparency'
 import type { SafetyScan } from './safetyQr'
 
 /** 60 chiffres en 12 groupes de 5, comme Signal. */
@@ -73,19 +74,25 @@ export function E2EKeySection() {
   )
 }
 
-interface Safety { code: string; pub: string; changed: boolean; verified: boolean }
+interface Safety { code: string; pub: string; changed: boolean; verified: boolean; logged: boolean | null }
 
 /** Code de sécurité avec la clé servie pour `userId`, comparée à l'empreinte épinglée ; null si l'un n'a pas de clé. */
 async function safetyWith(userId: string, mine: string): Promise<Safety | null> {
   try {
-    const { data } = await api.get<{ public: string }>(`/users/${userId}/keys/public`)
+    const { data } = await api.get<{ public: string; kt_seq?: number | null }>(`/users/${userId}/keys/public`)
+    // Journal de transparence (amélioration n° 10) : la clé servie doit y être inscrite.
+    let logged: boolean | null = null
+    if (typeof data.kt_seq === 'number') {
+      const entry = await api.get<KtEntry>(`/keys/log/${data.kt_seq}`).then(r => r.data, () => null)
+      logged = await contactKeyLogged(userId, data.public, entry)
+    }
     // Première vue : épinglée ; clé changée : boîte de dialogue bloquante.
     const trusted = (await trustedMembers([{ user_id: userId, public: data.public }])).length > 0
     const pin = await pinOf(userId)
     const fp = await fpOf(data.public)
     return {
       code: await c.safetyCode(c.b64uDecode(mine), c.b64uDecode(data.public)),
-      pub: data.public, changed: !trusted, verified: trusted && pin?.fp === fp && !!pin.verified,
+      pub: data.public, changed: !trusted, verified: trusted && pin?.fp === fp && !!pin.verified, logged,
     }
   } catch {
     return null
@@ -135,6 +142,12 @@ export function SafetyCode({ userId }: { userId: string }) {
           </div>
           {info.changed && (
             <p className="text-xs text-red-300 mt-2 flex items-center gap-1"><ShieldAlert size={13} aria-hidden />{t('e2e.safety.changed')}</p>
+          )}
+          {info.logged === true && (
+            <p className="text-xs text-fc-muted mt-2 flex items-center gap-1"><ShieldCheck size={13} aria-hidden />{t('guard.kt.logged')}</p>
+          )}
+          {info.logged === false && (
+            <p className="text-xs text-red-300 mt-2 flex items-center gap-1"><ShieldAlert size={13} aria-hidden />{t('guard.kt.notLogged')}</p>
           )}
           {info.verified && (
             <p className="text-xs text-green-400 mt-2 flex items-center gap-1"><BadgeCheck size={13} aria-hidden />{t('e2e.safety.verified')}</p>

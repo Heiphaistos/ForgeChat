@@ -11,6 +11,7 @@ import * as c from './crypto'
 import { fpOf, markVerified, pinOf, trustedMembers, useKeyAlerts } from './keyPins'
 import { errorText, RecoveryCodeModal } from './E2EGate'
 import { SafetyQrImage, SafetyQrScanner } from './SafetyQr'
+import { contactKeyLogged, type KtEntry } from './keyTransparency'
 import type { SafetyScan } from './safetyQr'
 
 export function E2EKeySection() {
@@ -55,19 +56,25 @@ export function E2EKeySection() {
   )
 }
 
-interface Safety { code: string; pub: string; changed: boolean; verified: boolean }
+interface Safety { code: string; pub: string; changed: boolean; verified: boolean; logged: boolean | null }
 
 /** Code de sécurité avec la clé servie pour `userId`, comparée à l'empreinte épinglée ; null si l'un n'a pas de clé. */
 async function safetyWith(userId: string, mine: string): Promise<Safety | null> {
   try {
-    const data = await http.get<{ public: string }>(path`/users/${userId}/keys/public`)
+    const data = await http.get<{ public: string; kt_seq?: number | null }>(path`/users/${userId}/keys/public`)
+    // Journal de transparence (amélioration n° 10) : la clé servie doit y être inscrite.
+    let logged: boolean | null = null
+    if (typeof data.kt_seq === 'number') {
+      const entry = await http.get<KtEntry>(`/keys/log/${data.kt_seq}`).catch(() => null)
+      logged = await contactKeyLogged(userId, data.public, entry)
+    }
     // Première vue : épinglée ; clé changée : boîte de dialogue bloquante.
     const trusted = (await trustedMembers([{ user_id: userId, public: data.public }])).length > 0
     const pin = await pinOf(userId)
     const fp = await fpOf(data.public)
     return {
       code: await c.safetyCode(c.b64uDecode(mine), c.b64uDecode(data.public)),
-      pub: data.public, changed: !trusted, verified: trusted && pin?.fp === fp && !!pin.verified,
+      pub: data.public, changed: !trusted, verified: trusted && pin?.fp === fp && !!pin.verified, logged,
     }
   } catch {
     return null
@@ -114,6 +121,8 @@ export function SafetyCode({ userId }: { userId: string }) {
           {info && !info.changed ? <SafetyQrScanner code={code} onResult={onScan} /> : null}
         </View>
       ) : null}
+      {info?.logged === true ? <T variant="muted" style={pad}>{t('guard.kt.logged')}</T> : null}
+      {info?.logged === false ? <T style={[{ color: colors.danger }, pad]}>{t('guard.kt.notLogged')}</T> : null}
       {info?.changed ? <T style={[{ color: colors.danger }, pad]}>{t('e2e.safety.changed')}</T> : null}
       {info?.verified ? <T style={[{ color: colors.success }, pad]}>{t('e2e.safety.verified')}</T> : null}
       {info && !info.changed && !info.verified ? (
