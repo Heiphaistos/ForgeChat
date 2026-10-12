@@ -568,6 +568,8 @@ pub async fn get_members(
     .bind(server_id)
     .fetch_all(&state.db)
     .await?;
+    // Marques de clan, affichées à côté des pseudos.
+    let tags = crate::handlers::server_settings::member_tags(&state, server_id, None).await.unwrap_or_default();
 
     let result: Vec<serde_json::Value> = members
         .iter()
@@ -585,6 +587,10 @@ pub async fn get_members(
                 "avatar_decoration": r.get::<Option<String>, _>("avatar_decoration"),
                 "server_banner": r.get::<Option<String>, _>("server_banner"),
                 "server_bio": r.get::<Option<String>, _>("server_bio"),
+                // Profil de serveur (129) : anneau d'avatar et style du pseudo, JSON validé.
+                "server_avatar_ring": r.get::<Option<serde_json::Value>, _>("server_avatar_ring"),
+                "server_name_style": r.get::<Option<serde_json::Value>, _>("server_name_style"),
+                "tags": tags.get(&r.get::<Uuid, _>("user_id")).cloned().unwrap_or_default(),
                 "status": r.get::<String, _>("status"),
                 "custom_status": r.get::<Option<String>, _>("custom_status"),
                 // Hiérarchie : le client n'affiche Expulser / Bannir / Timeout
@@ -613,7 +619,7 @@ pub async fn get_member(
 
     let row = sqlx::query(
         "SELECT sm.nickname, sm.joined_at, sm.is_owner, sm.voice_muted, sm.voice_deafened,
-                sm.server_avatar, sm.server_banner, sm.server_bio,
+                sm.server_avatar, sm.server_banner, sm.server_bio, sm.server_avatar_ring, sm.server_name_style,
                 (SELECT expires_at FROM user_timeouts t
                  WHERE t.server_id = sm.server_id AND t.user_id = sm.user_id AND t.expires_at > NOW()) AS timeout_until
          FROM server_members sm
@@ -635,6 +641,7 @@ pub async fn get_member(
     .bind(user_id)
     .fetch_all(&state.db)
     .await?;
+    let mut tags = crate::handlers::server_settings::member_tags(&state, server_id, Some(user_id)).await.unwrap_or_default();
 
     Ok(Json(serde_json::json!({
         "user_id": user_id,
@@ -644,6 +651,9 @@ pub async fn get_member(
         "server_avatar": row.get::<Option<String>, _>("server_avatar"),
         "server_banner": row.get::<Option<String>, _>("server_banner"),
         "server_bio": row.get::<Option<String>, _>("server_bio"),
+        "server_avatar_ring": row.get::<Option<serde_json::Value>, _>("server_avatar_ring"),
+        "server_name_style": row.get::<Option<serde_json::Value>, _>("server_name_style"),
+        "tags": tags.remove(&user_id).unwrap_or_default(),
         "joined_at": row.get::<chrono::DateTime<chrono::Utc>, _>("joined_at"),
         "is_owner": row.get::<bool, _>("is_owner"),
         "voice_muted": row.get::<bool, _>("voice_muted"),

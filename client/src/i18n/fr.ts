@@ -11,6 +11,7 @@ import * as accountGuard from './parts/accountGuard.ts'
 import * as discordSync from './parts/discordSync.ts'
 import * as themesMore from './parts/themesMore.ts'
 import { profileFr } from './profileFr.ts'
+import { profileStyleFr } from './profileStyleFr.ts'
 import { socialFr } from './socialFr.ts'
 import { comfortFr } from './comfort.ts'
 import { voiceLotFr } from './voiceLotFr.ts'
@@ -20,6 +21,7 @@ import { systemDeskFr } from './systemDesk.ts'
 
 export const fr = {
   ...profileFr,
+  ...profileStyleFr,
   ...socialFr,
   ...comfortFr,
   ...voiceLotFr,

@@ -11,6 +11,7 @@ import AnimatedImg from '../ui/AnimatedImg'
 import UserName from '../ui/UserName'
 import RichStatus from '../ui/RichStatus'
 import { AvatarDecoration } from '../ui/ProfileDecor'
+import AvatarRing from '../ui/AvatarRing'
 import { useT, type Key } from '../../i18n'
 
 interface Props {
@@ -59,11 +60,13 @@ function MemberRow({ m, decor, serverId, onClick }: { m: any; decor?: RoleDecor;
     >
       <div className="relative flex-shrink-0">
         <AvatarDecoration id={m.avatar_decoration} size={32}>
+        <AvatarRing ring={m.server_avatar_ring} size={32}>
         <div className="w-8 h-8 rounded-full bg-fc-accent flex items-center justify-center font-semibold text-sm text-white overflow-hidden">
           {m.avatar
             ? <AnimatedImg src={m.avatar} alt={m.nickname ?? m.username} loading="lazy" decoding="async" className="w-full h-full rounded-full object-cover" />
             : (m.nickname ?? m.username).charAt(0).toUpperCase()}
         </div>
+        </AvatarRing>
         </AvatarDecoration>
         <div
           className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-fc-channel ${STATUS_COLORS[m.liveStatus] ?? 'bg-fc-muted'}`}
@@ -73,7 +76,7 @@ function MemberRow({ m, decor, serverId, onClick }: { m: any; decor?: RoleDecor;
       </div>
       <div className="min-w-0">
         <div className={`text-sm font-medium truncate ${m.liveStatus === 'offline' || m.liveStatus === 'invisible' ? 'text-fc-muted' : 'text-fc-text group-hover:text-white'}`}>
-          <UserName userId={m.user_id} name={m.username} nickname={m.nickname} roleStyle={decor?.style} roleOverrides={decor?.overridesName} />
+          <UserName userId={m.user_id} name={m.username} nickname={m.nickname} roleStyle={decor?.style} roleOverrides={decor?.overridesName} serverStyle={m.server_name_style} clanTags={m.tags} />
           {decor?.icon && <span className="ml-1"><RoleIcon icon={decor.icon} title={decor.iconTitle} /></span>}
           {m.is_owner && <span aria-hidden className="ml-1 text-xs text-fc-yellow">👑</span>}
         </div>

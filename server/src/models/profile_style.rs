@@ -5,8 +5,29 @@
 
 use serde::{Deserialize, Serialize};
 
-pub const NAME_EFFECTS: &[&str] = &["", "shimmer", "glow", "outline"];
-pub const NAME_FONTS: &[&str] = &["", "serif", "mono", "rounded", "heavy", "cursive"];
+/// Effets du pseudo (rendu web : lib/nameStyle.ts ; mobile : lib/nameStyle.ts).
+pub const NAME_EFFECTS: &[&str] = &[
+    "", "shimmer", "glow", "outline", "neon", "rainbow", "wave", "glitch", "shadow3d",
+    "fire", "frost", "pulse", "holo", "chrome", "retro", "float", "sparkle",
+];
+/// Polices du pseudo : piles de polices système / embarquées, aucune police téléchargée.
+pub const NAME_FONTS: &[&str] = &[
+    "", "serif", "mono", "rounded", "heavy", "cursive", "slab", "condensed", "wide", "elegant",
+    "typewriter", "gothic", "comic", "impact", "smallcaps", "light", "handwritten", "futuristic",
+    "retro", "stencil", "code", "italic",
+];
+/// Épaisseur maximale du contour du pseudo (px).
+pub const OUTLINE_WIDTH_MAX: u8 = 4;
+/// Habillage d'une marque de clan (étiquette perso ou tag de serveur).
+pub const TAG_BADGES: &[&str] = &["", "solid", "soft", "outline", "gradient", "glass", "pill", "neon", "plain"];
+/// Icônes de marque : identifiants traduits en caractères par le client, jamais du texte libre.
+pub const TAG_ICONS: &[&str] = &[
+    "", "star", "crown", "shield", "flame", "bolt", "heart", "skull", "leaf", "diamond",
+    "moon", "sword", "gem", "paw", "music", "gamepad",
+];
+/// Anneau d'avatar du profil de serveur.
+pub const RING_STYLES: &[&str] = &["solid", "dashed", "dotted", "double", "glow", "spin", "pulse"];
+pub const RING_WIDTH_MAX: u8 = 8;
 pub const DISPLAY_NAME_MAX: usize = 32;
 pub const TAG_MAX: usize = 16;
 pub const LINKS_MAX: usize = 5;
@@ -14,6 +35,65 @@ pub const LINK_LABEL_MAX: usize = 32;
 pub const LINK_URL_MAX: usize = 256;
 /// Durées proposées pour effacer le statut personnalisé (minutes ; 0 = jamais).
 pub const STATUS_CLEAR_AFTER: &[i64] = &[0, 30, 60, 240, 1440, 4320, 10080];
+
+const COLOR_MAX: u32 = 0xFF_FFFF;
+
+fn is_zero(v: &u8) -> bool {
+    *v == 0
+}
+
+/// Style d'une marque de clan : couleur (étiquette perso seulement ; un tag de serveur
+/// garde sa colonne `color`), seconde couleur (dégradé), police, fond et icône.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct TagStyle {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub color: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub color2: Option<u32>,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub font: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub badge: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub icon: String,
+}
+
+impl TagStyle {
+    fn check(&self) -> Result<(), &'static str> {
+        if self.color.is_some_and(|c| c > COLOR_MAX) || self.color2.is_some_and(|c| c > COLOR_MAX) {
+            return Err("Marque : couleurs 0xRRGGBB");
+        }
+        if !NAME_FONTS.contains(&self.font.as_str())
+            || !TAG_BADGES.contains(&self.badge.as_str())
+            || !TAG_ICONS.contains(&self.icon.as_str())
+        {
+            return Err("Marque : police, fond ou icône inconnus");
+        }
+        Ok(())
+    }
+
+    fn is_default(&self) -> bool {
+        *self == TagStyle::default()
+    }
+}
+
+/// Style d'un tag de serveur (`server_tags.style`) : `null` ou `{}` → None. La couleur
+/// principale reste la colonne `color`, refusée ici pour n'avoir qu'une source.
+pub fn parse_tag_style(v: &serde_json::Value) -> Result<Option<serde_json::Value>, &'static str> {
+    if v.is_null() {
+        return Ok(None);
+    }
+    let s: TagStyle = serde_json::from_value(v.clone()).map_err(|_| "Style de marque invalide")?;
+    s.check()?;
+    if s.color.is_some() {
+        return Err("Style de marque : la couleur principale se règle à part");
+    }
+    if s.is_default() {
+        return Ok(None);
+    }
+    serde_json::to_value(s).map(Some).map_err(|_| "Style de marque invalide")
+}
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -27,6 +107,15 @@ pub struct NameStyle {
     pub effect: String,
     #[serde(default)]
     pub font: String,
+    /// Couleur du contour (0xRRGGBB) ; sans épaisseur, pas de contour.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub outline: Option<u32>,
+    /// Épaisseur du contour en px (0 = aucun, OUTLINE_WIDTH_MAX au plus).
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub outline_width: u8,
+    /// Style de l'étiquette perso affichée à côté du pseudo.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tag: Option<TagStyle>,
 }
 
 fn default_angle() -> u16 {
@@ -36,6 +125,7 @@ fn default_angle() -> u16 {
 impl NameStyle {
     fn is_default(&self) -> bool {
         self.colors.is_empty() && self.effect.is_empty() && self.font.is_empty()
+            && self.outline_width == 0 && self.tag.is_none()
     }
 }
 
@@ -44,8 +134,8 @@ pub fn parse_name_style(v: &serde_json::Value) -> Result<Option<serde_json::Valu
     if v.is_null() {
         return Ok(None);
     }
-    let s: NameStyle = serde_json::from_value(v.clone()).map_err(|_| "Style du pseudo invalide")?;
-    if s.colors.len() > 3 || s.colors.iter().any(|&c| c > 0xFF_FFFF) {
+    let mut s: NameStyle = serde_json::from_value(v.clone()).map_err(|_| "Style du pseudo invalide")?;
+    if s.colors.len() > 3 || s.colors.iter().any(|&c| c > COLOR_MAX) {
         return Err("Style du pseudo : 3 couleurs 0xRRGGBB au plus");
     }
     if s.angle > 360 {
@@ -54,10 +144,66 @@ pub fn parse_name_style(v: &serde_json::Value) -> Result<Option<serde_json::Valu
     if !NAME_EFFECTS.contains(&s.effect.as_str()) || !NAME_FONTS.contains(&s.font.as_str()) {
         return Err("Style du pseudo : effet ou police inconnus");
     }
+    if s.outline_width > OUTLINE_WIDTH_MAX || s.outline.is_some_and(|c| c > COLOR_MAX) {
+        return Err("Style du pseudo : contour 0xRRGGBB, épaisseur 0-4");
+    }
+    // Contour normalisé : pas d'épaisseur → pas de couleur ; épaisseur sans couleur → noir.
+    if s.outline_width == 0 {
+        s.outline = None;
+    } else if s.outline.is_none() {
+        s.outline = Some(0);
+    }
+    if let Some(tag) = &s.tag {
+        tag.check()?;
+        if tag.is_default() {
+            s.tag = None;
+        }
+    }
     if s.is_default() {
         return Ok(None);
     }
     Ok(Some(serde_json::to_value(s).map_err(|_| "Style du pseudo invalide")?))
+}
+
+/// Anneau autour de l'avatar dans un serveur (profil de serveur).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct AvatarRing {
+    /// 1 couleur = unie, 2-3 = dégradé ; aucune = pas d'anneau.
+    #[serde(default)]
+    pub colors: Vec<u32>,
+    #[serde(default = "default_ring_width")]
+    pub width: u8,
+    #[serde(default)]
+    pub style: String,
+}
+
+fn default_ring_width() -> u8 {
+    3
+}
+
+/// `null`, `{}` ou aucune couleur → None (pas d'anneau) ; sinon l'anneau normalisé.
+pub fn parse_avatar_ring(v: &serde_json::Value) -> Result<Option<serde_json::Value>, &'static str> {
+    if v.is_null() {
+        return Ok(None);
+    }
+    let mut r: AvatarRing = serde_json::from_value(v.clone()).map_err(|_| "Anneau d'avatar invalide")?;
+    if r.colors.len() > 3 || r.colors.iter().any(|&c| c > COLOR_MAX) {
+        return Err("Anneau d'avatar : 3 couleurs 0xRRGGBB au plus");
+    }
+    if r.width == 0 || r.width > RING_WIDTH_MAX {
+        return Err("Anneau d'avatar : épaisseur 1-8");
+    }
+    if r.style.is_empty() {
+        r.style = "solid".into();
+    }
+    if !RING_STYLES.contains(&r.style.as_str()) {
+        return Err("Anneau d'avatar : style inconnu");
+    }
+    if r.colors.is_empty() {
+        return Ok(None);
+    }
+    serde_json::to_value(r).map(Some).map_err(|_| "Anneau d'avatar invalide")
 }
 
 /// Caractères refusés dans un nom visible : contrôle, invisibles (largeur nulle) et
@@ -155,6 +301,55 @@ mod tests {
         assert!(parse_name_style(&json!({ "effect": "blink" })).is_err());
         assert!(parse_name_style(&json!({ "css": "color:red" })).is_err());
         assert!(parse_name_style(&json!("color:red")).is_err());
+    }
+
+    #[test]
+    fn style_contour_et_marque() {
+        let s = parse_name_style(&json!({ "font": "gothic", "effect": "glitch", "outline": 0xffffff, "outline_width": 2 })).unwrap().unwrap();
+        assert_eq!(s["outline"], 0xffffff);
+        assert_eq!(s["outline_width"], 2);
+        // Épaisseur sans couleur : contour noir ; couleur sans épaisseur : retirée.
+        assert_eq!(parse_name_style(&json!({ "outline_width": 1 })).unwrap().unwrap()["outline"], 0);
+        assert_eq!(parse_name_style(&json!({ "outline": 0xff0000 })).unwrap(), None);
+        assert!(parse_name_style(&json!({ "outline_width": 5 })).is_err());
+        assert!(parse_name_style(&json!({ "outline_width": -1 })).is_err());
+        assert!(parse_name_style(&json!({ "outline": "red", "outline_width": 1 })).is_err());
+        assert!(parse_name_style(&json!({ "outline": 0x1000000, "outline_width": 1 })).is_err());
+        let t = parse_name_style(&json!({ "tag": { "color": 0x00ff00, "badge": "neon", "icon": "crown", "font": "mono" } })).unwrap().unwrap();
+        assert_eq!(t["tag"]["icon"], "crown");
+        assert_eq!(parse_name_style(&json!({ "tag": {} })).unwrap(), None);
+        assert!(parse_name_style(&json!({ "tag": { "icon": "<img>" } })).is_err());
+        assert!(parse_name_style(&json!({ "tag": { "badge": "url(x)" } })).is_err());
+        assert!(parse_name_style(&json!({ "tag": { "style": "color:red" } })).is_err());
+        assert!(parse_name_style(&json!({ "tag": { "color2": 0x1000000 } })).is_err());
+        for e in NAME_EFFECTS { assert!(parse_name_style(&json!({ "effect": e })).is_ok()); }
+        for f in NAME_FONTS { assert!(parse_name_style(&json!({ "font": f })).is_ok()); }
+        assert!(NAME_EFFECTS.len() > 12 && NAME_FONTS.len() > 15);
+    }
+
+    #[test]
+    fn style_de_tag_de_serveur() {
+        assert_eq!(parse_tag_style(&json!(null)).unwrap(), None);
+        assert_eq!(parse_tag_style(&json!({})).unwrap(), None);
+        assert_eq!(parse_tag_style(&json!({ "badge": "glass", "color2": 0x123456 })).unwrap().unwrap()["badge"], "glass");
+        assert!(parse_tag_style(&json!({ "color": 0x123456 })).is_err());
+        assert!(parse_tag_style(&json!({ "font": "Arial" })).is_err());
+        assert!(parse_tag_style(&json!("solid")).is_err());
+    }
+
+    #[test]
+    fn anneau_d_avatar() {
+        assert_eq!(parse_avatar_ring(&json!(null)).unwrap(), None);
+        assert_eq!(parse_avatar_ring(&json!({})).unwrap(), None);
+        let r = parse_avatar_ring(&json!({ "colors": [0xff00ff, 0x00ffff], "width": 4 })).unwrap().unwrap();
+        assert_eq!(r["style"], "solid");
+        assert_eq!(parse_avatar_ring(&json!({ "colors": [1], "style": "spin" })).unwrap().unwrap()["width"], 3);
+        assert!(parse_avatar_ring(&json!({ "colors": [1], "width": 0 })).is_err());
+        assert!(parse_avatar_ring(&json!({ "colors": [1], "width": 9 })).is_err());
+        assert!(parse_avatar_ring(&json!({ "colors": [1, 2, 3, 4] })).is_err());
+        assert!(parse_avatar_ring(&json!({ "colors": [0x1000000] })).is_err());
+        assert!(parse_avatar_ring(&json!({ "colors": [1], "style": "solid;background:url(x)" })).is_err());
+        assert!(parse_avatar_ring(&json!({ "colors": [1], "css": "x" })).is_err());
     }
 
     #[test]

@@ -2,6 +2,7 @@ import { useCallback, useMemo, type CSSProperties } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import api, { mediaUrl } from '../api/client'
 import { useUxPrefs } from '../lib/uxPrefs'
+import type { MemberClanTag } from '../components/ui/UserName'
 
 interface DecorRole {
   id: string
@@ -20,6 +21,12 @@ export interface RoleDecor {
   iconTitle?: string
   /** Réglage du serveur : la couleur du rôle remplace la couleur perso du pseudo. */
   overridesName?: boolean
+  /** Profil de serveur : anneau d'avatar (components/ui/AvatarRing.tsx). */
+  ring?: unknown
+  /** Profil de serveur : style du pseudo propre au serveur. */
+  nameStyle?: unknown
+  /** Marques de clan du membre. */
+  tags?: MemberClanTag[]
 }
 
 const hex = (c: number) => '#' + (c >>> 0).toString(16).padStart(6, '0')
@@ -49,7 +56,7 @@ export function useRoleDecor(serverId?: string) {
     enabled,
     staleTime: 60_000,
   })
-  const { data: members = [] } = useQuery<{ user_id: string; role_ids?: string[] }[]>({
+  const { data: members = [] } = useQuery<{ user_id: string; role_ids?: string[]; server_avatar_ring?: unknown; server_name_style?: unknown; tags?: MemberClanTag[] }[]>({
     queryKey: ['members', serverId],
     queryFn: () => api.get(`/servers/${serverId}/members`).then(r => r.data),
     enabled,
@@ -80,12 +87,16 @@ export function useRoleDecor(serverId?: string) {
         .sort((a, b) => b.position - a.position)
       const colored = mine.find(r => r.color)
       const withIcon = mine.find(r => r.icon)
-      if (!colored && !withIcon) continue
+      const tags = Array.isArray(m.tags) && m.tags.length ? m.tags : undefined
+      if (!colored && !withIcon && !m.server_avatar_ring && !m.server_name_style && !tags) continue
       out.set(m.user_id, {
         style: showColors && colored ? roleNameStyle(colored.color, colored.secondary_color) : undefined,
         icon: withIcon?.icon ?? undefined,
         iconTitle: withIcon?.name,
         overridesName,
+        ring: m.server_avatar_ring ?? undefined,
+        nameStyle: m.server_name_style ?? undefined,
+        tags,
       })
     }
     return out

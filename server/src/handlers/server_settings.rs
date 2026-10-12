@@ -91,6 +91,62 @@ pub async fn unban_member(
 
 // ─── Tags de clan ─────────────────────────────────────────────────────────────
 
+/// Fiche publique d'un tag (id, nom, couleur, style validé — models/profile_style::TagStyle).
+fn tag_json(r: &sqlx::postgres::PgRow) -> serde_json::Value {
+    use sqlx::Row;
+    serde_json::json!({
+        "id": r.get::<Uuid, _>("id"),
+        "name": r.get::<String, _>("name"),
+        "color": r.get::<i32, _>("color"),
+        "style": r.get::<Option<serde_json::Value>, _>("style"),
+    })
+}
+
+/// Tags de clan des membres d'un serveur (d'un seul membre si `user` est donné),
+/// pour les afficher à côté des pseudos (liste des membres, messages, profils).
+pub async fn member_tags(state: &AppState, server_id: Uuid, user: Option<Uuid>) -> Result<std::collections::HashMap<Uuid, Vec<serde_json::Value>>> {
+    use sqlx::Row;
+    let rows = sqlx::query(
+        "SELECT mt.user_id, st.id, st.name, st.color, st.style
+         FROM member_tags mt
+         JOIN server_tags st ON st.id = mt.tag_id
+         WHERE mt.server_id=$1 AND ($2::uuid IS NULL OR mt.user_id = $2)
+         ORDER BY st.name",
+    )
+    .bind(server_id)
+    .bind(user)
+    .fetch_all(&state.db)
+    .await?;
+    let mut out: std::collections::HashMap<Uuid, Vec<serde_json::Value>> = std::collections::HashMap::new();
+    for r in &rows {
+        out.entry(r.get("user_id")).or_default().push(tag_json(r));
+    }
+    Ok(out)
+}
+
+/// Nom de tag : 1 à 32 caractères visibles (pas de caractères invisibles ni de contrôle).
+fn tag_name(v: &serde_json::Value) -> Result<String> {
+    let raw = v.as_str().unwrap_or("");
+    crate::models::profile_style::clean_label(raw, 32, "Nom du tag")
+        .map_err(AppError::BadRequest)?
+        .ok_or_else(|| AppError::BadRequest("name requis (1-32 chars)".into()))
+}
+
+/// Couleur 0xRRGGBB (avant : n'importe quel entier était stocké).
+fn tag_color(v: &serde_json::Value) -> Result<Option<i32>> {
+    match v {
+        serde_json::Value::Null => Ok(None),
+        v => v.as_i64()
+            .filter(|c| (0..=0xFF_FFFF).contains(c))
+            .map(|c| Some(c as i32))
+            .ok_or_else(|| AppError::BadRequest("Couleur du tag invalide (0xRRGGBB)".into())),
+    }
+}
+
+fn tag_style(v: &serde_json::Value) -> Result<Option<serde_json::Value>> {
+    crate::models::profile_style::parse_tag_style(v).map_err(|e| AppError::BadRequest(e.into()))
+}
+
 pub async fn list_tags(
     State(state): State<AppState>,
     Extension(claims): Extension<Claims>,
@@ -100,7 +156,7 @@ pub async fn list_tags(
     require_member(&state, claims.sub, server_id).await?;
 
     let rows = sqlx::query(
-        "SELECT id, name, color, created_at FROM server_tags WHERE server_id=$1 ORDER BY name",
+        "SELECT id, name, color, style, created_at FROM server_tags WHERE server_id=$1 ORDER BY name",
     )
     .bind(server_id)
     .fetch_all(&state.db)
@@ -110,12 +166,9 @@ pub async fn list_tags(
     let result = rows
         .iter()
         .map(|r| {
-            serde_json::json!({
-                "id": r.get::<Uuid, _>("id"),
-                "name": r.get::<String, _>("name"),
-                "color": r.get::<i32, _>("color"),
-                "created_at": r.get::<chrono::DateTime<chrono::Utc>, _>("created_at"),
-            })
+            let mut tag = tag_json(r);
+            tag["created_at"] = serde_json::json!(r.get::<chrono::DateTime<chrono::Utc>, _>("created_at"));
+            tag
         })
         .collect();
 
@@ -130,33 +183,65 @@ pub async fn create_tag(
 ) -> Result<Json<serde_json::Value>> {
     require_permission(&state, claims.sub, server_id, Permissions::MANAGE_ROLES).await?;
 
-    let name = body["name"]
-        .as_str()
-        .filter(|s| !s.is_empty() && s.len() <= 32)
-        .ok_or_else(|| AppError::BadRequest("name requis (1-32 chars)".into()))?;
-
-    let color: i32 = body["color"].as_i64().unwrap_or(7506394) as i32;
+    let name = tag_name(&body["name"])?;
+    let color = tag_color(&body["color"])?.unwrap_or(7506394);
+    let style = tag_style(&body["style"])?;
 
     let row = sqlx::query(
-        "INSERT INTO server_tags (server_id, name, color) VALUES ($1, $2, $3)
-         RETURNING id, name, color, created_at",
+        "INSERT INTO server_tags (server_id, name, color, style) VALUES ($1, $2, $3, $4)
+         RETURNING id, name, color, style, created_at",
     )
     .bind(server_id)
-    .bind(name)
+    .bind(&name)
     .bind(color)
+    .bind(style)
     .fetch_one(&state.db)
     .await?;
 
     use sqlx::Row;
-    let tag = serde_json::json!({
-        "id": row.get::<Uuid, _>("id"),
-        "name": row.get::<String, _>("name"),
-        "color": row.get::<i32, _>("color"),
-        "created_at": row.get::<chrono::DateTime<chrono::Utc>, _>("created_at"),
-    });
+    let mut tag = tag_json(&row);
+    tag["created_at"] = serde_json::json!(row.get::<chrono::DateTime<chrono::Utc>, _>("created_at"));
 
     state.broadcast_to_server_members(server_id, serde_json::json!({
         "type": "SERVER_TAG_CREATE",
+        "server_id": server_id,
+        "tag": &tag,
+    }).to_string()).await;
+
+    Ok(Json(tag))
+}
+
+/// PATCH /servers/:server_id/tags/:tag_id { color?, style? } — couleur 0xRRGGBB et style
+/// en liste blanche ; un champ absent reste inchangé, `style: {}` retire le style.
+pub async fn update_tag(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+    Path((server_id, tag_id)): Path<(Uuid, Uuid)>,
+    Json(body): Json<serde_json::Value>,
+) -> Result<Json<serde_json::Value>> {
+    require_permission(&state, claims.sub, server_id, Permissions::MANAGE_ROLES).await?;
+    let color = tag_color(&body["color"])?;
+    let has_style = body.get("style").is_some();
+    let style = tag_style(&body["style"])?;
+
+    let row = sqlx::query(
+        "UPDATE server_tags SET color = COALESCE($3, color),
+                style = CASE WHEN $4 THEN $5 ELSE style END
+         WHERE id=$1 AND server_id=$2
+         RETURNING id, name, color, style",
+    )
+    .bind(tag_id)
+    .bind(server_id)
+    .bind(color)
+    .bind(has_style)
+    .bind(style)
+    .fetch_optional(&state.db)
+    .await?
+    .ok_or_else(|| AppError::NotFound("Tag introuvable".into()))?;
+    let tag = tag_json(&row);
+
+    state.broadcast_to_server_members(server_id, serde_json::json!({
+        "type": "SERVER_TAG_UPDATE",
         "server_id": server_id,
         "tag": &tag,
     }).to_string()).await;
@@ -297,18 +382,11 @@ pub async fn get_members_detailed(
         )
         .bind(server_id)
         .fetch_all(&state.db),
-        sqlx::query(
-            "SELECT mt.user_id, st.id, st.name, st.color
-             FROM member_tags mt
-             JOIN server_tags st ON st.id = mt.tag_id
-             WHERE mt.server_id=$1",
-        )
-        .bind(server_id)
-        .fetch_all(&state.db),
+        member_tags(&state, server_id, None),
     );
     let members = members_res?;
     let roles_rows = roles_res.unwrap_or_default();
-    let tags_rows = tags_res.unwrap_or_default();
+    let tags_by_user = tags_res.unwrap_or_default();
 
     use std::collections::HashMap;
     let mut roles_by_user: HashMap<Uuid, Vec<serde_json::Value>> = HashMap::new();
@@ -318,16 +396,6 @@ pub async fn get_members_detailed(
             "id": r.get::<Uuid, _>("id"),
             "name": r.get::<String, _>("name"),
             "color": r.get::<i32, _>("color"),
-        }));
-    }
-
-    let mut tags_by_user: HashMap<Uuid, Vec<serde_json::Value>> = HashMap::new();
-    for t in &tags_rows {
-        let uid: Uuid = t.get("user_id");
-        tags_by_user.entry(uid).or_default().push(serde_json::json!({
-            "id": t.get::<Uuid, _>("id"),
-            "name": t.get::<String, _>("name"),
-            "color": t.get::<i32, _>("color"),
         }));
     }
 
