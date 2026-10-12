@@ -237,6 +237,8 @@ export interface RequestOptions<T> {
   formData?: FormData
   /** Jamais mis en file hors ligne (envoi de la file elle-même). */
   noQueue?: boolean
+  /** En-têtes en plus (ex. identifiant d'appareil à la connexion). */
+  headers?: Record<string, string>
 }
 
 /**
@@ -267,7 +269,7 @@ async function send<T>(method: string, p: string, opts: RequestOptions<T>): Prom
 
 async function sendOnline<T>(method: string, p: string, opts: RequestOptions<T>, retried = false, attempt = 0): Promise<T> {
   const auth = opts.auth ?? true
-  const headers: Record<string, string> = { Accept: 'application/json', 'X-Client': CLIENT_HEADER }
+  const headers: Record<string, string> = { ...opts.headers, Accept: 'application/json', 'X-Client': CLIENT_HEADER }
   if (auth) headers.Authorization = `Bearer ${await ensureAccessToken()}`
 
   let body: BodyInit | undefined

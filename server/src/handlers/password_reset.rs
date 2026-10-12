@@ -160,7 +160,8 @@ pub async fn reset_password(
         .ok_or_else(invalid)?;
 
     let mut tx = state.db.begin().await?;
-    sqlx::query("UPDATE users SET auth_hash=$2, kdf_salt=$3, password_hash=$4, kdf=$5, updated_at=NOW() WHERE id=$1")
+    // Le nouveau mot de passe rouvre aussi un compte verrouillé en urgence.
+    sqlx::query("UPDATE users SET auth_hash=$2, kdf_salt=$3, password_hash=$4, kdf=$5, locked_at=NULL, updated_at=NOW() WHERE id=$1")
         .bind(user_id)
         .bind(&new_hash)
         .bind(new_salt)

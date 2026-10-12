@@ -7,6 +7,7 @@ import { create } from 'zustand'
 import { ApiError, http } from '@/lib/http'
 import * as c from './crypto'
 import { type AccountSecrets, type AnyWrapped, asKdf, deriveSecrets, newKdfSalt, passwordProblem, unwrapAny, wrapKeyV2 } from './authKdf'
+import { pwnedProblem } from './pwned'
 import { guardArgon, guardKdf, guardPrelogin, markMigrated } from './authGuard'
 import { tokens } from '@/lib/tokens'
 import { t } from '@/i18n'
@@ -252,7 +253,7 @@ export const regenerateRecoveryCode = (userId: string, password: string) => work
  * rescellée en v2 par la nouvelle wrapKey. Sans clé sur cet appareil, l'enveloppe n'est pas envoyée.
  */
 export const changePassword = (userId: string, oldPw: string, newPw: string) => working(async () => {
-  const problem = passwordProblem(newPw)
+  const problem = passwordProblem(newPw) ?? await pwnedProblem(newPw)
   if (problem) throw new Error(problem)
   const old = await secretsFor(oldPw)
   const newSalt = newKdfSalt()

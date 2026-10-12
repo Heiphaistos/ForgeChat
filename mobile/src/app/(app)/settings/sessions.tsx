@@ -1,7 +1,8 @@
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { Alert, FlatList, StyleSheet, Text, View } from 'react-native'
+import { useAuth } from '@/stores/auth'
 import { authApi } from '@/api/auth'
-import { EmptyState, ErrorState, IconButton, Loading } from '@/components/ui'
+import { Button, EmptyState, ErrorState, IconButton, Loading } from '@/components/ui'
 import { t as tr, useT } from '@/i18n'
 import { formatRelative } from '@/lib/format'
 import { errorMessage } from '@/lib/http'
@@ -24,6 +25,15 @@ export default function SessionsScreen() {
     onSuccess: () => void queryClient.invalidateQueries({ queryKey: qk.sessions }),
     onError: (e) => Alert.alert(tr('settings.sessions.revokeFailed'), errorMessage(e)),
   })
+  // Verrouillage d'urgence (amélioration n° 25) : ferme tout, y compris cette session.
+  const lock = useMutation({
+    mutationFn: authApi.panic,
+    onSuccess: async () => {
+      Alert.alert(tr('guard.lock.done'), tr('guard.lock.next'))
+      await useAuth.getState().logout().catch(() => {})
+    },
+    onError: (e) => Alert.alert(tr('guard.lock.title'), errorMessage(e)),
+  })
   if (q.isLoading) return <Loading />
   if (q.error) return <ErrorState message={errorMessage(q.error)} onRetry={() => void q.refetch()} />
 
@@ -39,6 +49,24 @@ export default function SessionsScreen() {
         </Text>
       }
       ListEmptyComponent={<EmptyState icon="phone-portrait-outline" title={t('settings.sessions.empty')} />}
+      ListFooterComponent={
+        <View style={[styles.card, { flexDirection: 'column', alignItems: 'stretch', marginTop: spacing.lg }]}>
+          <Text style={styles.title}>{t('guard.lock.title')}</Text>
+          <Text style={styles.sub}>{t('guard.lock.intro')}</Text>
+          <Button
+            title={t('guard.lock.button')}
+            variant="danger"
+            icon="lock-closed-outline"
+            loading={lock.isPending}
+            onPress={() =>
+              Alert.alert(t('guard.lock.title'), t('guard.lock.confirm'), [
+                { text: t('common.cancel'), style: 'cancel' },
+                { text: t('guard.lock.button'), style: 'destructive', onPress: () => lock.mutate() },
+              ])
+            }
+          />
+        </View>
+      }
       renderItem={({ item }) => {
         const d = deviceLabel(item.device)
         return (

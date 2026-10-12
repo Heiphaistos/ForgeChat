@@ -5,6 +5,7 @@ import { KeyboardAvoidingView } from 'react-native-keyboard-controller'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { authApi } from '@/api/auth'
 import { MIN_PASSWORD, deriveSecrets, newKdfSalt, passwordProblem } from '@/e2e/authKdf'
+import { pwnedProblem } from '@/e2e/pwned'
 import { Button, PasswordField, T, TextField } from '@/components/ui'
 import { extractResetToken } from '@/features/account/rules'
 import { useT } from '@/i18n'
@@ -32,11 +33,16 @@ export default function ResetPasswordScreen() {
     if (!token) return setError(t('social.reset.pasteLink'))
     if (pw.length < MIN_PASSWORD || pw.length > 128) return setError(t('social.reset.length'))
     if (passwordStrength(pw).score < 2) return setError(t('social.reset.weak'))
-    const problem = passwordProblem(pw)
-    if (problem) return setError(problem)
+    const local = passwordProblem(pw)
+    if (local) return setError(local)
     if (pw !== confirm) return setError(t('social.reset.mismatch'))
     setLoading(true)
     setError(null)
+    const leaked = await pwnedProblem(pw)
+    if (leaked) {
+      setLoading(false)
+      return setError(leaked)
+    }
     try {
       // Le nouveau mot de passe ne part pas : seulement sa preuve et le nouveau sel.
       const kdfSalt = newKdfSalt()

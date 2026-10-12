@@ -196,6 +196,10 @@ pub struct AuthResponse {
     #[serde(skip_serializing_if = "String::is_empty")]
     pub refresh_token: String,
     pub user: UserPublic,
+    /// Identifiant d'appareil neuf à garder par l'appli (en-tête `X-ForgeChat-Device` ensuite).
+    /// Jamais pour le web, qui le reçoit en cookie HttpOnly.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub device_id: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]

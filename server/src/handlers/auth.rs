@@ -76,6 +76,17 @@ fn auth_reply(req_headers: &HeaderMap, mut auth: AuthResponse, secure: bool) -> 
     (headers, Json(auth))
 }
 
+/// Ajoute le cookie d'appareil (web) à la réponse de connexion.
+fn with_device_cookie(
+    (mut headers, body): (HeaderMap, Json<AuthResponse>),
+    cookie: Option<axum::http::HeaderValue>,
+) -> (HeaderMap, Json<AuthResponse>) {
+    if let Some(c) = cookie {
+        headers.append(axum::http::header::SET_COOKIE, c);
+    }
+    (headers, body)
+}
+
 /// Cookies HttpOnly de session (accès + rafraîchissement), noms préfixés en HTTPS (crate::cookies).
 pub(crate) fn session_cookie_headers(access_token: &str, refresh_token: &str, secure: bool) -> HeaderMap {
     crate::cookies::session(access_token, refresh_token, secure)
@@ -321,9 +332,11 @@ pub async fn verify_email(
 
     // Session visible (et révocable seule) dans « Sessions », comme à la connexion.
     let (refresh_token, access_token) = open_session(&state, user.id, &req_headers).await?;
+    // Premier appareil du compte : retenu sans alerte.
+    let device = crate::handlers::account_guard::note_login_device(&state, user.id, &req_headers, cookie_only(&req_headers), false).await;
 
-    let auth = AuthResponse { access_token, refresh_token, user: user.into_self_public() };
-    Ok(auth_reply(&req_headers, auth, is_secure(&state)))
+    let auth = AuthResponse { access_token, refresh_token, user: user.into_self_public(), device_id: device.new_id };
+    Ok(with_device_cookie(auth_reply(&req_headers, auth, is_secure(&state)), device.cookie))
 }
 
 /// Nouvelle session : jeton de rafraîchissement, ligne `user_sessions` (même hachage, pour que
@@ -418,6 +431,14 @@ pub async fn login(
             None => "Ce compte a été suspendu".into(),
         }));
     }
+    // Verrouillage d'urgence (amélioration n° 25) : rouvert seulement par un nouveau mot de passe.
+    let locked: bool = sqlx::query_scalar("SELECT locked_at IS NOT NULL FROM users WHERE id=$1")
+        .bind(user.id)
+        .fetch_one(&state.db)
+        .await?;
+    if locked {
+        return Err(AppError::ForbiddenMsg(crate::handlers::account_guard::LOCKED_MSG.into()));
+    }
 
     // Double authentification : anti-rejeu, codes de secours, 5 échecs / 15 min par compte.
     if user.totp_enabled {
@@ -443,9 +464,11 @@ pub async fn login(
     // l'écrire ici à « online » rendait visible un utilisateur invisible.
 
     let (refresh_token, access_token) = open_session(&state, user.id, &headers).await?;
+    // Appareil inconnu : e-mail au titulaire avec un lien de verrouillage (amélioration n° 4).
+    let device = crate::handlers::account_guard::note_login_device(&state, user.id, &headers, cookie_only(&headers), true).await;
 
-    let auth = AuthResponse { access_token, refresh_token, user: user.into_self_public() };
-    Ok(auth_reply(&headers, auth, is_secure(&state)))
+    let auth = AuthResponse { access_token, refresh_token, user: user.into_self_public(), device_id: device.new_id };
+    Ok(with_device_cookie(auth_reply(&headers, auth, is_secure(&state)), device.cookie))
 }
 
 pub async fn refresh(
@@ -946,7 +969,7 @@ mod cookie_only_tests {
             "is_bot": false, "focus_mode": false, "is_verified": true, "birthday": null,
             "created_at": Utc::now(), "updated_at": Utc::now(), "totp_enabled": false, "pronouns": null,
         })).unwrap();
-        let auth = AuthResponse { access_token: "acc".into(), refresh_token: "ref".into(), user: user.into_self_public() };
+        let auth = AuthResponse { access_token: "acc".into(), refresh_token: "ref".into(), user: user.into_self_public(), device_id: None };
         let (h, Json(body)) = auth_reply(&req, auth, true);
         (h, serde_json::to_value(body).unwrap())
     }

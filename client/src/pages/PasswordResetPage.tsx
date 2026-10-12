@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import api from '../api/client'
 import { MIN_PASSWORD, deriveSecrets, newKdfSalt, passwordProblem } from '../e2e/authKdf'
+import { pwnedProblem } from '../e2e/pwned'
 import { useT } from '../i18n'
 
 const inputCls =
@@ -91,9 +92,9 @@ function ResetForm({ token }: { token: string }) {
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (pw !== pw2) { toast.error(t('auth.passwordMismatch')); return }
-    const problem = passwordProblem(pw)
-    if (problem) { toast.error(problem); return }
     setLoading(true)
+    const problem = passwordProblem(pw) ?? await pwnedProblem(pw)
+    if (problem) { toast.error(problem); setLoading(false); return }
     try {
       // Le nouveau mot de passe ne part pas : seulement sa preuve et le nouveau sel.
       const new_kdf_salt = newKdfSalt()

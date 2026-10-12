@@ -11,7 +11,7 @@ import AppLockSection from './AppLockSection'
 export default function SecuritySection() {
   const t = useT()
   const qc = useQueryClient()
-  const [step, setStep] = useState<'idle' | 'setup' | 'confirm'>('idle')
+  const [step, setStep] = useState<'idle' | 'setup' | 'confirm' | 'regen'>('idle')
   const [code, setCode] = useState('')
   const [setupData, setSetupData] = useState<{ secret: string; qr_url: string; backup_codes: string[] } | null>(null)
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null)
@@ -49,6 +49,23 @@ export default function SecuritySection() {
 
   const is2faEnabled = me?.totp_enabled ?? false
 
+  // Codes de secours (amélioration n° 4) : nombre restant, régénération avec un code valide.
+  const { data: totpStatus } = useQuery<{ enabled: boolean; backup_codes_left: number }>({
+    queryKey: ['2fa-status'],
+    queryFn: () => api.get('/auth/2fa/status').then(r => r.data),
+    enabled: is2faEnabled,
+    staleTime: 60_000,
+  })
+  const [newCodes, setNewCodes] = useState<string[] | null>(null)
+  const regenMutation = useMutation({
+    mutationFn: () => api.post('/auth/2fa/backup-codes', { code }).then(r => r.data as { backup_codes: string[] }),
+    onSuccess: data => {
+      setNewCodes(data.backup_codes); setStep('idle'); setCode('')
+      qc.invalidateQueries({ queryKey: ['2fa-status'] })
+    },
+    onError: (e: any) => toast.error(e.response?.data?.error ?? t('settings.security.invalidCode')),
+  })
+
   return (
     <div className="space-y-6">
       <E2EKeySection />
@@ -80,6 +97,64 @@ export default function SecuritySection() {
           </button>
         )}
       </div>
+
+      {is2faEnabled && totpStatus && (
+        <div className="p-4 bg-fc-channel rounded-xl border border-fc-hover space-y-3">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="text-sm text-white">{t('guard.backup.left', { n: totpStatus.backup_codes_left })}</p>
+              {totpStatus.backup_codes_left <= 3 && <p className="text-xs text-fc-yellow">{t('guard.backup.low')}</p>}
+            </div>
+            <button
+              onClick={() => { setNewCodes(null); setStep('regen'); setCode('') }}
+              className="px-3 py-1.5 bg-fc-hover rounded-lg text-sm text-white hover:bg-fc-accent/30 flex-shrink-0"
+            >
+              {t('guard.backup.regen')}
+            </button>
+          </div>
+          {step === 'regen' && (
+            <div className="space-y-2">
+              <p className="text-xs text-fc-muted">{t('guard.backup.prompt')}</p>
+              <input
+                value={code}
+                onChange={e => setCode(e.target.value.replace(/[^0-9a-fA-F-]/g, '').slice(0, 19))}
+                placeholder="000000"
+                aria-label={t('settings.security.codeLabel')}
+                autoComplete="one-time-code"
+                className="w-full bg-fc-hover border border-fc-hover rounded-lg px-3 py-2 text-white font-mono tracking-widest text-center"
+              />
+              <div className="flex gap-2">
+                <button onClick={() => { setStep('idle'); setCode('') }} className="flex-1 py-2 bg-fc-hover rounded-lg text-fc-muted text-sm">
+                  {t('common.cancel')}
+                </button>
+                <button
+                  onClick={() => regenMutation.mutate()}
+                  disabled={code.length < 6 || regenMutation.isPending}
+                  className="flex-1 py-2 bg-fc-accent rounded-lg text-white text-sm font-medium disabled:opacity-50"
+                >
+                  {t('guard.backup.regen')}
+                </button>
+              </div>
+            </div>
+          )}
+          {newCodes && (
+            <div className="space-y-2 pt-2 border-t border-fc-hover">
+              <p className="text-xs text-white font-medium">{t('guard.backup.new')}</p>
+              <div className="grid grid-cols-2 gap-1">
+                {newCodes.map(c => (
+                  <code key={c} className="text-xs bg-fc-hover px-2 py-1 rounded font-mono text-fc-text">{c}</code>
+                ))}
+              </div>
+              <button
+                onClick={() => navigator.clipboard.writeText(newCodes.join('\n')).then(() => toast.success(t('guard.backup.copied')))}
+                className="text-xs text-fc-accent hover:underline"
+              >
+                {t('guard.backup.copy')}
+              </button>
+            </div>
+          )}
+        </div>
+      )}
 
       {step === 'setup' && setupData && (
         <div className="p-4 bg-fc-channel rounded-xl border border-fc-hover space-y-4">

@@ -8,6 +8,7 @@ import * as c from './crypto'
 import {
   type AccountSecrets, type AnyWrapped, asKdf, deriveSecrets, newKdfSalt, passwordProblem, unwrapAny, wrapKeyV2,
 } from './authKdf'
+import { pwnedProblem } from './pwned'
 import { guardArgon, guardKdf, guardPrelogin, markMigrated } from './authGuard'
 import { useAuth } from '../store/auth'
 import { t } from '../i18n'
@@ -259,7 +260,7 @@ export async function regenerateRecoveryCode(userId: string, password: string): 
  * rescellée en v2 par la nouvelle wrapKey. Sans clé lisible, l'enveloppe n'est pas envoyée.
  */
 export async function changePassword(userId: string, oldPw: string, newPw: string) {
-  const problem = passwordProblem(newPw)
+  const problem = passwordProblem(newPw) ?? await pwnedProblem(newPw)
   if (problem) throw new Error(problem)
   const old = await secretsFor(oldPw)
   const newSalt = newKdfSalt()
