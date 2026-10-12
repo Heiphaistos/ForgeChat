@@ -46,6 +46,16 @@ export function UpdateBanner() {
         </>
       )
       break
+    case 'verifying':
+      title = t('store.update.verifying', { version })
+      body = t('store.update.verifyingBody')
+      actions = null
+      break
+    case 'invalid':
+      title = t('store.update.invalid')
+      body = t('store.update.invalidBody')
+      actions = <Action label={t('store.update.later')} onPress={later} />
+      break
     case 'error':
       title = t('store.update.failed')
       body = t('store.update.failedBody')

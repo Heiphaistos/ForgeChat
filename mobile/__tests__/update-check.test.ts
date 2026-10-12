@@ -275,11 +275,35 @@ describe('liste d’empreintes signée', () => {
 describe('installation (navigateur, jamais depuis l’app)', () => {
   const UPDATE = { version: '1.2.0', url: APK, sha256: SHA }
 
-  function load(os: 'android' | 'ios', openURL = jest.fn().mockResolvedValue(true)) {
+  /** Fichier IPA simulé (module natif FileSystem) : `served` = octets envoyés par le serveur. */
+  const fakeFs = (served: Uint8Array) => {
+    const files = new Map<string, Uint8Array>()
+    class FileSystemFile {
+      constructor(readonly uri: string) {}
+      get exists() { return files.has(this.uri) }
+      delete() { files.delete(this.uri) }
+      open() {
+        const data = files.get(this.uri) ?? new Uint8Array(0)
+        let pos = 0
+        return { readBytes: (n: number) => { const b = data.subarray(pos, pos + n); pos += b.length; return b }, close: () => {} }
+      }
+    }
+    return {
+      files,
+      fs: {
+        FileSystemFile,
+        cacheDirectory: 'file:///cache',
+        downloadFileAsync: async (_url: string, to: { uri: string }) => { files.set(to.uri, served); return to.uri },
+      },
+    }
+  }
+
+  function load(os: 'android' | 'ios', openURL = jest.fn().mockResolvedValue(true), fs: unknown = null, share = jest.fn().mockResolvedValue({ action: 'sharedAction' })) {
     jest.resetModules()
     jest.dontMock('@/features/updates/installer') // simulé par le bloc précédent
     jest.doMock('expo-linking', () => ({ openURL }))
-    jest.doMock('react-native', () => ({ Platform: { OS: os } }))
+    jest.doMock('react-native', () => ({ Platform: { OS: os }, Share: { share } }))
+    jest.doMock('expo-modules-core', () => ({ ...jest.requireActual('expo-modules-core'), requireOptionalNativeModule: () => fs }))
     /* eslint-disable @typescript-eslint/no-require-imports */
     const installer = require('@/features/updates/installer') as typeof import('@/features/updates/installer')
     const { useUpdate, offerUpdate } = require('@/features/updates/updateStore') as typeof import('@/features/updates/updateStore')
@@ -310,13 +334,29 @@ describe('installation (navigateur, jamais depuis l’app)', () => {
     expect(useUpdate.getState().phase).toBe('ready')
   })
 
-  it('iOS : AltStore, puis SideStore, puis le lien direct', async () => {
-    const openURL = jest.fn().mockRejectedValueOnce(new Error('pas d’AltStore')).mockResolvedValue(true)
-    const { startUpdate } = load('ios', openURL)
+  it('iOS : IPA téléchargée et vérifiée ici, puis remise à AltStore/SideStore (jamais leur URL)', async () => {
+    const ipa = new TextEncoder().encode('IPA signée')
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const sha = (require('crypto') as typeof import('crypto')).createHash('sha256').update(ipa).digest('hex')
+    const { fs } = fakeFs(ipa)
+    const share = jest.fn().mockResolvedValue({ action: 'sharedAction' })
+    const { startUpdate, useUpdate, openURL } = load('ios', undefined, fs, share)
+    useUpdate.setState({ update: { ...UPDATE, sha256: sha } })
     await startUpdate()
-    expect(openURL.mock.calls[0][0]).toBe(`altstore://install?url=${encodeURIComponent(APK)}`)
-    expect(openURL.mock.calls[1][0]).toBe(`sidestore://install?url=${encodeURIComponent(APK)}`)
-    expect(openURL).toHaveBeenCalledTimes(2)
+    expect(openURL).not.toHaveBeenCalled()
+    expect(share).toHaveBeenCalledWith(expect.objectContaining({ url: 'file:///cache/ForgeChat-1.2.0.ipa' }))
+    expect(useUpdate.getState().phase).toBe('ready')
+  })
+
+  it('iOS : fichier différent de la version signée → refusé, rien remis à AltStore', async () => {
+    const { fs, files } = fakeFs(new TextEncoder().encode('IPA piégée'))
+    const share = jest.fn()
+    const { startUpdate, useUpdate, openURL } = load('ios', undefined, fs, share)
+    await startUpdate()
+    expect(share).not.toHaveBeenCalled()
+    expect(openURL).not.toHaveBeenCalled()
+    expect(files.size).toBe(0)
+    expect(useUpdate.getState().phase).toBe('invalid')
   })
 })
 
