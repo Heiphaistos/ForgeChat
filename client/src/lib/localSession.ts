@@ -58,14 +58,35 @@ export async function resumeSession(wait = pause): Promise<boolean> {
   }
 }
 
-/** Efface la session locale (déconnexion) en gardant les autres comptes mis de côté. */
-export async function clearLocalSession() {
+/** Ce qui appartient à la session (jetons d'anciennes versions, brouillons de messages). */
+const SESSION_KEYS = ['access_token', 'refresh_token', 'fc-drafts']
+
+/**
+ * Efface la session locale. Les préférences de l'appareil (micro, caméra, zoom, thème, dernier
+ * e-mail…) et les comptes mis de côté restent : effacer tout le stockage faisait retaper l'adresse
+ * et reperdre ses réglages à chaque session expirée (2026-10-12).
+ * `forgetLogin` : déconnexion volontaire, l'identifiant mémorisé (« Se souvenir de moi ») est oublié.
+ */
+export async function clearLocalSession(forgetLogin = false) {
   access = null
-  const alt = localStorage.getItem(TAURI_KEY)
-  localStorage.clear()
-  if (alt) localStorage.setItem(TAURI_KEY, alt)
+  for (const k of SESSION_KEYS) { try { localStorage.removeItem(k) } catch { /* stockage indisponible */ } }
   await invokeSession('session_clear').catch(e => console.warn('[session] trousseau', e))
+  if (forgetLogin) await invokeSession('login_forget').catch(e => console.warn('[session] identifiants', e))
 }
+
+// ─── « Se souvenir de moi » (bureau) ─────────────────────────────────────────────
+export interface RememberedLogin { email: string; password: string }
+
+/** Range e-mail et mot de passe au trousseau de l'OS (côté Rust, jamais dans la page). */
+export const rememberLoginOnDevice = (email: string, password: string) =>
+  invokeSession('login_remember', { email, password }).catch(e => console.warn('[session] identifiants', e))
+
+export const rememberedLogin = () => invokeSession<RememberedLogin | null>('login_remembered').catch(() => null)
+
+export const forgetRememberedLogin = () => invokeSession('login_forget').catch(() => {})
+
+/** Où la session est gardée : `os`, `file` (repli chiffré Linux) ou `memory`. */
+export const sessionStorageStatus = () => invokeSession<string>('session_storage_status').catch(() => 'memory')
 
 /**
  * Anciennes versions : jetons en clair dans localStorage. Rangés une fois au trousseau, puis

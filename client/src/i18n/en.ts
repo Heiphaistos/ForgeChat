@@ -51,6 +51,7 @@ export const en: Partial<Record<Key, string>> = {
   'auth.login.submitting': 'Signing in...',
   'auth.login.verifyCode': 'Verify code',
   'auth.login.submit': 'Sign in',
+  'auth.login.rememberMe': 'Remember me on this device',
   'auth.login.noAccount': 'No account?',
   'auth.login.signUp': 'Sign up',
   'auth.login.forgot': 'Forgot your password?',
