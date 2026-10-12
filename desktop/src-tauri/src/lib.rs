@@ -467,6 +467,7 @@ pub fn run() {
             native_voice::nv_set_mic,
             native_voice::nv_set_deafen,
             native_voice::nv_set_peer_audio,
+            native_voice::nv_set_audio_processing,
             native_voice::nv_set_camera,
             native_voice::nv_set_screen,
             native_voice::nv_popout,

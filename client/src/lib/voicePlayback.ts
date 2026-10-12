@@ -11,6 +11,7 @@
 import { getAudioContext } from './audio'
 import { spatialPosition } from './spatialAudio'
 import { mixPlan, type MixPlan } from './voiceMix'
+import { avPrefs } from './avPrefs'
 
 interface Graph { src: MediaStream; out: MediaStream; plan: MixPlan; nodes: AudioNode[]; gain: GainNode; panner: PannerNode | null; keepAlive: HTMLAudioElement }
 
@@ -63,7 +64,11 @@ function build(stream: MediaStream, plan: MixPlan): Graph {
  * `volume` : 1 = 100 % (0..2) ; `azimuth` : angle de la voix spatiale, null = désactivée.
  */
 export function playable(key: string, stream: MediaStream, kind: 'voice' | 'screen', volume: number, azimuth: number | null): { stream: MediaStream; elementVolume: number } {
-  const plan = mixPlan(kind, volume, azimuth)
+  // Réglages > Voix : volume général (multiplie le volume par personne) et sortie mono
+  // (sans voix spatiale, qui ne peut s'entendre qu'en stéréo).
+  const prefs = avPrefs()
+  const mono = prefs.monoOutput
+  const plan = mixPlan(kind, volume * (prefs.outputVolume / 100), mono ? null : azimuth, mono)
   // createMediaStreamSource lève InvalidStateError sur un flux sans piste audio (vidéo seule).
   if (!plan.graph || stream.getAudioTracks().length === 0) {
     dropPlayback(key)

@@ -11,6 +11,7 @@ import * as menus from './parts/menus.ts'
 import * as accountGuard from './parts/accountGuard.ts'
 import * as discordSync from './parts/discordSync.ts'
 import * as themesMore from './parts/themesMore.ts'
+import * as avSettings from './parts/avSettings.ts'
 import { profileEn } from './profileEn.ts'
 import { profileStyleEn } from './profileStyleEn.ts'
 import { socialEn } from './socialEn.ts'
@@ -37,6 +38,7 @@ export const en: Partial<Record<Key, string>> = {
   ...accountGuard.en,
   ...discordSync.en,
   ...themesMore.en,
+  ...avSettings.en,
   // --- Connexion, inscription, mot de passe oublié ---
   'auth.email': 'Email',
   'auth.password': 'Password',
@@ -1151,8 +1153,6 @@ export const en: Partial<Record<Key, string>> = {
   'settings.keywords.notifications_email': 'email mail digest newsletter',
   'settings.keywords.keybindings': 'shortcuts keyboard keys combinations hotkeys',
   'settings.keywords.language': 'language english french time zone format date time region',
-  'settings.keywords.audio': 'mic microphone headset input output volume noise echo',
-  'settings.keywords.video': 'camera webcam quality resolution background screen share',
   'settings.keywords.privacy': 'privacy dm direct messages friends who can confidentiality read export data',
   'settings.keywords.security': 'password 2fa two-factor authentication totp code',
   'settings.keywords.sessions': 'devices connected logout sign out remotely',

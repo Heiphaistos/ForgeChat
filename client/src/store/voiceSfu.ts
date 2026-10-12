@@ -19,6 +19,7 @@ import type { VoicePeer } from './voice'
 import api from '../api/client'
 import { maybeBlur } from '../utils/backgroundBlur'
 import { screenCaptureConstraints } from '../lib/voiceDock'
+import { avPrefs, videoCodecFor } from '../lib/avPrefs'
 import {
   isNativeVoice, nativeConnect, nativeDisconnect, nativeSetMic,
   type NativeTrackEvent, type NativeStateEvent,
@@ -118,11 +119,17 @@ export function getQualityPrefs(): QualityPrefs {
   }
 }
 
+/** Salle chiffrée de bout en bout : limite le choix du codec (lib/avPrefs). */
+const roomE2ee = () => _ctx?.get().e2ee === true
+
 async function publishCamera(room: Room, track: MediaStreamTrack) {
   const q = getQualityPrefs()
   _camPub = await room.localParticipant.publishTrack(track, {
     source: Track.Source.Camera,
-    simulcast: true,
+    // Réglages > Vidéo : codec préféré (repli VP8 automatique si le navigateur ne
+    // l'encode pas) et simulcast (plusieurs qualités, le SFU choisit par spectateur).
+    videoCodec: videoCodecFor(roomE2ee()),
+    simulcast: avPrefs().camSimulcast,
     videoEncoding: { maxBitrate: q.camMaxBitrate, maxFramerate: q.camFps },
   })
   // Chuchotement en cours : la nouvelle piste doit rester visible des autres.
@@ -138,6 +145,7 @@ async function publishScreen(room: Room) {
     // Un stream se regarde en plein écran : pas de couches dégradées à l'envoi,
     // le SFU régule par abonné (dynacast) sans toucher à la netteté du texte.
     simulcast: false,
+    videoCodec: videoCodecFor(roomE2ee()),
     videoEncoding: { maxBitrate: q.screenMaxBitrate, maxFramerate: q.screenFps },
     degradationPreference: q.screenContentHint === 'detail' ? 'maintain-resolution' : 'maintain-framerate',
   })
@@ -406,7 +414,7 @@ export async function connectMedia(url: string, token: string, roomName: string,
     dynacast: true,
     disconnectOnPageLeave: true,
     stopLocalTrackOnUnpublish: false,
-    publishDefaults: { dtx: true, red: true, videoCodec: 'vp8' },
+    publishDefaults: { dtx: true, red: true, videoCodec: videoCodecFor(!!e2ee) },
   })
   _room = room
   _roomName = roomName
