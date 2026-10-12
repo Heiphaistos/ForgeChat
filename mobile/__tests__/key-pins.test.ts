@@ -102,9 +102,11 @@ test('clé de serveur signée : vecteur du navigateur (S bas et S haut) et règl
   const ownerPub = b64uEncode(owner.pub)
   const sk = { server_id: 'srv', public: await pubKey(), signed_by: 'owner', signature: '' }
   sk.signature = await signServerKey(owner.priv, 'srv', 'owner', sk.public)
-  const pins = new Map([['owner', { fp: await fpOf(ownerPub) }]])
+  const pins = new Map([['owner', { fp: await fpOf(ownerPub), verified: true }]])
   const served = async () => ownerPub
   expect(await ownerVouches(sk, 'me', null, async (s) => pins.get(s), served)).toBe(true)
+  // Simplement épinglé : pas de confiance automatique.
+  expect(await ownerVouches(sk, 'me', null, async () => ({ fp: await fpOf(ownerPub) }), served)).toBe(false)
   expect(await ownerVouches(sk, 'owner', ownerPub, async () => undefined, served)).toBe(true)
   expect(await ownerVouches(sk, 'me', null, async () => undefined, served)).toBe(false)
   expect(await ownerVouches(sk, 'me', null, async (s) => pins.get(s), async () => pubKey())).toBe(false)

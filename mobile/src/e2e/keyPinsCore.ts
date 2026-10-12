@@ -75,9 +75,11 @@ export function firstUnreadable(seen: Set<string>, conv: string, epoch: number):
 export interface SignedServerKey { server_id: string; public: string; signature?: string | null; signed_by?: string | null }
 
 /**
- * Le propriétaire se porte garant de la clé : signature valide d'un signataire dont la clé est
- * DÉJÀ épinglée sur cet appareil (ou de moi-même). Un serveur compromis ne peut ni forger cette
- * signature, ni inventer un signataire connu : sans cela, l'acceptation reste explicite.
+ * Le propriétaire se porte garant de la clé : signature valide de moi-même, ou d'un signataire dont
+ * la clé épinglée a été VÉRIFIÉE (codes de sécurité comparés en dehors de ForgeChat). Une simple
+ * épingle ne suffit pas : elle vient souvent de la liste des membres, servie par le serveur, qui
+ * pourrait inventer à la fois un faux propriétaire et une fausse clé signée par lui (constaté au
+ * banc du 2026-10-12 : l'épinglage des membres précède l'enveloppe de l'époque). Sinon, acceptation explicite.
  * `signerPub` : clé publique servie pour le signataire (null si absente).
  */
 export async function ownerVouches(
@@ -89,7 +91,7 @@ export async function ownerVouches(
     pub = myPub
   } else {
     const pin = await getPin(sk.signed_by)
-    if (!pin) return false
+    if (!pin?.verified) return false
     pub = await signerPub(sk.signed_by).catch(() => null)
     if (!pub) return false
     try { if ((await fpOf(pub)) !== pin.fp) return false } catch { return false }

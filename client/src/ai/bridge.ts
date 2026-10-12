@@ -2,6 +2,8 @@
 // même moteur que le web (Worker + WebAssembly), piloté par messages JSON. Le texte et
 // l'audio arrivent de l'appli, sont traités ICI sur le téléphone, et le résultat repart
 // vers l'appli : rien ne passe par le réseau (seuls les modèles sont téléchargés).
+// Tout premier : politique Trusted Types (lib/trustedTypes.ts).
+import '../lib/trustedTypes'
 import { PACKS, isAiLang, packSize, packsFor, planTranslation, type PackId } from './manifest'
 import { downloadPacks, installedPacks, removePacks, usedBytes } from './modelStore'
 import { detectLang } from './text'
