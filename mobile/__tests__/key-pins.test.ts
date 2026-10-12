@@ -77,9 +77,15 @@ test('registre SecureStore : 1re vue épinglée, clé changée exclue + boîte d
   expect(await markVerified('b', oldPub)).toBe(false)
 })
 
-test('registre : clé de serveur changée refusée et signalée', async () => {
+test('registre : clé de serveur jamais vue refusée tant que non acceptée, puis changée refusée', async () => {
   const [p1, p2] = [await pubKey(), await pubKey()]
+  // Jamais épinglée en silence : rien ne lui est enveloppé avant acceptation (audit 2026-10-12, H2).
+  expect(await trustedServerKey({ server_id: 'srv', public: p1 })).toBeNull()
+  const fresh = useKeyAlerts.getState().alerts.find((a) => a.subject === 'server:srv')
+  expect(fresh).toMatchObject({ kind: 'server', fresh: true, fp: await fpOf(p1) })
+  await acceptKey(fresh!)
   expect(await trustedServerKey({ server_id: 'srv', public: p1 })).toMatchObject({ fingerprint: await fpOf(p1) })
+  // Clé différente ensuite : refusée et signalée comme changée.
   expect(await trustedServerKey({ server_id: 'srv', public: p2 })).toBeNull()
-  expect(useKeyAlerts.getState().alerts.some((a) => a.kind === 'server' && a.subject === 'server:srv')).toBe(true)
+  expect(useKeyAlerts.getState().alerts.some((a) => a.kind === 'server' && a.subject === 'server:srv' && !a.fresh)).toBe(true)
 })
