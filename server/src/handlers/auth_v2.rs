@@ -102,6 +102,8 @@ pub async fn hit(state: &AppState, key: &str, max: i64, window_secs: i64) -> Res
         let _: () = redis.expire(key, window_secs).await.map_err(redis_down)?;
     }
     if n > max {
+        drop(redis);
+        crate::security_events::record(state, "rate_limited").await;
         return Err(AppError::TooManyRequests);
     }
     Ok(())

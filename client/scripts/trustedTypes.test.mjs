@@ -25,3 +25,15 @@ test('adresses de script : notre origine, blob: de notre origine, API YouTube', 
     assert.equal(safeScriptUrl(ko, o), false, ko)
   }
 })
+
+test('appli de bureau : tauri://localhost (macOS/Linux) et http://tauri.localhost (Windows)', () => {
+  for (const o of ['tauri://localhost', 'http://tauri.localhost']) {
+    assert.equal(safeScriptUrl('/assets/index.js', o), true, o)
+    assert.equal(safeScriptUrl(`${o}/mediapipe/x.js`, o), true, o)
+    assert.equal(safeScriptUrl('https://evil.example/x.js', o), false, o)
+  }
+  for (const ko of ['tauri://localhost.evil/x.js', 'tauri://evil/x.js', 'other://localhost/x.js']) {
+    assert.equal(safeScriptUrl(ko, 'tauri://localhost'), false, ko)
+  }
+  assert.equal(safeScriptUrl('tauri://x/a.js', 'null'), false)
+})

@@ -1,0 +1,20 @@
+ForgeChat — divulgation responsable des failles de sécurité
+============================================================
+
+Vous avez trouvé une faille ? Merci de nous l'écrire avant de la rendre publique :
+contact.forgeinformatique@heiphaistos.org (objet : « Sécurité »).
+
+Ce qui nous aide :
+- la description, l'impact et les étapes pour reproduire ;
+- la version de l'appli (web, bureau, Android, iOS) et la date.
+
+Nos engagements :
+- accusé de réception sous 72 heures, premier diagnostic sous 7 jours ;
+- correctif publié au plus vite, au plus tard 90 jours après le signalement ;
+- aucune poursuite contre une recherche menée de bonne foi dans les règles ci-dessous ;
+- votre nom dans les remerciements si vous le souhaitez.
+
+Règles :
+- n'accédez qu'à vos propres comptes et données de test ; jamais à celles d'autrui ;
+- pas de déni de service, pas de spam, pas d'ingénierie sociale envers les utilisateurs ou l'équipe ;
+- arrêtez-vous dès la preuve obtenue, et supprimez les données éventuellement récupérées.

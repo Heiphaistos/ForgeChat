@@ -17,6 +17,7 @@ mod upload_sign;
 mod jwt;
 mod security_headers;
 mod cookies;
+mod security_events;
 
 use axum::{
     middleware as axum_middleware,
@@ -113,6 +114,16 @@ async fn main() -> anyhow::Result<()> {
             handlers::diagnostics::purge_old(&cleanup_state).await;
             purge_retention(&cleanup_state).await;
             handlers::e2e_conv::purge_legacy(&cleanup_state.db).await;
+        }
+    });
+
+    // Alertes de sécurité (seuils par heure), toutes les 5 minutes.
+    let alert_state = state.clone();
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(Duration::from_secs(300));
+        loop {
+            interval.tick().await;
+            security_events::check_alerts(&alert_state).await;
         }
     });
 
@@ -287,6 +298,12 @@ async fn main() -> anyhow::Result<()> {
         .route("/api/livekit/webhook", post(handlers::voice::livekit_webhook).layer(DefaultBodyLimit::max(INBOUND_JSON_LIMIT)))
         // Rapports d'erreurs des applis (sans JWT : une page blanche n'est pas
         // connectée). Corps borné ici, limite par IP dans le handler.
+        // Rapports CSP / Trusted Types du navigateur (sans JWT, corps borné, limite par IP).
+        .route(
+            "/api/security/csp-report",
+            post(handlers::diagnostics::csp_report)
+                .layer(DefaultBodyLimit::max(handlers::diagnostics::CSP_MAX_BODY)),
+        )
         .route(
             "/api/diagnostics/report",
             post(handlers::diagnostics::submit_report)
@@ -413,17 +430,34 @@ async fn cleanup_expired_attachments(state: &AppState, upload_dir: &str) {
 }
 
 /// Durées de conservation annoncées sur la page de confidentialité : au-delà, la ligne disparaît.
+/// Durée de rétention en jours, réglable par variable d'environnement (amélioration n° 14),
+/// bornée à [1, 3650] ; valeur par défaut si absente ou invalide.
+fn retention_days(var: &str, default: i64) -> i64 {
+    std::env::var(var).ok().and_then(|v| v.trim().parse::<i64>().ok()).filter(|d| (1..=3650).contains(d)).unwrap_or(default)
+}
+
 async fn purge_retention(state: &AppState) {
+    let sessions = retention_days("RETENTION_SESSIONS_DAYS", 30);
+    let devices = retention_days("RETENTION_PUSH_DEVICES_DAYS", 60);
+    let audit = retention_days("RETENTION_AUDIT_LOG_DAYS", 90);
+    let reports = retention_days("RETENTION_REPORTS_DAYS", 90);
+    let owned: Vec<(&str, String)> = vec![
+        ("sessions inactives", format!("DELETE FROM user_sessions WHERE last_seen < NOW() - INTERVAL '{sessions} days'")),
+        ("téléphones inactifs", format!("DELETE FROM push_devices WHERE last_seen_at < NOW() - INTERVAL '{devices} days'")),
+        ("journal d'audit", format!("DELETE FROM audit_log WHERE created_at < NOW() - INTERVAL '{audit} days'")),
+        ("signalements de MP traités", format!(
+            "DELETE FROM dm_reports WHERE status IN ('resolved', 'dismissed') AND COALESCE(resolved_at, created_at) < NOW() - INTERVAL '{reports} days'")),
+        ("signalements de messages traités", format!(
+            "DELETE FROM message_reports WHERE status IN ('resolved', 'dismissed') AND created_at < NOW() - INTERVAL '{reports} days'")),
+    ];
+    for (what, sql) in &owned {
+        if let Err(e) = sqlx::query(sql).execute(&state.db).await {
+            tracing::warn!("Purge ({what}) : {e}");
+        }
+    }
     const PURGES: &[(&str, &str)] = &[
-        ("sessions inactives", "DELETE FROM user_sessions WHERE last_seen < NOW() - INTERVAL '30 days'"),
         ("jetons de session expirés", "DELETE FROM refresh_tokens WHERE expires_at < NOW()"),
         ("inscriptions non confirmées", "DELETE FROM pending_registrations WHERE expires_at < NOW()"),
-        ("téléphones inactifs", "DELETE FROM push_devices WHERE last_seen_at < NOW() - INTERVAL '60 days'"),
-        ("journal d'audit", "DELETE FROM audit_log WHERE created_at < NOW() - INTERVAL '90 days'"),
-        ("signalements de MP traités",
-         "DELETE FROM dm_reports WHERE status IN ('resolved', 'dismissed') AND COALESCE(resolved_at, created_at) < NOW() - INTERVAL '90 days'"),
-        ("signalements de messages traités",
-         "DELETE FROM message_reports WHERE status IN ('resolved', 'dismissed') AND created_at < NOW() - INTERVAL '90 days'"),
     ];
     for (what, sql) in PURGES {
         if let Err(e) = sqlx::query(sql).execute(&state.db).await {
@@ -582,6 +616,7 @@ fn protected_routes(state: AppState) -> Router<AppState> {
         .route("/admin/settings", get(handlers::site_admin::get_settings).put(handlers::site_admin::put_settings))
         .route("/admin/audit", get(handlers::site_admin::audit_log))
         .route("/admin/diagnostics", get(handlers::diagnostics::list_reports))
+        .route("/admin/security-events", get(security_events::admin_events))
         .route("/admin/dm-reports", get(handlers::reports::list_dm_reports))
         .route("/admin/dm-reports/:id", patch(handlers::reports::update_dm_report))
         .route("/admin/diagnostics/:id", get(handlers::diagnostics::get_report).delete(handlers::diagnostics::delete_report))

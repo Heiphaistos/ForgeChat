@@ -31,6 +31,9 @@ export function safeScriptUrl(url: string, origin: string): boolean {
     return false
   }
   if (u.protocol === 'blob:') return u.href.startsWith(`blob:${origin}/`)
+  // Appli de bureau sous macOS/Linux : `tauri://localhost`, schéma non standard dont
+  // `URL.origin` vaut "null" ; on compare alors le début de l'adresse (origine + « / »).
+  if (u.origin === 'null') return origin !== 'null' && u.href.startsWith(`${origin}/`)
   return u.origin === origin
 }
 

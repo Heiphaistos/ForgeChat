@@ -376,3 +376,48 @@ async fn security_search_hides_strangers_presence() {
     assert_eq!(by(friend).status, "online");
     assert_eq!(by(friend).custom_status.as_deref(), Some("en vacances"));
 }
+
+#[tokio::test]
+#[ignore]
+async fn security_deleted_files_leave_disk() {
+    // Amélioration n° 18 (2026-10-12) : supprimer un serveur ou un message de groupe efface aussi
+    // les fichiers du disque ; un fichier encore référencé ailleurs reste.
+    let dir = std::env::temp_dir().join(format!("fc-up-{}", Uuid::new_v4().simple()));
+    std::fs::create_dir_all(&dir).unwrap();
+    std::env::set_var("UPLOAD_DIR", &dir);
+    let (state, db) = setup().await;
+    let owner = user(&db).await;
+    let file = |name: &str| {
+        std::fs::write(dir.join(name), b"x").unwrap();
+        format!("/uploads/{name}")
+    };
+    let s: Uuid = sqlx::query_scalar("INSERT INTO servers (name, owner_id, icon) VALUES ('del', $1, $2) RETURNING id")
+        .bind(owner).bind(file("icon.png")).fetch_one(&db).await.expect("server");
+    let chan: Uuid = sqlx::query_scalar("INSERT INTO channels (server_id, name) VALUES ($1, 'c') RETURNING id")
+        .bind(s).fetch_one(&db).await.expect("channel");
+    let msg: Uuid = sqlx::query_scalar("INSERT INTO messages (channel_id, user_id, content) VALUES ($1, $2, '') RETURNING id")
+        .bind(chan).bind(owner).fetch_one(&db).await.expect("message");
+    let att = file("att.bin");
+    sqlx::query("INSERT INTO attachments (message_id, filename, content_type, size, url) VALUES ($1, 'f', 'application/octet-stream', 1, $2)")
+        .bind(msg).bind(&att).execute(&db).await.expect("attachment");
+    // Même fichier aussi utilisé comme avatar : il doit survivre.
+    let shared = file("shared.png");
+    sqlx::query("INSERT INTO custom_emojis (server_id, name, url) VALUES ($1, 'e', $2)").bind(s).bind(&shared).execute(&db).await.unwrap();
+    sqlx::query("UPDATE users SET avatar=$1 WHERE id=$2").bind(&shared).bind(owner).execute(&db).await.unwrap();
+
+    let files = crate::handlers::uploads::server_upload_candidates(&db, s).await;
+    assert_eq!(files.len(), 3);
+    sqlx::query("DELETE FROM servers WHERE id=$1").bind(s).execute(&db).await.unwrap();
+    crate::handlers::uploads::remove_unreferenced(&state, files).await;
+    tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+    assert!(!dir.join("icon.png").exists() && !dir.join("att.bin").exists(), "fichiers du serveur effacés");
+    assert!(dir.join("shared.png").exists(), "fichier encore référencé conservé");
+
+    // Compte : avatar effacé avec lui.
+    let files = crate::handlers::uploads::user_upload_candidates(&db, owner).await;
+    sqlx::query("DELETE FROM users WHERE id=$1").bind(owner).execute(&db).await.unwrap();
+    crate::handlers::uploads::remove_unreferenced(&state, files).await;
+    tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+    assert!(!dir.join("shared.png").exists());
+    let _ = std::fs::remove_dir_all(&dir);
+}

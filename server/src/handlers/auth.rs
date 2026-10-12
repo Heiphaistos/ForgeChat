@@ -401,7 +401,10 @@ pub async fn login(
         .bind(crate::email_crypto::hmac(&email))
         .fetch_optional(&state.db)
         .await?;
-    let user = login_credentials(&body, user_opt)?.ok_or(AppError::Unauthorized)?;
+    let Some(user) = login_credentials(&body, user_opt)? else {
+        crate::security_events::record(&state, "login_failed").await;
+        return Err(AppError::Unauthorized);
+    };
 
     // Compte banni du site : le mot de passe est bon, l'accès est refusé avec le motif.
     let (banned_at, ban_reason): (Option<chrono::DateTime<Utc>>, Option<String>) =
@@ -420,6 +423,7 @@ pub async fn login(
     if user.totp_enabled {
         let Some(code) = body.totp_code.as_deref() else { return Err(AppError::TotpRequired) };
         if !crate::handlers::totp::check_code(&state, user.id, code).await? {
+            crate::security_events::record(&state, "totp_failed").await;
             return Err(AppError::Unauthorized);
         }
     }

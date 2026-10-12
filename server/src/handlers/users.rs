@@ -375,10 +375,12 @@ pub async fn delete_account(
     .execute(&state.db)
     .await?;
 
+    let files = crate::handlers::uploads::user_upload_candidates(&state.db, claims.sub).await;
     sqlx::query("DELETE FROM users WHERE id=$1")
         .bind(claims.sub)
         .execute(&state.db)
         .await?;
+    crate::handlers::uploads::remove_unreferenced(&state, files).await;
     // Compte supprimé : plus aucun jeton ni socket ne doit survivre.
     crate::middleware::auth::revoke_all_tokens_strict(&state, claims.sub).await;
     state.disconnect_user_sockets(claims.sub).await;

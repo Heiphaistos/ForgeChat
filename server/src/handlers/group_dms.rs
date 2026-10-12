@@ -529,9 +529,12 @@ pub async fn delete_group_message(
     .await?;
     if !is_member { return Err(AppError::Forbidden); }
 
-    let deleted = sqlx::query_scalar::<_, i64>(
-        "WITH del AS (DELETE FROM group_dm_messages WHERE id=$1 AND sender_id=$2 AND dm_id=$3 RETURNING 1)
-         SELECT COUNT(*) FROM del"
+    // Les adresses des fichiers joints sont lues dans la même requête, avant la suppression en
+    // cascade des lignes `attachments`, pour effacer aussi les fichiers du disque.
+    let (deleted, urls) = sqlx::query_as::<_, (i64, Vec<String>)>(
+        "WITH del AS (DELETE FROM group_dm_messages WHERE id=$1 AND sender_id=$2 AND dm_id=$3 RETURNING id)
+         SELECT (SELECT COUNT(*) FROM del),
+                ARRAY(SELECT url FROM attachments WHERE group_dm_message_id IN (SELECT id FROM del))"
     )
     .bind(msg_id)
     .bind(claims.sub)
@@ -542,6 +545,7 @@ pub async fn delete_group_message(
     if deleted == 0 {
         return Err(AppError::Forbidden);
     }
+    crate::handlers::uploads::remove_upload_files(&state, urls);
 
     let members: Vec<Uuid> = sqlx::query_scalar(
         "SELECT user_id FROM group_dm_members WHERE dm_id=$1"
@@ -822,9 +826,15 @@ pub async fn leave_group_dm(
     ).bind(group_id).fetch_all(&state.db).await.unwrap_or_default();
 
     if remaining.is_empty() {
-        // Plus personne — supprimer le groupe
-        sqlx::query("DELETE FROM group_dm_channels WHERE id=$1")
-            .bind(group_id).execute(&state.db).await.ok();
+        // Plus personne — supprimer le groupe, et les fichiers joints de ses messages du disque.
+        let urls: Vec<String> = sqlx::query_scalar(
+            "SELECT a.url FROM attachments a JOIN group_dm_messages m ON m.id = a.group_dm_message_id WHERE m.dm_id=$1"
+        ).bind(group_id).fetch_all(&state.db).await.unwrap_or_default();
+        if sqlx::query("DELETE FROM group_dm_channels WHERE id=$1")
+            .bind(group_id).execute(&state.db).await.is_ok()
+        {
+            crate::handlers::uploads::remove_upload_files(&state, urls);
+        }
         e2e_conv::forget_conversation(&state.db, e2e_conv::Conv::Group(group_id)).await;
     } else {
         // owner_id n'était jamais réassigné quand le owner quittait -- remove_group_dm_member
