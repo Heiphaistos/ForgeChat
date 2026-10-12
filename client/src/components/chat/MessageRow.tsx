@@ -3,7 +3,7 @@ import { desktopDownloadClick } from '../../lib/saveFile'
 import { RoleIcon, type RoleDecor } from '../../hooks/useRoleDecor'
 import { memo, useEffect, useRef, useState, useContext } from 'react'
 import { Pencil, Trash2, SmilePlus, MessagesSquare, Check, X, Pin, CornerUpLeft, Bot, Clock, Bookmark, Forward, Bell, Languages, Flag, Copy, Link, Loader2, Megaphone, Sparkles } from 'lucide-react'
-import { format } from 'date-fns'
+import { format, formatDistanceToNow } from 'date-fns'
 import { renderMarkdown, SpoilerModContext } from '../../utils/markdown'
 import { useUxPrefs } from '../../lib/uxPrefs'
 import ReminderModal from './ReminderModal'
@@ -16,7 +16,7 @@ import { REACTION_PICKER_EMOJIS, formatBytes, extractFirstUrl, EphemeralBadge, A
 import { AvatarDecoration } from '../ui/ProfileDecor'
 import AnimatedImg from '../ui/AnimatedImg'
 import UserName from '../ui/UserName'
-import { useT } from '../../i18n'
+import { dateLocale, useT } from '../../i18n'
 import { ThreadCountsContext } from './threadCounts'
 import { UnencryptedBadge } from '../../e2e/ChannelBadge'
 import { displayAttachments } from '../../e2e/files'
@@ -116,7 +116,8 @@ function MessageRow({
   const t = useT()
   const aiTranslate = useAiSettings(s => s.translate)
   const threadCounts = useContext(ThreadCountsContext)
-  const threadReplies = threadCounts?.get(msg.id) ?? 0
+  const threadInfo = threadCounts?.get(msg.id)
+  const threadReplies = threadInfo?.count ?? 0
   const isImage = (ct: string) => ct.startsWith('image/')
   const isVideo = (ct: string) => ct.startsWith('video/')
 
@@ -514,6 +515,8 @@ function MessageRow({
                   className="mt-1 inline-flex items-center gap-1.5 text-xs font-medium text-fc-accent hover:underline">
                   <MessagesSquare size={12} aria-hidden />
                   {threadReplies === 1 ? t('autothread.replies.one') : t('autothread.replies.other', { n: threadReplies })}
+                  {!!threadInfo?.unread && <span className="ml-1 px-1.5 rounded-full bg-fc-red text-white text-[10px]">{threadInfo.unread}</span>}
+                  {threadInfo?.lastReplyAt && <span className="font-normal text-fc-muted">· {t('thread.lastReply', { when: formatDistanceToNow(new Date(threadInfo.lastReplyAt), { addSuffix: true, locale: dateLocale() }) })}</span>}
                 </button>
               )}
             </>
