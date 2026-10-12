@@ -550,3 +550,41 @@ async fn security_key_transparency_log() {
     reconcile(&db).await.unwrap();
     assert!(latest_seq(&db, u).await.unwrap() > seq);
 }
+
+#[tokio::test]
+#[ignore]
+async fn product_reminders_dnd_status() {
+    // Améliorations n° 47, 48 et 50 (2026-10-12).
+    let (state, db) = setup().await;
+    let (a, b) = (user(&db).await, user(&db).await);
+    let claims = |u: Uuid| axum::Extension(crate::middleware::auth::Claims { sub: u, exp: i64::MAX, iss: "forgechat".into(), iat: 0, sid: None });
+
+    // Rappels : liste puis annulation ; jamais ceux d'un autre compte.
+    let dm: Uuid = sqlx::query_scalar("INSERT INTO dm_channels (user1_id, user2_id) VALUES ($1, $2) RETURNING id").bind(a).bind(b).fetch_one(&db).await.unwrap();
+    let msg: Uuid = sqlx::query_scalar("INSERT INTO dm_messages (dm_channel_id, sender_id, content) VALUES ($1, $2, 'x') RETURNING id").bind(dm).bind(b).fetch_one(&db).await.unwrap();
+    let r: Uuid = sqlx::query_scalar("INSERT INTO message_reminders (user_id, message_id, remind_at) VALUES ($1, $2, NOW() + INTERVAL '1 hour') RETURNING id").bind(a).bind(msg).fetch_one(&db).await.unwrap();
+    let list = crate::handlers::reminders::list(axum::extract::State(state.clone()), claims(a)).await.unwrap().0;
+    assert_eq!(list[0]["dm_id"], serde_json::json!(dm));
+    assert!(crate::handlers::reminders::cancel(axum::extract::State(state.clone()), claims(b), axum::extract::Path(r)).await.is_err());
+    crate::handlers::reminders::cancel(axum::extract::State(state.clone()), claims(a), axum::extract::Path(r)).await.unwrap();
+
+    // Ne pas déranger toute la journée : silence, sauf pour un favori.
+    let all_day = crate::dnd::Schedule { enabled: true, days: 127, start_min: 0, end_min: 1439, tz: "UTC".into(), allow_favorites: true };
+    crate::dnd::put_schedule(axum::extract::State(state.clone()), claims(a), axum::Json(all_day.clone())).await.unwrap();
+    let now_quiet = crate::dnd::in_quiet(chrono::Utc::now(), &all_day);
+    assert_eq!(crate::dnd::silenced(&state, a, Some(b)).await, now_quiet);
+    sqlx::query("INSERT INTO user_favorites (user_id, target_id) VALUES ($1, $2)").bind(a).bind(b).execute(&db).await.unwrap();
+    assert!(!crate::dnd::silenced(&state, a, Some(b)).await, "favori : passe");
+    assert_eq!(crate::dnd::dm_peer(&state, dm, a).await, Some(b));
+    let bad = crate::dnd::Schedule { tz: "Mars/Olympus".into(), ..all_day };
+    assert!(crate::dnd::put_schedule(axum::extract::State(state.clone()), claims(a), axum::Json(bad)).await.is_err());
+
+    // Page d'état publique : états seulement.
+    let _: () = redis::AsyncCommands::del(&mut *state.redis.lock().await, "status:public").await.unwrap();
+    let addr = axum::extract::ConnectInfo("127.0.0.1:1".parse::<std::net::SocketAddr>().unwrap());
+    let (code, body) = crate::health::public_status(axum::extract::State(state.clone()), addr, axum::http::HeaderMap::new()).await;
+    assert_eq!(code, axum::http::StatusCode::OK);
+    assert_eq!(body["components"]["database"], "ok");
+    assert_eq!(body["components"]["voice"], "off");
+    assert!(body.get("version").is_none(), "aucun détail interne");
+}

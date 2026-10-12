@@ -49,6 +49,8 @@ zip = { version = "8.6.0", default-features = false, features = ["deflate"] }
 web-push-native = { version = "0.5", default-features = false }
 p256 = { version = "0.13", default-features = false, features = ["ecdsa", "std"] }
 ciborium = "0.2"
+libc = "0.2"
+chrono-tz = "0.10"
 
 [profile.release]
 opt-level = 3

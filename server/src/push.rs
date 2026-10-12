@@ -206,6 +206,17 @@ pub async fn send_if_offline(state: &AppState, user_id: Uuid, payload: &serde_js
     if state.clients.read().await.contains_key(&user_id) {
         return;
     }
+    // « Ne pas déranger » programmé (amélioration n° 48) ; exception : favoris (MP à deux).
+    let from = match payload["url"].as_str().and_then(|u| u.strip_prefix("/dms/")).and_then(|r| r.split(['?', '/']).next()) {
+        Some(dm) => match dm.parse::<Uuid>() {
+            Ok(dm) => crate::dnd::dm_peer(state, dm, user_id).await,
+            Err(_) => None,
+        },
+        None => None,
+    };
+    if crate::dnd::silenced(state, user_id, from).await {
+        return;
+    }
     let subs: Vec<(Uuid, String, String, String)> = sqlx::query_as(
         "SELECT id, endpoint, p256dh, auth FROM push_subscriptions WHERE user_id = $1"
     )

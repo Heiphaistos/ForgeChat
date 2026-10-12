@@ -76,7 +76,7 @@ let refreshPromise: Promise<void> | null = null
 
 
 // Pages lisibles sans compte : un 401 n'y renvoie jamais vers /login (site public, pages légales).
-const PUBLIC_PATHS = new Set(['/', '/login', '/register', '/verify-email', '/forgot-password', '/reset-password', '/verrouiller',
+const PUBLIC_PATHS = new Set(['/', '/login', '/register', '/verify-email', '/forgot-password', '/reset-password', '/verrouiller', '/statut',
   '/fonctionnalites', '/telecharger', '/nouveautes', '/aide', '/a-propos', '/mentions-legales', '/confidentialite', '/cgu'])
 export const isPublicPath = (p: string) => PUBLIC_PATHS.has(p) || p.startsWith('/telecharger/')
 

@@ -51,6 +51,7 @@ export default function AppLayout() {
         <Stack.Screen name="news/settings" options={{ title: t('news.customize'), presentation: 'modal' }} />
         <Stack.Screen name="admin" options={{ title: 'Administration' }} />
         <Stack.Screen name="scheduled" options={{ title: t('messaging.sched.title') }} />
+        <Stack.Screen name="reminders" options={{ title: t('reminders.upcoming') }} />
         <Stack.Screen name="forward" options={{ title: t('screen.forward'), presentation: 'modal' }} />
         <Stack.Screen name="remind" options={{ title: t('screen.remind'), presentation: 'modal' }} />
         <Stack.Screen name="edits" options={{ title: t('screen.edits'), presentation: 'modal' }} />

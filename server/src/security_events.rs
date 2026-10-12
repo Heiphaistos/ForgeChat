@@ -19,6 +19,7 @@ pub const KINDS: &[(&str, &str, i64)] = &[
     ("csp", "Violations CSP / Trusted Types (tentative d'injection ?)", 50),
     ("panic", "Comptes verrouillés en urgence", 5),
     ("new_device", "Connexions depuis un nouvel appareil", 500),
+    ("server_error", "Erreurs serveur (réponses 5xx)", 50),
 ];
 
 fn hour(now: i64) -> i64 {
