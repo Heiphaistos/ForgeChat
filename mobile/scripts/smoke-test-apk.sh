@@ -25,7 +25,8 @@ LOGDIR=$HOME/forgechat-releases/smoke-logs
 fail() { echo "ÉCHEC : $*" >&2; exit 1; }
 
 PKG=$("$AAPT2" dump badging "$APK" | sed -n "s/^package: name='\([^']*\)'.*/\1/p")
-ACTIVITY=$("$AAPT2" dump badging "$APK" | sed -n "s/^launchable-activity: name='\([^']*\)'.*/\1/p")
+# Première entrée du lanceur = MainActivity (les alias des icônes alternatives suivent, désactivés).
+ACTIVITY=$("$AAPT2" dump badging "$APK" | sed -n "s/^launchable-activity: name='\([^']*\)'.*/\1/p" | head -n 1)
 [ -n "$PKG" ] && [ -n "$ACTIVITY" ] || fail "package ou activité de lancement introuvable"
 NATIVE=$("$AAPT2" dump badging "$APK" | sed -n "s/^native-code: //p" | tr -d "'")
 

@@ -18,6 +18,7 @@ import * as uxMobile from './parts/uxMobile'
 import * as accountGuard from './parts/accountGuard'
 import * as themesMore from './parts/themesMore'
 import * as profileStyle from './parts/profileStyle'
+import * as appIcon from './parts/appIcon'
 
 export const en: Partial<Record<Key, string>> = {
   ...settings.en,
@@ -38,6 +39,7 @@ export const en: Partial<Record<Key, string>> = {
   ...accountGuard.en,
   ...themesMore.en,
   ...profileStyle.en,
+  ...appIcon.en,
 
   // --- Commun ---
   'common.cancel': 'Cancel',

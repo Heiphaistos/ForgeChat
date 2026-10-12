@@ -91,6 +91,7 @@ describe('préférences', () => {
       custom: null,
       density: 'normal',
       categoriesFolded: true,
+      appIcon: null,
     })
     expect(parsePrefs(JSON.stringify({ categoriesFolded: false })).categoriesFolded).toBe(false)
     const withCustom = parsePrefs(JSON.stringify({ theme: 'c-abcd1234', density: 'compact', custom: { colors: { bg: '#123456' }, image: { url: 'https://a.fr/b.png' } } }))

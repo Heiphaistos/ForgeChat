@@ -19,6 +19,7 @@ import * as uxMobile from './parts/uxMobile'
 import * as accountGuard from './parts/accountGuard'
 import * as themesMore from './parts/themesMore'
 import * as profileStyle from './parts/profileStyle'
+import * as appIcon from './parts/appIcon'
 
 export const fr = {
   ...settings.fr,
@@ -39,6 +40,7 @@ export const fr = {
   ...accountGuard.fr,
   ...themesMore.fr,
   ...profileStyle.fr,
+  ...appIcon.fr,
 
   // --- Commun ---
   'common.cancel': 'Annuler',

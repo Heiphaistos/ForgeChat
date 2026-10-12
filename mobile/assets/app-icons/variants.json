@@ -1,0 +1,534 @@
+[
+  {
+    "id": "preset:1",
+    "name": "Preset1",
+    "background": {
+      "type": "gradient",
+      "colors": [
+        "#5865F2",
+        "#7C3AED"
+      ]
+    }
+  },
+  {
+    "id": "preset:2",
+    "name": "Preset2",
+    "background": {
+      "type": "gradient",
+      "colors": [
+        "#06B6D4",
+        "#3B82F6"
+      ]
+    }
+  },
+  {
+    "id": "preset:3",
+    "name": "Preset3",
+    "background": {
+      "type": "gradient",
+      "colors": [
+        "#10B981",
+        "#059669"
+      ]
+    }
+  },
+  {
+    "id": "preset:4",
+    "name": "Preset4",
+    "background": {
+      "type": "gradient",
+      "colors": [
+        "#F59E0B",
+        "#EF4444"
+      ]
+    }
+  },
+  {
+    "id": "preset:5",
+    "name": "Preset5",
+    "background": {
+      "type": "gradient",
+      "colors": [
+        "#EC4899",
+        "#8B5CF6"
+      ]
+    }
+  },
+  {
+    "id": "preset:6",
+    "name": "Preset6",
+    "background": {
+      "type": "gradient",
+      "colors": [
+        "#F43F5E",
+        "#F97316"
+      ]
+    }
+  },
+  {
+    "id": "preset:7",
+    "name": "Preset7",
+    "background": {
+      "type": "gradient",
+      "colors": [
+        "#0EA5E9",
+        "#22C55E"
+      ]
+    }
+  },
+  {
+    "id": "preset:8",
+    "name": "Preset8",
+    "background": {
+      "type": "gradient",
+      "colors": [
+        "#6366F1",
+        "#EC4899"
+      ]
+    }
+  },
+  {
+    "id": "preset:9",
+    "name": "Preset9",
+    "background": {
+      "type": "gradient",
+      "colors": [
+        "#14B8A6",
+        "#6366F1"
+      ]
+    }
+  },
+  {
+    "id": "preset:10",
+    "name": "Preset10",
+    "background": {
+      "type": "gradient",
+      "colors": [
+        "#84CC16",
+        "#14B8A6"
+      ]
+    }
+  },
+  {
+    "id": "preset:11",
+    "name": "Preset11",
+    "background": {
+      "type": "gradient",
+      "colors": [
+        "#A855F7",
+        "#3B82F6"
+      ]
+    }
+  },
+  {
+    "id": "preset:12",
+    "name": "Preset12",
+    "background": {
+      "type": "gradient",
+      "colors": [
+        "#EF4444",
+        "#7F1D1D"
+      ]
+    }
+  },
+  {
+    "id": "preset:13",
+    "name": "Preset13",
+    "background": {
+      "type": "gradient",
+      "colors": [
+        "#1E3A8A",
+        "#0F172A"
+      ]
+    }
+  },
+  {
+    "id": "preset:14",
+    "name": "Preset14",
+    "background": {
+      "type": "gradient",
+      "colors": [
+        "#FBBF24",
+        "#D97706"
+      ]
+    }
+  },
+  {
+    "id": "preset:15",
+    "name": "Preset15",
+    "background": {
+      "type": "gradient",
+      "colors": [
+        "#64748B",
+        "#1E293B"
+      ]
+    }
+  },
+  {
+    "id": "preset:16",
+    "name": "Preset16",
+    "background": {
+      "type": "gradient",
+      "colors": [
+        "#D946EF",
+        "#F43F5E"
+      ]
+    }
+  },
+  {
+    "id": "preset:17",
+    "name": "Preset17",
+    "background": {
+      "type": "solid",
+      "colors": [
+        "#5865F2"
+      ]
+    }
+  },
+  {
+    "id": "preset:18",
+    "name": "Preset18",
+    "background": {
+      "type": "solid",
+      "colors": [
+        "#2563EB"
+      ]
+    }
+  },
+  {
+    "id": "preset:19",
+    "name": "Preset19",
+    "background": {
+      "type": "solid",
+      "colors": [
+        "#16A34A"
+      ]
+    }
+  },
+  {
+    "id": "preset:20",
+    "name": "Preset20",
+    "background": {
+      "type": "solid",
+      "colors": [
+        "#DC2626"
+      ]
+    }
+  },
+  {
+    "id": "preset:21",
+    "name": "Preset21",
+    "background": {
+      "type": "solid",
+      "colors": [
+        "#EA580C"
+      ]
+    }
+  },
+  {
+    "id": "preset:22",
+    "name": "Preset22",
+    "background": {
+      "type": "solid",
+      "colors": [
+        "#CA8A04"
+      ]
+    }
+  },
+  {
+    "id": "preset:23",
+    "name": "Preset23",
+    "background": {
+      "type": "solid",
+      "colors": [
+        "#DB2777"
+      ]
+    }
+  },
+  {
+    "id": "preset:24",
+    "name": "Preset24",
+    "background": {
+      "type": "solid",
+      "colors": [
+        "#7C3AED"
+      ]
+    }
+  },
+  {
+    "id": "preset:25",
+    "name": "Preset25",
+    "background": {
+      "type": "solid",
+      "colors": [
+        "#0D9488"
+      ]
+    }
+  },
+  {
+    "id": "preset:26",
+    "name": "Preset26",
+    "background": {
+      "type": "solid",
+      "colors": [
+        "#475569"
+      ]
+    }
+  },
+  {
+    "id": "preset:27",
+    "name": "Preset27",
+    "background": {
+      "type": "solid",
+      "colors": [
+        "#0F172A"
+      ]
+    }
+  },
+  {
+    "id": "preset:28",
+    "name": "Preset28",
+    "background": {
+      "type": "solid",
+      "colors": [
+        "#0F172A"
+      ]
+    }
+  },
+  {
+    "id": "preset:29",
+    "name": "Preset29",
+    "background": {
+      "type": "solid",
+      "colors": [
+        "#0F172A"
+      ]
+    }
+  },
+  {
+    "id": "preset:30",
+    "name": "Preset30",
+    "background": {
+      "type": "solid",
+      "colors": [
+        "#0F172A"
+      ]
+    }
+  },
+  {
+    "id": "preset:31",
+    "name": "Preset31",
+    "background": {
+      "type": "solid",
+      "colors": [
+        "#0F172A"
+      ]
+    }
+  },
+  {
+    "id": "preset:32",
+    "name": "Preset32",
+    "background": {
+      "type": "solid",
+      "colors": [
+        "#0F172A"
+      ]
+    }
+  },
+  {
+    "id": "preset:33",
+    "name": "Preset33",
+    "background": {
+      "type": "solid",
+      "colors": [
+        "#0F172A"
+      ]
+    }
+  },
+  {
+    "id": "preset:34",
+    "name": "Preset34",
+    "background": {
+      "type": "solid",
+      "colors": [
+        "#0F172A"
+      ]
+    }
+  },
+  {
+    "id": "preset:35",
+    "name": "Preset35",
+    "background": {
+      "type": "solid",
+      "colors": [
+        "#F8FAFC"
+      ]
+    }
+  },
+  {
+    "id": "preset:36",
+    "name": "Preset36",
+    "background": {
+      "type": "solid",
+      "colors": [
+        "#F8FAFC"
+      ]
+    }
+  },
+  {
+    "id": "preset:37",
+    "name": "Preset37",
+    "background": {
+      "type": "solid",
+      "colors": [
+        "#F8FAFC"
+      ]
+    }
+  },
+  {
+    "id": "preset:38",
+    "name": "Preset38",
+    "background": {
+      "type": "solid",
+      "colors": [
+        "#F8FAFC"
+      ]
+    }
+  },
+  {
+    "id": "preset:39",
+    "name": "Preset39",
+    "background": {
+      "type": "solid",
+      "colors": [
+        "#F8FAFC"
+      ]
+    }
+  },
+  {
+    "id": "preset:40",
+    "name": "Preset40",
+    "background": {
+      "type": "solid",
+      "colors": [
+        "#F8FAFC"
+      ]
+    }
+  },
+  {
+    "id": "preset:41",
+    "name": "Preset41",
+    "background": {
+      "type": "solid",
+      "colors": [
+        "#F8FAFC"
+      ]
+    }
+  },
+  {
+    "id": "preset:42",
+    "name": "Preset42",
+    "background": {
+      "type": "solid",
+      "colors": [
+        "#F8FAFC"
+      ]
+    }
+  },
+  {
+    "id": "preset:43",
+    "name": "Preset43",
+    "background": {
+      "type": "circle",
+      "colors": [
+        "#5865F2",
+        "#7C3AED"
+      ],
+      "base": "#1e1f22"
+    }
+  },
+  {
+    "id": "preset:44",
+    "name": "Preset44",
+    "background": {
+      "type": "circle",
+      "colors": [
+        "#06B6D4",
+        "#3B82F6"
+      ],
+      "base": "#1e1f22"
+    }
+  },
+  {
+    "id": "preset:45",
+    "name": "Preset45",
+    "background": {
+      "type": "circle",
+      "colors": [
+        "#10B981",
+        "#059669"
+      ],
+      "base": "#1e1f22"
+    }
+  },
+  {
+    "id": "preset:46",
+    "name": "Preset46",
+    "background": {
+      "type": "circle",
+      "colors": [
+        "#F59E0B",
+        "#EF4444"
+      ],
+      "base": "#1e1f22"
+    }
+  },
+  {
+    "id": "preset:47",
+    "name": "Preset47",
+    "background": {
+      "type": "circle",
+      "colors": [
+        "#EC4899",
+        "#8B5CF6"
+      ],
+      "base": "#1e1f22"
+    }
+  },
+  {
+    "id": "preset:48",
+    "name": "Preset48",
+    "background": {
+      "type": "circle",
+      "colors": [
+        "#0F172A",
+        "#334155"
+      ],
+      "base": "#1e1f22"
+    }
+  },
+  {
+    "id": "preset:49",
+    "name": "Preset49",
+    "background": {
+      "type": "circle",
+      "colors": [
+        "#F43F5E",
+        "#F97316"
+      ],
+      "base": "#1e1f22"
+    }
+  },
+  {
+    "id": "preset:50",
+    "name": "Preset50",
+    "background": {
+      "type": "circle",
+      "colors": [
+        "#14B8A6",
+        "#6366F1"
+      ],
+      "base": "#1e1f22"
+    }
+  }
+]

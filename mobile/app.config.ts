@@ -3,6 +3,7 @@ import type { ExpoConfig, ConfigContext } from 'expo/config'
 import { googleServicesFile } from './plugins/googleServices.js'
 import { distributedServerConfig } from './plugins/serverConfig.js'
 import { versionCodeOf } from './plugins/versionCode.js'
+import withAppIcons from './plugins/withAppIcons.js'
 import withLanCleartext from './plugins/withLanCleartext.js'
 import withCertPinning from './plugins/withCertPinning.js'
 import withPictureInPicture from './plugins/withPictureInPicture.js'
@@ -90,7 +91,8 @@ export default (ctx: ConfigContext): ExpoConfig => {
   // Partage d'écran (MediaProjection) : permissions et service au premier plan, tous profils.
   // Pas de voile blanc sous la barre de navigation (thèmes sombres).
   // Image dans l'image pendant un appel vidéo.
-  const expoConfig = withPictureInPicture(withTransparentNavBar(withScreenShare(buildConfig(ctx))))
+  // Icônes d'application alternatives (Apparence → Icône de l'app), les 50 variantes du web.
+  const expoConfig = withAppIcons(withPictureInPicture(withTransparentNavBar(withScreenShare(buildConfig(ctx)))))
   // LAN : network_security_config limitant le HTTP en clair à l'IP du serveur de dev.
   if (APP_ENV === 'lan') return withLanCleartext(expoConfig, { host: LAN_CLEARTEXT_HOST })
   // APK distribués (APK DEV, bêta) : signés avec la clé de release hors dépôt, jamais la clé debug.
