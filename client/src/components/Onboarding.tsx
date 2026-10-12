@@ -11,6 +11,22 @@ const STEPS = [
     emoji: '💬',
   },
   {
+    // Amélioration n° 40 (2026-10-12) : le chiffrement expliqué dès l'arrivée.
+    title: 'Chiffré de bout en bout',
+    description: 'Vos messages privés, groupes, salons et fichiers sont chiffrés sur votre appareil : le serveur ne peut pas les lire. Gardez votre code de récupération en lieu sûr, il est le seul moyen de retrouver vos messages si vous oubliez votre mot de passe.',
+    emoji: '🔒',
+  },
+  {
+    title: 'Vérifiez vos contacts',
+    description: 'Sur le profil d’un contact, comparez le code de sécurité (ou scannez son QR code en personne). Si les codes sont identiques, personne ne s’interpose entre vous. ForgeChat vous prévient si sa clé change.',
+    emoji: '🛡️',
+  },
+  {
+    title: 'Protégez votre compte',
+    description: 'Activez la double authentification et une clé d’accès dans Paramètres > Sécurité. Un e-mail vous prévient de chaque connexion depuis un nouvel appareil, avec un lien pour tout verrouiller.',
+    emoji: '🔑',
+  },
+  {
     title: 'Découvrez les serveurs',
     description: 'Rejoignez ou créez des serveurs thématiques avec des canaux textuels et vocaux.',
     emoji: '🌐',

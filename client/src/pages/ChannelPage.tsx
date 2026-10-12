@@ -399,18 +399,21 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
   const autoThreads = !!(serverData?.channels ?? []).find((c: any) => c.id === channelId)?.auto_threads
   const { data: autoThreadCounts } = useQuery({
     queryKey: ['threads', channelId, 'counts'],
-    queryFn: () => api.get<{ parent_message_id: string | null; message_count: number }[]>(
+    queryFn: () => api.get<{ parent_message_id: string | null; message_count: number; unread_count: number; last_reply_at: string | null }[]>(
       `/servers/${serverId}/channels/${channelId}/threads`, { params: { limit: 100 } },
-    ).then(r => new Map(r.data.flatMap(th => th.parent_message_id ? [[th.parent_message_id, th.message_count] as const] : []))),
-    enabled: autoThreads && !!serverId && !!channelId,
+    ).then(r => new Map(r.data.flatMap(th => th.parent_message_id
+      ? [[th.parent_message_id, { count: th.message_count, unread: th.unread_count, lastReplyAt: th.last_reply_at }] as const]
+      : []))),
+    enabled: !!serverId && !!channelId,
     staleTime: 15_000,
   })
   useEffect(() => {
-    if (!autoThreads) return
-    return on('THREAD_CREATE', (d: any) => {
+    const refresh = (d: any) => {
       if (d.channel_id === channelId) qc.invalidateQueries({ queryKey: ['threads', channelId, 'counts'] })
-    })
-  }, [autoThreads, channelId, on, qc])
+    }
+    const offs = ['THREAD_CREATE', 'THREAD_MESSAGE'].map(ev => on(ev, refresh))
+    return () => offs.forEach(off => off())
+  }, [channelId, on, qc])
   const autoThreadTitle = (msgId: string) => {
     const m = useChat.getState().messagesByChannel[channelId ?? '']?.find(x => x.id === msgId)
     return (m?.content ?? '').replace(/\s+/g, ' ').trim().slice(0, 80) || t('autothread.reply')
@@ -773,7 +776,7 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
                 </button>
               </div>
             )}
-            <ThreadCountsContext.Provider value={autoThreads ? autoThreadCounts ?? null : null}>
+            <ThreadCountsContext.Provider value={autoThreadCounts ?? null}>
             <MessageList
               key={channelId}
               channelId={channelId}

@@ -66,6 +66,9 @@ pub(crate) async fn deliver_due(state: &AppState, only: Option<Uuid>) {
     }
 }
 
+type DueRow = (Uuid, Uuid, Option<Uuid>, Option<Uuid>, Option<Uuid>);
+type ReminderRow = (Uuid, Uuid, chrono::DateTime<chrono::Utc>, Option<Uuid>, Option<Uuid>, Option<Uuid>);
+
 /// Rappels échus d'utilisateurs HORS LIGNE qui ont un téléphone ou un navigateur abonné aux
 /// notifications (amélioration n° 47) : envoyés en notification, sans le texte (messages chiffrés),
 /// avec un lien vers le message. Sans abonnement, ils attendent la reconnexion comme avant.
@@ -74,7 +77,7 @@ pub(crate) async fn push_offline_due(state: &AppState) {
         return;
     }
     let online: Vec<Uuid> = state.clients.read().await.keys().copied().collect();
-    let rows: Vec<(Uuid, Uuid, Option<Uuid>, Option<Uuid>, Option<Uuid>)> = match sqlx::query_as(
+    let rows: Vec<DueRow> = match sqlx::query_as(
         "WITH due AS (
              UPDATE message_reminders SET sent = TRUE
              WHERE id IN (
@@ -124,7 +127,7 @@ pub async fn list(
     axum::extract::State(state): axum::extract::State<AppState>,
     axum::Extension(claims): axum::Extension<crate::middleware::auth::Claims>,
 ) -> crate::error::Result<axum::Json<serde_json::Value>> {
-    let rows: Vec<(Uuid, Uuid, chrono::DateTime<chrono::Utc>, Option<Uuid>, Option<Uuid>, Option<Uuid>)> = sqlx::query_as(
+    let rows: Vec<ReminderRow> = sqlx::query_as(
         "SELECT r.id, r.message_id, r.remind_at, m.channel_id, c.server_id, dm.dm_channel_id
          FROM message_reminders r
          LEFT JOIN messages m ON m.id = r.message_id
