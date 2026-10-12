@@ -40,6 +40,8 @@ export const remoteSupportFr = {
   'rs.state.declined': 'Refusée',
   'rs.state.expired': 'Code expiré',
   'rs.state.used': 'Code déjà utilisé sur cet appareil',
+  'rs.friendsOnly': "Support à distance réservé aux amis : ajoute cette personne en ami pour l'utiliser.",
+  'rs.scam': "⚠ Personne de ForgeChat, d'une banque ou d'un service technique ne te demandera de prendre la main sur ton ordinateur. Refuse si tu ne connais pas cette personne en vrai.",
   'rs.state.answered': 'Réponse envoyée',
 }
 
@@ -84,5 +86,7 @@ export const remoteSupportEn: Partial<Record<keyof typeof remoteSupportFr, strin
   'rs.state.declined': 'Declined',
   'rs.state.expired': 'Code expired',
   'rs.state.used': 'Code already used on this device',
+  'rs.friendsOnly': 'Remote support is for friends only: add this person as a friend to use it.',
+  'rs.scam': '⚠ Nobody from ForgeChat, a bank or a tech support service will ever ask to take control of your computer. Refuse if you do not know this person in real life.',
   'rs.state.answered': 'Answer sent',
 }

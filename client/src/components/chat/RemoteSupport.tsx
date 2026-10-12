@@ -2,7 +2,7 @@
 // L'identifiant et le code partent dans le contenu chiffré de bout en bout (`rs`), jamais en clair.
 import { useEffect, useState } from 'react'
 import { LifeBuoy } from 'lucide-react'
-import { useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import api from '../../api/client'
@@ -33,6 +33,30 @@ const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
 const canHost = canHostGhd(typeof navigator === 'undefined' ? '' : navigator.userAgent)
 const ID_KEY = 'fc_ghd_id'
 const savedId = () => { try { return localStorage.getItem(ID_KEY) ?? '' } catch { return '' } }
+
+/**
+ * Support à distance réservé aux amis acceptés : c'est le scénario type de l'arnaque au faux
+ * support. Le contenu étant chiffré de bout en bout, la règle s'applique ici, pas au serveur.
+ */
+const fetchRelationship = (userId: string) =>
+  api.get(`/users/${userId}/profile`).then(r => (r.data?.relationship as string | undefined) ?? 'none')
+
+function useIsFriend(userId: string | undefined): boolean | undefined {
+  const { data } = useQuery({
+    queryKey: ['profile', userId],
+    queryFn: () => api.get(`/users/${userId}/profile`).then(r => r.data),
+    enabled: !!userId,
+    staleTime: 30_000,
+  })
+  if (!userId) return false
+  return data === undefined ? undefined : data?.relationship === 'friend'
+}
+
+/** Correspondant d'un MP (infos déjà chargées par DMPage). */
+function usePartner(dmId: string): string | undefined {
+  const qc = useQueryClient()
+  return qc.getQueryData<{ other_user_id?: string } | null>(['dm_info', dmId])?.other_user_id ?? undefined
+}
 
 async function tauri<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
   const { invoke } = await import('@tauri-apps/api/core')
@@ -159,8 +183,11 @@ export function useRemoteSupportItem() {
   return (userId: string, label = tr('rs.button')): ContextMenuItem | null => userId === me ? null : {
     label, icon: <LifeBuoy size={14} />,
     onClick: () => {
-      api.post(`/dms/${userId}`)
-        .then(r => nav(`/dms/${r.data.dm_id}?support=1`))
+      fetchRelationship(userId)
+        .then(rel => {
+          if (rel !== 'friend') { toast.error(tr('rs.friendsOnly')); return }
+          return api.post(`/dms/${userId}`).then(r => nav(`/dms/${r.data.dm_id}?support=1`))
+        })
         .catch(() => toast.error(tr('msg.openDmFailed')))
     },
   }
@@ -168,6 +195,12 @@ export function useRemoteSupportItem() {
 
 /** Bouton du MP (en-tête, ou barre d'appel avec `round`) : « Aider » ou « Demander de l'aide ». */
 export function RemoteSupportButton({ dmId, autoOpen = false, round = false }: { dmId: string; autoOpen?: boolean; round?: boolean }) {
+  const friend = useIsFriend(usePartner(dmId))
+  if (!friend) return null
+  return <RemoteSupportMenu dmId={dmId} autoOpen={autoOpen} round={round} />
+}
+
+function RemoteSupportMenu({ dmId, autoOpen, round }: { dmId: string; autoOpen: boolean; round: boolean }) {
   const t = useT()
   const [open, setOpen] = useState<null | 'menu' | 'host'>(null)
   const [armed, setArmed] = useState<Armed | null>(null)
@@ -221,6 +254,9 @@ export function RemoteSupportCard({ msg, isOwn }: { msg: any; isOwn: boolean }) 
   // Offre acceptée : panneau hôte (false = fermé, null = pas Windows).
   const [host, setHost] = useState<Armed | null | false>(false)
   const [used, setUsed] = useState(() => wasUsed(cmid))
+  // Reçu d'un non-ami : affiché, jamais actionnable (pas d'ouverture de GhostHandDesk ni de code).
+  const friend = useIsFriend(isOwn ? undefined : msg.author_id) ?? false
+  const actionable = isOwn || friend
   const [, tick] = useState(0)
   useEffect(() => {
     if (rs?.k !== 'invite' || expired(rs)) return
@@ -259,7 +295,9 @@ export function RemoteSupportCard({ msg, isOwn }: { msg: any; isOwn: boolean }) 
       {rs.k === 'offer' && (
         <>
           <p className="text-fc-text">{t(isOwn ? 'rs.card.offerOut' : 'rs.card.offerIn', { name })}</p>
-          {!isOwn && !reply && host === false && (
+          {!isOwn && !reply && <p className="mt-1 text-[11px] font-medium text-fc-yellow">{t('rs.scam')}</p>}
+          {!isOwn && !actionable && <p className="mt-1 text-xs text-fc-muted">{t('rs.friendsOnly')}</p>}
+          {!isOwn && actionable && !reply && host === false && (
             <div className="mt-2 flex flex-wrap gap-2">
               <button className={`${btn} bg-fc-accent text-white`} onClick={() => void acceptOffer()}>{t('rs.accept')}</button>
               <button className={`${btn} text-fc-muted hover:text-white`} onClick={() => send(dmId, { v: 1, k: 'decline', ref: cmid })}>{t('rs.decline')}</button>
@@ -279,6 +317,8 @@ export function RemoteSupportCard({ msg, isOwn }: { msg: any; isOwn: boolean }) 
                 <span className="w-full text-[11px] text-fc-muted">{t('rs.portable')}</span>
               </div>
             )
+          ) : !actionable ? (
+            <p className="mt-1 text-xs text-fc-muted">{t('rs.friendsOnly')}</p>
           ) : !isExpired && !used && reply?.k !== 'decline' && (
             <div className="mt-2 flex flex-wrap gap-2">
               <button className={`${btn} bg-fc-accent text-white`} onClick={() => join('web')}>{t('rs.openWeb')}</button>
@@ -286,7 +326,7 @@ export function RemoteSupportCard({ msg, isOwn }: { msg: any; isOwn: boolean }) 
               {!reply && <button className={`${btn} text-fc-muted hover:text-white`} onClick={() => send(dmId, { v: 1, k: 'decline', ref: cmid })}>{t('rs.decline')}</button>}
             </div>
           )}
-          {!isOwn && !isExpired && !used && <p className="mt-1 font-mono text-[11px] text-fc-muted">{formatCode(rs.code)}</p>}
+          {!isOwn && actionable && !isExpired && !used && <p className="mt-1 font-mono text-[11px] text-fc-muted">{formatCode(rs.code)}</p>}
         </>
       )}
       <p className="mt-2 text-[11px] text-fc-muted">

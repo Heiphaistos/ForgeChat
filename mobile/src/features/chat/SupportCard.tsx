@@ -1,10 +1,12 @@
 // Carte « Support à distance » d'un MP (contenu chiffré `rs`). Android n'est qu'aidant :
 // l'invitation s'ouvre dans la visionneuse web GhostHandDesk (onglet personnalisé du navigateur).
 import { useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { Alert, Pressable, StyleSheet, Text, View } from 'react-native'
 import * as WebBrowser from 'expo-web-browser'
 import { Ionicons } from '@expo/vector-icons'
 import { messagesApi } from '@/api/messages'
+import { usersApi } from '@/api/users'
 import { t, useT } from '@/i18n'
 import { errorMessage } from '@/lib/http'
 import { expired, formatId, webViewerLink, type SupportPayload } from '@/lib/remoteSupport'
@@ -19,8 +21,19 @@ export async function sendSupport(dmId: string, rs: SupportPayload, text: string
   await messagesApi.send({ kind: 'dm', dmId }, { content: text, support: rs })
 }
 
+/**
+ * Support à distance réservé aux amis acceptés (scénario type de l'arnaque au faux support). Le
+ * contenu est chiffré de bout en bout : la règle s'applique ici, pas au serveur.
+ */
+const isFriend = (userId: string) =>
+  usersApi.profile(userId).then((p) => (p as { relationship?: unknown }).relationship === 'friend', () => false)
+
 /** Menu « Support à distance » d'un MP : Android ne fait qu'aider (visionneuse web), il ne partage pas son écran. */
-export function promptSupport(dmId: string) {
+export async function promptSupport(dmId: string, partnerId: string | undefined) {
+  if (!partnerId || !(await isFriend(partnerId))) {
+    Alert.alert(t('rs.button'), t('rs.friendsOnly'))
+    return
+  }
   Alert.alert(t('rs.button'), undefined, [
     {
       text: t('rs.help'),
@@ -36,6 +49,13 @@ export function SupportCard({ m, dmId, mine, reply }: { m: ChatMessage; dmId: st
   const rs = m.support
   const cmid = m.clientMsgId ?? ''
   const [opened, setOpened] = useState(() => used.has(cmid))
+  // Reçu d'un non-ami : affiché, jamais actionnable.
+  const friend = useQuery({
+    queryKey: ['support-friend', m.authorId],
+    queryFn: () => isFriend(m.authorId),
+    enabled: !mine && !!m.authorId,
+    staleTime: 30_000,
+  }).data === true
   if (!rs || !cmid || rs.k === 'accept' || rs.k === 'decline') return null
   const answer = (k: 'accept' | 'decline') =>
     sendSupport(dmId, { v: 1, k, ref: cmid }, t(`rs.text.${k}`)).catch((e) => Alert.alert(t('rs.sendError'), errorMessage(e)))
@@ -66,7 +86,9 @@ export function SupportCard({ m, dmId, mine, reply }: { m: ChatMessage; dmId: st
         <Text style={styles.titleText}>{t('rs.card.title')}</Text>
       </View>
       <Text style={styles.body}>{body}</Text>
-      {!mine && !reply ? (
+      {!mine && !reply ? <Text style={styles.warn}>{t('rs.scam')}</Text> : null}
+      {!mine && !friend ? <Text style={styles.fine}>{t('rs.friendsOnly')}</Text> : null}
+      {!mine && friend && !reply ? (
         <View style={styles.row}>
           {rs.k === 'invite' && !isExpired && !opened ? (
             <Pressable accessibilityRole="button" style={[styles.btn, styles.primary]} onPress={open}>
@@ -94,4 +116,5 @@ const styles = StyleSheet.create({
   btnText: { color: colors.text, fontSize: font.sm },
   primaryText: { color: '#ffffff', fontSize: font.sm, fontWeight: '600' },
   fine: { color: colors.textMuted, fontSize: font.xs },
+  warn: { color: colors.warning, fontSize: font.xs, fontWeight: '600' },
 })
