@@ -2,7 +2,7 @@
 // Le mobile vérifie les mêmes cas (mobile/__tests__/channel-text.test.ts).
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { automodBlock, containsWord, firstUrl, linkHosts, mentionMeta } from '../src/e2e/channelText.ts'
+import { automodBlock, containsWord, firstUrl, linkHosts, mentionMeta, previewAllowed } from '../src/e2e/channelText.ts'
 
 const U = '11111111-1111-4111-8111-111111111111'
 const R = '22222222-2222-4222-8222-222222222222'
@@ -51,4 +51,13 @@ test('AutoMod : liens dangereux (liste locale), sous-domaines compris', () => {
   assert.equal(automodBlock({ ...r, dangerous_domains: [] }, 'https://grabify.link'), null)
   assert.deepEqual(linkHosts('https://user@a.fr:8080/x http://www.b.fr.'), ['a.fr', 'b.fr'])
   assert.equal(automodBlock(r, 'https://google.com@grabify.link/x'), 'dangerous_link')
+})
+
+test("aperçu : seuls les domaines prévisualisés par le serveur partent à /og", () => {
+  for (const ok of ['https://github.com/a/b', 'https://fr.wikipedia.org/wiki/X', 'https://www.youtube.com/watch?v=1', 'https://forgechat.heiphaistos.org/x']) {
+    assert.equal(previewAllowed(ok), true, ok)
+  }
+  for (const ko of ['https://exemple.com/secret', 'https://github.com.evil.io/', 'https://evilgithub.com/', 'javascript:alert(1)', 'pas une url', 'ftp://github.com/']) {
+    assert.equal(previewAllowed(ko), false, ko)
+  }
 })

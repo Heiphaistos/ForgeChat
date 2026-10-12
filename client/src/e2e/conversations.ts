@@ -350,7 +350,16 @@ export interface RawMsg {
 }
 export type E2EState = 'ok' | 'locked'
 /** `e2e_body` : contenu déchiffré complet (aperçu de lien `p`, etc.). */
-export type Opened<T> = T & { e2e?: E2EState; e2e_body?: c.MsgBody; e2e_reply?: 'locked' }
+/**
+ * `unencrypted` : texte en clair, décidé ICI (jamais d'après le champ du serveur, qu'un serveur
+ * compromis pourrait omettre pour faire passer un message injecté pour un message chiffré).
+ * `unencrypted_warn` : en MP et en groupe, où plus aucun envoi légitime n'est en clair.
+ */
+export type Opened<T> = T & { e2e?: E2EState; e2e_body?: c.MsgBody; e2e_reply?: 'locked'; unencrypted?: boolean; unencrypted_warn?: boolean }
+
+/** Texte en clair d'un message tel que reçu (ni chiffré, ni effacé). */
+export const isPlaintext = (m: { enc?: unknown; content?: string | null; purged?: boolean }) =>
+  !m.enc && !m.purged && typeof m.content === 'string' && m.content.trim().length > 0
 
 const authorOf = (m: RawMsg) => m.sender_id ?? m.author_id ?? m.user_id ?? ''
 
@@ -371,8 +380,9 @@ function indexOpened(kind: ConvKind, id: string, m: RawMsg, body: c.MsgBody) {
  * affiche un texte d'attente.
  */
 export async function openMessage<T extends RawMsg>(kind: ConvKind, id: string, m: T, scope?: string): Promise<Opened<T>> {
-  if (m.purged && !m.enc) return { ...m, content: t('e2e.msg.purged') }
-  let out: Opened<T> = m
+  if (m.purged && !m.enc) return { ...m, content: t('e2e.msg.purged'), unencrypted: false, unencrypted_warn: false }
+  const plain = isPlaintext(m)
+  let out: Opened<T> = { ...m, unencrypted: plain, unencrypted_warn: plain && kind !== 'channel' }
   if (m.enc) {
     const body = await openBody(kind, id, m.enc, authorOf(m), m.client_msg_id, scope)
     out = body === null ? { ...m, content: lockedText(), e2e: 'locked' } : { ...m, content: body.t, e2e: 'ok', e2e_body: body }

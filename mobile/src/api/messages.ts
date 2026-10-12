@@ -1,4 +1,6 @@
 import * as Crypto from 'expo-crypto'
+import { Alert } from 'react-native'
+import { t } from '@/i18n'
 import { http, path } from '@/lib/http'
 import { LIMITS } from '@/config/env'
 import { adaptMessage } from '@/features/chat/adapters'
@@ -69,6 +71,21 @@ const botCommandNames = (serverId: string) =>
     .then((list) => list.map((c) => c.name))
     .catch(() => [] as string[])
 
+/** Commandes de bot déjà confirmées pendant cette session (serveur|commande). */
+const confirmedCommands = new Set<string>()
+
+function confirmPlainCommand(serverId: string, text: string): Promise<boolean> {
+  const cmd = text.trim().slice(1).split(/\s+/)[0]?.toLowerCase() ?? ''
+  const k = `${serverId}|${cmd}`
+  if (confirmedCommands.has(k)) return Promise.resolve(true)
+  return new Promise(resolve => {
+    Alert.alert(t('e2e.unencrypted'), t('e2e.botCommand.confirm', { cmd }), [
+      { text: t('common.cancel'), style: 'cancel', onPress: () => resolve(false) },
+      { text: t('e2e.botCommand.send'), style: 'destructive', onPress: () => { confirmedCommands.add(k); resolve(true) } },
+    ], { cancelable: true, onDismiss: () => resolve(false) })
+  })
+}
+
 /**
  * Salon : mentions toujours envoyées en métadonnées ; texte chiffré dès que j'ai une clé
  * (AutoMod et aperçu de lien faits ici), sauf commande de bot connue qui part en clair.
@@ -77,8 +94,11 @@ async function sendChannel(
   ref: Extract<ConversationRef, { kind: 'channel' }>, text: string, extra: Record<string, unknown>, files?: FileEntry[],
 ): Promise<ChatMessage> {
   const meta = { ...extra, ...mentionMeta(text) }
-  if (text.startsWith('/') && isBotCommand(text, await botCommandNames(ref.serverId)))
+  if (text.startsWith('/') && isBotCommand(text, await botCommandNames(ref.serverId))) {
+    // En clair (le bot doit la lire), sur une liste fournie par le serveur : confirmation d'abord.
+    if (!(await confirmPlainCommand(ref.serverId, text))) throw new Error(t('e2e.botCommand.cancelled'))
     return adaptMessage(ref, await http.post<unknown>(base(ref), { content: text, ...meta }))
+  }
   const sent = await sendChannelText(ref.serverId, ref.channelId, text, (body) => http.post<Record<string, unknown>>(base(ref), { ...body, ...meta }),
     { preview: true, extra: files?.length ? { f: files } : undefined })
   const m = adaptMessage(ref, sent.result)

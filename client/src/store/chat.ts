@@ -87,6 +87,8 @@ interface Message {
   purged?: boolean
   /** Envoyé en clair (bot, webhook, système, ancien message, membre sans clé). */
   unencrypted?: boolean
+  /** MP ou groupe : texte en clair là où tout est chiffré (badge d'alerte). */
+  unencrypted_warn?: boolean
   e2e?: E2EState
   /** Contenu déchiffré complet (aperçu de lien `p`…). */
   e2e_body?: MsgBody

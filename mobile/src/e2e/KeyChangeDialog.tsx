@@ -30,6 +30,7 @@ export default function KeyChangeDialog() {
   if (!alert) return null
   const code = safety?.fp === alert.fp ? safety.code : null
   const red = alert.verified || alert.kind === 'server'
+  const fresh = alert.kind === 'server' && alert.fresh === true
   const mono = { fontFamily: 'monospace', fontSize: 15, color: colors.text } as const
   return (
     // Bouton retour = « pas maintenant » (la clé reste exclue du chiffrement).
@@ -41,10 +42,10 @@ export default function KeyChangeDialog() {
           accessibilityRole="alert"
         >
           <T variant="subtitle" style={{ color: red ? colors.danger : colors.warning }}>
-            {t(alert.kind === 'server' ? 'e2e.pin.titleServer' : 'e2e.pin.title', { name: alert.name })}
+            {t(fresh ? 'e2e.pin.titleServerNew' : alert.kind === 'server' ? 'e2e.pin.titleServer' : 'e2e.pin.title', { name: alert.name })}
           </T>
           {alert.verified ? <T style={{ color: colors.danger }}>{t('e2e.pin.verifiedWarn')}</T> : null}
-          <T variant="muted">{t(alert.kind === 'server' ? 'e2e.pin.descServer' : 'e2e.pin.desc')}</T>
+          <T variant="muted">{t(fresh ? 'e2e.pin.descServerNew' : alert.kind === 'server' ? 'e2e.pin.descServer' : 'e2e.pin.desc')}</T>
           {alert.kind === 'user' && code ? (
             <View>
               <T variant="label">{t('e2e.safety.title')}</T>
@@ -55,14 +56,14 @@ export default function KeyChangeDialog() {
           ) : null}
           {alert.kind === 'server' ? (
             <View>
-              <T variant="label">{t('e2e.pin.fingerprint')}</T>
+              <T variant="label">{t(fresh ? 'e2e.pin.fingerprintNew' : 'e2e.pin.fingerprint')}</T>
               <Text style={[mono, { fontSize: 13 }]} selectable>{groups(alert.fp, 4).join(' ')}</Text>
             </View>
           ) : null}
           <Button variant="secondary" title={t('e2e.pin.refuse')} onPress={() => refuseKey(alert)} />
           <Button
             variant={red ? 'danger' : 'primary'}
-            title={t('e2e.pin.accept')}
+            title={t(fresh ? 'e2e.pin.acceptServerNew' : 'e2e.pin.accept')}
             loading={busy}
             disabled={busy}
             onPress={() => { setBusy(true); void acceptKey(alert).finally(() => setBusy(false)) }}

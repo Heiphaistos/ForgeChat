@@ -224,7 +224,7 @@ function MessageRow({
               )}
               {msg.expires_at && <EphemeralBadge expiresAt={msg.expires_at} />}
               {!msg.expires_at && msg.expire_on_read && <AfterReadBadge />}
-              {msg.unencrypted === true && <UnencryptedBadge />}
+              {msg.unencrypted === true && <UnencryptedBadge warn={msg.unencrypted_warn === true} />}
             </div>
           )}
 

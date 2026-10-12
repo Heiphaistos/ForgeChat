@@ -5,7 +5,7 @@
 import * as Crypto from 'expo-crypto'
 import { t } from '@/i18n'
 import { http, path } from '@/lib/http'
-import { automodBlock, firstUrl, type AutoModRules } from './channelText'
+import { automodBlock, firstUrl, previewAllowed, type AutoModRules } from './channelText'
 import { completeChannelKeys, lockedText, mustEncrypt, openBody, sealBody, withSeal } from './conversations'
 import * as c from './crypto'
 
@@ -46,7 +46,7 @@ export async function checkAutomod(serverId: string, text: string): Promise<void
 /** Aperçu du premier lien demandé par l'expéditeur, mis dans le contenu chiffré (`p`) ; {} sinon. */
 async function linkPreviewExtra(text: string): Promise<Record<string, unknown>> {
   const url = firstUrl(text)
-  if (!url) return {}
+  if (!url || !previewAllowed(url)) return {}
   const ctrl = new AbortController()
   const timer = setTimeout(() => ctrl.abort(), 3000)
   try {

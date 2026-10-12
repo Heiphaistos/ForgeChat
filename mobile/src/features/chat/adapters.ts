@@ -31,7 +31,7 @@ export function fromServerMessage(m: ServerMessage): ChatMessage {
     expiresAt: m.expires_at ?? null,
     pollId: m.poll_id ?? null,
     ...e2eFields(m),
-    ...(m.unencrypted === true ? { unencrypted: true } : {}),
+    ...plainFields(m, false),
     ...(m.type === 'welcome' || m.type === 'starboard' ? { system: { kind: m.type, meta: m.system_meta ?? {} } } : {}),
     // Aperçu de lien du message chiffré : celui de l'expéditeur, sans appel à /og.
     ...(m.e2e === 'ok' ? { preview: normalizeOg(m.e2e_body?.p, firstUrl(m.content ?? '') ?? '') } : {}),
@@ -61,6 +61,7 @@ export function fromDmMessage(m: DmMessage): ChatMessage {
     expiresAt: m.expires_at ?? null,
     ...(m.expire_on_read ? { expireOnRead: true } : {}),
     ...e2eFields(m),
+    ...plainFields(m, true),
     ...supportField(m),
   }
 }
@@ -69,6 +70,16 @@ export function fromDmMessage(m: DmMessage): ChatMessage {
 function supportField(m: { e2e?: 'ok' | 'locked' }) {
   const support = m.e2e === 'ok' ? parseSupport((m as { e2e_body?: { rs?: unknown } }).e2e_body?.rs) : null
   return support ? { support } : {}
+}
+
+/**
+ * Texte en clair : décidé ICI, jamais d'après le champ `unencrypted` du serveur (un serveur
+ * compromis pourrait l'omettre pour faire passer un message injecté pour un message chiffré).
+ * `warn` : MP et groupes, où plus aucun envoi légitime n'est en clair.
+ */
+export function plainFields(m: { enc?: unknown; e2e?: unknown; purged?: unknown; content?: unknown }, warn: boolean) {
+  const plain = !m.enc && !m.e2e && m.purged !== true && typeof m.content === 'string' && m.content.trim().length > 0
+  return plain ? { unencrypted: true, ...(warn ? { unencryptedWarn: true } : {}) } : {}
 }
 
 /** Champs du chiffrement de bout en bout (le texte est déjà déchiffré dans `content`, les clés des fichiers dans `files`). */
@@ -98,6 +109,7 @@ export function fromGroupMessage(m: GroupMessage): ChatMessage {
     expiresAt: m.expires_at ?? null,
     ...(m.expire_on_read ? { expireOnRead: true } : {}),
     ...e2eFields(m),
+    ...plainFields(m, true),
   }
 }
 
@@ -131,7 +143,7 @@ export function fromThreadMessage(raw: unknown): ChatMessage | null {
     pinned: false,
     // Fil ou forum chiffré (déchiffré par e2e/conversations.openRaw avec la portée du fil ou de la publication).
     ...e2eFields({ client_msg_id: s(m.client_msg_id), ...(m.e2e === 'ok' || m.e2e === 'locked' ? { e2e: m.e2e } : {}), e2e_body: m.e2e_body } as Parameters<typeof e2eFields>[0]),
-    ...(m.unencrypted === true ? { unencrypted: true } : {}),
+    ...plainFields(m as Parameters<typeof plainFields>[0], false),
   }
 }
 

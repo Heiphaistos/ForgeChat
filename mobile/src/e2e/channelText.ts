@@ -96,3 +96,25 @@ export function automodBlock(rules: AutoModRules | null | undefined, text: strin
 export function firstUrl(text: string): string | null {
   return text.match(/https?:\/\/[^\s<>"]+/)?.[0] ?? null
 }
+
+/**
+ * Domaines dont le serveur fait l'aperçu (liste fixe de server/src/handlers/audit.rs, get_og_preview).
+ * Vérifiée ICI avant tout appel à /og : un lien vers un autre site n'est jamais envoyé au serveur,
+ * qui sinon apprendrait les liens partagés dans les conversations chiffrées.
+ */
+export const PREVIEW_DOMAINS = [
+  'github.com', 'youtube.com', 'youtu.be', 'twitter.com', 'x.com',
+  'reddit.com', 'stackoverflow.com', 'wikipedia.org', 'medium.com', 'heiphaistos.org',
+] as const
+
+export function previewAllowed(url: string): boolean {
+  let host: string
+  try {
+    const u = new URL(url)
+    if (u.protocol !== 'https:' && u.protocol !== 'http:') return false
+    host = u.hostname.toLowerCase()
+  } catch {
+    return false
+  }
+  return PREVIEW_DOMAINS.some(d => host === d || host.endsWith(`.${d}`))
+}

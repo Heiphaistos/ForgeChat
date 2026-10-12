@@ -329,13 +329,34 @@ pub async fn verify_email(
     }
     tx.commit().await?;
 
-    let access_token = create_token(user.id, None, &state.config.jwt_secret, &state.config.jwt_issuer)
-        .map_err(AppError::Internal)?;
-    let refresh_token = generate_refresh_token();
-    store_refresh_token(&state, user.id, &refresh_token).await?;
+    // Session visible (et révocable seule) dans « Sessions », comme à la connexion.
+    let (refresh_token, access_token) = open_session(&state, user.id, &req_headers).await?;
 
     let auth = AuthResponse { access_token, refresh_token, user: user.into_self_public() };
     Ok(auth_reply(&req_headers, auth, is_secure(&state)))
+}
+
+/// Nouvelle session : jeton de rafraîchissement, ligne `user_sessions` (même hachage, pour que
+/// revoke_session la retrouve) et jeton d'accès qui porte son `sid`. Rend (rafraîchissement, accès).
+async fn open_session(state: &AppState, user_id: Uuid, headers: &HeaderMap) -> Result<(String, String)> {
+    let refresh_token = generate_refresh_token();
+    store_refresh_token(state, user_id, &refresh_token).await?;
+    // Étiquette d'appareil seulement, ni user-agent brut ni IP.
+    let device = headers.get("user-agent")
+        .and_then(|v| v.to_str().ok())
+        .map(|ua| crate::privacy::device_label(ua, false));
+    let sid: Option<Uuid> = sqlx::query_scalar(
+        "INSERT INTO user_sessions (user_id, refresh_token_hash, device_info) VALUES ($1, $2, $3) RETURNING id"
+    )
+    .bind(user_id)
+    .bind(hash_token(&refresh_token))
+    .bind(&device)
+    .fetch_one(&state.db)
+    .await
+    .ok();
+    let access_token = create_token(user_id, sid, &state.config.jwt_secret, &state.config.jwt_issuer)
+        .map_err(AppError::Internal)?;
+    Ok((refresh_token, access_token))
 }
 
 /// Vérifie la preuve de connexion selon l'état du compte (voir LoginRequest). `Ok(None)` = refus.
@@ -420,28 +441,7 @@ pub async fn login(
     // Le statut en direct est posé par la connexion WebSocket (presence.rs) :
     // l'écrire ici à « online » rendait visible un utilisateur invisible.
 
-    let refresh_token = generate_refresh_token();
-    store_refresh_token(&state, user.id, &refresh_token).await?;
-
-    // Session : même hachage que refresh_tokens.token_hash, pour que revoke_session la retrouve.
-    let sid: Option<Uuid> = {
-        let token_hash = hash_token(&refresh_token);
-        // Étiquette d'appareil seulement, ni user-agent brut ni IP.
-        let device = headers.get("user-agent")
-            .and_then(|v| v.to_str().ok())
-            .map(|ua| crate::privacy::device_label(ua, false));
-        sqlx::query_scalar(
-            "INSERT INTO user_sessions (user_id, refresh_token_hash, device_info) VALUES ($1, $2, $3) RETURNING id"
-        )
-        .bind(user.id)
-        .bind(&token_hash)
-        .bind(&device)
-        .fetch_one(&state.db)
-        .await
-        .ok()
-    };
-    let access_token = create_token(user.id, sid, &state.config.jwt_secret, &state.config.jwt_issuer)
-        .map_err(AppError::Internal)?;
+    let (refresh_token, access_token) = open_session(&state, user.id, &headers).await?;
 
     let auth = AuthResponse { access_token, refresh_token, user: user.into_self_public() };
     Ok(auth_reply(&headers, auth, is_secure(&state)))
@@ -479,9 +479,55 @@ pub async fn refresh(
 /// jeton d'accès sont émis. Renvoie (compte, nouveau jeton de rafraîchissement, jeton d'accès).
 /// Un jeton de rafraîchissement déjà consommé reste accepté ce nombre de secondes : deux fenêtres
 /// de l'appli qui se rafraîchissent en même temps, ou une réponse perdue (réseau coupé, appli
-/// fermée au mauvais moment), ne doivent pas déconnecter l'utilisateur. Chacun repart avec son
-/// propre nouveau jeton : aucun secret n'est conservé, seulement « ce jeton vient de tourner ».
+/// fermée au mauvais moment), ne doivent pas déconnecter l'utilisateur. Le retardataire reçoit le
+/// MÊME successeur (jamais un jeton de plus), la fenêtre n'est jamais prolongée, et elle tombe dès
+/// que la session est fermée (successeur supprimé) ou que le compte est révoqué.
 const REFRESH_GRACE_SECS: u64 = 60;
+
+/// Successeur gardé pendant la grâce, chiffré par une clé tirée de l'ANCIEN jeton : Redis seul ne
+/// le livre pas, il faut présenter le jeton consommé. Format : `v1:` + base64url(iv ‖ AES-256-GCM).
+fn seal_successor(old_token: &str, plain: &str) -> Option<String> {
+    use aes_gcm::{aead::{Aead, KeyInit, Payload}, Aes256Gcm, Nonce};
+    use base64::Engine;
+    let key = crate::crypto::hkdf32(old_token.as_bytes(), b"forgechat refresh grace v1");
+    let iv: [u8; 12] = rand::thread_rng().gen();
+    let ct = Aes256Gcm::new((&key).into())
+        .encrypt(Nonce::from_slice(&iv), Payload { msg: plain.as_bytes(), aad: b"rtgrace v1" })
+        .ok()?;
+    Some(format!("v1:{}", base64::engine::general_purpose::URL_SAFE_NO_PAD.encode([&iv[..], &ct].concat())))
+}
+
+fn open_successor(old_token: &str, sealed: &str) -> Option<String> {
+    use aes_gcm::{aead::{Aead, KeyInit, Payload}, Aes256Gcm, Nonce};
+    use base64::Engine;
+    let raw = base64::engine::general_purpose::URL_SAFE_NO_PAD.decode(sealed.strip_prefix("v1:")?).ok()?;
+    if raw.len() < 12 + 16 {
+        return None;
+    }
+    let (iv, ct) = raw.split_at(12);
+    let key = crate::crypto::hkdf32(old_token.as_bytes(), b"forgechat refresh grace v1");
+    let pt = Aes256Gcm::new((&key).into())
+        .decrypt(Nonce::from_slice(iv), Payload { msg: ct, aad: b"rtgrace v1" })
+        .ok()?;
+    String::from_utf8(pt).ok()
+}
+
+/// Contenu de la grâce : `<compte>|<émis à (unix)>|<sid ou ->|<successeur>`.
+fn grace_value(user_id: Uuid, issued: i64, sid: Option<Uuid>, successor: &str) -> String {
+    let sid = sid.map(|s| s.to_string()).unwrap_or_else(|| "-".into());
+    format!("{user_id}|{issued}|{sid}|{successor}")
+}
+
+fn parse_grace(v: &str) -> Option<(Uuid, i64, Option<Uuid>, String)> {
+    let mut it = v.splitn(4, '|');
+    let user = it.next()?.parse().ok()?;
+    let issued = it.next()?.parse().ok()?;
+    let sid = match it.next()? {
+        "-" => None,
+        s => Some(s.parse().ok()?),
+    };
+    Some((user, issued, sid, it.next()?.to_string()))
+}
 
 pub(crate) async fn rotate_refresh_token(state: &AppState, token: &str) -> Result<(Uuid, String, String)> {
     let token_hash = hash_token(token);
@@ -494,37 +540,14 @@ pub(crate) async fn rotate_refresh_token(state: &AppState, token: &str) -> Resul
     .fetch_optional(&state.db)
     .await?;
 
-    let user_id = match row {
-        Some((user_id, expires_at)) => {
-            if expires_at < Utc::now() {
-                return Err(AppError::Unauthorized);
-            }
-            user_id
-        }
-        None => {
-            // Jeton déjà tourné il y a moins d'une minute ?
-            let recent: Option<String> = {
-                let mut redis = state.redis.lock().await;
-                redis.get(&grace_key).await.unwrap_or(None)
-            };
-            let user_id = recent.and_then(|v| v.parse::<Uuid>().ok()).ok_or(AppError::Unauthorized)?;
-            // Déconnexion, bannissement ou « déconnecter partout » entre-temps : plus aucun jeton, plus de tolérance.
-            let still_signed_in: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM refresh_tokens WHERE user_id=$1)")
-                .bind(user_id)
-                .fetch_one(&state.db)
-                .await?;
-            if !still_signed_in {
-                return Err(AppError::Unauthorized);
-            }
-            user_id
-        }
+    let Some((user_id, expires_at)) = row else {
+        return grace_retry(state, token, &grace_key).await;
     };
-    if crate::handlers::site_admin::is_banned(state, user_id).await {
+    if expires_at < Utc::now() {
         return Err(AppError::Unauthorized);
     }
-    {
-        let mut redis = state.redis.lock().await;
-        let _: () = redis.set_ex(&grace_key, user_id.to_string(), REFRESH_GRACE_SECS).await.unwrap_or(());
+    if crate::handlers::site_admin::is_banned(state, user_id).await {
+        return Err(AppError::Unauthorized);
     }
 
     let new_refresh_token = generate_refresh_token();
@@ -545,9 +568,76 @@ pub(crate) async fn rotate_refresh_token(state: &AppState, token: &str) -> Resul
     .ok()
     .flatten();
 
+    // Grâce posée une seule fois (NX), jamais prolongée.
+    if let Some(sealed) = seal_successor(token, &grace_value(user_id, Utc::now().timestamp(), sid, &new_refresh_token)) {
+        let mut redis = state.redis.lock().await;
+        let _: () = redis::cmd("SET")
+            .arg(&grace_key)
+            .arg(sealed)
+            .arg("NX")
+            .arg("EX")
+            .arg(REFRESH_GRACE_SECS)
+            .query_async(&mut *redis)
+            .await
+            .unwrap_or(());
+    }
+
     let access_token = create_token(user_id, sid, &state.config.jwt_secret, &state.config.jwt_issuer)
         .map_err(AppError::Internal)?;
     Ok((user_id, new_refresh_token, access_token))
+}
+
+/// Jeton consommé il y a moins de `REFRESH_GRACE_SECS` : on rend le successeur déjà émis, à
+/// condition qu'il soit toujours valide (session ni fermée, ni tournée encore) et que le compte
+/// n'ait été ni révoqué ni banni depuis.
+async fn grace_retry(state: &AppState, token: &str, grace_key: &str) -> Result<(Uuid, String, String)> {
+    let sealed: Option<String> = {
+        let mut redis = state.redis.lock().await;
+        redis.get(grace_key).await.unwrap_or(None)
+    };
+    let (user_id, issued, sid, successor) = sealed
+        .as_deref()
+        .and_then(|s| open_successor(token, s))
+        .as_deref()
+        .and_then(parse_grace)
+        .ok_or(AppError::Unauthorized)?;
+    let revoked_since: Option<i64> = {
+        let mut redis = state.redis.lock().await;
+        redis.get(format!("jwtrevoke:{user_id}")).await.unwrap_or(None)
+    };
+    if revoked_since.is_some_and(|ts| issued < ts) {
+        return Err(AppError::Unauthorized);
+    }
+    let alive: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM refresh_tokens WHERE token_hash=$1 AND user_id=$2 AND expires_at > NOW())",
+    )
+    .bind(hash_token(&successor))
+    .bind(user_id)
+    .fetch_one(&state.db)
+    .await?;
+    if !alive || crate::handlers::site_admin::is_banned(state, user_id).await {
+        return Err(AppError::Unauthorized);
+    }
+    let access_token = create_token(user_id, sid, &state.config.jwt_secret, &state.config.jwt_issuer)
+        .map_err(AppError::Internal)?;
+    Ok((user_id, successor, access_token))
+}
+
+#[cfg(test)]
+mod grace_tests {
+    use super::*;
+
+    #[test]
+    fn successor_only_opens_with_the_old_token() {
+        let id = Uuid::new_v4();
+        let sid = Some(Uuid::new_v4());
+        let sealed = seal_successor("ancien", &grace_value(id, 42, sid, "succ|esseur")).unwrap();
+        assert!(!sealed.contains("esseur"));
+        let (u, issued, s, succ) = parse_grace(&open_successor("ancien", &sealed).unwrap()).unwrap();
+        assert_eq!((u, issued, s, succ.as_str()), (id, 42, sid, "succ|esseur"));
+        assert!(open_successor("autre", &sealed).is_none());
+        assert_eq!(parse_grace(&grace_value(id, 1, None, "x")).unwrap().2, None);
+    }
 }
 
 /// POST /auth/change-password {old_auth, new_auth, new_kdf_salt, wrapped?}

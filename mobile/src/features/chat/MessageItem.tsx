@@ -277,13 +277,17 @@ export const MessageItem = memo(function MessageItem({
               <Text style={styles.time}>{formatTime(m.createdAt)}</Text>
               {m.unencrypted ? (
                 <Text
-                  style={styles.unencrypted}
-                  onPress={() => Alert.alert(t('e2e.unencrypted'), t('e2e.unencrypted.title'))}
+                  style={m.unencryptedWarn ? [styles.unencrypted, styles.unencryptedWarn] : styles.unencrypted}
+                  onPress={() => Alert.alert(
+                    t(m.unencryptedWarn ? 'e2e.unencrypted.warn' : 'e2e.unencrypted'),
+                    t(m.unencryptedWarn ? 'e2e.unencrypted.warnTitle' : 'e2e.unencrypted.title'),
+                  )}
                   accessibilityRole="button"
-                  accessibilityLabel={t('e2e.unencrypted')}
-                  accessibilityHint={t('e2e.unencrypted.title')}
+                  accessibilityLabel={t(m.unencryptedWarn ? 'e2e.unencrypted.warn' : 'e2e.unencrypted')}
+                  accessibilityHint={t(m.unencryptedWarn ? 'e2e.unencrypted.warnTitle' : 'e2e.unencrypted.title')}
                 >
-                  <Ionicons name="lock-open-outline" size={10} color={colors.textFaint} /> {t('e2e.unencrypted')}
+                  <Ionicons name="lock-open-outline" size={10} color={m.unencryptedWarn ? colors.danger : colors.textFaint} />{' '}
+                  {t(m.unencryptedWarn ? 'e2e.unencrypted.warn' : 'e2e.unencrypted')}
                 </Text>
               ) : null}
             </View>
@@ -385,6 +389,7 @@ const styles = StyleSheet.create({
   bot: { backgroundColor: colors.primary, color: '#fff', fontSize: 9, fontWeight: '800', paddingHorizontal: 4, borderRadius: 3, overflow: 'hidden' },
   time: { color: colors.textFaint, fontSize: font.xs },
   unencrypted: { color: colors.textFaint, fontSize: 10 },
+  unencryptedWarn: { color: colors.danger, fontWeight: '700' },
   reply: { flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 2 },
   replyText: { color: colors.textMuted, fontSize: font.sm, flex: 1 },
   forward: { color: colors.textMuted, fontSize: font.xs, fontStyle: 'italic' },

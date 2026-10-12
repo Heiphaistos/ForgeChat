@@ -54,6 +54,8 @@ export interface KeyAlert {
   pub: string
   fp: string
   verified: boolean
+  /** Clé de récupération de serveur jamais vue : rien ne lui est enveloppé avant acceptation explicite. */
+  fresh?: boolean
 }
 export const useKeyAlerts = create<{ alerts: KeyAlert[] }>(() => ({ alerts: [] }))
 const refused = new Map<string, KeyAlert>()
@@ -115,9 +117,10 @@ export async function trustedServerKey<T extends { server_id: string; public: st
   const account = getMyId()
   if (!account) return null
   const r = await checkServerKey(sk, (s) => getPin(account, s))
-  if (r.fresh) await savePin(account, serverSubject(sk.server_id), { fp: r.fp })
-  if (r.ok) return { ...sk, fingerprint: r.fp }
-  raise({ subject: serverSubject(sk.server_id), name: serverName ?? sk.server_id, kind: 'server', pub: sk.public, fp: r.fp, verified: r.verified })
+  // Jamais vue : pas d'épinglage silencieux (un serveur compromis recevrait sinon les clés de
+  // tous les salons, historique compris). L'utilisateur doit l'accepter.
+  if (r.ok && !r.fresh) return { ...sk, fingerprint: r.fp }
+  raise({ subject: serverSubject(sk.server_id), name: serverName ?? sk.server_id, kind: 'server', pub: sk.public, fp: r.fp, verified: r.verified, fresh: r.fresh })
   return null
 }
 

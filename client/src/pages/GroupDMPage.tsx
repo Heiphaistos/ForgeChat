@@ -33,6 +33,7 @@ import { AfterReadBadge, EphemeralBadge } from '../components/chat/messageListSh
 import { rememberConvName, searchLocal } from '../e2e/searchIndex'
 import { displayAttachments, filesExtra, prepareFiles, type PreparedFiles } from '../e2e/files'
 import E2EAttachment from '../e2e/E2EAttachment'
+import { UnencryptedBadge } from '../e2e/ChannelBadge'
 import { AvatarDecoration } from '../components/ui/ProfileDecor'
 import AnimatedImg from '../components/ui/AnimatedImg'
 import UserName from '../components/ui/UserName'
@@ -83,8 +84,10 @@ interface GDMMessage {
   expire_on_read?: boolean
   e2e?: 'ok' | 'locked'
   e2e_reply?: 'locked'
+  /** Texte en clair (calculé sur l'appareil par openMessage). */
+  unencrypted?: boolean
   /** Contenu déchiffré complet (fichiers chiffrés `f`). */
-  e2e_body?: { f?: unknown }
+  e2e_body?: { f?: unknown; p?: unknown }
   reactions?: GDMReaction[]
   attachments?: GDMAttachment[]
   /** Journal local (Extras), en mémoire seulement. */
@@ -1137,6 +1140,7 @@ export default function GroupDMPage() {
                           }`}>
                             {msg.logged_edits?.map((old, i) => <div key={i} className="opacity-60" title={t('ux.logger.oldVersion')}>{old}</div>)}
                             {(() => { const gif = gifMessage(msg.content); return gif ? <GifMessage url={gif.url} provider={gif.provider} /> : renderMarkdown(msg.content) })()}
+                            {msg.unencrypted === true && <UnencryptedBadge warn />}
                             {msg.logged_deleted && <span className="ml-1 text-[10px] inline-block">{t('ux.logger.deleted')}</span>}
                             {msg.edited_at && <span className="text-[9px] opacity-60 ml-1">{t('msg.edited')}</span>}
                           </div>
@@ -1144,6 +1148,8 @@ export default function GroupDMPage() {
                         {/* Aperçu de lien (1 seul, pas si pièces jointes) */}
                         {linkPreviewEnabled && msg.content && !msg.attachments?.length && (() => {
                           const url = extractFirstUrl(msg.content ?? '')
+                          // Message chiffré : seul l'aperçu de l'expéditeur, jamais /og (le serveur verrait le lien lu).
+                          if (msg.enc) return url && msg.e2e_body?.p ? <LinkPreview url={url} data={msg.e2e_body.p} /> : null
                           return url ? <LinkPreview url={url} /> : null
                         })()}
                         {!showAttachments && !openedAtt.has(msg.id) && !!msg.attachments?.length && (

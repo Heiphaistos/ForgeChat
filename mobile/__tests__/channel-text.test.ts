@@ -1,5 +1,5 @@
 // Mentions en métadonnées et AutoMod côté appli : mêmes cas que client/scripts/channelText.test.mjs.
-import { automodBlock, containsWord, firstUrl, linkHosts, mentionMeta } from '@/e2e/channelText'
+import { automodBlock, containsWord, firstUrl, linkHosts, mentionMeta, previewAllowed } from '@/e2e/channelText'
 
 const U = '11111111-1111-4111-8111-111111111111'
 const R = '22222222-2222-4222-8222-222222222222'
@@ -39,4 +39,13 @@ test('AutoMod : liens dangereux (liste locale), mêmes cas que le web', () => {
   expect(automodBlock({ ...r, dangerous_domains: [] }, 'https://grabify.link')).toBeNull()
   expect(linkHosts('https://user@a.fr:8080/x http://www.b.fr.')).toEqual(['a.fr', 'b.fr'])
   expect(automodBlock(r, 'https://google.com@grabify.link/x')).toBe('dangerous_link')
+})
+
+test("aperçu : seuls les domaines prévisualisés par le serveur partent à /og", () => {
+  for (const ok of ['https://github.com/a/b', 'https://fr.wikipedia.org/wiki/X', 'https://www.youtube.com/watch?v=1', 'https://forgechat.heiphaistos.org/x']) {
+    expect(previewAllowed(ok)).toBe(true)
+  }
+  for (const ko of ['https://exemple.com/secret', 'https://github.com.evil.io/', 'https://evilgithub.com/', 'javascript:alert(1)', 'pas une url', 'ftp://github.com/']) {
+    expect(previewAllowed(ko)).toBe(false)
+  }
 })

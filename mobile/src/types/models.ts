@@ -283,8 +283,10 @@ export interface ChatMessage {
   e2e?: 'ok' | 'locked'
   /** Fichiers chiffrés décrits dans le message déchiffré (clés, noms, types : §12). */
   files?: import('@/e2e/crypto').FileEntry[]
-  /** Salon : message envoyé en clair (badge « non chiffré »). */
+  /** Message en clair (badge « non chiffré »), calculé sur l'appareil (features/chat/adapters.ts). */
   unencrypted?: boolean
+  /** MP ou groupe : texte en clair là où tout est chiffré (alerte appuyée). */
+  unencryptedWarn?: boolean
   /** Message chiffré : aperçu de lien calculé par l'expéditeur (jamais demandé au serveur). */
   preview?: LinkPreviewData | null
   /** Message système du lot communauté : carte de bienvenue ou référence du starboard. */

@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import api from '../../api/client'
 import { ExternalLink } from 'lucide-react'
 import { isSafeUrl } from '../../utils/safeUrl'
+import { previewAllowed } from '../../e2e/channelText'
 
 interface OGData {
   title?: string
@@ -38,7 +39,8 @@ export default function LinkPreview({ url, data: given }: Props) {
     queryFn: () => api.get(`/og?url=${encodeURIComponent(url)}`).then(r => r.data),
     staleTime: 3_600_000,
     retry: false,
-    enabled: given === undefined,
+    // Domaine sans aperçu côté serveur : rien n'est demandé (le lien ne part pas).
+    enabled: given === undefined && previewAllowed(url),
   })
   const embedded = given === undefined ? undefined : asOg(given)
   const data = given === undefined ? query.data : embedded
@@ -50,7 +52,9 @@ export default function LinkPreview({ url, data: given }: Props) {
   // Aperçu fourni par l'expéditeur : le lien suit l'URL visible dans le message, pas celle de l'aperçu.
   const target = given === undefined ? data.url : url
   const safeUrl = isSafeUrl(target) ? target : '#'
-  const safeImage = data.image && isSafeUrl(data.image) ? data.image : undefined
+  // Aperçu fourni par l'expéditeur (`given`) : jamais d'image, elle pourrait venir de son propre
+  // serveur et lui livrer l'IP et l'heure de lecture de chaque lecteur (même règle que le mobile).
+  const safeImage = given === undefined && data.image && isSafeUrl(data.image) ? data.image : undefined
 
   return (
     <div
@@ -64,6 +68,7 @@ export default function LinkPreview({ url, data: given }: Props) {
           alt={data.title ?? ''}
           loading="lazy"
           decoding="async"
+          referrerPolicy="no-referrer"
           className="w-full max-h-48 object-cover"
           onError={e => { (e.target as HTMLImageElement).style.display = 'none' }}
         />
