@@ -225,6 +225,7 @@ async fn read_sound_upload(state: &AppState, multipart: &mut Multipart) -> Resul
     let filename = format!("{}.{ext}", Uuid::new_v4());
     let upload_dir = PathBuf::from(&state.config.upload_dir).join("sounds");
     tokio::fs::create_dir_all(&upload_dir).await.map_err(|e| AppError::Internal(e.into()))?;
+    crate::antivirus::check(&file_bytes).await?;
     tokio::fs::write(upload_dir.join(&filename), &file_bytes).await.map_err(|e| AppError::Internal(e.into()))?;
     Ok((name, emoji, format!("/uploads/sounds/{filename}")))
 }

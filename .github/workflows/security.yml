@@ -66,3 +66,19 @@ jobs:
         run: node scripts/npm-audit-gate.mjs desktop
       - name: Mobile (exceptions examinées et datées)
         run: node scripts/npm-audit-gate.mjs mobile .github/audit/mobile-npm-exceptions.json
+
+  # Fuzzing guidé par la couverture (amélioration n° 22) : chaque lundi, 5 minutes sur la
+  # vérification WebAuthn. Les propriétés stables (src/fuzz_props.rs) tournent à chaque push.
+  fuzz:
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: rustup toolchain install nightly --profile minimal
+      - run: cargo install cargo-fuzz --locked --version 0.13.2
+      - name: WebAuthn (5 min)
+        working-directory: server/fuzz
+        run: cargo +nightly fuzz run webauthn -- -max_total_time=300

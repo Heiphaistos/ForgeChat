@@ -142,6 +142,7 @@ pub async fn create_emoji(
             let file_id = Uuid::new_v4();
             let filename = format!("emoji_{}.{}", file_id, ext);
             let file_path = upload_dir.join(&filename);
+            crate::antivirus::check(&data).await?;
             tokio::fs::write(&file_path, &data).await
                 .map_err(|e| AppError::Internal(e.into()))?;
             emoji_url = Some((format!("/uploads/emojis/{}", filename), ct));
