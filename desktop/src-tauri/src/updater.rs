@@ -96,7 +96,7 @@ pub struct UpdateInfo {
     pub notes: String,
     pub pub_date: String,
     /// Cible retenue : `windows-x86_64`, `windows-portable`, `linux-x86_64`,
-    /// `linux-portable`. Affiché dans l'UI pour que l'utilisateur sache quel
+    /// `linux-rpm`, `linux-arch`, `linux-portable`, `macos`. Affiché dans l'UI pour que l'utilisateur sache quel
     /// chemin va être pris.
     pub target: String,
     /// Vrai quand la mise à jour remplace l'exécutable sur place (pas
@@ -149,14 +149,14 @@ fn est_installee() -> bool {
     }
 }
 
-/// Copie installée par le gestionnaire de paquets RPM (Fedora, openSUSE,
-/// RHEL) : il lui faut le `.rpm`, pas le `.deb`.
-fn installee_par_rpm() -> bool {
+/// Copie installée par ce gestionnaire de paquets : RPM (Fedora, openSUSE,
+/// RHEL) veut le `.rpm`, pacman (Arch, Omarchy) le `.pkg.tar.zst`.
+fn installee_par(gestionnaire: &str, option: &str) -> bool {
     let Ok(exe) = exe_courant() else {
         return false;
     };
-    std::process::Command::new("rpm")
-        .arg("-qf")
+    std::process::Command::new(gestionnaire)
+        .arg(option)
         .arg(&exe)
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())
@@ -178,8 +178,10 @@ fn cible() -> &'static str {
         } else {
             "windows-portable"
         }
-    } else if installee && installee_par_rpm() {
+    } else if installee && installee_par("rpm", "-qf") {
         "linux-rpm"
+    } else if installee && installee_par("pacman", "-Qo") {
+        "linux-arch"
     } else if installee {
         "linux-x86_64"
     } else {
@@ -688,7 +690,17 @@ fn lancer_installeur(octets: &[u8], info: &UpdateInfo) -> Result<(), String> {
         // Un `.deb` ne s'installe pas sans les droits root : on ne peut pas le
         // faire à la place de l'utilisateur sans lui demander son mot de passe.
         // On lui remet le paquet vérifié, ouvert dans son installeur graphique.
-        std::process::Command::new("xdg-open")
+        // Arch / Omarchy n'en ont pas : pacman, derrière la fenêtre de mot de
+        // passe polkit (fichier dans `dossier_prive`, inaccessible aux autres comptes).
+        let mut commande = if cible() == "linux-arch" {
+            // Chemins absolus : la fenêtre polkit ne doit jamais approuver un `pacman` pris dans le PATH.
+            let mut c = std::process::Command::new("/usr/bin/pkexec");
+            c.args(["/usr/bin/pacman", "-U", "--noconfirm"]);
+            c
+        } else {
+            std::process::Command::new("xdg-open")
+        };
+        commande
             .arg(&chemin)
             .spawn()
             .map_err(|e| {
@@ -696,7 +708,11 @@ fn lancer_installeur(octets: &[u8], info: &UpdateInfo) -> Result<(), String> {
                     "Paquet téléchargé et vérifié dans « {} », mais son ouverture a échoué ({e}). \
                      Installez-le à la main : {} \"{}\"",
                     chemin.display(),
-                    if cible() == "linux-rpm" { "sudo dnf install" } else { "sudo apt install" },
+                    match cible() {
+                        "linux-rpm" => "sudo dnf install",
+                        "linux-arch" => "sudo pacman -U",
+                        _ => "sudo apt install",
+                    },
                     chemin.display()
                 )
             })?;
@@ -978,6 +994,7 @@ mod tests {
             Ok("ForgeChat-Setup-v3.25.0.exe")
         );
         assert!(nom_artefact(&format!("{b}ForgeChat-v3.25.0-amd64.deb"), "3.25.0").is_ok());
+        assert!(nom_artefact(&format!("{b}ForgeChat-v3.25.0-x86_64.pkg.tar.zst"), "3.25.0").is_ok());
         for url in [
             "https://evil.example/desktop/ForgeChat-Setup-v3.25.0.exe".to_string(),
             "http://forgechat.heiphaistos.org/desktop/ForgeChat-Setup-v3.25.0.exe".to_string(),
@@ -1012,7 +1029,7 @@ mod tests {
     fn la_cible_est_une_des_quatre_publiees() {
         assert!(matches!(
             cible(),
-            "windows-x86_64" | "windows-portable" | "linux-x86_64" | "linux-rpm" | "linux-portable" | "macos"
+            "windows-x86_64" | "windows-portable" | "linux-x86_64" | "linux-rpm" | "linux-arch" | "linux-portable" | "macos"
         ));
     }
 

@@ -2,7 +2,7 @@
 #
 #   tag mobile-vX.Y.Z  -> APK Android signé (clé ForgeChat) + IPA iOS (non signée, à installer
 #                         par AltStore / SideStore / Sideloadly, sans compte Apple payant)
-#   tag desktop-vX.Y.Z -> Windows (installeur + portable), Linux (.deb, .rpm, AppImage), macOS
+#   tag desktop-vX.Y.Z -> Windows (installeur + portable), Linux (.deb, .rpm, .pkg.tar.zst, AppImage), macOS
 #
 # Les jobs de build n'ont que `contents: read` : ils ne touchent jamais à la release. Ils transmettent
 # leurs fichiers par artefact (conservé 1 jour) au seul job `release`, qui a `contents: write`, calcule
@@ -261,6 +261,38 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
+  # Arch, Omarchy, Manjaro : le .deb du job linux remis en paquet pacman (desktop/arch/PKGBUILD).
+  arch:
+    needs: [version, linux]
+    if: needs.version.outputs.kind == 'desktop'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    container: archlinux:base-devel@sha256:996c3a1d6b0d87b01242f6fcd8cfa3ad3eece1a67ab5c8f108e20af1d7b97bdd
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: linux
+          path: dist-desktop
+      - name: Paquet pacman
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          # makepkg refuse de tourner en root.
+          useradd -m build
+          chown -R build dist-desktop
+          runuser -u build -- bash desktop/arch/paquet.sh \
+            "dist-desktop/ForgeChat-v$VERSION-amd64.deb" "dist-desktop/ForgeChat-v$VERSION-x86_64.pkg.tar.zst"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: arch
+          path: dist-desktop/*.pkg.tar.zst
+          if-no-files-found: error
+          retention-days: 1
+
   macos:
     needs: version
     if: needs.version.outputs.kind == 'desktop' && (github.event_name == 'push' || contains(inputs.jobs, 'macos'))
@@ -296,7 +328,7 @@ jobs:
   # Seul job avec le droit d'écrire : rassemble les artefacts, calcule SHA256SUMS.txt, crée la release
   # brouillon. Ne publie pas : la signature se fait hors ligne (docs/PUBLICATION-SIGNEE.md).
   release:
-    needs: [version, android, ios, windows, linux, macos]
+    needs: [version, android, ios, windows, linux, arch, macos]
     # Les jobs de l'autre famille sont « skipped » : seul un échec bloque la publication.
     if: ${{ github.event_name == 'push' && !cancelled() && !contains(needs.*.result, 'failure') }}
     runs-on: ubuntu-24.04

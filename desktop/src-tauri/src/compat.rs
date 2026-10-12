@@ -60,6 +60,20 @@ pub fn definir(on: bool) {
     let _ = std::fs::remove_file(d.join(EN_COURS));
 }
 
+/// Ce processus a affiché son premier écran (`app_ready`).
+static AFFICHEE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Une 2e instance vient d'être lancée puis renvoyée vers celle-ci : elle a reposé le marqueur
+/// dans `preparer` avant de s'arrêter. Sans ce ménage, le démarrage suivant croirait à un échec
+/// d'affichage et basculerait pour toujours en mode compatibilité.
+pub fn seconde_instance() {
+    if AFFICHEE.load(std::sync::atomic::Ordering::Relaxed) {
+        if let Some(d) = dossier() {
+            let _ = std::fs::remove_file(d.join(EN_COURS));
+        }
+    }
+}
+
 /// À appeler avant toute initialisation GTK. Renvoie vrai si le mode est actif.
 #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
 pub fn preparer() -> bool {
@@ -95,6 +109,7 @@ pub fn preparer() -> bool {
 /// Le client a affiché son premier écran : ce lancement a réussi.
 #[tauri::command]
 pub fn app_ready() {
+    AFFICHEE.store(true, std::sync::atomic::Ordering::Relaxed);
     if let Some(d) = dossier() {
         let _ = std::fs::remove_file(d.join(EN_COURS));
     }
