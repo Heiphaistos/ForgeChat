@@ -88,6 +88,12 @@ services:
       GIPHY_RATING: ${GIPHY_RATING:-pg-13}
       KLIPY_API_KEY: ${KLIPY_API_KEY:-}
       KLIPY_CONTENT_FILTER: ${KLIPY_CONTENT_FILTER:-medium}
+      # Alertes de sécurité par e-mail et durées de rétention (docs/EXPLOITATION-SECURITE.md).
+      SECURITY_ALERT_EMAIL: ${SECURITY_ALERT_EMAIL:-}
+      RETENTION_SESSIONS_DAYS: ${RETENTION_SESSIONS_DAYS:-30}
+      RETENTION_PUSH_DEVICES_DAYS: ${RETENTION_PUSH_DEVICES_DAYS:-60}
+      RETENTION_AUDIT_LOG_DAYS: ${RETENTION_AUDIT_LOG_DAYS:-90}
+      RETENTION_REPORTS_DAYS: ${RETENTION_REPORTS_DAYS:-90}
     volumes:
       - uploads:/app/uploads
       # Artefacts et manifeste des applications de bureau, deposes sur l'hote.

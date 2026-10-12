@@ -1,0 +1,15 @@
+[Unit]
+Description=Sauvegarde chiffrée ForgeChat (base + fichiers)
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/opt/forgechat/deploy/backup/forgechat-backup.sh
+Nice=10
+IOSchedulingClass=idle
+PrivateTmp=true
+NoNewPrivileges=true
+ProtectHome=true
+ProtectSystem=full
+ReadWritePaths=/var/backups/forgechat
