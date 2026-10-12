@@ -255,6 +255,7 @@ async fn main() -> anyhow::Result<()> {
             axum::http::header::ACCEPT,
             // Appli web : jetons en cookies HttpOnly seulement (auth.rs, cookie_only).
             axum::http::HeaderName::from_static("x-forgechat-tokens"),
+            axum::http::HeaderName::from_static("x-forgechat-device"),
         ])
         .allow_credentials(true);
 
@@ -281,6 +282,8 @@ async fn main() -> anyhow::Result<()> {
         .route("/api/auth/accounts/forget", post(handlers::accounts::forget).layer(DefaultBodyLimit::max(SMALL_JSON_LIMIT)))
         .route("/api/auth/forgot-password", post(handlers::password_reset::forgot_password).layer(DefaultBodyLimit::max(SMALL_JSON_LIMIT)))
         .route("/api/auth/reset-password", post(handlers::password_reset::reset_password).layer(DefaultBodyLimit::max(SMALL_JSON_LIMIT)))
+        .route("/api/auth/pwned-range/:prefix", get(handlers::pwned::range))
+        .route("/api/auth/panic", post(handlers::account_guard::panic_with_token).layer(DefaultBodyLimit::max(SMALL_JSON_LIMIT)))
         .route("/api/invites/:code", get(handlers::invites::get_invite_info))
         // Invitation amis (lecture publique — affiche le profil de l'invitant)
         .route("/api/friend-invite/:code", get(handlers::friends::get_friend_invite))
@@ -564,9 +567,12 @@ fn protected_routes(state: AppState) -> Router<AppState> {
         .route("/auth/2fa/setup", post(handlers::totp::setup_totp))
         .route("/auth/2fa/confirm", post(handlers::totp::confirm_totp))
         .route("/auth/2fa/disable", post(handlers::totp::disable_totp))
+        .route("/auth/2fa/backup-codes", post(handlers::totp::regenerate_backup_codes))
+        .route("/auth/2fa/status", get(handlers::totp::totp_status))
         .route("/auth/ws-ticket", post(handlers::auth::ws_ticket))
         // Users
         .route("/users/me", get(handlers::users::get_me))
+        .route("/users/me/panic", post(handlers::account_guard::panic_self))
         .route("/users/me/sessions", get(handlers::auth::list_sessions))
         .route("/users/me/sessions/:id", delete(handlers::auth::revoke_session))
         .route("/users/me", patch(handlers::users::update_me))

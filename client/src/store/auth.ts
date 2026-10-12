@@ -13,6 +13,7 @@ import { forgetOfflineData } from '../lib/offline'
 import { queryClient } from '../main'
 import { clearAccountKey, prelogin, rememberLogin, upgradeKdf } from '../e2e/accountKey'
 import { asKdf, deriveSecrets, newKdfSalt, passwordProblem } from '../e2e/authKdf'
+import { pwnedProblem } from '../e2e/pwned'
 import { clearSearchIndex } from '../e2e/searchIndex'
 import { guardArgon, markMigrated, markUserMigrated } from '../e2e/authGuard'
 
@@ -93,7 +94,7 @@ export const useAuth = create<AuthState>()(
     },
 
     register: async (username, email, password, inviteCode) => {
-      const problem = passwordProblem(password, [username, email])
+      const problem = passwordProblem(password, [username, email]) ?? await pwnedProblem(password)
       if (problem) throw new Error(problem)
       const kdf_salt = newKdfSalt()
       const secrets = await deriveSecrets(password, kdf_salt, 'argon2id')

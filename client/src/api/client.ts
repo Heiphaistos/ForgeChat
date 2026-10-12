@@ -27,13 +27,34 @@ const api = axios.create({
   ...(isTauri ? {} : { headers: { 'X-ForgeChat-Tokens': 'cookie' } }),
 })
 
+// Identifiant d'appareil (alerte « nouvelle connexion », amélioration n° 4). Web : cookie HttpOnly
+// posé par le serveur, rien à faire. Bureau : pas de cookie ; l'identifiant rendu à la première
+// connexion est gardé ici et présenté aux connexions suivantes (jamais sur d'autres routes).
+const DEVICE_KEY = 'fc_device_id'
+const DEVICE_RE = /^[A-Za-z0-9_-]{43}$/
+const isLoginUrl = (url?: string) => !!url && /\/auth\/(login|verify-email)$/.test(url)
+
 api.interceptors.request.use(cfg => {
   // Tauri uniquement : jeton d'accès en mémoire (les cookies ne traversent pas l'origine Tauri)
   if (isTauri) {
     const token = accessToken()
     if (token) cfg.headers.Authorization = `Bearer ${token}`
+    if (isLoginUrl(cfg.url)) {
+      try {
+        const id = localStorage.getItem(DEVICE_KEY)
+        if (id && DEVICE_RE.test(id)) cfg.headers['X-ForgeChat-Device'] = id
+      } catch { /* stockage indisponible : appareil vu comme nouveau */ }
+    }
   }
   return cfg
+})
+
+api.interceptors.response.use(res => {
+  const id = res.data?.device_id
+  if (isTauri && isLoginUrl(res.config.url) && typeof id === 'string' && DEVICE_RE.test(id)) {
+    try { localStorage.setItem(DEVICE_KEY, id) } catch { /* sans mémoire : nouvel appareil la prochaine fois */ }
+  }
+  return res
 })
 
 /** 503 (Redis coupé, refus de sécurité) : bannière et nouvel essai, jamais de déconnexion. */
@@ -55,7 +76,7 @@ let refreshPromise: Promise<void> | null = null
 
 
 // Pages lisibles sans compte : un 401 n'y renvoie jamais vers /login (site public, pages légales).
-const PUBLIC_PATHS = new Set(['/', '/login', '/register', '/verify-email', '/forgot-password', '/reset-password',
+const PUBLIC_PATHS = new Set(['/', '/login', '/register', '/verify-email', '/forgot-password', '/reset-password', '/verrouiller',
   '/fonctionnalites', '/telecharger', '/nouveautes', '/aide', '/a-propos', '/mentions-legales', '/confidentialite', '/cgu'])
 export const isPublicPath = (p: string) => PUBLIC_PATHS.has(p) || p.startsWith('/telecharger/')
 

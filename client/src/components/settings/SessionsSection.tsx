@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import api from '../../api/client'
-import { Monitor, Smartphone, Trash2, Shield, Clock, Cpu } from 'lucide-react'
+import { Monitor, Smartphone, Trash2, Shield, ShieldAlert, Clock, Cpu } from 'lucide-react'
+import { useAuth } from '../../store/auth'
 import { formatDistanceToNow } from 'date-fns'
 import { useT, t as tr, dateLocale, intlLocale } from '../../i18n'
 
@@ -34,6 +35,15 @@ export default function SessionsSection() {
   const revokeAll = useMutation({
     mutationFn: () => Promise.all(others.map(s => api.delete(`/users/me/sessions/${s.id}`))),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['sessions'] }),
+  })
+
+  // Verrouillage d'urgence (amélioration n° 25) : tout est fermé, y compris cette session.
+  const lock = useMutation({
+    mutationFn: () => api.post('/users/me/panic'),
+    onSuccess: async () => {
+      await useAuth.getState().logout().catch(() => {})
+      window.location.assign('/verrouiller')
+    },
   })
 
   // La liste est triée par last_seen : la première n'est pas forcément celle-ci.
@@ -142,6 +152,20 @@ export default function SessionsSection() {
       {sessions.length === 0 && (
         <p className="text-sm text-fc-muted text-center py-8">{t('settings.sessions.empty')}</p>
       )}
+
+      <section className="p-4 bg-fc-channel rounded-xl border border-fc-red/30 space-y-3">
+        <h3 className="text-sm font-semibold text-white flex items-center gap-2">
+          <ShieldAlert size={16} className="text-fc-red" /> {t('guard.lock.title')}
+        </h3>
+        <p className="text-xs text-fc-muted">{t('guard.lock.intro')}</p>
+        <button
+          onClick={() => { if (window.confirm(t('guard.lock.confirm'))) lock.mutate() }}
+          disabled={lock.isPending}
+          className="px-3 py-1.5 bg-fc-red rounded-lg text-white text-sm font-medium disabled:opacity-50"
+        >
+          {lock.isPending ? t('guard.lock.pending') : t('guard.lock.button')}
+        </button>
+      </section>
     </div>
   )
 }

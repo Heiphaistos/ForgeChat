@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { t } from '@/i18n'
 import { ApiError, http } from '@/lib/http'
+import { deviceHeaders, rememberDevice } from '@/lib/deviceId'
 import type { AuthResponse, Session, User } from '@/types/models'
 
 const userSchema = z
@@ -20,6 +21,7 @@ const authSchema = z.object({
   access_token: z.string().min(20),
   refresh_token: z.string().min(32),
   user: userSchema,
+  device_id: z.string().optional(),
 })
 
 export const authApi = {
@@ -31,7 +33,9 @@ export const authApi = {
     try {
       const body: Record<string, string> = { email: email.trim().toLowerCase(), ...proof }
       if (totpCode) body.totp_code = totpCode.replace(/\s+/g, '')
-      return (await http.post('/auth/login', body, { auth: false, schema: authSchema })) as AuthResponse
+      const res = (await http.post('/auth/login', body, { auth: false, schema: authSchema, headers: await deviceHeaders() })) as AuthResponse
+      await rememberDevice(res.device_id)
+      return res
     } catch (e) {
       if (e instanceof ApiError && e.status === 401) {
         throw new ApiError(401, t(totpCode ? 'auth.invalidTotp' : 'store.api.badCredentials'), 'bad_credentials')
@@ -49,7 +53,9 @@ export const authApi = {
     ),
 
   async verifyEmail(email: string, code: string): Promise<AuthResponse> {
-    return (await http.post('/auth/verify-email', { email: email.trim().toLowerCase(), code: code.trim() }, { auth: false, schema: authSchema })) as AuthResponse
+    const res = (await http.post('/auth/verify-email', { email: email.trim().toLowerCase(), code: code.trim() }, { auth: false, schema: authSchema, headers: await deviceHeaders() })) as AuthResponse
+    await rememberDevice(res.device_id)
+    return res
   },
 
   /**
@@ -76,6 +82,13 @@ export const authApi = {
   confirmTotp: (code: string) => http.post<{ enabled: boolean }>('/auth/2fa/confirm', { code: code.replace(/\s+/g, '') }),
   /** Le serveur n'exige que le code TOTP (pas le mot de passe). */
   disableTotp: (code: string) => http.post<{ enabled: boolean }>('/auth/2fa/disable', { code: code.replace(/\s+/g, '') }),
+  /** Codes de secours restants (jamais les codes eux-mêmes). */
+  totpStatus: () => http.get<{ enabled: boolean; backup_codes_left: number }>('/auth/2fa/status'),
+  /** Nouveaux codes de secours (les anciens sont invalidés) ; exige un code valide. */
+  regenerateBackupCodes: (code: string) =>
+    http.post<{ backup_codes: string[] }>('/auth/2fa/backup-codes', { code: code.replace(/\s+/g, '') }, { noQueue: true }),
+  /** Verrouillage d'urgence : toutes les sessions fermées, nouveau mot de passe exigé. */
+  panic: () => http.post<{ locked: boolean }>('/users/me/panic', {}, { noQueue: true }),
 }
 
 export interface TotpSetup {

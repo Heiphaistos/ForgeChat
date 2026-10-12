@@ -16,6 +16,7 @@ import * as comfort from './parts/comfort'
 import * as remoteSupport from './parts/remoteSupport'
 import * as ai from './parts/ai'
 import * as uxMobile from './parts/uxMobile'
+import * as accountGuard from './parts/accountGuard'
 
 export const fr = {
   ...settings.fr,
@@ -33,6 +34,7 @@ export const fr = {
   ...remoteSupport.fr,
   ...ai.fr,
   ...uxMobile.fr,
+  ...accountGuard.fr,
 
   // --- Commun ---
   'common.cancel': 'Annuler',

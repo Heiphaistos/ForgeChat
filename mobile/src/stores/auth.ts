@@ -14,6 +14,7 @@ import { classifyBootstrapFailure, SESSION_EXPIRED_NOTICE } from '@/lib/sessionN
 import { t } from '@/i18n'
 import { clearAccountKey, prelogin, rememberLogin, upgradeKdf } from '@/e2e/accountKey'
 import { asKdf, deriveSecrets, newKdfSalt, passwordProblem } from '@/e2e/authKdf'
+import { pwnedProblem } from '@/e2e/pwned'
 import { guardArgon, markMigrated, markUserMigrated } from '@/e2e/authGuard'
 import { forgetOfflineData, setOfflineOwner } from '@/lib/offline'
 import { listAccounts, putAccount, takeAccount } from '@/lib/accounts'
@@ -169,7 +170,7 @@ export const useAuth = create<AuthState>((set, get) => {
     },
 
     register: async (username, email, password, inviteCode) => {
-      const problem = passwordProblem(password, [username, email])
+      const problem = passwordProblem(password, [username, email]) ?? await pwnedProblem(password)
       if (problem) throw new Error(problem)
       const kdfSalt = newKdfSalt()
       const secrets = await deriveSecrets(password, kdfSalt, 'argon2id')

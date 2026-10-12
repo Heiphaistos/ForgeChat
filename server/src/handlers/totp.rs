@@ -253,6 +253,49 @@ pub async fn disable_totp(
     Ok(Json(serde_json::json!({ "enabled": false })))
 }
 
+/// POST /auth/2fa/backup-codes { code } : nouveaux codes de secours (amélioration n° 4). Exige un
+/// code valide (TOTP ou un code de secours restant) ; les anciens codes sont tous invalidés. Les
+/// nouveaux ne sont affichés qu'ici, une seule fois, et stockés hachés.
+pub async fn regenerate_backup_codes(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+    Json(input): Json<TotpVerifyInput>,
+) -> Result<impl IntoResponse, AppError> {
+    let enabled: bool = sqlx::query_scalar("SELECT totp_enabled FROM users WHERE id = $1")
+        .bind(claims.sub)
+        .fetch_one(&state.db)
+        .await?;
+    if !enabled {
+        return Err(AppError::BadRequest("2FA non activé".into()));
+    }
+    if !check_code(&state, claims.sub, &input.code).await? {
+        crate::security_events::record(&state, "totp_failed").await;
+        return Err(AppError::BadRequest("Code invalide".into()));
+    }
+    let codes = new_backup_codes();
+    let hashed: Vec<String> = codes.iter().map(|c| hash_backup(c)).collect();
+    sqlx::query("UPDATE users SET totp_backup_codes = $1 WHERE id = $2 AND totp_enabled = TRUE")
+        .bind(hashed.as_slice())
+        .bind(claims.sub)
+        .execute(&state.db)
+        .await?;
+    Ok(Json(serde_json::json!({ "backup_codes": codes })))
+}
+
+/// GET /auth/2fa/status : activé ? combien de codes de secours restent ? (jamais les codes).
+pub async fn totp_status(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+) -> Result<impl IntoResponse, AppError> {
+    let (enabled, left): (bool, Option<i32>) = sqlx::query_as(
+        "SELECT totp_enabled, cardinality(totp_backup_codes) FROM users WHERE id = $1",
+    )
+    .bind(claims.sub)
+    .fetch_one(&state.db)
+    .await?;
+    Ok(Json(serde_json::json!({ "enabled": enabled, "backup_codes_left": if enabled { left.unwrap_or(0) } else { 0 } })))
+}
+
 /// Comparaison de chaînes en temps constant pour éviter les timing side-channels
 fn ct_str_eq(a: &str, b: &str) -> bool {
     if a.len() != b.len() { return false; }

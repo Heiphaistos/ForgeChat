@@ -1,4 +1,6 @@
 pub mod auth;
+pub mod account_guard;
+pub mod pwned;
 pub mod auth_v2;
 pub mod site_admin;
 pub mod accounts;

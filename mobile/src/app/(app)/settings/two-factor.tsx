@@ -1,6 +1,7 @@
 import * as Clipboard from 'expo-clipboard'
 import { Stack, router } from 'expo-router'
 import { useState } from 'react'
+import { useMutation, useQuery } from '@tanstack/react-query'
 import { Alert, Linking, ScrollView, Share, StyleSheet, View } from 'react-native'
 import { authApi, type TotpSetup } from '@/api/auth'
 import { Button, Section, T, TextField } from '@/components/ui'
@@ -33,6 +34,19 @@ export default function TwoFactorScreen() {
   }
 
   const start = () => run(async () => setSetup(await authApi.setupTotp()))
+
+  // Codes de secours (amélioration n° 4) : combien restent, et régénération avec un code valide.
+  const status = useQuery({ queryKey: ['2fa-status'], queryFn: authApi.totpStatus, enabled })
+  const [newCodes, setNewCodes] = useState<string[] | null>(null)
+  const regen = useMutation({
+    mutationFn: () => authApi.regenerateBackupCodes(code),
+    onSuccess: (r) => {
+      setNewCodes(r.backup_codes)
+      setCode('')
+      void status.refetch()
+    },
+    onError: (e) => setError(errorMessage(e)),
+  })
 
   const confirm = () =>
     run(async () => {
@@ -68,7 +82,7 @@ export default function TwoFactorScreen() {
       keyboardType="number-pad"
       autoComplete="one-time-code"
       textContentType="oneTimeCode"
-      maxLength={8}
+      maxLength={19}
       error={error}
     />
   )
@@ -81,6 +95,36 @@ export default function TwoFactorScreen() {
           <T>{t('settings.twoFactor.enabledIntro')}</T>
           {codeField}
           <Button title={t('settings.twoFactor.disable')} variant="danger" onPress={disable} loading={loading} disabled={code.trim().length < 6} />
+          {status.data ? (
+            <Section title={t('guard.backup.regen')} footer={t('guard.backup.prompt')}>
+              <View style={{ padding: spacing.lg, gap: spacing.md }}>
+                <T>{t('guard.backup.left', { n: status.data.backup_codes_left })}</T>
+                {status.data.backup_codes_left <= 3 ? <T variant="error">{t('guard.backup.low')}</T> : null}
+                <Button
+                  title={t('guard.backup.regen')}
+                  variant="secondary"
+                  icon="refresh-outline"
+                  loading={regen.isPending}
+                  disabled={code.trim().length < 6}
+                  onPress={() => regen.mutate()}
+                />
+                {newCodes ? (
+                  <>
+                    <T variant="label">{t('guard.backup.new')}</T>
+                    <T style={styles.mono} selectable>
+                      {newCodes.join('\n')}
+                    </T>
+                    <Button
+                      title={t('settings.twoFactor.shareCodes')}
+                      variant="secondary"
+                      icon="share-outline"
+                      onPress={() => void Share.share({ message: t('settings.twoFactor.shareMessage', { codes: newCodes.join('\n') }) })}
+                    />
+                  </>
+                ) : null}
+              </View>
+            </Section>
+          ) : null}
         </>
       ) : !setup ? (
         <>

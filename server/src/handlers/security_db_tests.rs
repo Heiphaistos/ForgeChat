@@ -421,3 +421,50 @@ async fn security_deleted_files_leave_disk() {
     assert!(!dir.join("shared.png").exists());
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[tokio::test]
+#[ignore]
+async fn security_new_device_and_panic_lock() {
+    // Améliorations n° 4 et 25 (2026-10-12).
+    use crate::handlers::account_guard::*;
+    use axum::http::{HeaderMap, HeaderValue};
+    let (state, db) = setup().await;
+    let u = user(&db).await;
+    let counter = || async {
+        let k = format!("secev:new_device:{}", chrono::Utc::now().timestamp() / 3600);
+        let mut r = state.redis.lock().await;
+        redis::AsyncCommands::get::<_, Option<i64>>(&mut *r, k).await.unwrap().unwrap_or(0)
+    };
+    let before = counter().await;
+
+    // Premier appareil : identifiant neuf rendu à l'appli, aucune alerte.
+    let first = note_login_device(&state, u, &HeaderMap::new(), false, true).await;
+    let id = first.new_id.expect("identifiant rendu");
+    assert!(valid_device_id(&id) && first.cookie.is_none());
+    assert_eq!(counter().await, before);
+    // Même appareil (en-tête) : connu, rien de neuf.
+    let mut h = HeaderMap::new();
+    h.insert("x-forgechat-device", HeaderValue::from_str(&id).unwrap());
+    let again = note_login_device(&state, u, &h, false, true).await;
+    assert!(again.new_id.is_none());
+    assert_eq!(counter().await, before);
+    // Autre appareil (web, sans cookie) : cookie posé, alerte comptée.
+    let web = note_login_device(&state, u, &HeaderMap::new(), true, true).await;
+    assert!(web.new_id.is_none() && web.cookie.is_some());
+    assert_eq!(counter().await, before + 1);
+
+    // Verrouillage par le lien de l'e-mail : usage unique, sessions fermées, appareils oubliés.
+    sqlx::query("INSERT INTO user_sessions (user_id, refresh_token_hash) VALUES ($1, 'h')").bind(u).execute(&db).await.unwrap();
+    let token = new_panic_token(&state, u).await.unwrap();
+    let addr = axum::extract::ConnectInfo("127.0.0.1:1".parse::<std::net::SocketAddr>().unwrap());
+    let body = || axum::Json(serde_json::json!({ "token": token }));
+    panic_with_token(axum::extract::State(state.clone()), addr, HeaderMap::new(), body()).await.expect("verrouillage");
+    assert!(panic_with_token(axum::extract::State(state.clone()), addr, HeaderMap::new(), body()).await.is_err(), "usage unique");
+    let (locked, sessions, devices): (bool, i64, i64) = sqlx::query_as(
+        "SELECT (SELECT locked_at IS NOT NULL FROM users WHERE id=$1),
+                (SELECT count(*) FROM user_sessions WHERE user_id=$1),
+                (SELECT count(*) FROM known_devices WHERE user_id=$1)",
+    ).bind(u).fetch_one(&db).await.unwrap();
+    assert!(locked);
+    assert_eq!((sessions, devices), (0, 0));
+}

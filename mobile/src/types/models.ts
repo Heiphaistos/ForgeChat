@@ -48,6 +48,8 @@ export interface AuthResponse {
   access_token: string
   refresh_token: string
   user: User
+  /** Identifiant d'appareil neuf à garder (lib/deviceId.ts). */
+  device_id?: string
 }
 
 export interface Server {
