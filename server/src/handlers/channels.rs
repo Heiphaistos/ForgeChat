@@ -809,7 +809,8 @@ pub async fn purge_messages(
             sqlx::query(
                 "WITH victims AS (SELECT id FROM messages WHERE channel_id=$1 AND created_at < $2::timestamptz AND user_id=$3 ORDER BY created_at DESC LIMIT $4),
                       deleted AS (DELETE FROM messages WHERE id IN (SELECT id FROM victims) RETURNING id)
-                 SELECT COUNT(*) as n FROM deleted"
+                 SELECT (SELECT COUNT(*) FROM deleted) AS n,
+                        ARRAY(SELECT url FROM attachments WHERE message_id IN (SELECT id FROM victims)) AS urls"
             )
             .bind(channel_id).bind(&before_date).bind(aid).bind(limit)
             .fetch_one(&state.db).await
@@ -817,7 +818,8 @@ pub async fn purge_messages(
             sqlx::query(
                 "WITH victims AS (SELECT id FROM messages WHERE channel_id=$1 AND created_at < $2::timestamptz ORDER BY created_at DESC LIMIT $3),
                       deleted AS (DELETE FROM messages WHERE id IN (SELECT id FROM victims) RETURNING id)
-                 SELECT COUNT(*) as n FROM deleted"
+                 SELECT (SELECT COUNT(*) FROM deleted) AS n,
+                        ARRAY(SELECT url FROM attachments WHERE message_id IN (SELECT id FROM victims)) AS urls"
             )
             .bind(channel_id).bind(&before_date).bind(limit)
             .fetch_one(&state.db).await
@@ -826,7 +828,8 @@ pub async fn purge_messages(
         sqlx::query(
             "WITH victims AS (SELECT id FROM messages WHERE channel_id=$1 AND user_id=$2 ORDER BY created_at DESC LIMIT $3),
                   deleted AS (DELETE FROM messages WHERE id IN (SELECT id FROM victims) RETURNING id)
-             SELECT COUNT(*) as n FROM deleted"
+             SELECT (SELECT COUNT(*) FROM deleted) AS n,
+                    ARRAY(SELECT url FROM attachments WHERE message_id IN (SELECT id FROM victims)) AS urls"
         )
         .bind(channel_id).bind(aid).bind(limit)
         .fetch_one(&state.db).await
@@ -834,15 +837,18 @@ pub async fn purge_messages(
         sqlx::query(
             "WITH victims AS (SELECT id FROM messages WHERE channel_id=$1 ORDER BY created_at DESC LIMIT $2),
                   deleted AS (DELETE FROM messages WHERE id IN (SELECT id FROM victims) RETURNING id)
-             SELECT COUNT(*) as n FROM deleted"
+             SELECT (SELECT COUNT(*) FROM deleted) AS n,
+                    ARRAY(SELECT url FROM attachments WHERE message_id IN (SELECT id FROM victims)) AS urls"
         )
         .bind(channel_id).bind(limit)
         .fetch_one(&state.db).await
     };
 
-    let count: i64 = deleted
-        .map_err(|e| AppError::Internal(anyhow::anyhow!("{}", e)))?
-        .get("n");
+    let row = deleted.map_err(|e| AppError::Internal(anyhow::anyhow!("{}", e)))?;
+    let count: i64 = row.get("n");
+    // Les fichiers joints des messages purgés quittent aussi le disque (le CTE lit les adresses
+    // avant la suppression en cascade des lignes `attachments`).
+    crate::handlers::uploads::remove_upload_files(&state, row.get::<Vec<String>, _>("urls"));
 
     // PURGE_MESSAGES est une action destructive (suppression en masse) -- une perte
     // silencieuse de son entrée d'audit est un vrai trou de traçabilité, comme pour

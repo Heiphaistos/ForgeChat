@@ -1,0 +1,5 @@
+Contact: mailto:contact.forgeinformatique@heiphaistos.org
+Expires: 2027-10-12T00:00:00.000Z
+Preferred-Languages: fr, en
+Canonical: https://forgechat.heiphaistos.org/.well-known/security.txt
+Policy: https://forgechat.heiphaistos.org/.well-known/security-policy.txt

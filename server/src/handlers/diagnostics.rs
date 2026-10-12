@@ -43,6 +43,7 @@ const KINDS: &[&str] = &[
     "desktop_log",
     "manual",
 ];
+// `csp` : réservé à la route des rapports CSP (jamais accepté de /api/diagnostics/report).
 
 #[derive(Deserialize)]
 pub struct ReportInput {
@@ -228,6 +229,90 @@ pub async fn submit_report(
     Ok(StatusCode::NO_CONTENT)
 }
 
+/// Corps maximal d'un rapport CSP (un lot de l'API Reporting reste petit).
+pub const CSP_MAX_BODY: usize = 16 * 1024;
+const CSP_RATE_MAX: i64 = 20;
+
+/// Violation CSP / Trusted Types extraite d'un rapport (`report-uri` ou API Reporting).
+#[derive(Debug, PartialEq)]
+pub struct CspViolation {
+    pub directive: String,
+    pub blocked: String,
+    pub document: String,
+    pub sample: String,
+}
+
+fn str_of(v: &serde_json::Value, keys: &[&str]) -> String {
+    keys.iter().find_map(|k| v.get(*k).and_then(|x| x.as_str())).unwrap_or("").to_string()
+}
+
+/// Lit les deux formats : `{"csp-report": {...}}` (report-uri, Firefox) et
+/// `[{"type": "csp-violation", "body": {...}}]` (report-to, Chromium). 10 violations au plus.
+pub fn parse_csp_reports(raw: &[u8]) -> Vec<CspViolation> {
+    let Ok(v) = serde_json::from_slice::<serde_json::Value>(raw) else { return vec![] };
+    let bodies: Vec<serde_json::Value> = if let Some(r) = v.get("csp-report") {
+        vec![r.clone()]
+    } else if let Some(list) = v.as_array() {
+        list.iter()
+            .filter(|r| r.get("type").and_then(|t| t.as_str()) == Some("csp-violation"))
+            .filter_map(|r| r.get("body").cloned())
+            .collect()
+    } else {
+        vec![]
+    };
+    bodies
+        .iter()
+        .take(10)
+        .map(|b| {
+            // Jamais de query string ni de fragment : ils portent parfois des jetons.
+            let path = |u: String| u.split(['?', '#']).next().unwrap_or("").chars().take(300).collect::<String>();
+            CspViolation {
+                directive: str_of(b, &["effectiveDirective", "effective-directive", "violated-directive"]).chars().take(64).collect(),
+                blocked: path(str_of(b, &["blockedURL", "blocked-uri"])),
+                document: path(str_of(b, &["documentURL", "document-uri"])),
+                sample: scrub_secrets(&str_of(b, &["sample", "script-sample"]).chars().take(200).collect::<String>()),
+            }
+        })
+        .filter(|c| !c.directive.is_empty())
+        .collect()
+}
+
+/// Rapports de violation CSP et Trusted Types du navigateur (amélioration n° 7, 2026-10-12).
+/// Sans compte (le navigateur les envoie seul), corps borné, limite par IP. Rangés avec les
+/// rapports d'erreurs (type `csp`) : visibles dans Administration > Diagnostics, et comptés pour
+/// l'alerte de sécurité.
+pub async fn csp_report(
+    State(state): State<AppState>,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
+    body: axum::body::Bytes,
+) -> StatusCode {
+    let ip = crate::privacy::client_key(&headers, &addr);
+    if over_limit(&state, &format!("csp_ip:{ip}"), CSP_RATE_MAX, RATE_WINDOW_SECS).await {
+        return StatusCode::TOO_MANY_REQUESTS;
+    }
+    let header_ua = headers.get("user-agent").and_then(|v| v.to_str().ok());
+    let user_agent = header_ua.map(|ua| crate::privacy::device_label(ua, true));
+    for c in parse_csp_reports(&body) {
+        crate::security_events::record(&state, "csp").await;
+        let message = format!("{} a bloqué : {}", c.directive, if c.blocked.is_empty() { "(inline)" } else { &c.blocked });
+        let fp = fingerprint(&["web", "csp", &c.directive, &c.blocked, &c.sample]);
+        let _ = sqlx::query(
+            "INSERT INTO client_reports (platform, kind, message, stack, user_agent, url, fingerprint)
+             VALUES ('web', 'csp', $1, $2, $3, $4, $5)
+             ON CONFLICT (fingerprint) DO UPDATE SET count = client_reports.count + 1, last_seen = NOW()",
+        )
+        .bind(&message)
+        .bind((!c.sample.is_empty()).then_some(&c.sample))
+        .bind(&user_agent)
+        .bind((!c.document.is_empty()).then_some(&c.document))
+        .bind(&fp)
+        .execute(&state.db)
+        .await;
+    }
+    StatusCode::NO_CONTENT
+}
+
 /// Administration : rôle de site « El Patron » (voir site_admin.rs).
 pub(crate) async fn require_admin(state: &AppState, claims: &Claims) -> Result<()> {
     crate::handlers::site_admin::require_site_admin(state, claims).await
@@ -356,6 +441,27 @@ pub async fn purge_old(state: &AppState) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+
+    #[test]
+    fn csp_reports_both_formats_without_query_strings() {
+        let old = br#"{"csp-report":{"document-uri":"https://f.example/app?token=abc#x","blocked-uri":"https://evil.example/x.js?k=1","effective-directive":"script-src-elem","script-sample":"alert(1)"}}"#;
+        let v = parse_csp_reports(old);
+        assert_eq!(v, vec![CspViolation {
+            directive: "script-src-elem".into(),
+            blocked: "https://evil.example/x.js".into(),
+            document: "https://f.example/app".into(),
+            sample: "alert(1)".into(),
+        }]);
+        let new = br#"[{"type":"csp-violation","body":{"documentURL":"https://f.example/","blockedURL":"trusted-types-sink","effectiveDirective":"require-trusted-types-for","sample":"Element innerHTML|<img src=x>"}},{"type":"deprecation","body":{}}]"#;
+        let v = parse_csp_reports(new);
+        assert_eq!(v.len(), 1);
+        assert_eq!(v[0].directive, "require-trusted-types-for");
+        assert!(parse_csp_reports(b"pas du json").is_empty());
+        assert!(parse_csp_reports(br#"{"csp-report":{}}"#).is_empty());
+        let many = format!("[{}]", vec![r#"{"type":"csp-violation","body":{"effectiveDirective":"img-src"}}"#; 50].join(","));
+        assert_eq!(parse_csp_reports(many.as_bytes()).len(), 10);
+    }
 
     #[test]
     fn masque_les_jetons() {

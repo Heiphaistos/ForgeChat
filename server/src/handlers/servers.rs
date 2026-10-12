@@ -298,10 +298,12 @@ pub async fn delete_server(
         "type": "SERVER_DELETE",
         "server_id": server_id,
     }).to_string()).await;
+    let files = crate::handlers::uploads::server_upload_candidates(&state.db, server_id).await;
     sqlx::query("DELETE FROM servers WHERE id=$1")
         .bind(server_id)
         .execute(&state.db)
         .await?;
+    crate::handlers::uploads::remove_unreferenced(&state, files).await;
     Ok(Json(serde_json::json!({ "ok": true })))
 }
 

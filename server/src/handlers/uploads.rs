@@ -424,6 +424,59 @@ pub fn remove_upload_files(state: &AppState, urls: Vec<String>) {
     });
 }
 
+/// Fichiers d'un serveur (pièces jointes de ses salons, icône, bannière, émojis, autocollants,
+/// sons), relevés AVANT sa suppression : la cascade efface les lignes, pas les fichiers.
+pub async fn server_upload_candidates(db: &sqlx::PgPool, server_id: Uuid) -> Vec<String> {
+    sqlx::query_scalar(
+        "SELECT a.url FROM attachments a JOIN messages m ON m.id = a.message_id
+           JOIN channels c ON c.id = m.channel_id WHERE c.server_id = $1
+         UNION SELECT icon FROM servers WHERE id = $1 AND icon IS NOT NULL
+         UNION SELECT banner FROM servers WHERE id = $1 AND banner IS NOT NULL
+         UNION SELECT url FROM custom_emojis WHERE server_id = $1
+         UNION SELECT url FROM server_stickers WHERE server_id = $1
+         UNION SELECT file_url FROM soundboard WHERE server_id = $1",
+    )
+    .bind(server_id)
+    .fetch_all(db)
+    .await
+    .unwrap_or_default()
+}
+
+/// Fichiers d'un compte (pièces jointes envoyées, avatar, bannière), relevés AVANT sa suppression.
+pub async fn user_upload_candidates(db: &sqlx::PgPool, user_id: Uuid) -> Vec<String> {
+    sqlx::query_scalar(
+        "SELECT url FROM attachments WHERE uploader_id = $1
+         UNION SELECT avatar FROM users WHERE id = $1 AND avatar IS NOT NULL
+         UNION SELECT banner FROM users WHERE id = $1 AND banner IS NOT NULL",
+    )
+    .bind(user_id)
+    .fetch_all(db)
+    .await
+    .unwrap_or_default()
+}
+
+/// Après une suppression en cascade : efface du disque les fichiers candidats que plus aucune
+/// ligne ne référence (un fichier encore utilisé ailleurs reste en place).
+pub async fn remove_unreferenced(state: &AppState, candidates: Vec<String>) {
+    if candidates.is_empty() {
+        return;
+    }
+    let gone: Vec<String> = sqlx::query_scalar(
+        "SELECT u FROM unnest($1::text[]) AS u
+         WHERE NOT EXISTS (SELECT 1 FROM attachments WHERE url = u)
+           AND NOT EXISTS (SELECT 1 FROM users WHERE avatar = u OR banner = u)
+           AND NOT EXISTS (SELECT 1 FROM servers WHERE icon = u OR banner = u)
+           AND NOT EXISTS (SELECT 1 FROM custom_emojis WHERE url = u)
+           AND NOT EXISTS (SELECT 1 FROM server_stickers WHERE url = u)
+           AND NOT EXISTS (SELECT 1 FROM soundboard WHERE file_url = u)",
+    )
+    .bind(&candidates)
+    .fetch_all(&state.db)
+    .await
+    .unwrap_or_default();
+    remove_upload_files(state, gone);
+}
+
 pub async fn upload_file(
     State(state): State<AppState>,
     Extension(claims): Extension<Claims>,
