@@ -5,6 +5,7 @@
 
 # Build
 server/target/
+desktop/src-tauri/target/
 client/node_modules/
 client/dist/
 
