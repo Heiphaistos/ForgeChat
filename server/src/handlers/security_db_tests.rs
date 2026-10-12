@@ -351,3 +351,28 @@ async fn security_birthday_at_rest() {
     assert_eq!(clear, None);
     assert!(!enc.contains("2000"));
 }
+
+/// Audit 2026-10-12 : la recherche globale ne livre la présence que des amis et membres d'un serveur commun.
+#[tokio::test]
+#[ignore]
+async fn security_search_hides_strangers_presence() {
+    let (state, db) = setup().await;
+    let (me, stranger, friend) = (user(&db).await, user(&db).await, user(&db).await);
+    let tag = Uuid::new_v4().simple().to_string()[..8].to_string();
+    for (u, name) in [(stranger, format!("zz{tag}s")), (friend, format!("zz{tag}f"))] {
+        sqlx::query("UPDATE users SET username=$2, status='online', custom_status='en vacances' WHERE id=$1")
+            .bind(u).bind(name).execute(&db).await.expect("profil");
+    }
+    sqlx::query("INSERT INTO friendships (user_id, friend_id, status) VALUES ($1, $2, 'accepted')")
+        .bind(me).bind(friend).execute(&db).await.expect("ami");
+    let claims = crate::middleware::auth::Claims { sub: me, exp: i64::MAX, iss: "forgechat".into(), iat: 0, sid: None };
+    let q = std::collections::HashMap::from([("q".to_string(), format!("zz{tag}"))]);
+    let axum::Json(found) = crate::handlers::users::search_users(
+        axum::extract::State(state.clone()), axum::Extension(claims), axum::extract::Query(q),
+    ).await.expect("recherche");
+    let by = |id: Uuid| found.iter().find(|u| u.id == id).expect("trouvé");
+    assert_eq!(by(stranger).status, "offline");
+    assert_eq!(by(stranger).custom_status, None);
+    assert_eq!(by(friend).status, "online");
+    assert_eq!(by(friend).custom_status.as_deref(), Some("en vacances"));
+}
