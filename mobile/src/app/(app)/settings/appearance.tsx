@@ -1,8 +1,11 @@
 import { Ionicons } from '@expo/vector-icons'
 import { useMutation, useQuery } from '@tanstack/react-query'
-import { Alert, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
+import { Alert, Platform, Pressable, ScrollView, Share, StyleSheet, Text, View } from 'react-native'
+import { useState } from 'react'
 import { settingsApi, settingsKey, type ServerSideSettings } from '@/api/settings'
-import { Button, Row, Section, SwitchRow } from '@/components/ui'
+import { Button, Row, Section, SwitchRow, TextField } from '@/components/ui'
+import { shareCode, studioWithImport } from '@/features/appearance/themeShare'
+import { http } from '@/lib/http'
 import { accountCustomThemes, restartApp, themeStudioKey } from '@/features/appearance/sync'
 import { useLang, useT, type Lang } from '@/i18n'
 import { errorMessage } from '@/lib/http'
@@ -10,7 +13,7 @@ import { queryClient } from '@/lib/queryClient'
 import { colors, font, radius, spacing } from '@/theme'
 import { paletteFromSpec, THEMES, type Palette } from '@/theme/palettes'
 import { appearance, deviceCustom, DENSITIES, saveAppearance, TEXT_SCALES, useAppearance, type AppearancePrefs } from '@/theme/prefs'
-import { cssGradient, type PresetGroup, type ThemeSpec } from '@/theme/themeCore'
+import { cssGradient, findTheme, type PresetGroup, type ThemeSpec } from '@/theme/themeCore'
 
 /** Langues traduites (libellés dans leur propre langue, jamais traduits). */
 const LANGS: { code: Lang; label: string }[] = [
@@ -89,6 +92,27 @@ export default function AppearanceScreen() {
     settingsApi.setTheme(id).catch(() => undefined)
   }
 
+  // Import / export d'un code de thème (amélioration n° 42).
+  const [code, setCode] = useState('')
+  const importTheme = useMutation({
+    mutationFn: async () => {
+      const next = studioWithImport(studio.data as Record<string, unknown> | null, customs, code)
+      if (!next) throw new Error(t('themeShare.invalid'))
+      await http.put('/user/theme-studio', next.studio, { noQueue: true })
+      return next.theme
+    },
+    onSuccess: (theme) => {
+      setCode('')
+      void studio.refetch()
+      pickTheme(theme.id, theme)
+    },
+    onError: (e) => Alert.alert(t('themeShare.import'), errorMessage(e)),
+  })
+  const current = findTheme(prefs.theme, customs)
+  const exportTheme = () => {
+    if (current) void Share.share({ message: shareCode(current) })
+  }
+
   const restart = () => {
     if (!restartApp()) Alert.alert(t('appearance.themeSaved'), t('appearance.reopenForTheme'))
   }
@@ -147,6 +171,14 @@ export default function AppearanceScreen() {
             ))}
           </View>
         ) : null}
+      </Section>
+
+      <Section title={t('themeShare.title')} footer={t('themeShare.footer')}>
+        <View style={{ padding: spacing.lg, gap: spacing.md }}>
+          {current ? <Button title={t('themeShare.export')} variant="secondary" icon="share-outline" onPress={exportTheme} /> : null}
+          <TextField label={t('themeShare.code')} value={code} onChangeText={setCode} autoCapitalize="none" autoCorrect={false} multiline />
+          <Button title={t('themeShare.import')} icon="download-outline" disabled={!code.trim()} loading={importTheme.isPending} onPress={() => importTheme.mutate()} />
+        </View>
       </Section>
 
       <Section title={t('appearance.accent')} footer={t('appearance.syncedF')}>
