@@ -29,6 +29,7 @@ import PickerShell, { PickerFallback } from '../ui/PickerShell'
 import { t as tr, useT, type Key } from '../../i18n'
 import { mustEncrypt, openMessages, withSeal } from '../../e2e/conversations'
 import { currentGeo } from '../../lib/geo'
+import { buildPoll } from '../../lib/encPoll'
 import { channelSendError, postMessage, sendChannel } from '../../e2e/channels'
 import { sealPoll } from '../../e2e/channelScopes'
 import { outgoingText, useUxPrefs } from '../../lib/uxPrefs'
@@ -139,6 +140,8 @@ export interface FileWithTtl {
 interface Props {
   channelId: string
   serverId?: string
+  /** Conversation privée : MP (défaut) ou groupe. */
+  convKind?: 'dm' | 'group'
   placeholder?: string
   /** `replyPing` : réponse dans un salon, notifier l'auteur cité (false = sans mention). */
   onSend: (content: string, replyTo?: string, files?: FileWithTtl[], ttlSeconds?: number | null, replyPing?: boolean) => void
@@ -193,7 +196,7 @@ function FileIcon({ file }: { file: File }) {
   return <File size={14} className="text-fc-muted" />
 }
 
-export default function MessageInput({ channelId, serverId, placeholder, onSend, onEdit, replyTo, onCancelReply, sending }: Props) {
+export default function MessageInput({ channelId, serverId, convKind = 'dm', placeholder, onSend, onEdit, replyTo, onCancelReply, sending }: Props) {
   const t = useT()
   const { drafts, setDraft, clearDraft } = useDraft()
   const me = useAuth(s => s.user)
@@ -872,17 +875,37 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
   // Partage de position (amélioration n° 34) : coordonnées dans le corps chiffré (`g`). Conversation
   // non chiffrée : refus, la position ne part jamais en clair.
   const shareLocation = useCallback(async () => {
-    const kind = serverId ? 'channel' : 'dm'
+    const kind = serverId ? 'channel' : convKind
     try {
       if (!await mustEncrypt(kind, channelId)) { toast.error(tr('geo.needsE2E')); return }
       const g = await currentGeo()
-      const extra = { g }
-      if (serverId) await postMessage(serverId, channelId, tr('geo.text'), body => api.post(`/servers/${serverId}/channels/${channelId}/messages`, body), extra)
-      else await withSeal('dm', channelId, tr('geo.text'), body => api.post(`/dms/${channelId}/messages`, body), null, { extra })
+      await sendExtra(tr('geo.text'), { g })
     } catch (e) {
       toast.error(e instanceof GeolocationPositionError ? tr('geo.denied') : channelSendError(e, tr('geo.failed')))
     }
-  }, [channelId, serverId])
+  }, [channelId, serverId, convKind]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  /** Message chiffré avec un contenu structuré (position, sondage chiffré). */
+  const sendExtra = (text: string, extra: Record<string, unknown>) => serverId
+    ? postMessage(serverId, channelId, text, body => api.post(`/servers/${serverId}/channels/${channelId}/messages`, body), extra)
+    : withSeal(convKind, channelId, text, body => api.post(convKind === 'group' ? `/dms/groups/${channelId}/messages` : `/dms/${channelId}/messages`, body), null, { extra })
+
+  // Sondage chiffré des MP et groupes (amélioration n° 35).
+  const [encPollOpen, setEncPollOpen] = useState(false)
+  const [encPollQ, setEncPollQ] = useState('')
+  const [encPollOpts, setEncPollOpts] = useState('')
+  const [encPollMulti, setEncPollMulti] = useState(false)
+  const sendEncPoll = async () => {
+    const poll = buildPoll(encPollQ, encPollOpts, encPollMulti)
+    if (!poll) { toast.error(tr('encpoll.invalid')); return }
+    try {
+      if (!await mustEncrypt(convKind, channelId)) { toast.error(tr('geo.needsE2E')); return }
+      await sendExtra(`📊 ${poll.q}`, { poll })
+      setEncPollOpen(false); setEncPollQ(''); setEncPollOpts(''); setEncPollMulti(false)
+    } catch (e) {
+      toast.error(channelSendError(e, tr('encpoll.failed')))
+    }
+  }
 
   const closeAllPickers = () => {
     setShowEmojiPicker(false)
@@ -1443,6 +1466,28 @@ export default function MessageInput({ channelId, serverId, placeholder, onSend,
           >
             <MapPin size={18} />
           </button>
+
+          {!serverId && (
+            <div className="relative">
+              <button onClick={() => { closeAllPickers(); setEncPollOpen(o => !o) }} aria-expanded={encPollOpen}
+                className={`p-1.5 rounded transition ${encPollOpen ? 'text-fc-accent' : 'text-fc-muted hover:text-white'}`}
+                title={t('encpoll.create')} aria-label={t('encpoll.create')}>
+                <BarChart3 size={18} />
+              </button>
+              {encPollOpen && (
+                <div className="absolute bottom-full right-0 mb-2 w-72 bg-fc-channel border border-fc-hover rounded-xl shadow-2xl z-50 p-3 space-y-2">
+                  <input value={encPollQ} onChange={e => setEncPollQ(e.target.value)} maxLength={300} placeholder={t('encpoll.question')} aria-label={t('encpoll.question')}
+                    className="w-full px-2 py-1.5 bg-fc-input rounded text-sm text-white" />
+                  <textarea value={encPollOpts} onChange={e => setEncPollOpts(e.target.value)} rows={4} placeholder={t('encpoll.options')} aria-label={t('encpoll.options')}
+                    className="w-full px-2 py-1.5 bg-fc-input rounded text-sm text-white" />
+                  <label className="flex items-center gap-2 text-xs text-fc-muted">
+                    <input type="checkbox" checked={encPollMulti} onChange={e => setEncPollMulti(e.target.checked)} /> {t('encpoll.multi')}
+                  </label>
+                  <button onClick={() => void sendEncPoll()} className="w-full py-1.5 rounded bg-fc-accent text-white text-sm">{t('encpoll.send')}</button>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Bouton Sondage — server-only (polls.channel_id référence `channels`),
               masqué sur petits écrans et en DM comme "Programmer un message" ci-dessus */}

@@ -1247,6 +1247,7 @@ export default function GroupDMPage() {
         {/* Input */}
         <MessageInput
           channelId={groupId!}
+          convKind="group"
           placeholder={t('gdm.placeholder', { name: group.name })}
           sending={sendMsg.isPending}
           replyTo={replyTo}

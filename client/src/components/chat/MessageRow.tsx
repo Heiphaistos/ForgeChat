@@ -10,6 +10,8 @@ import ReminderModal from './ReminderModal'
 import PollDisplay from './PollDisplay'
 import LinkPreview from './LinkPreview'
 import LocationCard from './LocationCard'
+import EncryptedPoll from './EncryptedPoll'
+import { KEYCAPS, pollOf } from '../../lib/encPoll'
 import { geoOf } from '../../lib/geo'
 import { parseStickerMessage } from './StickerPicker'
 import { gifMessage, GifMessage } from './gif-utils'
@@ -437,6 +439,9 @@ function MessageRow({
               {/* Support à distance (MP) : carte du contenu chiffré `rs` */}
               {!serverId && msg.e2e_body?.rs != null && <RemoteSupportCard msg={msg} isOwn={isOwn} />}
 
+              {/* Sondage chiffré (amélioration n° 35) */}
+              {(() => { const p = msg.enc ? pollOf(msg.e2e_body) : null; return p ? <EncryptedPoll poll={p} reactions={msg.reactions} onToggle={e => onToggleReaction(msg.id, e)} /> : null })()}
+
               {/* Position partagée (chiffrée, amélioration n° 34) */}
               {(() => { const g = msg.enc ? geoOf(msg.e2e_body) : null; return g ? <LocationCard g={g} /> : null })()}
 
@@ -451,7 +456,7 @@ function MessageRow({
               {/* Réactions */}
               {showReactions && msg.reactions?.length > 0 && (
                 <div className="flex flex-wrap gap-1 mt-1.5">
-                  {msg.reactions?.map((r: any) => {
+                  {msg.reactions?.filter((r: any) => !(msg.enc && pollOf(msg.e2e_body) && (KEYCAPS as readonly string[]).includes(r.emoji))).map((r: any) => {
                     const isSuper = !!r.is_super
                     const isPopping = !isSuper && poppingEmoji === r.emoji
                     const isBumped = !isSuper && bumpedEmojis.includes(r.emoji)
