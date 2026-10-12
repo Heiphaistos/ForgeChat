@@ -125,6 +125,7 @@ pub async fn create_my_keys(
     Json(body): Json<CreateKeyBody>,
 ) -> Result<Json<Value>> {
     let fingerprint = validate_key(&body.public, &body.wrapped, body.backup.as_ref())?;
+    let mut tx = state.db.begin().await?;
     let done = sqlx::query(
         "INSERT INTO user_keys (user_id, public_key, fingerprint, wrapped, backup, backup_at)
          VALUES ($1, $2, $3, $4, $5, CASE WHEN $5::jsonb IS NULL THEN NULL ELSE NOW() END)
@@ -135,12 +136,15 @@ pub async fn create_my_keys(
     .bind(&fingerprint)
     .bind(to_json(&body.wrapped))
     .bind(body.backup.as_ref().map(to_json))
-    .execute(&state.db)
+    .execute(&mut *tx)
     .await?;
     if done.rows_affected() == 0 {
         return Err(AppError::Conflict("KEY_EXISTS".into()));
     }
-    Ok(Json(json!({ "ok": true, "fingerprint": fingerprint })))
+    // Journal de transparence (amélioration n° 10), dans la même transaction.
+    let kt_seq = crate::key_log::append(&mut tx, claims.sub, &body.public).await?;
+    tx.commit().await?;
+    Ok(Json(json!({ "ok": true, "fingerprint": fingerprint, "kt_seq": kt_seq })))
 }
 
 #[derive(Deserialize)]
@@ -281,9 +285,10 @@ pub async fn reset_my_key(
     .bind(body.backup.as_ref().map(to_json))
     .execute(&mut *tx)
     .await?;
+    let kt_seq = crate::key_log::append(&mut tx, claims.sub, &body.public).await?;
     tx.commit().await?;
     tracing::info!(user_id = %claims.sub, "clé E2E réinitialisée");
-    Ok(Json(json!({ "ok": true, "fingerprint": fingerprint })))
+    Ok(Json(json!({ "ok": true, "fingerprint": fingerprint, "kt_seq": kt_seq })))
 }
 
 fn is_fresh(iat: i64, now: i64) -> bool {
@@ -323,7 +328,9 @@ pub async fn get_public_key(
             .fetch_optional(&state.db)
             .await?;
     let (public, fingerprint) = row.ok_or_else(not_found)?;
-    Ok(Json(json!({ "user_id": user_id, "public": public, "fingerprint": fingerprint })))
+    // Entrée du journal de transparence où cette clé doit figurer (vérifiée par l'appli).
+    let kt_seq = crate::key_log::latest_seq(&state.db, user_id).await;
+    Ok(Json(json!({ "user_id": user_id, "public": public, "fingerprint": fingerprint, "kt_seq": kt_seq })))
 }
 
 #[cfg(test)]

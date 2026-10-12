@@ -19,6 +19,7 @@ mod security_headers;
 mod cookies;
 mod security_events;
 mod webauthn;
+mod key_log;
 
 use axum::{
     middleware as axum_middleware,
@@ -115,6 +116,20 @@ async fn main() -> anyhow::Result<()> {
             handlers::diagnostics::purge_old(&cleanup_state).await;
             purge_retention(&cleanup_state).await;
             handlers::e2e_conv::purge_legacy(&cleanup_state.db).await;
+        }
+    });
+
+    // Journal de transparence des clés : rattrapage au démarrage, puis chaque heure.
+    let kt_db = state.db.clone();
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(Duration::from_secs(3600));
+        loop {
+            interval.tick().await;
+            match key_log::reconcile(&kt_db).await {
+                Ok(0) => {}
+                Ok(n) => tracing::info!("journal de transparence : {n} clé(s) inscrite(s)"),
+                Err(e) => tracing::warn!("journal de transparence : {e}"),
+            }
         }
     });
 
@@ -725,6 +740,8 @@ fn protected_routes(state: AppState) -> Router<AppState> {
         .route("/users/me/keys/backup", put(handlers::user_keys::put_my_backup).delete(handlers::user_keys::delete_my_backup).layer(DefaultBodyLimit::max(SMALL_JSON_LIMIT)))
         .route("/users/me/keys/reset", post(handlers::user_keys::reset_my_key).layer(DefaultBodyLimit::max(SMALL_JSON_LIMIT)))
         .route("/users/:id/keys/public", get(handlers::user_keys::get_public_key))
+        .route("/keys/log", get(key_log::list))
+        .route("/keys/log/:seq", get(key_log::get))
         // Clés de conversation des MP et groupes chiffrés (docs/CHIFFREMENT-E2E.md §4.1)
         .route("/e2e/conversations/:kind/:id/keys", get(handlers::e2e_conv::get_my_envelopes).post(handlers::e2e_conv::post_envelopes).layer(DefaultBodyLimit::max(SMALL_JSON_LIMIT)))
         .route("/e2e/conversations/:kind/:id/keys/request", post(handlers::e2e_conv::request_keys))

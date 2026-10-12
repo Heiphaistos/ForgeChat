@@ -2,6 +2,7 @@ import { Stack } from 'expo-router'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import E2EGate from '@/e2e/E2EGate'
 import KeyChangeDialog from '@/e2e/KeyChangeDialog'
+import { KeyTransparencyMonitor } from '@/e2e/KeyTransparencyMonitor'
 import AiEngineHost from '@/features/ai/AiEngineHost'
 import { useAppearanceSync } from '@/features/appearance/sync'
 import UserMenuHost from '@/features/userMenu/UserMenuHost'
@@ -92,6 +93,7 @@ export default function AppLayout() {
       </Stack>
       <E2EGate />
       <KeyChangeDialog />
+      <KeyTransparencyMonitor />
       <AiEngineHost />
       <UserMenuHost />
     </>

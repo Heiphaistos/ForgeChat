@@ -39,6 +39,10 @@ export const fr = {
   'guard.qr.match': 'Codes identiques : contact vérifié.',
   'guard.qr.mismatch': 'Les codes NE correspondent PAS : quelqu’un s’interpose peut-être, ou une clé a changé. Rien n’a été vérifié.',
   'guard.qr.invalid': 'Ce QR code n’est pas un code de sécurité ForgeChat (ou la caméra est indisponible).',
+  'guard.kt.logged': 'Clé inscrite au journal public des clés.',
+  'guard.kt.notLogged': 'Attention : cette clé ne figure pas au journal public des clés. Vérifiez le code de sécurité en personne avant d’échanger quoi que ce soit de sensible.',
+  'guard.kt.rewritten': 'Alerte de sécurité : le journal public des clés a été réécrit. Le serveur est peut-être compromis : vérifiez les codes de sécurité de vos contacts en personne et prévenez l’administrateur.',
+  'guard.kt.foreign': 'Alerte de sécurité : une clé différente de celle de cet appareil est publiée pour ton compte. Si tu as réinitialisé ta clé ailleurs, reconnecte-toi ici ; sinon, quelqu’un a publié une clé à ton nom : verrouille ton compte (Paramètres > Sessions) et préviens tes contacts.',
 }
 export const en: Partial<Record<keyof typeof fr, string>> = {
   'guard.lock.title': 'Lock my account',
@@ -79,4 +83,8 @@ export const en: Partial<Record<keyof typeof fr, string>> = {
   'guard.qr.match': 'Codes match: contact verified.',
   'guard.qr.mismatch': 'The codes do NOT match: someone may be intercepting, or a key changed. Nothing was verified.',
   'guard.qr.invalid': 'This QR code is not a ForgeChat safety code (or the camera is unavailable).',
+  'guard.kt.logged': 'Key recorded in the public key log.',
+  'guard.kt.notLogged': 'Warning: this key is not in the public key log. Check the safety code in person before sharing anything sensitive.',
+  'guard.kt.rewritten': 'Security alert: the public key log was rewritten. The server may be compromised: check your contacts’ safety codes in person and warn the administrator.',
+  'guard.kt.foreign': 'Security alert: a key different from this device’s is published for your account. If you reset your key elsewhere, sign in again here; otherwise someone published a key in your name: lock your account (Settings > Sessions) and warn your contacts.',
 }
