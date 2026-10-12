@@ -81,7 +81,7 @@ Priorité : 🔴 haute · 🟠 moyenne · 🟢 confort.
 34. 🟠 Partage de position en temps réel (durée limitée, chiffrée).
 35. 🟠 Sondages chiffrés de bout en bout dans les MP et groupes.
 36. 🟠 Statuts personnalisés avec expiration (« En réunion jusqu'à 15 h »).
-37. 🟠 Messages éphémères par défaut réglables par conversation, avec indicateur clair dans l’en-tête.
+37. 🟠 Accès invité : lien temporaire vers un salon en lecture seule, sans création de compte, révocable.
 38. 🟠 Tableau de bord d'administration : santé du serveur, file d'envoi d'e-mails, erreurs récentes.
 39. 🟠 Modération assistée : file de signalements unifiée avec actions rapides et historique.
 40. 🟠 Onboarding guidé (3 écrans) qui explique le chiffrement et la vérification des contacts.
