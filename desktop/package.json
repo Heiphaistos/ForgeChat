@@ -8,6 +8,6 @@
     "build:all": "cd ../client && npm run build && cd ../desktop && tauri build"
   },
   "devDependencies": {
-    "@tauri-apps/cli": "^2.0.0"
+    "@tauri-apps/cli": "^2.12.1"
   }
 }
