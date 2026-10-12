@@ -82,8 +82,9 @@ trap 'cp "$BACKUP" "$ROOT/package.json"; rm -f "$BACKUP"' EXIT
 
 npx expo prebuild --platform android --clean --no-install
 
+# R8 a manque de memoire avec 2 Go (defaut du prebuild) le 2026-10-12 : 4 Go par defaut.
 cd android
-./gradlew assembleRelease --no-daemon --max-workers=2 -PreactNativeArchitectures="${FORGECHAT_ABIS:-arm64-v8a,armeabi-v7a}" --console=plain &
+./gradlew assembleRelease --no-daemon --max-workers=2 -Dorg.gradle.jvmargs="-Xmx${FORGECHAT_GRADLE_XMX:-4g} -XX:MaxMetaspaceSize=1g" -PreactNativeArchitectures="${FORGECHAT_ABIS:-arm64-v8a,armeabi-v7a}" --console=plain &
 G=$!
 while kill -0 $G 2>/dev/null; do
   read -r total used <<<"$(free -m | awk '/^(Swap|Échange)/{print $2, $3}')"

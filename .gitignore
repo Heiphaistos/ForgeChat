@@ -27,3 +27,4 @@ dist-desktop/
 
 # Sauvegarde du Redis local de test
 dump.rdb
+*.tsbuildinfo

@@ -92,7 +92,7 @@ test('registre : clé de serveur jamais vue refusée tant que non acceptée, pui
 
 test('clé de serveur signée : vecteur du navigateur (S bas et S haut) et règles de confiance', async () => {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const v = (require('../../docs/e2e-vectors.json') as { serverKeySig: Record<string, string> }).serverKeySig
+  const v = (require('../../docs/e2e-vectors.json') as { serverKeySig: Record<'signer_public' | 'signature' | 'signature_high_s' | 'server_id' | 'signed_by' | 'public', string> }).serverKeySig
   const signerPub = b64uDecode(v.signer_public)
   expect(await verifyServerKeySig(signerPub, v.signature, v.server_id, v.signed_by, v.public)).toBe(true)
   expect(await verifyServerKeySig(signerPub, v.signature_high_s, v.server_id, v.signed_by, v.public)).toBe(true)
