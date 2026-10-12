@@ -1,12 +1,15 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Field } from './shared'
-import { Mic, RefreshCw, Waves, Radio } from 'lucide-react'
+import { RefreshCw, Waves, Radio } from 'lucide-react'
 import { useVoice } from '../../store/voice'
 import { useCallStore } from '../../store/call'
 import { NOISE_ENGINES, getNoiseEngine, type NoiseEngine } from '../../lib/audio'
 import { useT } from '../../i18n'
 import { useSpatial } from '../../store/spatial'
 import { setAudioOutput } from '../../lib/voicePlayback'
+import {
+  MicCheck, InputVolume, PttRelease, VoiceProcessing, OutputSettings, SoundSettings, AudioResetButton,
+} from './AvAudioSettings'
 
 export default function AudioSection() {
   const t = useT()
@@ -16,12 +19,7 @@ export default function AudioSection() {
   const [selectedInput, setSelectedInput] = useState(localStorage.getItem('fc_audio_input') ?? '')
   const [selectedOutput, setSelectedOutput] = useState(localStorage.getItem('fc_audio_output') ?? '')
   const [permission, setPermission] = useState<'unknown' | 'granted' | 'denied'>('unknown')
-  const [vuLevel, setVuLevel] = useState(0)
   const [engine, setEngine] = useState<NoiseEngine>(() => getNoiseEngine())
-  const testStreamRef = useRef<MediaStream | null>(null)
-  const animFrameRef = useRef<number>(0)
-  const analyserRef = useRef<AnalyserNode | null>(null)
-  const testCtxRef = useRef<AudioContext | null>(null)
   const setNoiseEngine = useVoice(s => s.setNoiseEngine)
   const setAudioInput = useVoice(s => s.setAudioInput)
   const pttMode = useVoice(s => s.pttMode)
@@ -59,45 +57,6 @@ export default function AudioSection() {
       .catch(() => refreshDevices())
   }, [refreshDevices])
 
-  const startMicTest = async () => {
-    if (testStreamRef.current) return
-    try {
-      const constraints: MediaStreamConstraints = {
-        audio: selectedInput ? { deviceId: { exact: selectedInput } } : true,
-      }
-      const stream = await navigator.mediaDevices.getUserMedia(constraints)
-      testStreamRef.current = stream
-      const ctx = new AudioContext()
-      testCtxRef.current = ctx
-      const src = ctx.createMediaStreamSource(stream)
-      const analyser = ctx.createAnalyser()
-      analyser.fftSize = 256
-      src.connect(analyser)
-      analyserRef.current = analyser
-
-      const buf = new Uint8Array(analyser.frequencyBinCount)
-      const tick = () => {
-        analyser.getByteFrequencyData(buf)
-        const avg = buf.reduce((a, b) => a + b, 0) / buf.length
-        setVuLevel(Math.min(100, (avg / 128) * 100))
-        animFrameRef.current = requestAnimationFrame(tick)
-      }
-      tick()
-    } catch {}
-  }
-
-  const stopMicTest = () => {
-    cancelAnimationFrame(animFrameRef.current)
-    testStreamRef.current?.getTracks().forEach(tr => tr.stop())
-    testStreamRef.current = null
-    analyserRef.current = null
-    testCtxRef.current?.close()
-    testCtxRef.current = null
-    setVuLevel(0)
-  }
-
-  useEffect(() => () => stopMicTest(), [])
-
   const handleInputChange = (id: string) => {
     setSelectedInput(id)
     // setAudioInput réacquiert le micro et le pousse aux pairs : avant, changer de
@@ -105,10 +64,6 @@ export default function AudioSection() {
     // signaler à l'utilisateur.
     void setAudioInput(id)
     void useCallStore.getState().setAudioInput()
-    if (testStreamRef.current) {
-      stopMicTest()
-      setTimeout(startMicTest, 100)
-    }
   }
 
   const handleOutputChange = (id: string) => {
@@ -164,31 +119,9 @@ export default function AudioSection() {
         </div>
       </Field>
 
-      <div className="p-4 bg-fc-channel rounded-xl border border-fc-hover space-y-3">
-        <div className="flex items-center justify-between">
-          <p className="text-xs text-white font-medium uppercase tracking-wide">{t('settings.audio.micTest')}</p>
-          <button
-            onClick={testStreamRef.current ? stopMicTest : startMicTest}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition
-              ${testStreamRef.current
-                ? 'bg-fc-red/20 text-fc-red hover:bg-fc-red/30'
-                : 'bg-fc-accent/20 text-fc-accent hover:bg-fc-accent/30'
-              }`}
-          >
-            <Mic size={12} />
-            {testStreamRef.current ? t('settings.audio.stop') : t('settings.audio.test')}
-          </button>
-        </div>
-        <div className="h-3 bg-fc-hover rounded-full overflow-hidden">
-          <div
-            className="h-full bg-gradient-to-r from-fc-green to-fc-yellow transition-all duration-75 rounded-full"
-            style={{ width: `${vuLevel}%` }}
-          />
-        </div>
-        {vuLevel === 0 && testStreamRef.current && (
-          <p className="text-xs text-fc-muted">{t('settings.audio.speak')}</p>
-        )}
-      </div>
+      <InputVolume />
+
+      <MicCheck deviceId={selectedInput} />
 
       {/* Suppression de bruit — plusieurs moteurs, façon Krisp */}
       <div className="p-4 bg-fc-channel rounded-xl border border-fc-hover space-y-3">
@@ -224,8 +157,10 @@ export default function AudioSection() {
         </div>
       </div>
 
+      <VoiceProcessing />
+
       {/* Mode d'entrée : voix / push-to-talk */}
-      <div className="p-4 bg-fc-channel rounded-xl border border-fc-hover">
+      <div className="p-4 bg-fc-channel rounded-xl border border-fc-hover space-y-3">
         <div className="flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <Radio size={16} className={pttMode ? 'text-fc-accent' : 'text-fc-muted'} />
@@ -248,6 +183,7 @@ export default function AudioSection() {
               ${pttMode ? 'translate-x-5' : 'translate-x-0'}`} />
           </button>
         </div>
+        {pttMode && <PttRelease />}
       </div>
 
       <Field label={t('settings.audio.output')}>
@@ -270,6 +206,8 @@ export default function AudioSection() {
         )}
       </Field>
 
+      <OutputSettings />
+
       <Field label={t('voiceLot.spatial.title')}>
         <label className="flex items-center gap-2 text-sm text-white cursor-pointer">
           <input type="checkbox" checked={spatial} onChange={e => setSpatial(e.target.checked)} className="accent-fc-accent" />
@@ -277,6 +215,12 @@ export default function AudioSection() {
         </label>
         <p className="text-xs text-fc-muted mt-1">{t('voiceLot.spatial.hint')}</p>
       </Field>
+
+      <SoundSettings />
+
+      <div className="flex justify-end">
+        <AudioResetButton />
+      </div>
     </div>
   )
 }

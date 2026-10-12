@@ -21,7 +21,7 @@ use super::video::{self, Capture, VideoServer};
 struct Session {
     room: Arc<Room>,
     /// Garde le module audio natif actif (micro + lecture des voix).
-    _audio: PlatformAudio,
+    audio: PlatformAudio,
     mic: Option<LocalTrackPublication>,
     camera: Option<(LocalTrackPublication, Capture)>,
     screen: Option<(LocalTrackPublication, Capture)>,
@@ -71,6 +71,33 @@ fn session() -> &'static Mutex<Option<Session>> {
 fn prefs() -> &'static std::sync::Mutex<AudioPrefs> {
     static P: OnceLock<std::sync::Mutex<AudioPrefs>> = OnceLock::new();
     P.get_or_init(Default::default)
+}
+
+/// Traitement du micro choisi dans Réglages > Voix (annulation d'écho,
+/// réduction de bruit, gain automatique). Gardé d'un appel à l'autre : ce sont
+/// des préférences, pas un état de session.
+#[derive(Clone, Copy)]
+struct Processing {
+    aec: bool,
+    ns: bool,
+    agc: bool,
+}
+
+fn processing() -> &'static std::sync::Mutex<Processing> {
+    static P: OnceLock<std::sync::Mutex<Processing>> = OnceLock::new();
+    P.get_or_init(|| {
+        std::sync::Mutex::new(Processing {
+            aec: true,
+            ns: true,
+            agc: true,
+        })
+    })
+}
+
+fn apply_processing(audio: &PlatformAudio, p: Processing) {
+    let _ = audio.set_echo_cancellation(p.aec, true);
+    let _ = audio.set_noise_suppression(p.ns, true);
+    let _ = audio.set_auto_gain_control(p.agc, true);
 }
 
 #[derive(Serialize, Clone)]
@@ -223,11 +250,10 @@ pub async fn connect(app: AppHandle, url: String, token: String, ice: Vec<Value>
     disconnect().await;
 
     let audio = PlatformAudio::new().map_err(|e| format!("audio du système indisponible : {e}"))?;
-    // Même traitement qu'un navigateur : sans annulation d'écho, un casque
-    // non utilisé renvoie la voix des autres dans le micro.
-    let _ = audio.set_echo_cancellation(true, true);
-    let _ = audio.set_noise_suppression(true, true);
-    let _ = audio.set_auto_gain_control(true, true);
+    // Même traitement qu'un navigateur (tout actif par défaut) : sans annulation
+    // d'écho, un casque non utilisé renvoie la voix des autres dans le micro.
+    let p = *processing().lock().unwrap();
+    apply_processing(&audio, p);
 
     let video = VideoServer::start().map_err(|e| format!("serveur vidéo local : {e}"))?;
     let mut rtc = RtcConfiguration::default();
@@ -281,7 +307,7 @@ pub async fn connect(app: AppHandle, url: String, token: String, ice: Vec<Value>
     // livre en `TrackSubscribed`, traité par la boucle d'événements.
     let events = tauri::async_runtime::spawn(run_events(app.clone(), room.clone(), video.clone(), rx));
     state(&app, "connected", None, None);
-    *session().lock().await = Some(Session { room, _audio: audio, mic: mic_pub, camera: None, screen: None, video, events, app });
+    *session().lock().await = Some(Session { room, audio, mic: mic_pub, camera: None, screen: None, video, events, app });
     Ok(())
 }
 
@@ -312,6 +338,16 @@ pub async fn set_mic(open: bool) -> Result<(), String> {
     let Some(s) = guard.as_ref() else { return Ok(()) };
     if let Some(p) = &s.mic {
         if open { p.unmute() } else { p.mute() }
+    }
+    Ok(())
+}
+
+/// Réglages > Voix : appliqué tout de suite à l'appel en cours, et aux suivants.
+pub async fn set_audio_processing(aec: bool, ns: bool, agc: bool) -> Result<(), String> {
+    let p = Processing { aec, ns, agc };
+    *processing().lock().unwrap() = p;
+    if let Some(s) = session().lock().await.as_ref() {
+        apply_processing(&s.audio, p);
     }
     Ok(())
 }

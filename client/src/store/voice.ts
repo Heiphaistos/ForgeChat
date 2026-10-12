@@ -8,8 +8,11 @@ import { webrtcMissing, openInBrowser, NO_WEBRTC_MESSAGE } from '../lib/webrtcSu
 import { isNativeVoice, nativeSetDeafen, nativeSetPeerAudio, nativeSetCamera, nativeSetScreen } from '../lib/nativeVoice'
 import {
   createProcessedAudioTrack, getNoiseEngine, setNoiseEngine as persistNoiseEngine,
+  micNeedsChain, chainOptionsFromPrefs, hasLiveChain,
   type NoiseEngine, type ProcessedAudio,
 } from '../lib/audio'
+import { avPrefs, micConstraintsFor, camConstraintsFromPrefs, effectiveAutoGain } from '../lib/avPrefs'
+import { nativeApplyAudioProcessing } from '../lib/nativeVoice'
 import {
   addPeer, removePeer, connectMedia, disconnectMedia, watchStream as sfuWatchStream, getAutoWatch, setAutoWatch as sfuSetAutoWatch,
   setLocalStream, replaceMicTrack, applyMicEnabled, addCameraTrack, removeCameraTrack,
@@ -115,6 +118,8 @@ interface VoiceStore {
   /** Streams regardés à la demande (identifiants), quand la lecture auto est coupée. */
   watchedStreams: string[]
   autoWatchStreams: boolean
+  /** Aperçu demandé avant d'allumer la caméra (Réglages > Vidéo > Toujours prévisualiser). */
+  cameraPreview: boolean
   /** Muet / sourdine imposés à MOI par un modérateur : non levables ici. */
   serverMuted: boolean
   serverDeafened: boolean
@@ -125,7 +130,9 @@ interface VoiceStore {
   leave(): void
   toggleMute(): void
   toggleDeafen(): void
-  toggleVideo(): Promise<void>
+  /** `skipPreview` : depuis l'aperçu lui-même (sinon l'aperçu s'ouvre si le réglage le demande). */
+  toggleVideo(opts?: { skipPreview?: boolean }): Promise<void>
+  closeCameraPreview(): void
   shareScreen(): Promise<void>
   stopScreenShare(): Promise<void>
   setRecording(on: boolean): void
@@ -140,6 +147,12 @@ interface VoiceStore {
   setScreenVolume(userId: string, volume: number): void
   setNoiseSuppressionEnabled(enabled: boolean): Promise<void>
   setNoiseEngine(engine: NoiseEngine): Promise<void>
+  /**
+   * Reconstruit la chaîne du micro après un changement de Réglages > Voix (écho, gain
+   * automatique, volume d'entrée, sensibilité). `onlyIfMissing` : seulement si la chaîne
+   * en place ne peut pas suivre à chaud.
+   */
+  refreshMicChain(opts?: { onlyIfMissing?: boolean }): Promise<void>
   setAudioInput(deviceId: string): Promise<void>
   setVideoInput(deviceId: string): Promise<void>
   applyQualityPrefs(): Promise<void>
@@ -182,38 +195,31 @@ function saveVolumes(key: string, volumes: Record<string, number>) {
   try { localStorage.setItem(key, JSON.stringify(volumes)) } catch { /* quota/private mode */ }
 }
 
+/** Contraintes du micro : périphérique et traitements choisis dans Réglages > Voix (lib/avPrefs). */
 function micConstraints(): MediaTrackConstraints {
-  const savedMicId = localStorage.getItem('fc_audio_input') || undefined
-  const engine = getNoiseEngine()
-  return {
-    // Voix en mono (valeur idéale, jamais bloquante) : une piste stéréo mal formée s'entendait d'un seul côté.
-    channelCount: 1,
-    echoCancellation: true,
-    ...browserProcessing(engine),
-    ...(savedMicId ? { deviceId: { exact: savedMicId } } : {}),
-  }
+  return micConstraintsFor(getNoiseEngine())
 }
 
 /**
- * Traitement du navigateur selon le moteur. Quand un moteur applicatif traite le
- * signal, l'AGC du navigateur en plus faisait « pomper » la voix (gain qui monte
- * dans les silences nettoyés) ; « Désactivée » veut dire micro brut.
+ * Traitement du navigateur selon le moteur et les Réglages. Quand un moteur applicatif
+ * traite le signal, l'AGC du navigateur en plus faisait « pomper » la voix (gain qui
+ * monte dans les silences nettoyés) : il ne s'active alors que si l'utilisateur le
+ * demande explicitement. « Désactivée » veut dire sans réduction de bruit.
  */
 function browserProcessing(engine: NoiseEngine) {
-  const on = engine === 'browser'
-  return { noiseSuppression: on, autoGainControl: on }
+  return {
+    echoCancellation: avPrefs().echoCancellation,
+    noiseSuppression: engine === 'browser',
+    autoGainControl: effectiveAutoGain(engine),
+  }
 }
 
 function camConstraints(): MediaTrackConstraints {
-  const savedCamId = localStorage.getItem('fc_video_input') || undefined
-  const height = Number(localStorage.getItem('fc_cam_height') ?? '720') || 720
-  return {
-    width: { ideal: Math.round((height * 16) / 9) },
-    height: { ideal: height },
-    frameRate: { ideal: Number(localStorage.getItem('fc_cam_fps') ?? '30') || 30 },
-    ...(savedCamId ? { deviceId: { exact: savedCamId } } : {}),
-  }
+  return camConstraintsFromPrefs()
 }
+
+/** Délai de relâchement du push-to-talk en cours (Réglages > Voix). */
+let _pttReleaseTimer: ReturnType<typeof setTimeout> | null = null
 
 function screenConstraints() {
   const fps = Number(localStorage.getItem('fc_screen_fps') ?? '30') || 30
@@ -238,18 +244,23 @@ function micShouldBeOpen(s: VoiceStore): boolean {
 
 /** Construit la piste micro à envoyer : brute + moteur de suppression de bruit. */
 async function buildMicTrack(raw: MediaStreamTrack, engine: NoiseEngine): Promise<{ track: MediaStreamTrack; error: string | null }> {
-  if (engine === 'off' || engine === 'browser') {
-    // L'ancienne chaîne (worklet + AudioContext) tournait encore pour rien.
+  if (!micNeedsChain(engine)) {
+    // Ni moteur applicatif, ni volume d'entrée, ni seuil manuel : l'ancienne chaîne
+    // (worklet + AudioContext) tournait encore pour rien.
     disposeProcessed()
     return { track: raw, error: null }
   }
   try {
     _processed?.dispose()
-    _processed = await createProcessedAudioTrack(raw, engine)
+    _processed = await createProcessedAudioTrack(raw, engine, chainOptionsFromPrefs('voice'))
     return { track: _processed.track, error: null }
   } catch (e) {
-    warn(`moteur de suppression de bruit "${engine}" indisponible`, e)
     _processed = null
+    if (engine === 'off' || engine === 'browser') {
+      warn('volume d’entrée / seuil du micro indisponibles', e)
+      return { track: raw, error: 'Volume d’entrée et seuil de sensibilité indisponibles : micro envoyé tel quel.' }
+    }
+    warn(`moteur de suppression de bruit "${engine}" indisponible`, e)
     return { track: raw, error: `Suppression de bruit « ${engine} » indisponible : traitement du navigateur utilisé à la place.` }
   }
 }
@@ -390,7 +401,7 @@ export const useVoice = create<VoiceStore>((set, get) => {
     }
     set({
       joined: false, listenOnly: false, channelId: null, channelName: null, serverId: null,
-      localVideoUrl: null, localScreenUrl: null, nativeSpeakers: [], watchedStreams: [],
+      localVideoUrl: null, localScreenUrl: null, nativeSpeakers: [], watchedStreams: [], cameraPreview: false,
       localStream: null, localScreenStream: null, peers: [], muted: false, deafened: false,
       videoEnabled: false, screenSharing: false, recording: false, error: null, notice: null,
       pttActive: false, whisperTargets: null,
@@ -460,6 +471,7 @@ export const useVoice = create<VoiceStore>((set, get) => {
     nativeSpeakers: [],
     watchedStreams: [],
     autoWatchStreams: getAutoWatch(),
+    cameraPreview: false,
     serverMuted: false,
     serverDeafened: false,
     sfuSpeakers: [],
@@ -810,9 +822,17 @@ export const useVoice = create<VoiceStore>((set, get) => {
     },
 
     // ── Caméra ──────────────────────────────────────────────────────────────
-    toggleVideo: async () => {
+    toggleVideo: async (opts) => {
       const { videoEnabled, joined, listenOnly, channelId } = get()
       if (!joined || listenOnly) return
+      // Toujours prévisualiser : l'aperçu (CameraPreviewDialog) s'ouvre d'abord et
+      // rappelle toggleVideo({ skipPreview: true }) sur « Allumer la caméra ».
+      // Pas sur l'application Linux : la caméra y est capturée par le natif.
+      if (!videoEnabled && opts?.skipPreview !== true && avPrefs().camAlwaysPreview && !isNativeVoice()) {
+        set({ cameraPreview: true })
+        return
+      }
+      if (get().cameraPreview) set({ cameraPreview: false })
       // Double clic pendant l'ouverture : deux caméras ouvertes, une jamais fermée.
       if (_camBusy) return
       _camBusy = true
@@ -857,6 +877,8 @@ export const useVoice = create<VoiceStore>((set, get) => {
         _camBusy = false
       }
     },
+
+    closeCameraPreview: () => set({ cameraPreview: false }),
 
     // ── Partage d'écran ─────────────────────────────────────────────────────
     shareScreen: async () => {
@@ -948,15 +970,26 @@ export const useVoice = create<VoiceStore>((set, get) => {
     // Pas de VOICE_STATE à chaque appui : rien de diffusé ne change, et chaque
     // appui consommait la limite de 20 changements d'état par 10 s.
     activatePtt: () => {
+      if (_pttReleaseTimer) { clearTimeout(_pttReleaseTimer); _pttReleaseTimer = null }
       if (!get().pttMode || !get().joined) return
       set({ pttActive: true })
       syncMic()
     },
 
+    // Délai de relâchement (Réglages > Voix) : la fin du mot n'est plus coupée
+    // quand on lâche la touche un peu tôt. Un nouvel appui l'annule.
     deactivatePtt: () => {
       if (!get().pttMode || !get().joined) return
-      set({ pttActive: false })
-      syncMic()
+      if (_pttReleaseTimer) clearTimeout(_pttReleaseTimer)
+      const release = () => {
+        _pttReleaseTimer = null
+        if (!get().pttMode || !get().joined) return
+        set({ pttActive: false })
+        syncMic()
+      }
+      const delay = avPrefs().pttReleaseMs
+      if (delay > 0) _pttReleaseTimer = setTimeout(release, delay)
+      else release()
     },
 
     // ── Volumes ─────────────────────────────────────────────────────────────
@@ -987,10 +1020,23 @@ export const useVoice = create<VoiceStore>((set, get) => {
     setNoiseEngine: async (engine) => {
       persistNoiseEngine(engine)
       set({ noiseEngine: engine })
-      if (!get().joined || get().listenOnly) return
+      await get().refreshMicChain()
+    },
 
+    refreshMicChain: async (opts) => {
+      nativeApplyAudioProcessing()
+      if (!get().joined || get().listenOnly) return
       const raw = getRawMicTrack()
       if (!raw) return
+      const engine = get().noiseEngine
+      // Volume d'entrée ou seuil changés : réglés à chaud (setLiveInputGain,
+      // setLiveGate) quand la chaîne en place convient — pas de coupure audible.
+      if (opts?.onlyIfMissing) {
+        const wantGate = avPrefs().vadMode === 'manual'
+        const hasGate = !!_processed?.gate
+        if (!micNeedsChain(engine) && !hasGate) return
+        if (_processed && hasLiveChain('voice') && hasGate === wantGate) return
+      }
       // Traitement du navigateur suivant le moteur : passer à « Navigateur » ne
       // réactivait pas sa réduction de bruit, « Désactivée » la gardait.
       await raw.applyConstraints(browserProcessing(engine)).catch(e => warn('contraintes micro', e))

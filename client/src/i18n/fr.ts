@@ -8,6 +8,7 @@ import * as notifCenter from './parts/notifCenter.ts'
 import * as uxSettings from './parts/uxSettings.ts'
 import * as menus from './parts/menus.ts'
 import * as accountGuard from './parts/accountGuard.ts'
+import * as avSettings from './parts/avSettings.ts'
 import { profileFr } from './profileFr.ts'
 import { socialFr } from './socialFr.ts'
 import { comfortFr } from './comfort.ts'
@@ -30,6 +31,7 @@ export const fr = {
   ...systemDeskFr,
   ...menus.fr,
   ...accountGuard.fr,
+  ...avSettings.fr,
   // --- Connexion, inscription, mot de passe oublié ---
   'auth.email': 'Email',
   'auth.password': 'Mot de passe',
@@ -1143,8 +1145,6 @@ export const fr = {
   'settings.keywords.notifications_email': 'email courriel résumé newsletter',
   'settings.keywords.keybindings': 'raccourcis clavier touches combinaisons',
   'settings.keywords.language': 'langue français fuseau horaire format date heure région',
-  'settings.keywords.audio': 'micro microphone casque entrée sortie volume bruit écho',
-  'settings.keywords.video': 'caméra webcam qualité résolution arrière-plan',
   'settings.keywords.privacy': 'vie privée dm messages privés amis qui peut confidentialité lecture',
   'settings.keywords.security': 'mot de passe 2fa a2f double authentification totp code',
   'settings.keywords.sessions': 'appareils connectés déconnexion à distance',

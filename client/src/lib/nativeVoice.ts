@@ -5,6 +5,8 @@
 // Ici, seulement le pilotage : commandes `nv_*` et événements `nv:*`.
 // La vidéo reçue arrive sous forme d'URL vidéo locale, affichée par un <img>.
 import { webrtcMissing } from './webrtcSupport'
+import { avPrefs } from './avPrefs'
+import { getNoiseEngine } from './audio'
 
 const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
 
@@ -76,6 +78,7 @@ export async function nativeConnect(
     tauriInvoke('nv_connect', { url, token, ice, mic, micOpen, e2ee }),
     new Promise((_, reject) => setTimeout(() => reject(new Error('le module audio/vidéo ne répond pas')), 30_000)),
   ])
+  nativeApplyAudioProcessing()
 }
 
 export async function nativeDisconnect(owner: NativeOwner): Promise<void> {
@@ -91,6 +94,21 @@ export async function nativeDisconnect(owner: NativeOwner): Promise<void> {
 export const nativeSetKey = (k: NativeMediaKey) => tauriInvoke('nv_set_key', { key: k.key, index: k.index })
 export const nativeSetMic = (open: boolean) => tauriInvoke('nv_set_mic', { open })
 export const nativeSetDeafen = (deafened: boolean) => tauriInvoke('nv_set_deafen', { deafened })
+/**
+ * Réglages > Voix appliqués au micro natif : annulation d'écho, réduction de bruit
+ * (sauf moteur « Désactivée ») et gain automatique (actif sauf choix contraire : le
+ * natif n'a pas de moteur applicatif avec lequel il « pomperait »). Une appli bureau
+ * plus ancienne, sans la commande, garde son traitement par défaut.
+ */
+export function nativeApplyAudioProcessing() {
+  if (!isNativeVoice()) return
+  const p = avPrefs()
+  tauriInvoke('nv_set_audio_processing', {
+    aec: p.echoCancellation,
+    ns: getNoiseEngine() !== 'off',
+    agc: p.autoGain ?? true,
+  }).catch(e => console.warn('[voice] traitement du micro natif', e))
+}
 export const nativeSetPeerAudio = (identity: string, enabled: boolean) => tauriInvoke('nv_set_peer_audio', { identity, enabled })
 /** URL de l'aperçu local, ou null quand la caméra s'arrête. */
 export const nativeSetCamera = (on: boolean) => tauriInvoke<string | null>('nv_set_camera', { on })

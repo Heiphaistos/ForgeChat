@@ -23,10 +23,11 @@ export interface MixPlan {
  * `kind` voice : micro d'un participant, toujours mixé en mono (graphe systématique).
  * `kind` screen : son d'un partage d'écran, stéréo conservée ; graphe seulement si > 100 % ou spatial.
  * `azimuth` null = voix spatiale désactivée.
+ * `forceMono` : Réglages > Voix > Sortie mono, tout le son reçu (streams compris) en mono.
  */
-export function mixPlan(kind: 'voice' | 'screen', volume: number, azimuth: number | null): MixPlan {
+export function mixPlan(kind: 'voice' | 'screen', volume: number, azimuth: number | null, forceMono = false): MixPlan {
   const gain = Math.min(Math.max(Number.isFinite(volume) ? volume : 1, 0), 2)
   const panner = azimuth !== null
-  const mono = kind === 'voice'
+  const mono = kind === 'voice' || forceMono
   return { graph: mono || panner || gain > 1, mono, panner, gain }
 }

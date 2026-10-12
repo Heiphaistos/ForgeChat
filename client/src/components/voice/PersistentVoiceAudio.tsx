@@ -6,6 +6,9 @@ import { spatialAzimuth } from '../../lib/spatialAudio'
 import { clampVolumePct } from '../../lib/voiceMix'
 import { useSpatial } from '../../store/spatial'
 import { useMyUxPrefs } from '../../store/uxPrefs'
+import { useAvPrefs } from '../../lib/avPrefs'
+import { useAuth } from '../../store/auth'
+import CameraPreviewDialog from './CameraPreviewDialog'
 
 /**
  * Lecture audio des pairs en salon vocal — montée une seule fois, hors de
@@ -30,6 +33,13 @@ export default function PersistentVoiceAudio() {
   const spatial = useSpatial(s => s.on)
   // « Rendre muet » pour moi seulement (menu utilisateur) : volume gardé, voix coupée.
   const locallyMuted = useMyUxPrefs().voiceMuted
+  // Réglages > Voix : volume général et sortie mono (appliqués par routeAudio, ici
+  // seulement pour re-rendre) et atténuation des streams pendant qu'un autre parle.
+  useAvPrefs(s => s.outputVolume)
+  useAvPrefs(s => s.monoOutput)
+  const duck = useAvPrefs(s => s.duckStreams)
+  const myId = useAuth(s => s.user?.id)
+  const othersSpeaking = useVoice(s => duck > 0 && s.sfuSpeakers.some(id => id !== myId))
   const [autoplayBlocked, setAutoplayBlocked] = useState(false)
   const elementsRef = useRef(new Set<HTMLAudioElement>())
 
@@ -57,11 +67,12 @@ export default function PersistentVoiceAudio() {
 
   return (
     <>
+      <CameraPreviewDialog />
       <div style={{ display: 'none' }} aria-hidden="true">
         {peers.map((p, i) => {
           const azimuth = spatial ? spatialAzimuth(i, peers.length) : null
           const micVolume = locallyMuted.includes(p.userId) ? 0 : clampVolumePct(userVolumes[p.userId] ?? 100) / 100
-          const screenVolume = clampVolumePct(screenVolumes[p.userId] ?? 100) / 100
+          const screenVolume = clampVolumePct(screenVolumes[p.userId] ?? 100) / 100 * (othersSpeaking ? 1 - duck / 100 : 1)
           return (
             <span key={p.userId}>
               {p.stream && p.stream.getAudioTracks().length > 0 && (
