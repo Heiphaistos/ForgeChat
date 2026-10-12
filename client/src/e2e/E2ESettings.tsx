@@ -9,7 +9,7 @@ import { regenerateRecoveryCode, useAccountKey } from './accountKey'
 import * as c from './crypto'
 import { fpOf, markVerified, pinOf, trustedMembers, useKeyAlerts } from './keyPins'
 import { RecoveryCodeModal } from './E2EGate'
-import { SafetyQrImage, SafetyQrScanner } from './SafetyQr'
+import { SafetyQrImage, SafetyQrScanner } from './SafetyQrView'
 import { contactKeyLogged, type KtEntry } from './keyTransparency'
 import type { SafetyScan } from './safetyQr'
 

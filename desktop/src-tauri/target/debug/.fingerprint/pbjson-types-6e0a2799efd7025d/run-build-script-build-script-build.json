@@ -1,1 +1,0 @@
-{"rustc":18169182855791486453,"features":"","declared_features":"","target":0,"profile":0,"path":0,"deps":[[17009993894703290646,"build_script_build",false,8707908137378516077]],"local":[{"RerunIfChanged":{"output":"debug/build/pbjson-types-6e0a2799efd7025d/output","paths":["descriptors.bin"]}}],"rustflags":[],"config":0,"compile_kind":0}
