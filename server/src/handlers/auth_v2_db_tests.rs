@@ -51,7 +51,7 @@ async fn auth_v2_prelogin_and_migration() {
         .unwrap();
     // Adresse encore en clair (compte d'avant la migration) : chiffrée au démarrage.
     crate::email_crypto::migrate_at_rest(&db).await.unwrap();
-    assert_eq!(prelogin_lookup(&db, secret, &email).await.unwrap(), (fake_salt(secret, &email), true));
+    assert_eq!(prelogin_lookup(&db, secret, &email).await.unwrap(), (fake_salt(secret, &email), true, "pbkdf2".to_string()));
 
     // Ancienne appli : {email, password} toujours accepté tant que le compte n'est pas migré.
     let u = user(&db, id).await;
@@ -60,11 +60,11 @@ async fn auth_v2_prelogin_and_migration() {
     assert!(login_credentials(&login(json!({ "email": email, "auth": AUTH })), Some(u)).unwrap().is_none());
 
     // Migration (appli à jour), une seule fois.
-    assert!(migrate_account(&db, id, AUTH, SALT).await.unwrap());
-    assert!(!migrate_account(&db, id, AUTH2, SALT).await.unwrap());
+    assert!(migrate_account(&db, id, AUTH, SALT, "argon2id").await.unwrap());
+    assert!(!migrate_account(&db, id, AUTH2, SALT, "pbkdf2").await.unwrap());
     let u = user(&db, id).await;
     assert_eq!(u.password_hash, NO_PASSWORD);
-    assert_eq!(prelogin_lookup(&db, secret, &email).await.unwrap(), (SALT.to_string(), false));
+    assert_eq!(prelogin_lookup(&db, secret, &email).await.unwrap(), (SALT.to_string(), false, "argon2id".to_string()));
 
     // Compte migré : auth seulement ; un mot de passe reçu = 426, jamais vérifié.
     assert!(login_credentials(&login(json!({ "email": email, "auth": AUTH })), Some(u.clone())).unwrap().is_some());
@@ -185,7 +185,7 @@ async fn auth_v2_email_at_rest() {
     assert_eq!(crate::email_crypto::open(id, &enc).as_deref(), Some(norm.as_str()));
 
     // Prelogin et connexion (casse quelconque).
-    assert_eq!(prelogin_lookup(&db, "s", &email.to_uppercase()).await.unwrap(), (SALT.to_string(), false));
+    assert_eq!(prelogin_lookup(&db, "s", &email.to_uppercase()).await.unwrap().0, SALT.to_string());
     let (_, Json(logged)) = crate::handlers::auth::login(State(state.clone()), ip(), HeaderMap::new(), Json(login(json!({ "email": email, "auth": AUTH }))))
         .await
         .unwrap();
@@ -252,4 +252,46 @@ async fn mailed_code(dir: &std::path::Path, to: &str) -> String {
         tokio::time::sleep(std::time::Duration::from_millis(50)).await;
     }
     panic!("aucun e-mail pour {to}");
+}
+
+/// Passage à Argon2id (audit 2026-10-12, M3) : preuve, sel, dérivation et enveloppe E2E ensemble.
+#[tokio::test]
+#[ignore]
+async fn auth_v2_upgrade_kdf() {
+    let db = db().await;
+    let redis_url = std::env::var("FORGECHAT_TEST_REDIS_URL").expect("FORGECHAT_TEST_REDIS_URL");
+    std::env::set_var("DATABASE_URL", "postgres://inutilise");
+    std::env::set_var("JWT_SECRET", "secret-de-test-assez-long-pour-demarrer-0123456789");
+    let config = crate::config::Config::from_env().unwrap();
+    let conn = redis::Client::open(redis_url).unwrap().get_connection_manager().await.unwrap();
+    let state = AppState::new(db.clone(), conn, config).await;
+    let tag = Uuid::new_v4().simple().to_string();
+    let id: Uuid = sqlx::query_scalar(
+        "INSERT INTO users (username, email, password_hash, auth_hash, kdf_salt) VALUES ($1, $2, '!v2', $3, $4) RETURNING id",
+    )
+    .bind(&tag[..20]).bind(format!("{tag}@test.local")).bind(bcrypt::hash(AUTH, 4).unwrap()).bind(SALT)
+    .fetch_one(&db).await.unwrap();
+    sqlx::query("INSERT INTO user_keys (user_id, public_key, fingerprint, wrapped) VALUES ($1, 'p', 'f', '{\"v\":2}')")
+        .bind(id).execute(&db).await.unwrap();
+    let claims = Claims { sub: id, exp: i64::MAX, iss: "forgechat".into(), iat: 0, sid: None };
+    let wrapped = json!({ "v": 2, "iv": URL_SAFE_NO_PAD.encode([1u8; 12]), "ct": URL_SAFE_NO_PAD.encode([2u8; 48]) });
+    let body = |old: &str, wrapped: Value| -> UpgradeKdfBody {
+        serde_json::from_value(json!({ "old_auth": old, "new_auth": AUTH2, "new_kdf_salt": "QUJDREVGR0hJSktMTU5PUA", "kdf": "argon2id", "wrapped": wrapped })).unwrap()
+    };
+    // Mauvaise preuve, ou compte avec clé E2E sans nouvelle enveloppe : refusé, rien ne change.
+    assert!(upgrade_kdf(State(state.clone()), Extension(claims.clone()), Json(body(AUTH2, wrapped.clone()))).await.is_err());
+    assert!(upgrade_kdf(State(state.clone()), Extension(claims.clone()), Json(body(AUTH, Value::Null))).await.is_err());
+    let kdf: String = sqlx::query_scalar("SELECT kdf FROM users WHERE id=$1").bind(id).fetch_one(&db).await.unwrap();
+    assert_eq!(kdf, "pbkdf2");
+    // Bonne preuve : tout bascule ensemble.
+    upgrade_kdf(State(state.clone()), Extension(claims.clone()), Json(body(AUTH, wrapped.clone()))).await.expect("bascule");
+    let u = user(&db, id).await;
+    assert!(bcrypt::verify(AUTH2, u.auth_hash.as_deref().unwrap()).unwrap());
+    let (kdf, salt, w): (String, String, Value) =
+        sqlx::query_as("SELECT u.kdf, u.kdf_salt, k.wrapped FROM users u JOIN user_keys k ON k.user_id=u.id WHERE u.id=$1")
+            .bind(id).fetch_one(&db).await.unwrap();
+    assert_eq!((kdf.as_str(), salt.as_str()), ("argon2id", "QUJDREVGR0hJSktMTU5PUA"));
+    assert_eq!(w["ct"], wrapped["ct"]);
+    // Une seule fois (jamais de retour vers PBKDF2 par cette route).
+    assert!(upgrade_kdf(State(state.clone()), Extension(claims), Json(body(AUTH2, wrapped))).await.is_err());
 }

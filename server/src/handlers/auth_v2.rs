@@ -63,6 +63,17 @@ pub fn hash_auth(auth: &str) -> Result<String> {
     bcrypt::hash(auth, bcrypt::DEFAULT_COST).map_err(|e| AppError::Internal(e.into()))
 }
 
+/// Dérivations acceptées : `pbkdf2` (historique) et `argon2id` (m = 19 Mio, t = 2, p = 1).
+pub const KDFS: [&str; 2] = ["pbkdf2", "argon2id"];
+
+/// Valide la dérivation annoncée par l'appli ; absente = `pbkdf2` (anciennes applis).
+pub fn check_kdf(kdf: Option<&str>) -> Result<&'static str> {
+    match kdf {
+        None => Ok("pbkdf2"),
+        Some(k) => KDFS.iter().copied().find(|x| *x == k).ok_or_else(|| AppError::BadRequest("kdf invalide".into())),
+    }
+}
+
 pub fn email_norm(email: &str) -> String {
     email.trim().to_lowercase()
 }
@@ -109,17 +120,17 @@ pub struct PreloginBody {
     email: String,
 }
 
-/// Rend `(kdf_salt, legacy)` pour un e-mail ; inconnu = sel factice et `legacy`, comme un compte non migré.
-pub async fn prelogin_lookup(db: &PgPool, secret: &str, email: &str) -> Result<(String, bool)> {
+/// Rend `(kdf_salt, legacy, kdf)` pour un e-mail ; inconnu = sel factice et `legacy`, comme un compte non migré.
+pub async fn prelogin_lookup(db: &PgPool, secret: &str, email: &str) -> Result<(String, bool, String)> {
     let email = email_norm(email);
-    let salt: Option<String> =
-        sqlx::query_scalar("SELECT kdf_salt FROM users WHERE email_hmac=$1 AND auth_hash IS NOT NULL AND kdf_salt IS NOT NULL")
+    let row: Option<(String, String)> =
+        sqlx::query_as("SELECT kdf_salt, kdf FROM users WHERE email_hmac=$1 AND auth_hash IS NOT NULL AND kdf_salt IS NOT NULL")
             .bind(crate::email_crypto::hmac(&email))
             .fetch_optional(db)
             .await?;
-    Ok(match salt {
-        Some(s) => (s, false),
-        None => (fake_salt(secret, &email), true),
+    Ok(match row {
+        Some((s, kdf)) => (s, false, kdf),
+        None => (fake_salt(secret, &email), true, "pbkdf2".into()),
     })
 }
 
@@ -135,18 +146,18 @@ pub async fn prelogin(
     }
     hit(&state, &format!("prelogin_ip:{}", client_key(&headers, &addr)), 30, 900).await?;
     hit(&state, &account_key("prelogin_acct", &body.email), 30, 900).await?;
-    let (kdf_salt, legacy) = prelogin_lookup(&state.db, &state.config.jwt_secret, &body.email).await?;
-    Ok(Json(json!({ "kdf_salt": kdf_salt, "legacy": legacy })))
+    let (kdf_salt, legacy, kdf) = prelogin_lookup(&state.db, &state.config.jwt_secret, &body.email).await?;
+    Ok(Json(json!({ "kdf_salt": kdf_salt, "legacy": legacy, "kdf": kdf })))
 }
 
 /// GET /users/me/kdf → {kdf_salt, legacy} du compte connecté (avant une action sensible).
 pub async fn my_kdf(State(state): State<AppState>, Extension(claims): Extension<Claims>) -> Result<Json<Value>> {
-    let (salt, migrated): (Option<String>, bool) =
-        sqlx::query_as("SELECT kdf_salt, auth_hash IS NOT NULL FROM users WHERE id=$1")
+    let (salt, migrated, kdf): (Option<String>, bool, String) =
+        sqlx::query_as("SELECT kdf_salt, auth_hash IS NOT NULL, kdf FROM users WHERE id=$1")
             .bind(claims.sub)
             .fetch_one(&state.db)
             .await?;
-    Ok(Json(json!({ "kdf_salt": salt.filter(|_| migrated), "legacy": !migrated })))
+    Ok(Json(json!({ "kdf_salt": salt.filter(|_| migrated), "legacy": !migrated, "kdf": kdf })))
 }
 
 // ─── Preuve du mot de passe pour une action sensible ────────────────────────
@@ -189,20 +200,90 @@ pub async fn verify_proof(state: &AppState, user_id: Uuid, auth: Option<&str>, p
 /// Migration v1 → v2 d'un compte dont le mot de passe vient d'être vérifié : `auth_hash` et
 /// `kdf_salt` posés, `password_hash` rendu inutilisable, en une seule requête (atomique).
 /// Sans effet si le compte est déjà migré (rejeu, deux appareils en même temps).
-pub async fn migrate_account(db: &PgPool, user_id: Uuid, auth_new: &str, kdf_salt_new: &str) -> Result<bool> {
+pub async fn migrate_account(db: &PgPool, user_id: Uuid, auth_new: &str, kdf_salt_new: &str, kdf: &str) -> Result<bool> {
     check_salt(kdf_salt_new)?;
+    let kdf = check_kdf(Some(kdf))?;
     let auth_hash = hash_auth(auth_new)?;
     let done = sqlx::query(
-        "UPDATE users SET auth_hash=$2, kdf_salt=$3, password_hash=$4, updated_at=NOW()
+        "UPDATE users SET auth_hash=$2, kdf_salt=$3, password_hash=$4, kdf=$5, updated_at=NOW()
          WHERE id=$1 AND auth_hash IS NULL",
     )
     .bind(user_id)
     .bind(&auth_hash)
     .bind(kdf_salt_new)
     .bind(NO_PASSWORD)
+    .bind(kdf)
     .execute(db)
     .await?;
     Ok(done.rows_affected() == 1)
+}
+
+// ─── Passage à Argon2id (audit 2026-10-12, M3) ──────────────────────────────
+
+#[derive(Deserialize)]
+pub struct UpgradeKdfBody {
+    old_auth: String,
+    new_auth: String,
+    new_kdf_salt: String,
+    kdf: String,
+    /// Clé de compte E2E re-scellée par la nouvelle wrapKey (obligatoire si le compte en a une).
+    #[serde(default)]
+    wrapped: Option<Value>,
+}
+
+/// POST /auth/upgrade-kdf : l'appli, qui vient de prouver le mot de passe, le re-dérive avec
+/// Argon2id. Preuve, sel, dérivation et enveloppe E2E changent ensemble (une transaction) ; les
+/// sessions restent ouvertes (même mot de passe). Seulement de `pbkdf2` vers `argon2id`.
+pub async fn upgrade_kdf(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+    Json(body): Json<UpgradeKdfBody>,
+) -> Result<Json<Value>> {
+    if body.kdf != "argon2id" {
+        return Err(AppError::BadRequest("kdf invalide".into()));
+    }
+    check_auth(&body.new_auth)?;
+    check_salt(&body.new_kdf_salt)?;
+    let wrapped = match &body.wrapped {
+        None | Some(Value::Null) => None,
+        Some(v) => {
+            let w: crate::handlers::user_keys::Wrapped =
+                serde_json::from_value(v.clone()).map_err(|_| AppError::BadRequest("wrapped invalide".into()))?;
+            w.validate()?;
+            Some(serde_json::to_value(&w).map_err(|e| AppError::Internal(e.into()))?)
+        }
+    };
+    verify_proof(&state, claims.sub, Some(&body.old_auth), None).await?;
+    let has_key: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM user_keys WHERE user_id=$1)")
+        .bind(claims.sub)
+        .fetch_one(&state.db)
+        .await?;
+    if has_key && wrapped.is_none() {
+        return Err(AppError::BadRequest("wrapped requis".into()));
+    }
+    let new_hash = hash_auth(&body.new_auth)?;
+    let mut tx = state.db.begin().await?;
+    let done = sqlx::query(
+        "UPDATE users SET auth_hash=$2, kdf_salt=$3, kdf='argon2id', updated_at=NOW()
+         WHERE id=$1 AND kdf='pbkdf2' AND auth_hash IS NOT NULL",
+    )
+    .bind(claims.sub)
+    .bind(&new_hash)
+    .bind(&body.new_kdf_salt)
+    .execute(&mut *tx)
+    .await?;
+    if done.rows_affected() != 1 {
+        return Err(AppError::Conflict("KDF_ALREADY_UPGRADED".into()));
+    }
+    if let Some(w) = wrapped {
+        sqlx::query("UPDATE user_keys SET wrapped=$2 WHERE user_id=$1")
+            .bind(claims.sub)
+            .bind(w)
+            .execute(&mut *tx)
+            .await?;
+    }
+    tx.commit().await?;
+    Ok(Json(json!({ "ok": true, "kdf": "argon2id" })))
 }
 
 #[cfg(test)]
@@ -229,6 +310,13 @@ mod tests {
         assert!(check_auth(&"A".repeat(10_000)).is_err());
         assert!(check_salt("AAAAAAAAAAAAAAAAAAAAAA").is_ok());
         assert!(check_salt(AUTH).is_err());
+    }
+
+    #[test]
+    fn kdf_names() {
+        assert_eq!(check_kdf(None).unwrap(), "pbkdf2");
+        assert_eq!(check_kdf(Some("argon2id")).unwrap(), "argon2id");
+        assert!(check_kdf(Some("md5")).is_err());
     }
 
     #[test]
