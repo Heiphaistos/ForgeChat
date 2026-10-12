@@ -294,5 +294,13 @@
       "iv": "WltcXV5fYGFiY2Rl",
       "ct": "bT1vma47nNkXxCTJyWo-vpX7PzX2CRuFBk7RQ3jM7xtwrgE4M62sfIgkYorm_EbN"
     }
+  },
+  "serverKeySig": {
+    "server_id": "11111111-1111-4111-8111-111111111111",
+    "signed_by": "22222222-2222-4222-8222-222222222222",
+    "public": "BC2KsTOAyeiH-u9UxbUrYrth66odOeh8aUGoluAIHrj-S8cMLCDKrs_d_e8ZZTYKpYakafLajqnfgjGyvr_bNpM",
+    "signer_public": "BGyywmr0tbXpVhIvMmezfanDUzTiNBTj75j8swgL38JFfrboCpHNuAAFyX17Hhv3_BEKWKNqA-F0nB5TC_hn4_Y",
+    "signature": "NmL5SvM_SM1ia7Rkwd2PLCzRwVrpB0Me0dWjzK72APJxyeZ-YWLgtSQHVcTaQxdNPbJ3tZvgHNyAsZF5lNARUw",
+    "signature_high_s": "NmL5SvM_SM1ia7Rkwd2PLCzRwVrpB0Me0dWjzK72APKONhmAnp0fS9v4qjslvOiyfzSC-As3gahzCDlJZ5MT_g"
   }
 }

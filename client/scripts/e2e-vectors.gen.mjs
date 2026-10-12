@@ -115,5 +115,23 @@ const vectors = {
     ['7K3QZ-M9XW2-PB4TD-0VH1U', null],
   ],
 }
+// Signature de la clé de serveur par son propriétaire (ECDSA, aléatoire : seule la vérification est testée).
+{
+  const owner = await c.generateKeyPair(), server = await c.generateKeyPair()
+  const sid = '11111111-1111-4111-8111-111111111111', signer = '22222222-2222-4222-8222-222222222222'
+  const pub = c.b64uEncode(server.pub)
+  vectors.serverKeySig = {
+    server_id: sid, signed_by: signer, public: pub, signer_public: c.b64uEncode(owner.pub),
+    signature: await c.signServerKey(await c.importSigningKey(owner.priv, owner.pub), sid, signer, pub),
+  }
+  // Même signature en forme « S haut » (n - s) : WebCrypto produit les deux, tout vérificateur doit les accepter.
+  const sig = c.b64uDecode(vectors.serverKeySig.signature)
+  const n = 0xffffffff00000000ffffffffffffffffbce6faada7179e84f3b9cac2fc632551n
+  const s = BigInt('0x' + Buffer.from(sig.subarray(32)).toString('hex'))
+  const hi = new Uint8Array(64)
+  hi.set(sig.subarray(0, 32))
+  hi.set(Buffer.from((n - s).toString(16).padStart(64, '0'), 'hex'), 32)
+  vectors.serverKeySig.signature_high_s = c.b64uEncode(hi)
+}
 writeFileSync(new URL('../../docs/e2e-vectors.json', import.meta.url), JSON.stringify(vectors, null, 2) + '\n')
 console.log('docs/e2e-vectors.json écrit')

@@ -11,7 +11,7 @@ import { useWs } from '../store/ws'
 import { useAccountKey } from './accountKey'
 import { reencryptServer, useReencryptProgress } from './conversations'
 import { RecoveryCodeModal } from './E2EGate'
-import { createServerKey, getServerKey, recoverServer, regenerateServerRecovery, type RecoveredChannel } from './serverKey'
+import { createServerKey, ensureServerKeySigned, getServerKey, recoverServer, regenerateServerRecovery, type RecoveredChannel } from './serverKey'
 import { saveDecrypted } from './files'
 
 const btnCls = 'px-3 py-2 bg-fc-accent hover:bg-indigo-500 text-white rounded text-sm font-medium transition disabled:opacity-50'
@@ -62,7 +62,8 @@ export default function ServerKeySettings({ serverId, serverName, isOwner }: { s
   const ready = useAccountKey(s => s.status) === 'ready'
   const { data: key, isLoading } = useQuery({
     queryKey: ['server_key', serverId],
-    queryFn: () => getServerKey(serverId),
+    // Propriétaire : une clé non encore signée par moi l'est au passage (membres qui me connaissent).
+    queryFn: () => getServerKey(serverId).then(k => { void ensureServerKeySigned(serverId, k).catch(() => {}); return k }),
     enabled: isOwner,
   })
   useEffect(() => on('SERVER_KEY', (d: any) => {
@@ -210,7 +211,8 @@ export function ServerKeyPrompt({ serverId, serverName }: { serverId: string; se
   const [busy, setBusy] = useState(false)
   const { data: key } = useQuery({
     queryKey: ['server_key', serverId],
-    queryFn: () => getServerKey(serverId),
+    // Propriétaire : une clé non encore signée par moi l'est au passage (membres qui me connaissent).
+    queryFn: () => getServerKey(serverId).then(k => { void ensureServerKeySigned(serverId, k).catch(() => {}); return k }),
     enabled: ready && !later,
     staleTime: 5 * 60_000,
   })

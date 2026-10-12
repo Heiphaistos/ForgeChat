@@ -326,6 +326,46 @@ export async function unwrapServerKey(
   return key
 }
 
+// ─── Signature de la clé de récupération par le propriétaire (audit 2026-10-12, H2) ───
+/**
+ * Texte signé : lie la clé publique du serveur au serveur et au signataire. ECDSA P-256 /
+ * SHA-256 avec le scalaire de la clé de compte (même clé que l'ECDH, messages séparés par ce
+ * préfixe) ; signature r ‖ s de 64 octets en base64url, vérifiée aussi par le serveur.
+ */
+export const serverKeySigText = (serverId: string, signer: string, serverPub: string) =>
+  `forgechat server-key sig v1|${serverId}|${signer}|${serverPub}`
+
+/** Clé de signature NON extractible tirée de la clé de compte (scalaire + point public). */
+export async function importSigningKey(priv: Uint8Array, pub: Uint8Array): Promise<CryptoKey> {
+  checkPublic(pub)
+  if (priv.length !== 32) throw new Error('clé privée invalide')
+  const jwk: JsonWebKey = {
+    kty: 'EC', crv: 'P-256', ext: false, key_ops: ['sign'],
+    x: b64uEncode(pub.subarray(1, 33)), y: b64uEncode(pub.subarray(33)), d: b64uEncode(priv),
+  }
+  return subtle.importKey('jwk', jwk, { name: 'ECDSA', namedCurve: 'P-256' }, false, ['sign'])
+}
+
+export async function signServerKey(sign: CryptoKey, serverId: string, signer: string, serverPub: string): Promise<string> {
+  const sig = await subtle.sign({ name: 'ECDSA', hash: 'SHA-256' }, sign, buf(utf8(serverKeySigText(serverId, signer, serverPub))))
+  return b64uEncode(new Uint8Array(sig))
+}
+
+/** Vrai si `signature` est bien celle de `signerPub` sur cette clé de serveur. */
+export async function verifyServerKeySig(
+  signerPub: Uint8Array, signature: string, serverId: string, signer: string, serverPub: string,
+): Promise<boolean> {
+  try {
+    checkPublic(signerPub)
+    const sig = b64uDecode(signature)
+    if (sig.length !== 64) return false
+    const k = await subtle.importKey('raw', buf(signerPub), { name: 'ECDSA', namedCurve: 'P-256' }, false, ['verify'])
+    return await subtle.verify({ name: 'ECDSA', hash: 'SHA-256' }, k, buf(sig), buf(utf8(serverKeySigText(serverId, signer, serverPub))))
+  } catch {
+    return false
+  }
+}
+
 // ─── Notes privées sur une personne (lot « Profil et social ») ──────────────
 /**
  * Note chiffrée pour soi seul : AES-GCM(HKDF(ECDH(ma clé, ma clé publique))), IV

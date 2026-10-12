@@ -148,7 +148,7 @@ le serveur. Pour les conversations sensibles, il faut utiliser les applis bureau
 | # | État | Ce qui a changé |
 |---|---|---|
 | H1 | **Corrigé** | La grâce rend le **même** successeur (chiffré dans Redis par une clé tirée de l'ancien jeton), n'est jamais prolongée (`SET NX`), tombe dès que la session est fermée ou le compte révoqué. `verify_email` ouvre une session visible. Test sur vraie base : `refresh_grace_db`. |
-| H2 | **Atténué** | Une clé de récupération de serveur jamais vue n'est plus épinglée en silence : rien (ni historique) ne lui est enveloppé avant acceptation explicite (boîte de dialogue avec empreinte), web et mobile. Reste à faire : signature de la clé par la clé de compte du propriétaire (changement de protocole). |
+| H2 | **Corrigé** | Clé de récupération signée par la clé de compte du propriétaire (ECDSA P-256, vérifiée aussi par le serveur, migration 122). Acceptée sans question seulement si le signataire est déjà épinglé sur l'appareil ; sinon acceptation explicite, rien (ni historique) n'est enveloppé avant. Web, mobile, serveur ; vecteur `serverKeySig`, test sur vraie base `server_key_signature_db`. |
 | H3 | **Corrigé** | « Non chiffré » calculé sur l'appareil (`openMessage`, `plainFields`), jamais d'après le serveur ; alerte rouge « authenticité non garantie » en MP et groupe. |
 | M1 | **Corrigé** | Liste blanche `previewAllowed` vérifiée sur l'appareil avant tout `/og` ; les groupes web ne demandent plus `/og` pour un message déchiffré. |
 | M2 | **Corrigé** | Plus d'image dans un aperçu fourni par l'expéditeur ; `referrerPolicy="no-referrer"`. |

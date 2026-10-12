@@ -4,7 +4,8 @@
 import { create } from 'zustand'
 import { secureStateStorage } from '@/lib/secureStorage'
 import { useAccountKey } from './accountKey'
-import { checkServerKey, fpOf, serverSubject, sortMembers, type Pin } from './keyPinsCore'
+import { http, path } from '@/lib/http'
+import { checkServerKey, fpOf, ownerVouches, serverSubject, sortMembers, type Pin, type SignedServerKey } from './keyPinsCore'
 
 export { fpOf } from './keyPinsCore'
 
@@ -113,10 +114,19 @@ export async function trustedMembers<T extends MemberLike>(list: T[]) {
 }
 
 /** Clé de récupération d'un serveur, empreinte recalculée ; null si elle a changé (enveloppe refusée). */
-export async function trustedServerKey<T extends { server_id: string; public: string }>(sk: T, serverName?: string): Promise<(T & { fingerprint: string }) | null> {
+/** Clé de compte publique servie pour un utilisateur (comparée ensuite à son épingle). */
+const signerPublic = (userId: string) =>
+  http.get<{ public: string | null }>(path`/users/${userId}/keys/public`).then((r) => r.public ?? null)
+
+export async function trustedServerKey<T extends SignedServerKey>(sk: T, serverName?: string): Promise<(T & { fingerprint: string }) | null> {
   const account = getMyId()
   if (!account) return null
   const r = await checkServerKey(sk, (s) => getPin(account, s))
+  // Jamais vue mais signée par son propriétaire, que je connais déjà : acceptée sans question.
+  if (r.fresh && (await ownerVouches(sk, account, useAccountKey.getState().pub, (s) => getPin(account, s), signerPublic))) {
+    await savePin(account, serverSubject(sk.server_id), { fp: r.fp })
+    return { ...sk, fingerprint: r.fp }
+  }
   // Jamais vue : pas d'épinglage silencieux (un serveur compromis recevrait sinon les clés de
   // tous les salons, historique compris). L'utilisateur doit l'accepter.
   if (r.ok && !r.fresh) return { ...sk, fingerprint: r.fp }

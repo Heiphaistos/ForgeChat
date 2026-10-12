@@ -18,7 +18,7 @@ export type ConvKind = 'dm' | 'group' | 'channel'
 
 interface Envelope { epoch: number; wrapped: c.ConvWrapped; wrapped_by: string | null; wrapped_by_pub: string }
 /** Clé de récupération du serveur d'un salon (§11). */
-export interface ServerKeyInfo { server_id: string; public: string }
+export interface ServerKeyInfo { server_id: string; public: string; signature?: string | null; signed_by?: string | null }
 interface KeysResponse {
   current_epoch: number | null; rotate_needed: boolean; all_keyed: boolean; envelopes: Envelope[]
   /** « Il faut chiffrer » : j'ai une clé de compte (chiffrement obligatoire partout). */

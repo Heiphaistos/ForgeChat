@@ -689,6 +689,7 @@ fn protected_routes(state: AppState) -> Router<AppState> {
         .route("/servers/:server_id/e2e/server-key", get(handlers::e2e_server_key::get_server_key).put(handlers::e2e_server_key::put_server_key).layer(DefaultBodyLimit::max(SMALL_JSON_LIMIT)))
         .route("/servers/:server_id/e2e/server-key/recovery", put(handlers::e2e_server_key::put_recovery).layer(DefaultBodyLimit::max(SMALL_JSON_LIMIT)))
         .route("/servers/:server_id/e2e/server-key/owner", put(handlers::e2e_server_key::put_owner_wrapped).layer(DefaultBodyLimit::max(SMALL_JSON_LIMIT)))
+        .route("/servers/:server_id/e2e/server-key/signature", put(handlers::e2e_server_key::put_signature).layer(DefaultBodyLimit::max(SMALL_JSON_LIMIT)))
         .route("/servers/:server_id/e2e/recovery", get(handlers::e2e_server_key::get_recovery))
         .route("/dms/:dm_id/messages/:msg_id/encrypt", put(handlers::e2e_conv::encrypt_dm_message).layer(DefaultBodyLimit::max(SMALL_JSON_LIMIT)))
         .route("/dms/groups/:group_id/messages/:msg_id/encrypt", put(handlers::e2e_conv::encrypt_group_message).layer(DefaultBodyLimit::max(SMALL_JSON_LIMIT)))

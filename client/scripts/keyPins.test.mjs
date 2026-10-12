@@ -80,3 +80,28 @@ test('enveloppe illisible : signalée une seule fois par conversation et époque
   assert.equal(firstUnreadable(seen, 'dm:x', 3), true)
   assert.equal(firstUnreadable(seen, 'group:x', 2), true)
 })
+
+test('clé de serveur signée : acceptée seulement si le signataire est déjà épinglé (ou moi)', async () => {
+  const c = await import('../src/e2e/crypto.ts')
+  const { ownerVouches, fpOf } = await import('../src/e2e/keyPinsCore.ts')
+  const owner = await c.generateKeyPair()
+  const ownerPub = c.b64uEncode(owner.pub)
+  const sign = await c.importSigningKey(owner.priv, owner.pub)
+  const server = await c.generateKeyPair()
+  const sk = { server_id: 'srv', public: c.b64uEncode(server.pub), signed_by: 'owner' }
+  sk.signature = await c.signServerKey(sign, 'srv', 'owner', sk.public)
+  const pins = new Map([['owner', { fp: await fpOf(ownerPub) }]])
+  const getPin = async s => pins.get(s)
+  const served = async () => ownerPub
+  assert.equal(await ownerVouches(sk, 'me', null, getPin, served), true)
+  // Moi-même propriétaire (clé de compte locale).
+  assert.equal(await ownerVouches({ ...sk }, 'owner', ownerPub, async () => undefined, served), true)
+  // Signataire jamais vu : pas de confiance automatique.
+  assert.equal(await ownerVouches(sk, 'me', null, async () => undefined, served), false)
+  // Le serveur sert une autre clé pour le signataire (ou une autre clé de serveur) : refus.
+  const other = c.b64uEncode((await c.generateKeyPair()).pub)
+  assert.equal(await ownerVouches(sk, 'me', null, getPin, async () => other), false)
+  assert.equal(await ownerVouches({ ...sk, public: other }, 'me', null, getPin, served), false)
+  assert.equal(await ownerVouches({ ...sk, server_id: 'autre' }, 'me', null, getPin, served), false)
+  assert.equal(await ownerVouches({ ...sk, signature: null }, 'me', null, getPin, served), false)
+})

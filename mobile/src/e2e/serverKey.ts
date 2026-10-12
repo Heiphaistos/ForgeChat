@@ -16,6 +16,9 @@ export interface ServerKeyResponse {
   recovery?: c.WrappedKey
   /** Propriétaire seulement : la même pour sa clé de compte (null après un transfert sans ré-enveloppe). */
   owner_wrapped?: c.ConvWrapped | null
+  /** Signature de la clé par le compte `signed_by` (son propriétaire), vérifiée par les membres. */
+  signature?: string | null
+  signed_by?: string | null
 }
 
 export const getServerKey = (serverId: string) => http.get<ServerKeyResponse>(path`/servers/${serverId}/e2e/server-key`)
@@ -32,8 +35,11 @@ export async function createServerKey(serverId: string): Promise<string> {
   const kp = await c.generateKeyPair()
   const code = c.generateRecoveryCode()
   try {
+    const pub = c.b64uEncode(kp.pub)
     await http.put(path`/servers/${serverId}/e2e/server-key`, {
-      public: c.b64uEncode(kp.pub),
+      public: pub,
+      // Signée par ma clé de compte : les membres qui me connaissent l'acceptent sans question.
+      signature: await c.signServerKey(priv, serverId, id, pub),
       recovery: await c.wrapKey(kp.priv, code, c.serverRecoveryAad(serverId)),
       owner_wrapped: await c.wrapServerKey(priv, kp.pub, kp.priv, serverId, id),
     })
@@ -45,6 +51,21 @@ export async function createServerKey(serverId: string): Promise<string> {
   // Les prochaines époques devront l'inclure : états des salons rechargés.
   forgetConv()
   return code
+}
+
+/**
+ * Propriétaire : signe la clé existante si elle ne l'est pas par moi (clé créée avant les
+ * signatures, ou serveur reçu par transfert). Sans effet pour un autre membre.
+ */
+export async function ensureServerKeySigned(serverId: string, k?: ServerKeyResponse): Promise<void> {
+  const { priv, userId } = useAccountKey.getState()
+  if (!priv || !userId) return
+  const key = k ?? (await getServerKey(serverId))
+  // `recovery` n'est rendu qu'au propriétaire.
+  if (!key.exists || !key.public || !key.recovery || key.signed_by === userId) return
+  await http.put(path`/servers/${serverId}/e2e/server-key/signature`, {
+    signature: await c.signServerKey(priv, serverId, userId, key.public),
+  })
 }
 
 /** Clé privée du serveur : par ma clé de compte, sinon par le code (et ré-enveloppée pour moi). */

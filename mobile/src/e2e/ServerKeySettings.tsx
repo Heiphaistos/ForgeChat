@@ -14,7 +14,7 @@ import { colors, spacing } from '@/theme'
 import { useAccountKey } from './accountKey'
 import { RecoveryCodeModal } from './E2EGate'
 import {
-  createServerKey, getServerKey, recoverServer, recoveredAsText, regenerateServerRecovery, type RecoveredChannel,
+  createServerKey, ensureServerKeySigned, getServerKey, recoverServer, recoveredAsText, regenerateServerRecovery, type RecoveredChannel,
 } from './serverKey'
 
 /** Erreur lisible des opérations sur la clé du serveur. */
@@ -38,7 +38,7 @@ export function ServerKeySettings({ serverId }: { serverId: string }) {
   const meId = useAuth((st) => st.user?.id)
   const ready = useAccountKey((st) => st.status === 'ready')
   const owner = !!meId && detail.data?.server.owner_id === meId
-  const key = useQuery({ queryKey: ['server-key', serverId], queryFn: () => getServerKey(serverId), enabled: owner })
+  const key = useQuery({ queryKey: ['server-key', serverId], queryFn: () => getServerKey(serverId).then((k) => { void ensureServerKeySigned(serverId, k).catch(() => {}); return k }), enabled: owner })
   const [code, setCode] = useState<string | null>(null)
   const [input, setInput] = useState('')
   const [busy, setBusy] = useState(false)

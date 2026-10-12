@@ -113,14 +113,14 @@ pub async fn check_content(
 /// Champs de réponse propres aux salons : clé de récupération du serveur et
 /// époques qui n'y sont pas encore enveloppées.
 pub async fn extend_keys(db: &PgPool, channel: Uuid, me: Uuid, out: &mut Value) -> Result<()> {
-    let key: Option<(Uuid, String, String)> = sqlx::query_as(
-        "SELECT sk.server_id, sk.public_key, sk.fingerprint FROM server_keys sk
+    let key: Option<(Uuid, String, String, Option<String>, Option<Uuid>)> = sqlx::query_as(
+        "SELECT sk.server_id, sk.public_key, sk.fingerprint, sk.signature, sk.signed_by FROM server_keys sk
          JOIN channels c ON c.server_id = sk.server_id WHERE c.id=$1",
     )
     .bind(channel)
     .fetch_optional(db)
     .await?;
-    let Some((server_id, public, fp)) = key else {
+    let Some((server_id, public, fp, signature, signed_by)) = key else {
         out["server_key"] = Value::Null;
         out["server_missing"] = json!([]);
         return Ok(());
@@ -137,7 +137,9 @@ pub async fn extend_keys(db: &PgPool, channel: Uuid, me: Uuid, out: &mut Value) 
     .bind(&fp)
     .fetch_all(db)
     .await? };
-    out["server_key"] = json!({ "server_id": server_id, "public": public, "fingerprint": fp });
+    out["server_key"] = json!({
+        "server_id": server_id, "public": public, "fingerprint": fp, "signature": signature, "signed_by": signed_by,
+    });
     out["server_missing"] = json!(server_missing);
     Ok(())
 }
