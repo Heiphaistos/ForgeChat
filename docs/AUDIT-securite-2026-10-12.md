@@ -148,7 +148,7 @@ le serveur. Pour les conversations sensibles, il faut utiliser les applis bureau
 | # | État | Ce qui a changé |
 |---|---|---|
 | H1 | **Corrigé** | La grâce rend le **même** successeur (chiffré dans Redis par une clé tirée de l'ancien jeton), n'est jamais prolongée (`SET NX`), tombe dès que la session est fermée ou le compte révoqué. `verify_email` ouvre une session visible. Test sur vraie base : `refresh_grace_db`. |
-| H2 | **Corrigé** | Clé de récupération signée par la clé de compte du propriétaire (ECDSA P-256, vérifiée aussi par le serveur, migration 122). Acceptée sans question seulement si le signataire est déjà épinglé sur l'appareil ; sinon acceptation explicite, rien (ni historique) n'est enveloppé avant. Web, mobile, serveur ; vecteur `serverKeySig`, test sur vraie base `server_key_signature_db`. |
+| H2 | **Corrigé** | Clé de récupération signée par la clé de compte du propriétaire (ECDSA P-256, vérifiée aussi par le serveur, migration 122). Acceptée sans question seulement si le signataire est moi ou un contact VÉRIFIÉ (codes de sécurité) ; sinon acceptation explicite, rien (ni historique) n'est enveloppé avant. Une simple épingle ne suffit pas : le banc navigateur a montré que l'épinglage des membres (liste servie par le serveur) précédait la vérification. Vérifié dans Chromium (`client/scripts/web-bench`). |
 | H3 | **Corrigé** | « Non chiffré » calculé sur l'appareil (`openMessage`, `plainFields`), jamais d'après le serveur ; alerte rouge « authenticité non garantie » en MP et groupe. |
 | M1 | **Corrigé** | Liste blanche `previewAllowed` vérifiée sur l'appareil avant tout `/og` ; les groupes web ne demandent plus `/og` pour un message déchiffré. |
 | M2 | **Corrigé** | Plus d'image dans un aperçu fourni par l'expéditeur ; `referrerPolicy="no-referrer"`. |
@@ -161,3 +161,13 @@ le serveur. Pour les conversations sensibles, il faut utiliser les applis bureau
 | Faibles | **Corrigés** : verrouillage de compte (limite par compte **et** adresse, plafond 100/h par compte), sessions invisibles, CSRF entre sous-domaines (contrôle `Origin`/`Sec-Fetch-Site` des écritures par cookie, et `accounts/stash`), WebSocket (`VIEW_CHANNEL`, fil vérifié, limites de débit), dossier temporaire privé des mises à jour Linux, plages IPv6 du filtre SSRF. Recherche globale d'utilisateurs : présence et statut personnalisé masqués hors amis et serveurs communs (test `security_search_hides_strangers_presence`). Formulation sur IndexedDB corrigée. Support à distance réservé aux amis acceptés, avec avertissement anti-arnaque (web et mobile). **Ouvert** : archivage des dépôts iOS/Android périmés (réglage GitHub, à faire par le propriétaire). |
 
 Vérifié : `cargo test` serveur (174 tests, plus 21 tests sur vraie base PostgreSQL + Redis), `tsc`, `eslint` et tests `node --test` du web, `tsc` et `jest` du mobile (635 tests). Le crate bureau n'a pas pu être compilé ici (libwebrtc exige clang 21) : les fonctions modifiées ont été compilées et testées à part.
+
+## Durcissement de la version web (2026-10-12, suite)
+
+- **CSP** : `connect-src` limité à notre origine (une XSS ne peut plus exfiltrer ailleurs), `base-uri` et `frame-ancestors` à `'none'`, `upgrade-insecure-requests`, COOP `same-origin` (`nginx.conf`).
+- **Trusted Types** imposé (`require-trusted-types-for 'script'`) avec une politique `default` stricte (`client/src/lib/trustedTypes.ts`) : seuls le texte, la coloration highlight.js, les scripts de notre origine et l'API YouTube passent. Toute injection de HTML ou de script est refusée par le navigateur, même si une faille XSS était trouvée.
+- **Cookies** préfixés `__Host-` / `__Secure-` (anti « cookie tossing » depuis un sous-domaine), anciens noms lus jusqu'au 2026-11-12.
+- **En-têtes posés par le serveur** lui-même : `no-store`, CSP « tout refuser » et CORP `same-origin` sur l'API, `nosniff`, `no-referrer`, `X-Frame-Options: DENY` partout.
+- **Banc** `client/scripts/web-bench` : parcours réel (inscription Argon2id, clé E2E, MP et salon chiffrés, clé de récupération signée, pages principales, moteur d'IA) dans Chromium avec la CSP de production : aucune violation.
+
+Limite qui demeure : le code de la version web est servi par le serveur. Un serveur compromis peut servir un autre code ; seules les applis signées (bureau, mobile) y échappent. L'appli de bureau n'a pas encore `require-trusted-types-for` dans sa CSP (non testable ici).

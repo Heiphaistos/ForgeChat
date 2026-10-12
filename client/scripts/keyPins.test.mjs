@@ -81,7 +81,7 @@ test('enveloppe illisible : signalée une seule fois par conversation et époque
   assert.equal(firstUnreadable(seen, 'group:x', 2), true)
 })
 
-test('clé de serveur signée : acceptée seulement si le signataire est déjà épinglé (ou moi)', async () => {
+test('clé de serveur signée : acceptée seulement si le signataire est VÉRIFIÉ (ou moi)', async () => {
   const c = await import('../src/e2e/crypto.ts')
   const { ownerVouches, fpOf } = await import('../src/e2e/keyPinsCore.ts')
   const owner = await c.generateKeyPair()
@@ -90,10 +90,12 @@ test('clé de serveur signée : acceptée seulement si le signataire est déjà 
   const server = await c.generateKeyPair()
   const sk = { server_id: 'srv', public: c.b64uEncode(server.pub), signed_by: 'owner' }
   sk.signature = await c.signServerKey(sign, 'srv', 'owner', sk.public)
-  const pins = new Map([['owner', { fp: await fpOf(ownerPub) }]])
+  const pins = new Map([['owner', { fp: await fpOf(ownerPub), verified: true }]])
   const getPin = async s => pins.get(s)
   const served = async () => ownerPub
   assert.equal(await ownerVouches(sk, 'me', null, getPin, served), true)
+  // Simplement épinglé (liste des membres servie par le serveur) : pas de confiance automatique.
+  assert.equal(await ownerVouches(sk, 'me', null, async () => ({ fp: await fpOf(ownerPub) }), served), false)
   // Moi-même propriétaire (clé de compte locale).
   assert.equal(await ownerVouches({ ...sk }, 'owner', ownerPub, async () => undefined, served), true)
   // Signataire jamais vu : pas de confiance automatique.

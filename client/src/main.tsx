@@ -1,3 +1,5 @@
+// Tout premier : politique Trusted Types, avant toute écriture dans le DOM (lib/trustedTypes.ts).
+import './lib/trustedTypes'
 // En premier : capte les erreurs dès l'évaluation des modules suivants.
 import './lib/errorReporter'
 import React from 'react'
