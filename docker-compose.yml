@@ -118,7 +118,7 @@ services:
   # Serveur média (SFU) : tout le son et la vidéo transitent par lui, plus aucun
   # pair-à-pair. Signalisation derrière nginx (/livekit/), média en UDP direct.
   livekit:
-    image: livekit/livekit-server:v1.13.7@sha256:6fd3b7088874c4d119160dd688798dfec852bc014786d392caad15f6f63912a3
+    image: livekit/livekit-server:v1.13.9@sha256:d0c04791bf63ca8dcea123571827d56ba9504bd57c8d5de60ee03b5408cc3154
     logging: *logging
     # Pas de root : aucun volume, ports tous au-dessus de 1024.
     user: "65534:65534"
