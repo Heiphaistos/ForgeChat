@@ -14,3 +14,61 @@ updates:
     directory: /
     schedule:
       interval: weekly
+  # Dépendances applicatives (audit 2026-10-12, amélioration n° 21) : correctifs mineurs et de
+  # sécurité groupés en une PR par semaine et par dossier ; les versions majeures restent manuelles.
+  - package-ecosystem: cargo
+    directory: /server
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      rust-minor:
+        update-types: [minor, patch]
+    ignore:
+      - dependency-name: '*'
+        update-types: [version-update:semver-major]
+  - package-ecosystem: cargo
+    directory: /desktop/src-tauri
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      rust-minor:
+        update-types: [minor, patch]
+    ignore:
+      - dependency-name: '*'
+        update-types: [version-update:semver-major]
+  - package-ecosystem: npm
+    directory: /client
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      npm-minor:
+        update-types: [minor, patch]
+    ignore:
+      - dependency-name: '*'
+        update-types: [version-update:semver-major]
+  - package-ecosystem: npm
+    directory: /desktop
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      npm-minor:
+        update-types: [minor, patch]
+    ignore:
+      - dependency-name: '*'
+        update-types: [version-update:semver-major]
+  # Mobile : Expo impose des versions alignées (`npx expo install --fix`) ; seuls les correctifs.
+  - package-ecosystem: npm
+    directory: /mobile
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      npm-patch:
+        update-types: [patch]
+    ignore:
+      - dependency-name: '*'
+        update-types: [version-update:semver-major, version-update:semver-minor]

@@ -1,0 +1,68 @@
+# Sécurité (audit 2026-10-12, améliorations n° 2 et 21) : scan de secrets sur tout l'historique,
+# audit des dépendances Rust et npm. Lancé à chaque push/PR et chaque lundi (nouveaux avis).
+# Même règle que ci.yml : aucune action tierce, seul `checkout` épinglé par SHA ; gitleaks est
+# téléchargé depuis sa release officielle et vérifié par SHA-256 avant exécution.
+name: Sécurité
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  schedule:
+    - cron: '17 6 * * 1'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: security-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  secrets:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      GITLEAKS_VERSION: 8.28.0
+      GITLEAKS_SHA256: a65b5253807a68ac0cafa4414031fd740aeb55f54fb7e55f386acb52e6a840eb
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Installer gitleaks (somme SHA-256 vérifiée)
+        run: |
+          curl -sSfL -o /tmp/gitleaks.tgz "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          echo "${GITLEAKS_SHA256}  /tmp/gitleaks.tgz" | sha256sum -c -
+          tar -xzf /tmp/gitleaks.tgz -C /tmp gitleaks
+      - name: Aucun secret dans l'historique
+        run: /tmp/gitleaks git . --no-banner --redact -c .gitleaks.toml --max-target-megabytes 2
+
+  rust:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: cargo install cargo-audit --locked --version 0.22.2
+      - name: Serveur (vulnérabilités, bloquant)
+        working-directory: server
+        run: cargo audit -c never
+      - name: Bureau (vulnérabilités, bloquant)
+        working-directory: desktop/src-tauri
+        run: cargo audit -c never
+
+  npm:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Client web
+        run: node scripts/npm-audit-gate.mjs client
+      - name: Bureau
+        run: node scripts/npm-audit-gate.mjs desktop
+      - name: Mobile (exceptions examinées et datées)
+        run: node scripts/npm-audit-gate.mjs mobile .github/audit/mobile-npm-exceptions.json

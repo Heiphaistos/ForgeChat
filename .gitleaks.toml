@@ -1,0 +1,21 @@
+# Scan de secrets (audit 2026-10-12, amélioration n° 2). Lancé par .github/workflows/security.yml
+# sur chaque push et PR. Règles par défaut de gitleaks + exceptions ci-dessous, toutes vérifiées :
+# vecteurs de test publics, gabarits vides, bibliothèques tierces, traductions, artefacts de build.
+title = "ForgeChat"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Faux positifs vérifiés"
+paths = [
+  '''(^|/)\.env\.example$''',
+  '''^docs/e2e-vectors\.json$''',
+  '''(^|/)i18n/[a-z-]+\.ts$''',
+  '''(^|/)third-party/''',
+  '''(^|/)target/''',
+  '''(^|/)node_modules/''',
+  '''(^|/)dist/''',
+  '''(^|/)package-lock\.json$''',
+  '''(^|/)Cargo\.lock$''',
+]
