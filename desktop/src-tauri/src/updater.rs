@@ -619,6 +619,24 @@ pub fn balayer_ancien() {
 
 // ─────────────────────── Chemin installé ───────────────────────
 
+/// Dossier neuf, au nom aléatoire et réservé au compte (0700) : sous Linux, `/tmp` est partagé et
+/// un autre compte pouvait préparer `/tmp/<nom du paquet>` puis remplacer le paquet vérifié avant
+/// son installation par `sudo apt install`.
+fn dossier_prive() -> Result<PathBuf, String> {
+    use ring::rand::SecureRandom;
+    let mut alea = [0u8; 16];
+    ring::rand::SystemRandom::new()
+        .fill(&mut alea)
+        .map_err(|_| "aléa indisponible".to_string())?;
+    let dossier = std::env::temp_dir().join(format!("forgechat-maj-{}", hex(&alea)));
+    let mut b = std::fs::DirBuilder::new();
+    #[cfg(unix)]
+    std::os::unix::fs::DirBuilderExt::mode(&mut b, 0o700);
+    b.create(&dossier)
+        .map_err(|e| format!("dossier de mise à jour impossible à créer : {e}"))?;
+    Ok(dossier)
+}
+
 /// Écrit l'artefact vérifié dans le dossier temporaire et le lance.
 fn lancer_installeur(octets: &[u8], info: &UpdateInfo) -> Result<(), String> {
     let nom = info
@@ -633,9 +651,19 @@ fn lancer_installeur(octets: &[u8], info: &UpdateInfo) -> Result<(), String> {
         return Err("nom d'artefact refusé".into());
     }
 
-    let chemin = std::env::temp_dir().join(nom);
-    std::fs::write(&chemin, octets)
-        .map_err(|e| format!("écriture du fichier de mise à jour impossible : {e}"))?;
+    let chemin = dossier_prive()?.join(nom);
+    {
+        // create_new : jamais un fichier préparé d'avance par un autre compte.
+        use std::io::Write;
+        let mut f = std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&chemin)
+            .map_err(|e| format!("écriture du fichier de mise à jour impossible : {e}"))?;
+        f.write_all(octets)
+            .and_then(|_| f.sync_all())
+            .map_err(|e| format!("écriture du fichier de mise à jour impossible : {e}"))?;
+    }
 
     #[cfg(windows)]
     {

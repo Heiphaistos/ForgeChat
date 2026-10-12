@@ -4,7 +4,7 @@ import { Alert, ScrollView, StyleSheet, View } from 'react-native'
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { authApi } from '@/api/auth'
-import { MIN_PASSWORD, deriveSecrets, newKdfSalt } from '@/e2e/authKdf'
+import { MIN_PASSWORD, deriveSecrets, newKdfSalt, passwordProblem } from '@/e2e/authKdf'
 import { Button, PasswordField, T, TextField } from '@/components/ui'
 import { extractResetToken } from '@/features/account/rules'
 import { useT } from '@/i18n'
@@ -32,6 +32,8 @@ export default function ResetPasswordScreen() {
     if (!token) return setError(t('social.reset.pasteLink'))
     if (pw.length < MIN_PASSWORD || pw.length > 128) return setError(t('social.reset.length'))
     if (passwordStrength(pw).score < 2) return setError(t('social.reset.weak'))
+    const problem = passwordProblem(pw)
+    if (problem) return setError(problem)
     if (pw !== confirm) return setError(t('social.reset.mismatch'))
     setLoading(true)
     setError(null)

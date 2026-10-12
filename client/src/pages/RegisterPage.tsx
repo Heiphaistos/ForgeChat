@@ -55,7 +55,7 @@ export default function RegisterPage() {
       toast.error(t('auth.register.acceptTerms'))
       return
     }
-    const problem = passwordProblem(password)
+    const problem = passwordProblem(password, [username, email])
     if (problem) { toast.error(problem); return }
     setLoading(true)
     try {

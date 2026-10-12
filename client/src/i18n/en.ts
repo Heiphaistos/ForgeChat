@@ -62,7 +62,7 @@ export const en: Partial<Record<Key, string>> = {
   'auth.register.subtitle': 'Join ForgeChat for free',
   'auth.register.username': 'Username',
   'auth.register.usernamePlaceholder': 'yourname',
-  'auth.register.passwordPlaceholder': 'At least 10 characters',
+  'auth.register.passwordPlaceholder': 'At least 12 characters',
   'auth.register.confirm': 'Confirm password',
   'auth.register.confirmPlaceholder': 'Repeat the password',
   'auth.register.termsBefore': 'I accept the',

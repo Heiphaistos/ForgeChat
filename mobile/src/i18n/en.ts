@@ -118,7 +118,7 @@ export const en: Partial<Record<Key, string>> = {
   'auth.invalidEmailAddress': 'Invalid email address.',
   'auth.usernameRule': '2 to 32 characters: letters, numbers, _ or -',
   'auth.invalidEmail': 'Invalid email',
-  'auth.passwordMin': 'At least 10 characters',
+  'auth.passwordMin': 'At least 12 characters',
   'auth.passwordMax': '128 characters maximum',
   'auth.passwordWeak': 'Password too weak',
   'auth.passwordMismatch': 'Passwords do not match',

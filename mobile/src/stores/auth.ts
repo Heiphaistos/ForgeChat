@@ -158,7 +158,7 @@ export const useAuth = create<AuthState>((set, get) => {
     },
 
     register: async (username, email, password, inviteCode) => {
-      const problem = passwordProblem(password)
+      const problem = passwordProblem(password, [username, email])
       if (problem) throw new Error(problem)
       const kdfSalt = newKdfSalt()
       const secrets = await deriveSecrets(password, kdfSalt)

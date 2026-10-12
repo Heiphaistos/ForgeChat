@@ -81,13 +81,44 @@ fn token_from_cookie(req: &Request) -> Option<String> {
         })
 }
 
+/// Origines de l'appli (web et bureau Tauri), les seules autorisées à écrire avec les cookies.
+const TAURI_ORIGINS: &[&str] = &["tauri://localhost", "https://tauri.localhost", "http://tauri.localhost"];
+
+/// Anti-CSRF des requêtes authentifiées par cookie. `SameSite=Strict` laisse passer tout
+/// sous-domaine de heiphaistos.org (même « site ») ; un envoi `multipart/form-data` n'a pas de
+/// pré-vol CORS. Une écriture (hors GET/HEAD/OPTIONS) doit donc venir de l'appli : `Origin`
+/// présent = l'une des nôtres ; absent, `Sec-Fetch-Site` ne doit pas dire « autre site ».
+fn same_origin_write(req: &Request, frontend_url: &str) -> bool {
+    use axum::http::Method;
+    if matches!(*req.method(), Method::GET | Method::HEAD | Method::OPTIONS) {
+        return true;
+    }
+    same_origin_headers(req.headers(), frontend_url)
+}
+
+/// Même règle, sur les en-têtes seuls (routes publiques qui lisent les cookies : comptes mis de côté).
+pub(crate) fn same_origin_headers(h: &axum::http::HeaderMap, frontend_url: &str) -> bool {
+    if let Some(origin) = h.get("origin").and_then(|v| v.to_str().ok()) {
+        let ours = frontend_url.trim_end_matches('/');
+        return origin.eq_ignore_ascii_case(ours) || TAURI_ORIGINS.iter().any(|o| origin.eq_ignore_ascii_case(o));
+    }
+    !matches!(
+        h.get("sec-fetch-site").and_then(|v| v.to_str().ok()),
+        Some("cross-site") | Some("same-site")
+    )
+}
+
 pub async fn require_auth(
     State(state): State<AppState>,
     req: Request,
     next: Next,
 ) -> Result<Response, AppError> {
     // Priorité : Cookie > Authorization: Bearer
-    let token = token_from_cookie(&req).or_else(|| {
+    let from_cookie = token_from_cookie(&req);
+    if from_cookie.is_some() && !same_origin_write(&req, &state.config.frontend_url) {
+        return Err(AppError::Forbidden);
+    }
+    let token = from_cookie.or_else(|| {
         req.headers()
             .get("Authorization")
             .and_then(|v| v.to_str().ok())
@@ -204,6 +235,26 @@ fn decide(blocked: bool, revoked_since: Option<i64>, banned: bool, iat: i64) -> 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn csrf_origin_rules() {
+        let req = |m: &str, origin: Option<&str>, site: Option<&str>| {
+            let mut b = axum::http::Request::builder().method(m).uri("/api/x");
+            if let Some(o) = origin { b = b.header("origin", o) }
+            if let Some(s) = site { b = b.header("sec-fetch-site", s) }
+            b.body(axum::body::Body::empty()).unwrap()
+        };
+        let front = "https://forgechat.example";
+        assert!(same_origin_write(&req("GET", Some("https://evil.example"), None), front));
+        assert!(same_origin_write(&req("POST", Some("https://forgechat.example"), None), front));
+        assert!(same_origin_write(&req("POST", Some("tauri://localhost"), None), front));
+        assert!(!same_origin_write(&req("POST", Some("https://ghd.example"), None), front));
+        assert!(!same_origin_write(&req("DELETE", Some("null"), None), front));
+        assert!(same_origin_write(&req("POST", None, None), front), "client natif sans Origin");
+        assert!(same_origin_write(&req("POST", None, Some("same-origin")), front));
+        assert!(!same_origin_write(&req("POST", None, Some("same-site")), front));
+        assert!(!same_origin_write(&req("PATCH", None, Some("cross-site")), front));
+    }
 
     #[test]
     fn revocation_rules() {

@@ -8,7 +8,7 @@ import * as c from './crypto'
 export const AUTH_INFO = 'forgechat auth v2'
 export const WRAP_INFO = 'forgechat wrap v2'
 /** Longueur minimale du mot de passe (vérifiée ici : le serveur ne voit plus le mot de passe). */
-export const MIN_PASSWORD = 10
+export const MIN_PASSWORD = 12
 export const MAX_PASSWORD = 128
 
 export const keyAadV2 = (userId: string) => `forgechat key v2|${userId}`
@@ -34,12 +34,32 @@ export async function deriveSecrets(password: string, kdfSalt: string, iteration
 
 export const newKdfSalt = () => c.b64uEncode(c.randomBytes(16))
 
-/** Erreur lisible pour l'écran, ou null si le mot de passe convient. */
-export function passwordProblem(pw: string): string | null {
+/**
+ * Erreur lisible pour l'écran, ou null si le mot de passe convient. Il protège aussi la clé de
+ * chiffrement : son enveloppe est gardée par le serveur, qui (compromis) pourrait l'attaquer hors
+ * ligne. Seul l'appareil voit le mot de passe : c'est donc ici que la règle s'applique.
+ * `context` : pseudo, e-mail… qui ne doivent pas en être la base.
+ */
+export function passwordProblem(pw: string, context: readonly string[] = []): string | null {
   if (pw.length < MIN_PASSWORD) return `Le mot de passe doit faire au moins ${MIN_PASSWORD} caractères`
   if (pw.length > MAX_PASSWORD) return `Le mot de passe doit faire au plus ${MAX_PASSWORD} caractères`
+  if (new Set(pw).size < 6) return 'Mot de passe trop répétitif : varie davantage les caractères'
+  const low = pw.toLowerCase()
+  const bases = [...COMMON_BASES, ...context.flatMap(v => v.toLowerCase().split('@')).filter(v => v.length >= 4)]
+  if (bases.some(b => low.includes(b))) return 'Mot de passe trop facile à deviner (mot courant, suite de touches, pseudo ou e-mail)'
+  const classes = [/[a-z]/, /[A-Z]/, /[0-9]/, /[^A-Za-z0-9]/].filter(r => r.test(pw)).length
+  if (pw.length < 16 && classes < 3) {
+    return 'Mélange au moins 3 sortes de caractères (minuscules, majuscules, chiffres, symboles), ou choisis une phrase de 16 caractères ou plus'
+  }
   return null
 }
+
+/** Bases des mots de passe les plus essayés (listes de fuites), en minuscules. */
+const COMMON_BASES = [
+  'password', 'motdepasse', 'azerty', 'qwerty', 'qwertz', '123456', '654321', '000000', '111111', 'abc123',
+  'iloveyou', 'jetaime', 'soleil', 'bonjour', 'doudou', 'loulou', 'chouchou', 'marseille', 'forgechat',
+  'admin', 'welcome', 'letmein', 'dragon', 'monkey', 'football', 'sunshine', 'princess', 'qazwsx', 'zxcvbn',
+]
 
 export async function wrapKeyV2(priv: Uint8Array, wrapKey: Uint8Array, userId: string, iv = c.randomBytes(12)): Promise<WrappedKeyV2> {
   const ct = await c.aesGcmEncrypt(wrapKey, iv, priv, keyAadV2(userId))

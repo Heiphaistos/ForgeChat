@@ -204,6 +204,48 @@ fn chemin_libre(dir: &Path, nom: &str) -> PathBuf {
         .unwrap_or(p)
 }
 
+/// Extensions qui s'exécutent ou s'interprètent à l'ouverture (Windows, macOS, Linux).
+const EXTENSIONS_EXECUTABLES: &[&str] = &[
+    "exe", "com", "scr", "pif", "bat", "cmd", "msi", "msix", "msp", "appx", "appxbundle", "ps1", "psm1",
+    "vbs", "vbe", "js", "jse", "wsf", "wsh", "hta", "cpl", "lnk", "url", "reg", "inf", "scf", "jar",
+    "dll", "sys", "iso", "img", "vhd", "vhdx", "chm", "xll", "app", "command", "pkg", "dmg", "sh",
+    "run", "appimage", "deb", "rpm", "desktop", "py", "pl",
+];
+
+fn extension_executable(nom: &str) -> bool {
+    nom.rsplit_once('.')
+        .map(|(_, ext)| EXTENSIONS_EXECUTABLES.contains(&ext.to_ascii_lowercase().as_str()))
+        .unwrap_or(false)
+}
+
+/// « Téléchargé d'Internet » : sous Windows le flux `Zone.Identifier` (ZoneId=3), que SmartScreen
+/// et Office lisent avant d'ouvrir le fichier ; sous macOS l'attribut `com.apple.quarantine`
+/// (Gatekeeper). Un fichier reçu d'un autre membre n'est jamais traité comme local. Sans effet
+/// (et sans erreur) sur un système de fichiers qui ne les connaît pas.
+fn marquer_provenance(chemin: &Path) {
+    #[cfg(windows)]
+    {
+        let mut flux = chemin.as_os_str().to_os_string();
+        flux.push(":Zone.Identifier");
+        let _ = std::fs::write(PathBuf::from(flux), "[ZoneTransfer]\r\nZoneId=3\r\n");
+    }
+    #[cfg(target_os = "macos")]
+    {
+        let horodatage = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
+        let _ = std::process::Command::new("/usr/bin/xattr")
+            .arg("-w")
+            .arg("com.apple.quarantine")
+            .arg(format!("0081;{horodatage:x};ForgeChat;"))
+            .arg(chemin)
+            .status();
+    }
+    #[cfg(not(any(windows, target_os = "macos")))]
+    let _ = chemin;
+}
+
 /// Enregistre les octets reçus (corps brut de l'invocation, nom dans `x-file-name`).
 /// Renvoie le chemin écrit, ou None si l'utilisateur a annulé la boîte.
 #[tauri::command]
@@ -225,7 +267,8 @@ pub async fn save_file(app: AppHandle, request: tauri::ipc::Request<'_>) -> Resu
 
     let chemin = tauri::async_runtime::spawn_blocking(move || -> Result<Option<PathBuf>, String> {
         let chemin = match dir_defaut {
-            Some(dir) if !cfg.ask_save => chemin_libre(&dir, &nom),
+            // Un exécutable n'est jamais déposé sans que l'utilisateur choisisse où.
+            Some(dir) if !cfg.ask_save && !extension_executable(&nom) => chemin_libre(&dir, &nom),
             dir => {
                 let mut boite = app.dialog().file().set_file_name(&nom);
                 if let Some(d) = dir {
@@ -241,6 +284,7 @@ pub async fn save_file(app: AppHandle, request: tauri::ipc::Request<'_>) -> Resu
             }
         };
         std::fs::write(&chemin, &octets).map_err(|e| format!("{}: {e}", chemin.display()))?;
+        marquer_provenance(&chemin);
         Ok(Some(chemin))
     })
     .await
@@ -472,6 +516,17 @@ fn exe_de_commande(commande: &str) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn executables_reconnus() {
+        for n in ["setup.EXE", "facture.pdf.lnk", "a.ps1", "x.AppImage", "photo.scr"] {
+            assert!(super::extension_executable(n), "{n}");
+        }
+        for n in ["photo.png", "doc.pdf", "notes.txt", "sans-extension", "archive.zip"] {
+            assert!(!super::extension_executable(n), "{n}");
+        }
+    }
+
     use super::*;
 
     #[test]

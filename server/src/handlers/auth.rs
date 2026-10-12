@@ -388,9 +388,15 @@ pub async fn login(
     let email = email_norm(&body.email);
     // Par IP (toutes les tentatives) et par compte (réussites décomptées : l'attaquant ne réussit
     // jamais sur le compte visé). Plus de remise à zéro par IP après une connexion réussie.
-    hit(&state, &format!("login_attempts:{}", crate::privacy::client_key(&headers, &addr)), 20, 900).await?;
-    let acct_key = account_key("login_acct", &email);
+    let ip = crate::privacy::client_key(&headers, &addr);
+    hit(&state, &format!("login_attempts:{ip}"), 20, 900).await?;
+    // Par compte ET par adresse : 10 / 15 min. Un tiers ne bloque donc plus la connexion de la
+    // victime depuis sa propre adresse. Plafond global par compte (toutes adresses) : 100 / heure,
+    // contre une attaque répartie. Les réussites sont décomptées des deux.
+    let acct_key = format!("{}:{ip}", account_key("login_acct", &email));
     hit(&state, &acct_key, 10, 900).await?;
+    let acct_all_key = account_key("login_acct_all", &email);
+    hit(&state, &acct_all_key, 100, 3600).await?;
     // Migration annoncée : format vérifié avant toute écriture.
     let migration = match (body.auth_new.as_deref(), body.kdf_salt_new.as_deref()) {
         (Some(a), Some(s)) => {
@@ -436,6 +442,7 @@ pub async fn login(
     {
         let mut redis = state.redis.lock().await;
         let _: () = redis.decr(&acct_key, 1).await.unwrap_or(());
+        let _: () = redis.decr(&acct_all_key, 1).await.unwrap_or(());
     }
 
     // Le statut en direct est posé par la connexion WebSocket (presence.rs) :
@@ -637,6 +644,54 @@ mod grace_tests {
         assert_eq!((u, issued, s, succ.as_str()), (id, 42, sid, "succ|esseur"));
         assert!(open_successor("autre", &sealed).is_none());
         assert_eq!(parse_grace(&grace_value(id, 1, None, "x")).unwrap().2, None);
+    }
+
+    /// Contre un vrai PostgreSQL et un vrai Redis (ignoré par défaut) :
+    /// `FORGECHAT_TEST_DATABASE_URL=… FORGECHAT_TEST_REDIS_URL=… cargo test -- --ignored refresh_grace_db`
+    #[tokio::test]
+    #[ignore]
+    async fn refresh_grace_db() {
+        let db_url = std::env::var("FORGECHAT_TEST_DATABASE_URL").expect("FORGECHAT_TEST_DATABASE_URL");
+        let redis_url = std::env::var("FORGECHAT_TEST_REDIS_URL").expect("FORGECHAT_TEST_REDIS_URL");
+        std::env::set_var("DATABASE_URL", &db_url);
+        std::env::set_var("REDIS_URL", &redis_url);
+        std::env::set_var("JWT_SECRET", "secret-de-test-assez-long-pour-demarrer-0123456789");
+        let config = crate::config::Config::from_env().expect("config");
+        let db = sqlx::PgPool::connect(&db_url).await.expect("db");
+        sqlx::migrate!("./migrations").run(&db).await.expect("migrations");
+        let redis = redis::Client::open(redis_url).expect("redis url").get_connection_manager().await.expect("redis");
+        let state = AppState::new(db.clone(), redis, config).await;
+        let tag = Uuid::new_v4().simple().to_string();
+        let user: Uuid = sqlx::query_scalar("INSERT INTO users (username, email, password_hash) VALUES ($1, $2, 'x') RETURNING id")
+            .bind(&tag[..20]).bind(format!("{tag}@test.local")).fetch_one(&db).await.expect("user");
+        let count = || async {
+            sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM refresh_tokens WHERE user_id=$1").bind(user).fetch_one(&db).await.unwrap()
+        };
+
+        let (t0, _) = open_session(&state, user, &HeaderMap::new()).await.expect("session");
+        let (_, t1, _) = rotate_refresh_token(&state, &t0).await.expect("rotation");
+        // Retardataire dans la fenêtre : le MÊME successeur, aucun jeton de plus.
+        for _ in 0..3 {
+            let (u, again, _) = rotate_refresh_token(&state, &t0).await.expect("grâce");
+            assert_eq!((u, again.as_str()), (user, t1.as_str()));
+        }
+        assert_eq!(count().await, 1, "la grâce ne fabrique pas de jetons");
+        // Un jeton inventé ne profite pas de la grâce.
+        assert!(rotate_refresh_token(&state, "inconnu-0123456789").await.is_err());
+
+        // Session fermée (déconnexion de cet appareil) : le vieux jeton ne rend plus rien.
+        let sid: Uuid = sqlx::query_scalar("SELECT id FROM user_sessions WHERE user_id=$1").bind(user).fetch_one(&db).await.unwrap();
+        end_session(&state, user, sid).await.expect("fin de session");
+        assert!(rotate_refresh_token(&state, &t0).await.is_err(), "grâce coupée avec la session");
+
+        // Déconnexion partout puis reconnexion de la victime : l'ancien jeton volé reste mort.
+        let (u0, _) = open_session(&state, user, &HeaderMap::new()).await.expect("session 2");
+        let (_, u1, _) = rotate_refresh_token(&state, &u0).await.expect("rotation 2");
+        sqlx::query("DELETE FROM refresh_tokens WHERE user_id=$1").bind(user).execute(&db).await.unwrap();
+        crate::middleware::auth::revoke_all_tokens(&state, user).await;
+        let _ = open_session(&state, user, &HeaderMap::new()).await.expect("reconnexion");
+        assert!(rotate_refresh_token(&state, &u0).await.is_err(), "jeton tourné avant la révocation");
+        assert!(rotate_refresh_token(&state, &u1).await.is_err(), "successeur supprimé");
     }
 }
 
