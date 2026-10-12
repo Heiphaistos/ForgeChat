@@ -67,6 +67,7 @@ const VerifyEmailPage = lazy(() => import('./pages/VerifyEmailPage'))
 const PasswordResetPage = lazy(() => import('./pages/PasswordResetPage'))
 const LockAccountPage = lazy(() => import('./pages/LockAccountPage'))
 const StatusPage = lazy(() => import('./pages/StatusPage'))
+const BackupViewerPage = lazy(() => import('./pages/BackupViewerPage'))
 const InvitePage = lazy(() => import('./pages/InvitePage'))
 const FriendInvitePage = lazy(() => import('./pages/FriendInvitePage'))
 const SettingsPage = lazy(() => import('./pages/SettingsPage'))
@@ -1065,6 +1066,7 @@ function AppInner() {
           <Route path="/reset-password" element={<PasswordResetPage />} />
           <Route path="/verrouiller" element={<LockAccountPage />} />
           <Route path="/statut" element={<StatusPage />} />
+          <Route path="/sauvegarde" element={<BackupViewerPage />} />
           <Route path="/invite/:code" element={<InvitePage />} />
           <Route path="/friend-invite/:code" element={<FriendInvitePage />} />
           <Route path="/settings" element={<AuthGuard><SettingsPage /></AuthGuard>} />

@@ -5,6 +5,7 @@ import { Hash, Users, Bell, Pin, Search, Volume2, Video, Megaphone, MessagesSqua
 import { SplitContext } from '../contexts/SplitContext'
 import NsfwGate, { useNsfwOk } from '../components/chat/NsfwGate'
 import { useMobile } from '../contexts/MobileContext'
+import BackupConversationButton from '../components/chat/BackupConversationButton'
 import ExportConversationButton from '../components/chat/ExportConversationButton'
 import api from '../api/client'
 import { useChat, useDraft, type ChatMessage } from '../store/chat'
@@ -612,6 +613,10 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
             {currentChannel && (
               <span className="hidden md:flex">
                 <ExportConversationButton
+                  channelId={channelId}
+                  channelName={currentChannel.name ?? channelId}
+                />
+                <BackupConversationButton
                   channelId={channelId}
                   channelName={currentChannel.name ?? channelId}
                 />

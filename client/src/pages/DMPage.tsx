@@ -5,6 +5,7 @@ import { useParams, useSearchParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Phone, Video, Search, Mic, MicOff, PhoneOff, VideoOff, ChevronLeft, Pin, X, Maximize2, Captions, Volume2, Images } from 'lucide-react'
 import MediaGallery from '../components/chat/MediaGallery'
+import BackupConversationButton from '../components/chat/BackupConversationButton'
 import { openUserVolume } from '../components/voice/UserVolumePopover'
 import { openUserMenu, userMenuProps } from '../components/userMenu/store'
 import LiveCaptions from '../components/ai/LiveCaptions'
@@ -500,6 +501,7 @@ export default function DMPage() {
           >
             <Images size={18} />
           </button>
+          {dmId && <BackupConversationButton channelId={dmId} channelName={partnerName || t('dm.direct')} />}
         </div>
       </div>
 
