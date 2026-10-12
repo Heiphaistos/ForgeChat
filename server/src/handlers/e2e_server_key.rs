@@ -337,7 +337,10 @@ mod tests {
         assert!(!check_signature(server, owner, "BAUTRE", &signer_pub, &sig));
         assert!(!check_signature(Uuid::new_v4(), owner, public, &signer_pub, &sig));
         assert!(!check_signature(server, Uuid::new_v4(), public, &signer_pub, &sig));
-        assert!(!check_signature(server, owner, public, &signer_pub, &sig.replace('A', "B")));
+        // Un octet de la signature inversé (toujours une altération, quelle que soit la signature).
+        let mut bad = URL_SAFE_NO_PAD.decode(&sig).unwrap();
+        bad[10] ^= 1;
+        assert!(!check_signature(server, owner, public, &signer_pub, &URL_SAFE_NO_PAD.encode(bad)));
         assert!(!check_signature(server, owner, public, &signer_pub, "pas une signature"));
     }
 

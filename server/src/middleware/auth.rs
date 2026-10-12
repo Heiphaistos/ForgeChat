@@ -69,18 +69,6 @@ pub fn verify_token(token: &str, secret: &str, issuer: &str) -> Option<Claims> {
     .map(|d| d.claims)
 }
 
-/// Extrait le token depuis le cookie `access_token`
-fn token_from_cookie(req: &Request) -> Option<String> {
-    req.headers()
-        .get("cookie")
-        .and_then(|v| v.to_str().ok())
-        .and_then(|s| {
-            s.split(';').find_map(|part| {
-                part.trim().strip_prefix("access_token=").map(|t| t.to_string())
-            })
-        })
-}
-
 /// Origines de l'appli (web et bureau Tauri), les seules autorisées à écrire avec les cookies.
 const TAURI_ORIGINS: &[&str] = &["tauri://localhost", "https://tauri.localhost", "http://tauri.localhost"];
 
@@ -114,7 +102,8 @@ pub async fn require_auth(
     next: Next,
 ) -> Result<Response, AppError> {
     // Priorité : Cookie > Authorization: Bearer
-    let from_cookie = token_from_cookie(&req);
+    // HTTPS : seulement `__Host-access_token` (crate::cookies), jamais posable par un autre sous-domaine.
+    let from_cookie = crate::cookies::access_token(req.headers(), state.config.frontend_url.starts_with("https"));
     if from_cookie.is_some() && !same_origin_write(&req, &state.config.frontend_url) {
         return Err(AppError::Forbidden);
     }
