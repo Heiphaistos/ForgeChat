@@ -77,3 +77,12 @@ updates:
     ignore:
       - dependency-name: '*'
         update-types: [version-update:semver-major, version-update:semver-minor]
+      # Versions exactes fixées par le SDK Expo (bundledNativeModules.json) : elles ne bougent
+      # qu'avec le SDK, via `npx expo install --fix`, jamais un correctif isolé (PR #10).
+      - dependency-name: react
+      - dependency-name: react-dom
+      - dependency-name: react-native
+      - dependency-name: react-native-reanimated
+      - dependency-name: react-native-worklets
+      - dependency-name: react-native-webview
+      - dependency-name: react-native-keyboard-controller
