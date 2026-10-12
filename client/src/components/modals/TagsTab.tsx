@@ -1,13 +1,13 @@
 import { useState } from 'react'
-import { Plus, Trash2 } from 'lucide-react'
+import { Palette, Plus, Trash2 } from 'lucide-react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import api from '../../api/client'
 import toast from 'react-hot-toast'
 import { useT, intlLocale } from '../../i18n'
+import ClanTag from '../ui/ClanTag'
+import TagStyleFields from '../settings/TagStyleFields'
+import { cleanTagStyle, type TagStyle } from '../../lib/nameStyle'
 
-function colorIntToHex(c: number): string {
-  return '#' + (c >>> 0).toString(16).padStart(6, '0')
-}
 function hexToColorInt(h: string): number {
   return parseInt(h.replace('#', ''), 16)
 }
@@ -16,7 +16,47 @@ interface ServerTag {
   id: string
   name: string
   color: number
+  /** Style de marque (models/profile_style::parse_tag_style) : sans couleur principale. */
+  style?: unknown
   created_at: string
+}
+
+/** Style d'un tag sans la couleur principale (elle reste la colonne `color`). */
+function tagRest(style: unknown): Omit<TagStyle, 'color'> {
+  const s = cleanTagStyle(style)
+  return { color2: s?.color2, font: s?.font, badge: s?.badge, icon: s?.icon }
+}
+
+/** Couleur, seconde couleur, police, fond et icône d'un tag : PATCH /servers/:id/tags/:tag_id. */
+function TagEditor({ serverId, tag, onClose }: { serverId: string; tag: ServerTag; onClose: () => void }) {
+  const t = useT()
+  const qc = useQueryClient()
+  const [color, setColor] = useState<number>(tag.color)
+  const [style, setStyle] = useState<Omit<TagStyle, 'color'>>(tagRest(tag.style))
+  const save = useMutation({
+    // Le serveur revalide tout ; {} = style par défaut.
+    mutationFn: () => api.patch(`/servers/${serverId}/tags/${tag.id}`, { color, style: cleanTagStyle(style) ?? {} }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['tags', serverId] })
+      qc.invalidateQueries({ queryKey: ['members', serverId] })
+      toast.success(t('pedit.clan.saved'))
+      onClose()
+    },
+    onError: (e: any) => toast.error(e.response?.data?.error ?? t('common.error')),
+  })
+  return (
+    <div className="mt-3 space-y-4 border-t border-fc-hover pt-3">
+      <TagStyleFields name={tag.name} color={color} onColor={c => c != null && setColor(c)} value={style} onChange={setStyle} />
+      <div className="flex flex-wrap gap-2">
+        <button onClick={() => save.mutate()} disabled={save.isPending}
+          className="px-4 py-2 bg-fc-accent hover:bg-fc-accent/80 disabled:opacity-50 rounded text-white text-sm font-medium transition">
+          {save.isPending ? t('common.saving') : t('pedit.clan.save')}
+        </button>
+        <button onClick={() => setStyle({})} className="px-3 py-2 text-sm text-fc-muted hover:text-white">{t('pedit.clan.reset')}</button>
+        <button onClick={onClose} className="px-3 py-2 text-sm text-fc-muted hover:text-white">{t('pedit.clan.close')}</button>
+      </div>
+    </div>
+  )
 }
 
 export default function TagsTab({ serverId }: { serverId: string }) {
@@ -24,6 +64,7 @@ export default function TagsTab({ serverId }: { serverId: string }) {
   const qc = useQueryClient()
   const [newName, setNewName] = useState('')
   const [newColor, setNewColor] = useState('#7289da')
+  const [editing, setEditing] = useState<string | null>(null)
 
   const { data: tags = [] } = useQuery<ServerTag[]>({
     queryKey: ['tags', serverId],
@@ -101,28 +142,30 @@ export default function TagsTab({ serverId }: { serverId: string }) {
         ) : (
           <div className="space-y-2">
             {tags.map(tg => (
-              <div key={tg.id} className="flex items-center gap-3 p-3 bg-fc-channel rounded-lg">
-                <div
-                  aria-hidden
-                  className="w-3 h-3 rounded-full flex-shrink-0"
-                  style={{ backgroundColor: colorIntToHex(tg.color) }}
-                />
-                <span
-                  className="text-sm font-bold font-mono px-2 py-0.5 rounded border"
-                  style={{ borderColor: colorIntToHex(tg.color), color: colorIntToHex(tg.color) }}
-                >
-                  [{tg.name}]
-                </span>
-                <span className="flex-1 text-xs text-fc-muted">
-                  {t('servers.create.createdOn', { date: new Date(tg.created_at).toLocaleDateString(intlLocale()) })}
-                </span>
-                <button
-                  onClick={() => deleteTag.mutate(tg.id)}
-                  aria-label={t('chset.removeTag', { tag: tg.name })}
-                  className="p-1.5 text-fc-muted hover:text-red-400 hover:bg-fc-hover rounded transition"
-                >
-                  <Trash2 size={14} aria-hidden />
-                </button>
+              <div key={tg.id} className="p-3 bg-fc-channel rounded-lg">
+                <div className="flex items-center gap-3">
+                  <ClanTag name={tg.name} color={tg.color} style={tg.style} />
+                  <span className="flex-1 text-xs text-fc-muted">
+                    {t('servers.create.createdOn', { date: new Date(tg.created_at).toLocaleDateString(intlLocale()) })}
+                  </span>
+                  <button
+                    onClick={() => setEditing(editing === tg.id ? null : tg.id)}
+                    aria-expanded={editing === tg.id}
+                    aria-label={t('pedit.clan.editA11y', { tag: tg.name })}
+                    title={t('pedit.clan.edit')}
+                    className="p-1.5 text-fc-muted hover:text-white hover:bg-fc-hover rounded transition"
+                  >
+                    <Palette size={14} aria-hidden />
+                  </button>
+                  <button
+                    onClick={() => deleteTag.mutate(tg.id)}
+                    aria-label={t('chset.removeTag', { tag: tg.name })}
+                    className="p-1.5 text-fc-muted hover:text-red-400 hover:bg-fc-hover rounded transition"
+                  >
+                    <Trash2 size={14} aria-hidden />
+                  </button>
+                </div>
+                {editing === tg.id && <TagEditor serverId={serverId} tag={tg} onClose={() => setEditing(null)} />}
               </div>
             ))}
           </div>

@@ -38,6 +38,8 @@ interface User {
   custom_status_emoji?: string | null
   custom_status_expires_at?: string | null
   display_name?: string | null
+  /** Style du pseudo du compte (validé par le serveur, relu par lib/nameStyle::cleanStyle). */
+  name_style?: unknown
   /** Activité (jeu détecté, musique saisie à la main…). */
   activity_type?: string | null
   activity_name?: string | null

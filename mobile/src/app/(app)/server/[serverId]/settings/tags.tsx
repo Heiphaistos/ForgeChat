@@ -3,6 +3,7 @@ import { Stack } from 'expo-router'
 import { useState } from 'react'
 import { Alert, Pressable, ScrollView, View } from 'react-native'
 import { moderationApi } from '@/api/moderation'
+import { ClanTag } from '@/components/ClanTag'
 import { Button, ErrorState, IconButton, Loading, Row, Section, T, TextField } from '@/components/ui'
 import { roleColorHex } from '@/features/servers/perms'
 import { useT } from '@/i18n'
@@ -78,7 +79,8 @@ export default function ClanTagsScreen() {
             title={tag.name}
             right={
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
-                <View style={{ width: 14, height: 14, borderRadius: 7, backgroundColor: roleColorHex(tag.color) ?? colors.textMuted }} accessible={false} />
+                {/* Aperçu statique de la marque : couleur et style validés (components/ClanTag). */}
+                <ClanTag name={tag.name} color={tag.color} style={tag.style} />
                 <IconButton icon="trash-outline" label={t('serverSettings.channel.deleteTag', { name: tag.name })} color={colors.danger} onPress={() => remove(tag.id, tag.name)} />
               </View>
             }
