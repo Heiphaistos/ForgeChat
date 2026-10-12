@@ -149,6 +149,7 @@ pub async fn register(
     }
     check_auth(auth)?;
     check_salt(kdf_salt)?;
+    let kdf = auth_v2::check_kdf(body.kdf.as_deref())?;
 
     let email_lower = email_norm(&body.email);
     if email_lower.len() > 254 || !email_lower.contains('@') || !email_lower.contains('.') {
@@ -206,11 +207,11 @@ pub async fn register(
     let code = format!("{:06}", rand::thread_rng().gen_range(0..1_000_000));
     let discriminator = format!("{:04}", rand::thread_rng().gen_range(1..=9999));
     sqlx::query(
-        "INSERT INTO pending_registrations (email_hmac, username, password_hash, discriminator, code, expires_at, auth_hash, kdf_salt, invite_code)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        "INSERT INTO pending_registrations (email_hmac, username, password_hash, discriminator, code, expires_at, auth_hash, kdf_salt, invite_code, kdf)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
          ON CONFLICT (email_hmac) DO UPDATE SET username=EXCLUDED.username, discriminator=EXCLUDED.discriminator,
             code=EXCLUDED.code, attempts=0, expires_at=EXCLUDED.expires_at, auth_hash=EXCLUDED.auth_hash,
-            kdf_salt=EXCLUDED.kdf_salt, invite_code=EXCLUDED.invite_code, created_at=NOW()",
+            kdf_salt=EXCLUDED.kdf_salt, invite_code=EXCLUDED.invite_code, kdf=EXCLUDED.kdf, created_at=NOW()",
     )
     .bind(&email_hmac)
     .bind(&body.username)
@@ -221,6 +222,7 @@ pub async fn register(
     .bind(&auth_hash)
     .bind(kdf_salt)
     .bind(invite_hash)
+    .bind(kdf)
     .execute(&state.db)
     .await?;
     let html = mail_html(
@@ -297,8 +299,8 @@ pub async fn verify_email(
     // Adresse prouvée par le code : seulement son empreinte et sa version chiffrée sont gardées.
     let user_id = Uuid::new_v4();
     let user = sqlx::query_as::<_, crate::models::user::User>(
-        "INSERT INTO users (id, username, discriminator, email_hmac, email_enc, password_hash, auth_hash, kdf_salt, is_verified, invited_by, registration_invite_id)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, true, $9, $10) RETURNING *",
+        "INSERT INTO users (id, username, discriminator, email_hmac, email_enc, password_hash, auth_hash, kdf_salt, is_verified, invited_by, registration_invite_id, kdf)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, true, $9, $10, $11) RETURNING *",
     )
     .bind(user_id)
     .bind(&pending.username)
@@ -310,6 +312,7 @@ pub async fn verify_email(
     .bind(&pending.kdf_salt)
     .bind(invite.and_then(|(_, by)| by))
     .bind(invite.map(|(id, _)| id))
+    .bind(&pending.kdf)
     .fetch_one(&mut *tx)
     .await?;
     if let Some((invite_id, _)) = invite {
@@ -402,7 +405,7 @@ pub async fn login(
         (Some(a), Some(s)) => {
             check_auth(a)?;
             check_salt(s)?;
-            Some((a, s))
+            Some((a, s, auth_v2::check_kdf(body.kdf_new.as_deref())?))
         }
         _ => None,
     };
@@ -435,8 +438,8 @@ pub async fn login(
     }
 
     if user.auth_hash.is_none() {
-        if let Some((auth_new, salt_new)) = migration {
-            auth_v2::migrate_account(&state.db, user.id, auth_new, salt_new).await?;
+        if let Some((auth_new, salt_new, kdf)) = migration {
+            auth_v2::migrate_account(&state.db, user.id, auth_new, salt_new, kdf).await?;
         }
     }
     {
@@ -713,6 +716,7 @@ pub async fn change_password(
     };
     check_auth(new_auth)?;
     check_salt(new_salt)?;
+    let new_kdf = auth_v2::check_kdf(body["new_kdf"].as_str())?;
     // Clé E2E ré-enveloppée par l'appli avec la nouvelle clé : enregistrée dans la même
     // transaction, sinon elle resterait scellée par l'ancienne.
     let wrapped = match body.get("wrapped") {
@@ -746,11 +750,12 @@ pub async fn change_password(
         .bind(claims.sub)
         .execute(&mut *tx)
         .await?;
-    sqlx::query("UPDATE users SET auth_hash=$2, kdf_salt=$3, password_hash=$4, updated_at=NOW() WHERE id=$1")
+    sqlx::query("UPDATE users SET auth_hash=$2, kdf_salt=$3, password_hash=$4, kdf=$5, updated_at=NOW() WHERE id=$1")
         .bind(claims.sub)
         .bind(&new_hash)
         .bind(new_salt)
         .bind(NO_PASSWORD)
+        .bind(new_kdf)
         .execute(&mut *tx)
         .await?;
     if let Some(w) = wrapped {

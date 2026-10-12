@@ -523,6 +523,7 @@ fn protected_routes(state: AppState) -> Router<AppState> {
         // Auth
         .route("/auth/logout", post(handlers::auth::logout))
         .route("/auth/change-password", post(handlers::auth::change_password))
+        .route("/auth/upgrade-kdf", post(handlers::auth_v2::upgrade_kdf).layer(DefaultBodyLimit::max(SMALL_JSON_LIMIT)))
         .route("/auth/2fa/setup", post(handlers::totp::setup_totp))
         .route("/auth/2fa/confirm", post(handlers::totp::confirm_totp))
         .route("/auth/2fa/disable", post(handlers::totp::disable_totp))

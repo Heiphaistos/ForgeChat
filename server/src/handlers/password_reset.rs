@@ -136,6 +136,7 @@ pub async fn reset_password(
         return Err(AppError::BadRequest("new_auth et new_kdf_salt requis".into()));
     };
     check_salt(new_salt)?;
+    let new_kdf = crate::handlers::auth_v2::check_kdf(body["new_kdf"].as_str())?;
     let new_hash = hash_auth(new_auth)?;
     let invalid = || AppError::BadRequest("Lien invalide ou expiré".into());
     if token.len() != 64 || !token.chars().all(|c| c.is_ascii_alphanumeric()) {
@@ -159,11 +160,12 @@ pub async fn reset_password(
         .ok_or_else(invalid)?;
 
     let mut tx = state.db.begin().await?;
-    sqlx::query("UPDATE users SET auth_hash=$2, kdf_salt=$3, password_hash=$4, updated_at=NOW() WHERE id=$1")
+    sqlx::query("UPDATE users SET auth_hash=$2, kdf_salt=$3, password_hash=$4, kdf=$5, updated_at=NOW() WHERE id=$1")
         .bind(user_id)
         .bind(&new_hash)
         .bind(new_salt)
         .bind(NO_PASSWORD)
+        .bind(new_kdf)
         .execute(&mut *tx)
         .await?;
     sqlx::query("DELETE FROM refresh_tokens WHERE user_id=$1")

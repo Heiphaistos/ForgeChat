@@ -163,6 +163,9 @@ pub struct RegisterRequest {
     /// Code d'invitation (obligatoire quand l'inscription est sur invitation).
     #[serde(default)]
     pub invite_code: Option<String>,
+    /// Dérivation du mot de passe utilisée par l'appli (`pbkdf2` si absent : anciennes applis).
+    #[serde(default)]
+    pub kdf: Option<String>,
 }
 
 /// Compte migré : `{email, auth}`. Compte non migré : `{email, password, auth_new, kdf_salt_new}`
@@ -178,6 +181,9 @@ pub struct LoginRequest {
     pub auth_new: Option<String>,
     #[serde(default)]
     pub kdf_salt_new: Option<String>,
+    /// Dérivation de `auth_new` (`pbkdf2` si absent).
+    #[serde(default)]
+    pub kdf_new: Option<String>,
     pub totp_code: Option<String>,
 }
 
@@ -292,4 +298,5 @@ pub struct PendingRegistration {
     pub auth_hash: String,
     pub kdf_salt: String,
     pub invite_code: Option<String>,
+    pub kdf: String,
 }
