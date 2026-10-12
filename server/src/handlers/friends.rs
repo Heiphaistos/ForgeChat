@@ -420,6 +420,8 @@ pub async fn get_dm_messages(
     // résultat en ordre chronologique croissant, le `.reverse()` final ne doit
     // s'appliquer qu'aux autres branches.
     let is_around = around.is_some();
+    // Galerie (amélioration n° 46) : seulement les messages qui portent des fichiers.
+    let media_only = params.get("media").is_some_and(|v| v == "1" || v == "true");
 
     let messages = if let Some(around_id) = around {
         let ts: Option<chrono::DateTime<chrono::Utc>> = sqlx::query_scalar(
@@ -458,11 +460,13 @@ pub async fn get_dm_messages(
              JOIN users u ON u.id = dm.sender_id
              WHERE dm.dm_channel_id=$1
                AND (dm.created_at, dm.id) < (SELECT created_at, id FROM dm_messages WHERE id=$3 AND dm_channel_id=$1)
+               AND (NOT $4 OR EXISTS (SELECT 1 FROM attachments a WHERE a.dm_message_id = dm.id))
              ORDER BY dm.created_at DESC, dm.id DESC LIMIT $2"
         )
         .bind(dm_id)
         .bind(limit)
         .bind(before_id)
+        .bind(media_only)
         .fetch_all(&state.db)
         .await?
     } else {
@@ -470,10 +474,12 @@ pub async fn get_dm_messages(
             "SELECT dm.*, u.username, u.avatar, u.avatar_decoration FROM dm_messages dm
              JOIN users u ON u.id = dm.sender_id
              WHERE dm.dm_channel_id=$1
+               AND (NOT $3 OR EXISTS (SELECT 1 FROM attachments a WHERE a.dm_message_id = dm.id))
              ORDER BY dm.created_at DESC, dm.id DESC LIMIT $2"
         )
         .bind(dm_id)
         .bind(limit)
+        .bind(media_only)
         .fetch_all(&state.db)
         .await?
     };

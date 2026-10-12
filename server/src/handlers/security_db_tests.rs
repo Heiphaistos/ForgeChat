@@ -632,3 +632,30 @@ async fn product_report_quick_actions() {
     assert!(r1_again.is_err());
     act(owner, r1, "dismiss").await.unwrap();
 }
+
+#[tokio::test]
+#[ignore]
+async fn product_dm_media_filter() {
+    // Amélioration n° 46 (2026-10-12) : galerie = seulement les messages avec fichiers.
+    let (state, db) = setup().await;
+    let (a, b) = (user(&db).await, user(&db).await);
+    let dm: Uuid = sqlx::query_scalar("INSERT INTO dm_channels (user1_id, user2_id) VALUES ($1, $2) RETURNING id").bind(a).bind(b).fetch_one(&db).await.unwrap();
+    let mut with_file = Vec::new();
+    for i in 0..4 {
+        let m: Uuid = sqlx::query_scalar("INSERT INTO dm_messages (dm_channel_id, sender_id, content) VALUES ($1, $2, $3) RETURNING id")
+            .bind(dm).bind(a).bind(format!("m{i}")).fetch_one(&db).await.unwrap();
+        if i % 2 == 0 {
+            sqlx::query("INSERT INTO attachments (dm_message_id, filename, content_type, size, url) VALUES ($1, 'f.png', 'image/png', 1, '/uploads/x.png')")
+                .bind(m).execute(&db).await.unwrap();
+            with_file.push(m);
+        }
+    }
+    let claims = axum::Extension(crate::middleware::auth::Claims { sub: a, exp: i64::MAX, iss: "forgechat".into(), iat: 0, sid: None });
+    let q = |p: &[(&str, &str)]| axum::extract::Query(p.iter().map(|(k, v)| (k.to_string(), v.to_string())).collect::<std::collections::HashMap<_, _>>());
+    let all = crate::handlers::friends::get_dm_messages(axum::extract::State(state.clone()), claims.clone(), axum::extract::Path(dm), q(&[])).await.unwrap().0;
+    assert_eq!(all.len(), 4);
+    let media = crate::handlers::friends::get_dm_messages(axum::extract::State(state.clone()), claims, axum::extract::Path(dm), q(&[("media", "1")])).await.unwrap().0;
+    let ids: Vec<Uuid> = media.iter().map(|m| serde_json::from_value(m["id"].clone()).unwrap()).collect();
+    assert_eq!(ids.len(), 2);
+    assert!(ids.iter().all(|i| with_file.contains(i)));
+}
