@@ -15,9 +15,9 @@ jest.mock('@/lib/secureStorage', () => ({
 }))
 jest.mock('@/e2e/accountKey', () => ({ useAccountKey: { getState: () => ({ pub: mockMyPub, userId: mockMe }) } }))
 
-import { b64uEncode, generateKeyPair } from '@/e2e/crypto'
+import { b64uDecode, b64uEncode, generateKeyPair, signServerKey, verifyServerKeySig } from '@/e2e/crypto'
 import { acceptKey, markVerified, parsePin, pinOf, trustedMembers, trustedServerKey, useKeyAlerts } from '@/e2e/keyPins'
-import { checkServerKey, fpOf, serverSubject, sortMembers } from '@/e2e/keyPinsCore'
+import { checkServerKey, fpOf, ownerVouches, serverSubject, sortMembers } from '@/e2e/keyPinsCore'
 
 const pubKey = async () => b64uEncode((await generateKeyPair()).pub)
 const store = (init: Record<string, { fp: string; verified?: boolean }> = {}) => {
@@ -88,4 +88,25 @@ test('registre : clé de serveur jamais vue refusée tant que non acceptée, pui
   // Clé différente ensuite : refusée et signalée comme changée.
   expect(await trustedServerKey({ server_id: 'srv', public: p2 })).toBeNull()
   expect(useKeyAlerts.getState().alerts.some((a) => a.kind === 'server' && a.subject === 'server:srv' && !a.fresh)).toBe(true)
+})
+
+test('clé de serveur signée : vecteur du navigateur (S bas et S haut) et règles de confiance', async () => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const v = (require('../../docs/e2e-vectors.json') as { serverKeySig: Record<string, string> }).serverKeySig
+  const signerPub = b64uDecode(v.signer_public)
+  expect(await verifyServerKeySig(signerPub, v.signature, v.server_id, v.signed_by, v.public)).toBe(true)
+  expect(await verifyServerKeySig(signerPub, v.signature_high_s, v.server_id, v.signed_by, v.public)).toBe(true)
+  expect(await verifyServerKeySig(signerPub, v.signature, v.server_id, 'autre', v.public)).toBe(false)
+
+  const owner = await generateKeyPair()
+  const ownerPub = b64uEncode(owner.pub)
+  const sk = { server_id: 'srv', public: await pubKey(), signed_by: 'owner', signature: '' }
+  sk.signature = await signServerKey(owner.priv, 'srv', 'owner', sk.public)
+  const pins = new Map([['owner', { fp: await fpOf(ownerPub) }]])
+  const served = async () => ownerPub
+  expect(await ownerVouches(sk, 'me', null, async (s) => pins.get(s), served)).toBe(true)
+  expect(await ownerVouches(sk, 'owner', ownerPub, async () => undefined, served)).toBe(true)
+  expect(await ownerVouches(sk, 'me', null, async () => undefined, served)).toBe(false)
+  expect(await ownerVouches(sk, 'me', null, async (s) => pins.get(s), async () => pubKey())).toBe(false)
+  expect(await ownerVouches({ ...sk, public: await pubKey() }, 'me', null, async (s) => pins.get(s), served)).toBe(false)
 })

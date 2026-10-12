@@ -4,7 +4,8 @@
 import { create } from 'zustand'
 import { useAuth } from '../store/auth'
 import { useAccountKey } from './accountKey'
-import { checkServerKey, fpOf, serverSubject, sortMembers, type Pin } from './keyPinsCore'
+import api from '../api/client'
+import { checkServerKey, fpOf, ownerVouches, serverSubject, sortMembers, type Pin, type SignedServerKey } from './keyPinsCore'
 
 export { fpOf } from './keyPinsCore'
 
@@ -148,14 +149,23 @@ export async function trustedMembers<T extends MemberLike>(list: T[]) {
  * Clé de récupération d'un serveur, avec l'empreinte recalculée ; null si elle a changé ou si elle
  * n'a jamais été acceptée sur cet appareil (enveloppe refusée, boîte de dialogue ouverte).
  */
-export async function trustedServerKey<T extends { server_id: string; public: string }>(sk: T, serverName?: string): Promise<(T & { fingerprint: string }) | null> {
+export async function trustedServerKey<T extends SignedServerKey>(sk: T, serverName?: string): Promise<(T & { fingerprint: string }) | null> {
   const account = me()
   if (!account) return null
   const r = await checkServerKey(sk, s => getPin(account, s))
   if (r.ok && !r.fresh) return { ...sk, fingerprint: r.fp }
+  // Jamais vue mais signée par son propriétaire, que je connais déjà : acceptée sans question.
+  if (r.fresh && await ownerVouches(sk, account, useAccountKey.getState().pub, s => getPin(account, s), signerPublic)) {
+    await savePin(account, serverSubject(sk.server_id), { fp: r.fp })
+    return { ...sk, fingerprint: r.fp }
+  }
   raise({ subject: serverSubject(sk.server_id), name: serverName ?? sk.server_id, kind: 'server', pub: sk.public, fp: r.fp, verified: r.verified, fresh: r.fresh })
   return null
 }
+
+/** Clé de compte publique servie pour un utilisateur (comparée ensuite à son épingle). */
+const signerPublic = (userId: string) =>
+  api.get<{ public: string | null }>(`/users/${userId}/keys/public`).then(r => r.data.public ?? null)
 
 /** Propriétaire qui vient de créer la clé de son serveur : épinglée d'office. */
 export async function pinOwnServerKey(serverId: string, pub: string) {

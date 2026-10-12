@@ -13,7 +13,8 @@ import { useAuth } from '../store/auth'
 import { t } from '../i18n'
 
 interface KeysResponse { public: string; fingerprint: string; wrapped: AnyWrapped; backup: c.WrappedKey | null }
-interface StoredKey { priv: CryptoKey; pub: string }
+/** `sign` : clé de signature (absente des entrées enregistrées avant son ajout). */
+interface StoredKey { priv: CryptoKey; pub: string; sign?: CryptoKey }
 
 /** `setup` : aucune clé sur le serveur ; `unlock` : clé à ouvrir sur cet appareil. */
 export type LockMode = 'setup' | 'unlock'
@@ -23,12 +24,14 @@ interface E2EState {
   mode: LockMode
   priv: CryptoKey | null
   pub: string | null
+  /** Clé de signature (même clé de compte, usage ECDSA) : signer la clé de récupération de mes serveurs. */
+  sign: CryptoKey | null
   /** Code de récupération à afficher UNE fois, puis oublié. */
   recoveryToShow: string | null
 }
 
 export const useAccountKey = create<E2EState>()(() => ({
-  status: 'idle', mode: 'unlock', priv: null, pub: null, recoveryToShow: null,
+  status: 'idle', mode: 'unlock', priv: null, pub: null, sign: null, recoveryToShow: null,
 }))
 
 // ─── IndexedDB ───────────────────────────────────────────────────────────────
@@ -121,11 +124,12 @@ async function fetchKeys(): Promise<KeysResponse | null> {
 
 async function activate(userId: string, priv: Uint8Array, pub: Uint8Array) {
   const key = await c.importPrivateKey(priv, pub)
+  const sign = await c.importSigningKey(priv, pub)
   priv.fill(0)
   const pubB64 = c.b64uEncode(pub)
-  await idb<unknown>('readwrite', s => s.put({ priv: key, pub: pubB64 } satisfies StoredKey, userId))
+  await idb<unknown>('readwrite', s => s.put({ priv: key, pub: pubB64, sign } satisfies StoredKey, userId))
   forgetTyped()
-  useAccountKey.setState({ status: 'ready', priv: key, pub: pubB64 })
+  useAccountKey.setState({ status: 'ready', priv: key, pub: pubB64, sign })
 }
 
 /** Nouvelle paire + enveloppes (mot de passe, code de récupération). */
@@ -181,7 +185,7 @@ async function runInitAccountKey(userId: string) {
       } catch { /* rejoué à la prochaine connexion */ }
     }
     forgetTyped()
-    useAccountKey.setState({ status: 'ready', priv: stored.priv, pub: stored.pub })
+    useAccountKey.setState({ status: 'ready', priv: stored.priv, pub: stored.pub, sign: stored.sign ?? null })
     return
   }
   const keys = await fetchKeys()
@@ -281,7 +285,7 @@ export async function changePassword(userId: string, oldPw: string, newPw: strin
 /** Déconnexion : plus de clé pour ce compte sur ce navigateur (les autres comptes gardent la leur). */
 export async function clearAccountKey(userId?: string) {
   forgetTyped()
-  useAccountKey.setState({ status: 'idle', mode: 'unlock', priv: null, pub: null, recoveryToShow: null })
+  useAccountKey.setState({ status: 'idle', mode: 'unlock', priv: null, pub: null, sign: null, recoveryToShow: null })
   await idb<unknown>('readwrite', s => (userId ? s.delete(userId) : s.clear())).catch(() => {})
 }
 

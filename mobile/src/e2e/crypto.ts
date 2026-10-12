@@ -518,3 +518,29 @@ export function safeMime(m: string): string {
   return /^(image\/(png|jpeg|gif|webp|avif|bmp)|video\/(mp4|webm|quicktime|ogg)|audio\/(mpeg|mp3|mp4|m4a|x-m4a|aac|flac|ogg|wav|x-wav|webm|opus)|application\/pdf|text\/plain)$/.test(t)
     ? t : 'application/octet-stream'
 }
+
+// ─── Signature de la clé de récupération par le propriétaire (audit 2026-10-12, H2) ───
+/** Texte signé : identique à client/src/e2e/crypto.ts (vecteur `serverKeySig`). */
+export const serverKeySigText = (serverId: string, signer: string, serverPub: string) =>
+  `forgechat server-key sig v1|${serverId}|${signer}|${serverPub}`
+
+/** ECDSA P-256 / SHA-256 avec le scalaire de la clé de compte ; r ‖ s (64 o) en base64url. */
+export async function signServerKey(priv: Uint8Array, serverId: string, signer: string, serverPub: string): Promise<string> {
+  return b64uEncode(p256.sign(new TextEncoder().encode(serverKeySigText(serverId, signer, serverPub)), priv))
+}
+
+/**
+ * Vrai si `signature` est celle de `signerPub` sur cette clé de serveur. `lowS: false` : WebCrypto
+ * (applis web et bureau) ne normalise pas S, une signature sur deux serait sinon refusée.
+ */
+export async function verifyServerKeySig(
+  signerPub: Uint8Array, signature: string, serverId: string, signer: string, serverPub: string,
+): Promise<boolean> {
+  try {
+    const sig = b64uDecode(signature)
+    if (sig.length !== 64 || signerPub.length !== 65 || signerPub[0] !== 4) return false
+    return p256.verify(sig, new TextEncoder().encode(serverKeySigText(serverId, signer, serverPub)), signerPub, { lowS: false })
+  } catch {
+    return false
+  }
+}

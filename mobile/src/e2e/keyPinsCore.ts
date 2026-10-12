@@ -2,7 +2,7 @@
 // Copie de client/src/e2e/keyPinsCore.ts (garder identiques). Voir docs/CHIFFREMENT-E2E.md §3 (empreintes).
 // Le serveur fournit les clés publiques : on ne lui fait jamais confiance pour l'empreinte,
 // on la recalcule (SHA-256 de la clé publique, base64url) et on la compare à celle épinglée.
-import { b64uDecode, b64uEncode, fingerprint } from './crypto'
+import { b64uDecode, b64uEncode, fingerprint, verifyServerKeySig } from './crypto'
 
 /** Empreinte épinglée d'un sujet (utilisateur, ou `server:<id>` pour une clé de récupération de serveur). */
 export interface Pin { fp: string; verified?: boolean }
@@ -69,4 +69,31 @@ export function firstUnreadable(seen: Set<string>, conv: string, epoch: number):
   if (seen.has(k)) return false
   seen.add(k)
   return true
+}
+
+/** Clé de récupération telle que servie, avec la signature de son propriétaire (si elle existe). */
+export interface SignedServerKey { server_id: string; public: string; signature?: string | null; signed_by?: string | null }
+
+/**
+ * Le propriétaire se porte garant de la clé : signature valide d'un signataire dont la clé est
+ * DÉJÀ épinglée sur cet appareil (ou de moi-même). Un serveur compromis ne peut ni forger cette
+ * signature, ni inventer un signataire connu : sans cela, l'acceptation reste explicite.
+ * `signerPub` : clé publique servie pour le signataire (null si absente).
+ */
+export async function ownerVouches(
+  sk: SignedServerKey, me: string, myPub: string | null, getPin: GetPin, signerPub: (id: string) => Promise<string | null>,
+): Promise<boolean> {
+  if (!sk.signature || !sk.signed_by) return false
+  let pub: string | null
+  if (sk.signed_by === me) {
+    pub = myPub
+  } else {
+    const pin = await getPin(sk.signed_by)
+    if (!pin) return false
+    pub = await signerPub(sk.signed_by).catch(() => null)
+    if (!pub) return false
+    try { if ((await fpOf(pub)) !== pin.fp) return false } catch { return false }
+  }
+  if (!pub) return false
+  return verifyServerKeySig(b64uDecode(pub), sk.signature, sk.server_id, sk.signed_by, sk.public)
 }
