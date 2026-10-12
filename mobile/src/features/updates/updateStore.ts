@@ -5,9 +5,11 @@ import type { AvailableUpdate } from './updateCheck'
  * Mise à jour proposée (bannière UpdateBanner) :
  *  - available : proposée ;
  *  - ready     : téléchargement lancé dans le navigateur, à ouvrir une fois terminé ;
- *  - error     : aucun navigateur n'a pu ouvrir le lien.
+ *  - verifying : iOS, téléchargement et vérification de l'empreinte signée en cours ;
+ *  - invalid   : iOS, le fichier reçu ne correspond pas à l'empreinte signée (rien n'est installé) ;
+ *  - error     : aucun navigateur n'a pu ouvrir le lien (ou téléchargement impossible).
  */
-export type UpdatePhase = 'available' | 'ready' | 'error'
+export type UpdatePhase = 'available' | 'verifying' | 'ready' | 'error' | 'invalid'
 
 interface UpdateState {
   update: AvailableUpdate | null
