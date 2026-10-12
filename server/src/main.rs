@@ -21,6 +21,8 @@ mod security_events;
 mod webauthn;
 mod key_log;
 mod antivirus;
+mod health;
+mod dnd;
 #[cfg(test)]
 mod fuzz_props;
 
@@ -96,6 +98,7 @@ async fn main() -> anyhow::Result<()> {
     tracing::info!("Redis OK");
 
     let state = AppState::new(db, redis_conn, config.clone()).await;
+    health::mark_started();
     handlers::discord_import::recover_interrupted(&state).await;
     handlers::site_admin::sync_owner_email(&state).await;
     handlers::site_admin::sync_banned_set(&state).await;
@@ -185,6 +188,7 @@ async fn main() -> anyhow::Result<()> {
             // P1-8 — seulement les utilisateurs connectés : un rappel échu hors
             // ligne n'est plus perdu, la reconnexion WebSocket le livre.
             handlers::reminders::deliver_due(&reminder_state, None).await;
+            handlers::reminders::push_offline_due(&reminder_state).await;
         }
     });
 
@@ -283,6 +287,8 @@ async fn main() -> anyhow::Result<()> {
         // (contrairement à /health qui n'a pas de route nginx dédiée et retombe
         // silencieusement sur le SPA React, 200 même backend down)
         .route("/api/health", get(|| async { "ok" }))
+        // Page d'état publique (amélioration n° 50) : états seulement, cache 30 s.
+        .route("/api/status", get(health::public_status))
         // Manifeste de mise à jour de l'application bureau. Public : l'updater
         // l'interroge au lancement, avant toute authentification.
         .route("/api/desktop/latest", get(handlers::desktop::get_latest))
@@ -352,6 +358,7 @@ async fn main() -> anyhow::Result<()> {
         // fil de l'eau, ont droit à ATTACHMENT_BODY_LIMIT (route par route).
         .layer(DefaultBodyLimit::max(12 * 1024 * 1024))
         .layer(axum::middleware::from_fn(security_headers::apply))
+        .layer(axum::middleware::from_fn_with_state(state.clone(), health::count_server_errors))
         .layer(cors)
         .layer(TraceLayer::new_for_http())
         .with_state(state);
@@ -596,6 +603,7 @@ fn protected_routes(state: AppState) -> Router<AppState> {
         // Users
         .route("/users/me", get(handlers::users::get_me))
         .route("/users/me/panic", post(handlers::account_guard::panic_self))
+        .route("/users/me/dnd-schedule", get(dnd::get_schedule).put(dnd::put_schedule))
         .route("/users/me/sessions", get(handlers::auth::list_sessions))
         .route("/users/me/sessions/:id", delete(handlers::auth::revoke_session))
         .route("/users/me", patch(handlers::users::update_me))
@@ -646,6 +654,7 @@ fn protected_routes(state: AppState) -> Router<AppState> {
         .route("/admin/audit", get(handlers::site_admin::audit_log))
         .route("/admin/diagnostics", get(handlers::diagnostics::list_reports))
         .route("/admin/security-events", get(security_events::admin_events))
+        .route("/admin/health", get(health::admin_health))
         .route("/admin/dm-reports", get(handlers::reports::list_dm_reports))
         .route("/admin/dm-reports/:id", patch(handlers::reports::update_dm_report))
         .route("/admin/diagnostics/:id", get(handlers::diagnostics::get_report).delete(handlers::diagnostics::delete_report))
@@ -697,6 +706,8 @@ fn protected_routes(state: AppState) -> Router<AppState> {
         .route("/servers/:server_id/channels/:channel_id/messages/:msg_id/pin", delete(handlers::messages::unpin_message))
         .route("/servers/:server_id/channels/:channel_id/messages/search", get(handlers::messages::search_messages))
         .route("/messages/:id/remind", post(handlers::messages::set_reminder))
+        .route("/reminders", get(handlers::reminders::list))
+        .route("/reminders/:id", delete(handlers::reminders::cancel))
         .route("/messages/:id/report", post(handlers::reports::create_report))
         .route("/servers/:server_id/reports", get(handlers::reports::list_reports))
         .route("/servers/:server_id/reports/:report_id", patch(handlers::reports::update_report))

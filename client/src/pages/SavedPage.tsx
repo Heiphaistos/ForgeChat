@@ -14,6 +14,7 @@ import { lockedText, openBody } from '../e2e/conversations'
 import type { EncPayload, MsgBody } from '../e2e/crypto'
 import { displayAttachments, type ServerAttachment } from '../e2e/files'
 import E2EAttachment from '../e2e/E2EAttachment'
+import UpcomingReminders from '../components/UpcomingReminders'
 
 interface SavedMessage {
   id: string
@@ -267,6 +268,7 @@ export default function SavedPage() {
 
       {/* ── Content ── */}
       <div className="flex-1 overflow-y-auto overscroll-contain px-6 py-4">
+        <UpcomingReminders />
         {isLoading ? (
           <div className="flex justify-center py-12">
             <div className="w-6 h-6 border-2 border-fc-accent border-t-transparent rounded-full animate-spin" />

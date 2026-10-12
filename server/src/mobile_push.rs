@@ -350,6 +350,15 @@ pub async fn send(state: &AppState, user_id: Uuid, n: &Notice) {
     if state.clients.read().await.contains_key(&user_id) {
         return;
     }
+    // « Ne pas déranger » programmé (amélioration n° 48) ; exception : favoris.
+    let from = match n.target {
+        Target::Dm(dm) | Target::MissedCall { dm_id: Some(dm), .. } => crate::dnd::dm_peer(state, dm, user_id).await,
+        Target::MissedCall { dm_id: None, caller } => Some(caller),
+        _ => None,
+    };
+    if crate::dnd::silenced(state, user_id, from).await {
+        return;
+    }
     {
         let key = format!("push_rl:{}:{}", user_id, n.target.collapse_key());
         let mut redis = state.redis.lock().await;

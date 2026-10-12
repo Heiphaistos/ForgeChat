@@ -96,6 +96,8 @@ function DesktopNotifBlock() {
   )
 }
 
+const DAY_KEYS = ['dnd.mon', 'dnd.tue', 'dnd.wed', 'dnd.thu', 'dnd.fri', 'dnd.sat', 'dnd.sun'] as const
+
 export default function NotificationsSection() {
   const t = useT()
   const nav = useNavigate()
@@ -107,14 +109,34 @@ export default function NotificationsSection() {
     staleTime: 60_000,
   })
 
+  // « Ne pas déranger » programmé (amélioration n° 48) : aussi appliqué par le serveur aux
+  // notifications push (téléphone, navigateur fermé), dans le fuseau de cet appareil.
+  const { data: dnd } = useQuery<{ days: number; allow_favorites: boolean }>({
+    queryKey: ['dnd-schedule'],
+    queryFn: () => api.get('/users/me/dnd-schedule').then(r => r.data),
+    staleTime: 60_000,
+  })
+  const toMin = (hm: string) => { const [h, m] = hm.split(':').map(Number); return (h || 0) * 60 + (m || 0) }
   const save = useMutation({
-    mutationFn: (data: Record<string, unknown>) => api.put('/user/settings', data),
+    mutationFn: async (data: { quiet_hours_enabled: boolean; quiet_hours_start: string; quiet_hours_end: string }) => {
+      await api.put('/user/settings', data)
+      await api.put('/users/me/dnd-schedule', {
+        enabled: data.quiet_hours_enabled, days: quietDays, start_min: toMin(data.quiet_hours_start), end_min: toMin(data.quiet_hours_end),
+        tz: Intl.DateTimeFormat().resolvedOptions().timeZone || 'Europe/Paris', allow_favorites: allowFavorites,
+      })
+    },
     onSuccess: () => { toast.success(t('common.saved')); refetch() },
+    onError: (e: any) => toast.error(e.response?.data?.error ?? t('common.error')),
   })
 
   const [quietEnabled, setQuietEnabled] = useState(false)
   const [quietStart, setQuietStart] = useState('22:00')
   const [quietEnd, setQuietEnd] = useState('08:00')
+  const [quietDays, setQuietDays] = useState(127)
+  const [allowFavorites, setAllowFavorites] = useState(true)
+  useEffect(() => {
+    if (dnd) { setQuietDays(dnd.days); setAllowFavorites(dnd.allow_favorites) }
+  }, [dnd])
 
   useEffect(() => {
     if (settings) {
@@ -183,6 +205,23 @@ export default function NotificationsSection() {
               <input type="time" value={quietEnd} onChange={e => setQuietEnd(e.target.value)}
                 className="w-full bg-fc-bg border border-fc-hover rounded-lg px-3 py-2 text-sm text-white" />
             </div>
+            <div className="col-span-2">
+              <span className="text-xs text-fc-muted mb-1 block">{t('dnd.days')}</span>
+              <div className="flex flex-wrap gap-1" role="group" aria-label={t('dnd.days')}>
+                {DAY_KEYS.map((k, i) => {
+                  const on = (quietDays & (1 << i)) !== 0
+                  return (
+                    <button key={k} type="button" aria-pressed={on} onClick={() => setQuietDays(d => d ^ (1 << i))}
+                      className={`px-2.5 py-1 rounded-md text-xs ${on ? 'bg-fc-accent text-white' : 'bg-fc-hover text-fc-muted'}`}>{t(k)}</button>
+                  )
+                })}
+              </div>
+            </div>
+            <div className="col-span-2 flex items-center justify-between">
+              <span className="text-xs text-fc-muted">{t('dnd.favorites')}</span>
+              <Toggle value={allowFavorites} onChange={setAllowFavorites} />
+            </div>
+            <p className="col-span-2 text-xs text-fc-muted">{t('dnd.serverSide')}</p>
           </div>
         )}
       </div>

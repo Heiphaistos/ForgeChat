@@ -7,11 +7,12 @@ import api, { SERVER_URL } from '../api/client'
 import { passwordProof } from '../e2e/accountKey'
 import { useMobile } from '../contexts/MobileContext'
 import { useSiteAdmin, useSiteAdminInfo } from '../hooks/useSiteAdmin'
+import { HealthTab, SecurityTab } from '../components/admin/HealthTabs'
 
 /** Administration du site : comptes, invitations, bannissements, réglages, journal. */
 
-type Tab = 'overview' | 'users' | 'servers' | 'invites' | 'settings' | 'audit'
-const TABS: [Tab, string][] = [['overview', 'Aperçu'], ['users', 'Comptes'], ['servers', 'Serveurs'], ['invites', 'Invitations'], ['settings', 'Réglages'], ['audit', 'Journal']]
+type Tab = 'overview' | 'health' | 'security' | 'users' | 'servers' | 'invites' | 'settings' | 'audit'
+const TABS: [Tab, string][] = [['overview', 'Aperçu'], ['health', 'Santé'], ['security', 'Sécurité'], ['users', 'Comptes'], ['servers', 'Serveurs'], ['invites', 'Invitations'], ['settings', 'Réglages'], ['audit', 'Journal']]
 
 interface Overview {
   total_users: number; online_now: number; new_24h: number; new_7d: number; new_30d: number
@@ -382,6 +383,8 @@ export default function SiteAdminPage() {
           ))}
         </div>
         {tab === 'overview' && <OverviewTab />}
+        {tab === 'health' && <HealthTab />}
+        {tab === 'security' && <SecurityTab />}
         {tab === 'users' && <UsersTab />}
         {tab === 'servers' && <ServersTab />}
         {tab === 'invites' && <InvitesTab />}

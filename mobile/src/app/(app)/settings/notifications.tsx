@@ -1,6 +1,6 @@
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { useState } from 'react'
-import { Alert, Platform, ScrollView, View } from 'react-native'
+import { Alert, Platform, Pressable, ScrollView, Text, View } from 'react-native'
 import { emailPrefsKey, settingsApi, settingsKey, type ServerSideSettings } from '@/api/settings'
 import { usersApi } from '@/api/users'
 import { Button, Row, Section, SwitchRow, TextField } from '@/components/ui'
@@ -8,7 +8,7 @@ import { PUSH_AVAILABLE } from '@/config/env'
 import { isHHMM, toHHMM } from '@/features/account/rules'
 import { keepConnectedEnabled } from '@/features/notifications/backgroundRules'
 import { t as tr, useT } from '@/i18n'
-import { errorMessage } from '@/lib/http'
+import { errorMessage, http } from '@/lib/http'
 import { queryClient } from '@/lib/queryClient'
 import { useKeepAlive } from '@/services/keepAlive'
 import { useAuth } from '@/stores/auth'
@@ -100,12 +100,35 @@ function FocusMode() {
   )
 }
 
+interface DndSchedule { enabled: boolean; days: number; start_min: number; end_min: number; tz: string; allow_favorites: boolean }
+const DAY_KEYS = ['dnd.mon', 'dnd.tue', 'dnd.wed', 'dnd.thu', 'dnd.fri', 'dnd.sat', 'dnd.sun'] as const
+const toMin = (hm: string) => {
+  const [h, m] = hm.split(':').map(Number)
+  return (h || 0) * 60 + (m || 0)
+}
+
 function QuietHours() {
   const t = useT()
   const q = useQuery({ queryKey: settingsKey, queryFn: settingsApi.get })
+  // « Ne pas déranger » programmé (amélioration n° 48) : le serveur retient aussi les notifications
+  // push pendant ces plages (téléphone en veille compris), dans le fuseau de ce téléphone.
+  const dnd = useQuery({ queryKey: ['dnd-schedule'], queryFn: () => http.get<DndSchedule>('/users/me/dnd-schedule') })
   const [draft, setDraft] = useState<{ start: string; end: string } | null>(null)
   const save = useMutation({
-    mutationFn: (patch: Partial<ServerSideSettings>) => settingsApi.update(patch),
+    mutationFn: async (patch: Partial<ServerSideSettings> & { days?: number; allow_favorites?: boolean }) => {
+      const { days, allow_favorites, ...settings } = patch
+      const data = await settingsApi.update(settings)
+      await http.put('/users/me/dnd-schedule', {
+        enabled: data.quiet_hours_enabled,
+        days: days ?? dnd.data?.days ?? 127,
+        start_min: toMin(toHHMM(data.quiet_hours_start, '22:00')),
+        end_min: toMin(toHHMM(data.quiet_hours_end, '08:00')),
+        tz: Intl.DateTimeFormat().resolvedOptions().timeZone || 'Europe/Paris',
+        allow_favorites: allow_favorites ?? dnd.data?.allow_favorites ?? true,
+      }, { noQueue: true })
+      void dnd.refetch()
+      return data
+    },
     onSuccess: (data) => {
       queryClient.setQueryData(settingsKey, data)
       setDraft(null)
@@ -138,6 +161,23 @@ function QuietHours() {
               <TextField label={t('settings.notifications.end')} value={end} onChangeText={(v) => edit({ end: v })} keyboardType="numbers-and-punctuation" maxLength={5} />
             </View>
           </View>
+          <Text style={{ color: colors.textMuted }}>{t('dnd.days')}</Text>
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs }}>
+            {DAY_KEYS.map((k, i) => {
+              const days = dnd.data?.days ?? 127
+              const on = (days & (1 << i)) !== 0
+              return (
+                <Pressable key={k} accessibilityRole="button" accessibilityState={{ selected: on }}
+                  onPress={() => save.mutate({ days: days ^ (1 << i) })}
+                  style={{ paddingHorizontal: spacing.md, paddingVertical: spacing.xs, borderRadius: 8, backgroundColor: on ? colors.primary : colors.bgDeep }}>
+                  <Text style={{ color: on ? '#fff' : colors.textMuted }}>{t(k)}</Text>
+                </Pressable>
+              )
+            })}
+          </View>
+          <SwitchRow icon="star-outline" title={t('dnd.favorites')} value={dnd.data?.allow_favorites ?? true}
+            onValueChange={(v) => save.mutate({ allow_favorites: v })} />
+          <Text style={{ color: colors.textMuted }}>{t('dnd.serverSide')}</Text>
           {draft ? (
             <Button
               title={t(valid ? 'settings.notifications.saveRange' : 'settings.notifications.invalidRange')}
