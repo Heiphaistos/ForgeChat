@@ -1,6 +1,6 @@
 // Réglages > Sécurité : clé de compte E2E ; profils : code de sécurité à comparer.
 import { useEffect, useState } from 'react'
-import { Text, View } from 'react-native'
+import { Alert, Text, View } from 'react-native'
 import { Button, PasswordField, Row, Section, T } from '@/components/ui'
 import { useT } from '@/i18n'
 import { useAuth } from '@/stores/auth'
@@ -10,6 +10,8 @@ import { regenerateRecoveryCode, useAccountKey } from './accountKey'
 import * as c from './crypto'
 import { fpOf, markVerified, pinOf, trustedMembers, useKeyAlerts } from './keyPins'
 import { errorText, RecoveryCodeModal } from './E2EGate'
+import { SafetyQrImage, SafetyQrScanner } from './SafetyQr'
+import type { SafetyScan } from './safetyQr'
 
 export function E2EKeySection() {
   const t = useT()
@@ -88,6 +90,15 @@ export function SafetyCode({ userId }: { userId: string }) {
   }, [userId, ready, mine, tick, alerts])
   const code = info?.code ?? null
   const groups = code?.match(/.{5}/g) ?? []
+  // Scan en personne (amélioration n° 11) : seule une égalité stricte marque la clé vérifiée.
+  const onScan = (r: SafetyScan) => {
+    if (r === 'match' && info) {
+      void markVerified(userId, info.pub).then((ok) => { if (ok) setTick((n) => n + 1) })
+      Alert.alert(t('guard.qr.match'))
+    } else {
+      Alert.alert(t('e2e.safety.title'), t(r === 'mismatch' ? 'guard.qr.mismatch' : 'guard.qr.invalid'))
+    }
+  }
   const pad = { paddingHorizontal: spacing.lg, paddingBottom: spacing.md }
   return (
     <Section title={t('e2e.safety.title')} footer={code ? t('e2e.safety.desc') : undefined}>
@@ -96,6 +107,13 @@ export function SafetyCode({ userId }: { userId: string }) {
           ? groups.map((g, i) => <Text key={i} style={{ fontFamily: 'monospace', fontSize: 16, color: colors.text, width: '20%' }}>{g}</Text>)
           : <T variant="muted">{t(ready ? 'e2e.safety.none' : 'e2e.settings.locked')}</T>}
       </View>
+      {code ? (
+        <View style={[pad, { alignItems: 'center', gap: spacing.sm }]}>
+          <SafetyQrImage code={code} />
+          <T variant="muted">{t('guard.qr.hint')}</T>
+          {info && !info.changed ? <SafetyQrScanner code={code} onResult={onScan} /> : null}
+        </View>
+      ) : null}
       {info?.changed ? <T style={[{ color: colors.danger }, pad]}>{t('e2e.safety.changed')}</T> : null}
       {info?.verified ? <T style={[{ color: colors.success }, pad]}>{t('e2e.safety.verified')}</T> : null}
       {info && !info.changed && !info.verified ? (
