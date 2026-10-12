@@ -12,9 +12,9 @@ import { useUi } from './ui'
 import { useUnread } from './unread'
 import { classifyBootstrapFailure, SESSION_EXPIRED_NOTICE } from '@/lib/sessionNotice'
 import { t } from '@/i18n'
-import { clearAccountKey, prelogin, rememberLogin } from '@/e2e/accountKey'
-import { deriveSecrets, newKdfSalt, passwordProblem } from '@/e2e/authKdf'
-import { markMigrated, markUserMigrated } from '@/e2e/authGuard'
+import { clearAccountKey, prelogin, rememberLogin, upgradeKdf } from '@/e2e/accountKey'
+import { asKdf, deriveSecrets, newKdfSalt, passwordProblem } from '@/e2e/authKdf'
+import { guardArgon, markMigrated, markUserMigrated } from '@/e2e/authGuard'
 import { forgetOfflineData, setOfflineOwner } from '@/lib/offline'
 import { listAccounts, putAccount, takeAccount } from '@/lib/accounts'
 
@@ -139,17 +139,28 @@ export const useAuth = create<AuthState>((set, get) => {
       // dernière fois avec la nouvelle preuve, et le serveur bascule le compte.
       const pre = await prelogin(email)
       const salt = pre.legacy || !pre.kdf_salt ? newKdfSalt() : pre.kdf_salt
-      const secrets = await deriveSecrets(password, salt)
+      // Compte v1 qui migre : directement en Argon2id. Sinon : la dérivation du compte.
+      const kdf = pre.legacy ? 'argon2id' : asKdf(pre.kdf)
+      let secrets = await deriveSecrets(password, salt, kdf)
       let res: AuthResponse
       try {
         res = await authApi.login(
           email,
-          pre.legacy ? { password, auth_new: secrets.auth, kdf_salt_new: salt } : { auth: secrets.auth },
+          pre.legacy ? { password, auth_new: secrets.auth, kdf_salt_new: salt, kdf_new: 'argon2id' } : { auth: secrets.auth },
           totpCode,
         )
       } catch (e) {
         secrets.wrapKey.fill(0)
         throw e
+      }
+      // Compte encore en PBKDF2 : bascule vers Argon2id tant que le mot de passe est là (audit M3).
+      // Jeton d'accès posé d'abord : la bascule est une requête authentifiée.
+      if (kdf === 'pbkdf2') {
+        tokens.setAccessToken(res.access_token)
+        const upgraded = await upgradeKdf(res.user.id, password, secrets, email)
+        if (upgraded) { secrets.wrapKey.fill(0); secrets = upgraded }
+      } else {
+        void guardArgon(`user|${res.user.id}`, 'argon2id')
       }
       rememberLogin(password, secrets)
       void markMigrated(email) // anti-retour arrière (e2e/authGuard.ts)
@@ -161,7 +172,7 @@ export const useAuth = create<AuthState>((set, get) => {
       const problem = passwordProblem(password, [username, email])
       if (problem) throw new Error(problem)
       const kdfSalt = newKdfSalt()
-      const secrets = await deriveSecrets(password, kdfSalt)
+      const secrets = await deriveSecrets(password, kdfSalt, 'argon2id')
       try {
         await authApi.register(username, email, secrets.auth, kdfSalt, inviteCode)
       } catch (e) {

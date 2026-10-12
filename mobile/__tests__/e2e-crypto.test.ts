@@ -185,3 +185,14 @@ test('connexion v2 : master, auth, wrapKey et enveloppe v2 (NFKC), mêmes octets
   // Une phrase longue passe sans symbole.
   expect(k.passwordProblem('le chat dort sur la radio')).toBeNull()
 })
+
+test('Argon2id (audit M3) : mêmes octets que le web et que l’implémentation de référence', async () => {
+  const x = V.authArgon2
+  expect({ ...k.ARGON2 }).toEqual(x.params)
+  const s = await k.deriveSecrets(x.password, x.kdfSalt, 'argon2id')
+  expect(s.auth).toBe(x.auth)
+  expect(c.b64uEncode(s.wrapKey)).toBe(x.wrapKey)
+  expect(k.asKdf('argon2id')).toBe('argon2id')
+  expect(k.asKdf(undefined)).toBe('pbkdf2')
+  expect(k.asKdf('md5')).toBe('pbkdf2')
+}, 60_000)

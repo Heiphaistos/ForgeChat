@@ -43,6 +43,13 @@ Anti-force brute (même lot, faille H1) : compteurs Redis par IP (seul `X-Real-I
 
 Propriétaire du site (faille M2) : `fc_is_god` lit `site_settings.owner_user_id` (UUID du compte qui avait l'adresse du propriétaire à la migration 108, ou du premier compte qui prouve cette adresse), plus jamais l'e-mail : un compte supprimé puis recréé avec la même adresse n'hérite de rien.
 
+### 3.1 bis Argon2id (2026-10-12, audit M3)
+- `master` vient d'**Argon2id** (m = 19 Mio, t = 2, p = 1, 32 octets ; minimum OWASP, tenable en JavaScript pur sur mobile) au lieu de PBKDF2-SHA256 600 000 ; `auth` et `wrapKey` sortent du même HKDF. Une attaque hors ligne de l'enveloppe par un serveur compromis coûte 19 Mio de mémoire par essai : les cartes graphiques n'y gagnent presque plus rien.
+- Serveur (migration 123) : `users.kdf` (`pbkdf2` | `argon2id`), rendu par le prelogin et `GET /users/me/kdf` ; accepté à l'inscription (`kdf`), à la migration v1 (`kdf_new`), au changement et à la réinitialisation (`new_kdf`).
+- Comptes existants : juste après une connexion PBKDF2 réussie, l'appli re-dérive avec Argon2id et appelle `POST /auth/upgrade-kdf {old_auth, new_auth, new_kdf_salt, kdf, wrapped}` : preuve, sel, dérivation et clé E2E re-scellée changent ensemble ; seulement de `pbkdf2` vers `argon2id` ; sessions conservées.
+- Anti-retour : un appareil qui a vu un compte en Argon2id refuse ensuite qu'on lui annonce PBKDF2 (AUTH_DOWNGRADE), par e-mail et par compte.
+- Vecteur `authArgon2` de docs/e2e-vectors.json, recoupé avec l'implémentation de référence (argon2-cffi).
+
 ### 3.2 Enveloppes et récupération
 - À la première connexion d'une appli compatible : paire ECDH P-256 générée **sur l'appareil**.
 - Stockée sur le serveur : `public` (clair) + `wrapped` = clé privée (PKCS8 sur web, scalaire 32 o sur mobile → on stocke le **scalaire 32 octets**, le web l'importe en JWK `d`) scellée par la wrapKey (v2 ci-dessus ; v1 historique : AES-GCM(PBKDF2(mot de passe, sel)), AAD `forgechat key v1|<user_id>`).

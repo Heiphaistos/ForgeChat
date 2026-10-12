@@ -32,3 +32,15 @@ export async function guardKdf(userId: string, info: { legacy: boolean }) {
   if (!info.legacy) return markUserMigrated(userId)
   if ((await secureStateStorage.getItem(userKey(userId))) === '1') throw new Error('AUTH_DOWNGRADE')
 }
+
+/**
+ * Même principe pour la dérivation (audit 2026-10-12, M3) : un compte vu en Argon2id sur cet
+ * appareil n'accepte plus qu'on lui annonce PBKDF2 (plus faible). `subject` : e-mail, ou `user|<id>`.
+ * Identique à client/src/e2e/authGuard.ts (checkArgon).
+ */
+const argonKey = (subject: string) => `fc_v2_account_${accountTag(`argon2id|${subject}`)}`
+
+export async function guardArgon(subject: string, kdf: string | undefined) {
+  if (kdf === 'argon2id') return void (await secureStateStorage.setItem(argonKey(subject), '1'))
+  if ((await secureStateStorage.getItem(argonKey(subject))) === '1') throw new Error('AUTH_DOWNGRADE')
+}

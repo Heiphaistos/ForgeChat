@@ -6,9 +6,9 @@ import { create } from 'zustand'
 import api from '../api/client'
 import * as c from './crypto'
 import {
-  type AccountSecrets, type AnyWrapped, deriveSecrets, newKdfSalt, passwordProblem, unwrapAny, wrapKeyV2,
+  type AccountSecrets, type AnyWrapped, asKdf, deriveSecrets, newKdfSalt, passwordProblem, unwrapAny, wrapKeyV2,
 } from './authKdf'
-import { guardKdf, guardPrelogin, markMigrated } from './authGuard'
+import { guardArgon, guardKdf, guardPrelogin, markMigrated } from './authGuard'
 import { useAuth } from '../store/auth'
 import { t } from '../i18n'
 
@@ -69,7 +69,7 @@ function passwordOr(pw?: string): string {
 }
 
 // ─── Connexion v2 : sel du compte et preuve du mot de passe ─────────────────
-export interface KdfInfo { kdf_salt: string | null; legacy: boolean }
+export interface KdfInfo { kdf_salt: string | null; legacy: boolean; kdf?: string }
 
 /**
  * Sel avant connexion ; e-mail inconnu = sel factice et `legacy` (le serveur ne révèle rien).
@@ -78,6 +78,7 @@ export interface KdfInfo { kdf_salt: string | null; legacy: boolean }
 export async function prelogin(email: string): Promise<KdfInfo> {
   const data = (await api.post<KdfInfo>('/auth/prelogin', { email: email.trim() })).data
   await guardPrelogin(email, data)
+  if (!data.legacy) await guardArgon(email.trim().toLowerCase(), data.kdf)
   if (!data.legacy) await markMigrated(email)
   return data
 }
@@ -95,7 +96,8 @@ async function secretsFor(password: string): Promise<AccountSecrets | null> {
   // Sans compte chargé : aucun état migré connu, rien à comparer.
   if (userId) await guardKdf(userId, data).catch(() => { throw refuse() })
   if (data.legacy || !data.kdf_salt) return null
-  return deriveSecrets(password, data.kdf_salt)
+  if (userId) await guardArgon(`user|${userId}`, data.kdf).catch(() => { throw refuse() })
+  return deriveSecrets(password, data.kdf_salt, asKdf(data.kdf))
 }
 
 const proofOf = (password: string, s: AccountSecrets | null) => (s ? { auth: s.auth } : { password })
@@ -261,7 +263,7 @@ export async function changePassword(userId: string, oldPw: string, newPw: strin
   if (problem) throw new Error(problem)
   const old = await secretsFor(oldPw)
   const newSalt = newKdfSalt()
-  const next = await deriveSecrets(newPw, newSalt)
+  const next = await deriveSecrets(newPw, newSalt, 'argon2id')
   try {
     let wrapped: AnyWrapped | null = null
     const k = await fetchKeys()
@@ -274,11 +276,38 @@ export async function changePassword(userId: string, oldPw: string, newPw: strin
     }
     await api.post('/auth/change-password', {
       ...(old ? { old_auth: old.auth } : { old_password: oldPw }),
-      new_auth: next.auth, new_kdf_salt: newSalt, wrapped,
+      new_auth: next.auth, new_kdf_salt: newSalt, new_kdf: 'argon2id', wrapped,
     })
+    await guardArgon(`user|${userId}`, 'argon2id')
   } finally {
     next.wrapKey.fill(0)
     if (old !== typed?.secrets) old?.wrapKey.fill(0)
+  }
+}
+
+/**
+ * Juste après une connexion PBKDF2 réussie : le compte passe à Argon2id (même mot de passe,
+ * nouveau sel, clé E2E re-scellée), en une requête atomique. Rend les nouveaux secrets, ou null
+ * si la bascule n'a pas pu se faire (on réessaiera à la prochaine connexion).
+ */
+export async function upgradeKdf(userId: string, password: string, old: AccountSecrets, email?: string): Promise<AccountSecrets | null> {
+  const salt = newKdfSalt()
+  const next = await deriveSecrets(password, salt, 'argon2id')
+  try {
+    let wrapped: AnyWrapped | null = null
+    const k = await fetchKeys()
+    if (k) {
+      const priv = await unwrapAny(k.wrapped, password, old, userId)
+      wrapped = await wrapKeyV2(priv, next.wrapKey, userId)
+      priv.fill(0)
+    }
+    await api.post('/auth/upgrade-kdf', { old_auth: old.auth, new_auth: next.auth, new_kdf_salt: salt, kdf: 'argon2id', wrapped })
+    await guardArgon(`user|${userId}`, 'argon2id')
+    if (email) await guardArgon(email.trim().toLowerCase(), 'argon2id')
+    return next
+  } catch {
+    next.wrapKey.fill(0)
+    return null
   }
 }
 

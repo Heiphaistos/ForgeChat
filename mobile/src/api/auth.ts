@@ -44,7 +44,7 @@ export const authApi = {
   register: (username: string, email: string, auth: string, kdfSalt: string, inviteCode?: string) =>
     http.post<{ pending: boolean }>(
       '/auth/register',
-      { username: username.trim(), email: email.trim().toLowerCase(), auth, kdf_salt: kdfSalt, ...(inviteCode?.trim() ? { invite_code: inviteCode.trim() } : {}) },
+      { username: username.trim(), email: email.trim().toLowerCase(), auth, kdf_salt: kdfSalt, kdf: 'argon2id', ...(inviteCode?.trim() ? { invite_code: inviteCode.trim() } : {}) },
       { auth: false },
     ),
 
@@ -69,7 +69,7 @@ export const authApi = {
   /** Jeton à usage unique (30 min) reçu par e-mail ; révoque toutes les sessions. */
   /** Le nouveau mot de passe ne part pas : sa preuve (`auth`) et son sel seulement (authKdf.ts). */
   resetPassword: (token: string, newAuth: string, newKdfSalt: string) =>
-    http.post('/auth/reset-password', { token, new_auth: newAuth, new_kdf_salt: newKdfSalt }, { auth: false }),
+    http.post('/auth/reset-password', { token, new_auth: newAuth, new_kdf_salt: newKdfSalt, new_kdf: 'argon2id' }, { auth: false }),
 
   /** Double authentification (handlers/totp.rs). Le secret n'est actif qu'après `confirmTotp`. */
   setupTotp: () => http.post<TotpSetup>('/auth/2fa/setup'),

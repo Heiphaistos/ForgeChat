@@ -242,3 +242,25 @@ test('connexion v2 : master, auth, wrapKey et enveloppe v2 (NFKC)', async () => 
   const other = await deriveSecrets('autre mot de passe', x.kdfSalt, x.iterations)
   await assert.rejects(unwrapKeyV2(x.wrapped, other.wrapKey, x.userId))
 })
+
+test('Argon2id (audit M3) : vecteur commun, vérifié par l’implémentation de référence', async () => {
+  const { deriveSecrets, ARGON2 } = await import('../src/e2e/authKdf.ts')
+  const x = V.authArgon2
+  assert.deepEqual({ ...ARGON2 }, x.params)
+  const s = await deriveSecrets(x.password, x.kdfSalt, 'argon2id')
+  assert.equal(s.auth, x.auth)
+  assert.equal(e(s.wrapKey), x.wrapKey)
+  // Jamais confondu avec PBKDF2.
+  assert.notEqual((await deriveSecrets(x.password, x.kdfSalt, 1000)).auth, x.auth)
+})
+
+test('anti-retour PBKDF2 pour un compte vu en Argon2id', async () => {
+  const { checkArgon } = await import('../src/e2e/authGuard.ts')
+  const tags = new Set()
+  const store = { has: async t => tags.has(t), add: async t => { tags.add(t) } }
+  await checkArgon(store, 'a@gmail.com', 'pbkdf2') // jamais vu : accepté
+  await checkArgon(store, 'a@gmail.com', 'argon2id')
+  await assert.rejects(checkArgon(store, 'a@gmail.com', 'pbkdf2'), /AUTH_DOWNGRADE/)
+  await assert.rejects(checkArgon(store, 'a@gmail.com', undefined), /AUTH_DOWNGRADE/)
+  await checkArgon(store, 'b@gmail.com', 'pbkdf2')
+})
