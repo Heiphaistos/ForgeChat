@@ -60,7 +60,6 @@ export const fr = {
   'auth.login.submitting': 'Connexion...',
   'auth.login.verifyCode': 'Valider le code',
   'auth.login.submit': 'Se connecter',
-  'auth.login.rememberMe': 'Se souvenir de moi sur cet appareil',
   'auth.login.noAccount': 'Pas de compte ?',
   'auth.login.signUp': "S'inscrire",
   'auth.login.forgot': 'Mot de passe oublié ?',

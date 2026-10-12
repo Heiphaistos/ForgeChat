@@ -1,9 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { LegalLinks } from './LegalPages'
 import { Eye, EyeOff } from 'lucide-react'
-import { useAuth, rememberOnDevice, setRememberOnDevice } from '../store/auth'
-import { rememberedLogin } from '../lib/localSession'
+import { useAuth } from '../store/auth'
 import toast from 'react-hot-toast'
 import Logo3D from '../components/Logo3D'
 import { useT } from '../i18n'
@@ -24,13 +23,6 @@ export default function LoginPage() {
   // Options de clé d'accès renvoyées avec `totp_required` (compte qui en a, navigateur compatible).
   const [passkeyOptions, setPasskeyOptions] = useState<Record<string, any> | null>(null)
   const [loading, setLoading] = useState(false)
-  const [remember, setRemember] = useState(rememberOnDevice)
-  // Bureau : identifiants mémorisés (trousseau de l'OS) quand la reconnexion automatique a demandé
-  // la double authentification ou n'a pas pu joindre le serveur.
-  useEffect(() => {
-    if (!isTauri || !rememberOnDevice()) return
-    void rememberedLogin().then(r => { if (r?.email) { setEmail(r.email); setPassword(r.password) } })
-  }, [])
   const { login } = useAuth()
   const nav = useNavigate()
   const [searchParams] = useSearchParams()
@@ -184,13 +176,6 @@ export default function LoginPage() {
                 {t('auth.login.back')}
               </button>
             </div>
-          )}
-
-          {isTauri && !needTotp && (
-            <label className="flex items-center gap-2 text-sm text-fc-muted cursor-pointer select-none">
-              <input type="checkbox" checked={remember} onChange={e => { setRemember(e.target.checked); setRememberOnDevice(e.target.checked) }} className="accent-fc-accent" />
-              {t('auth.login.rememberMe')}
-            </label>
           )}
 
           <button

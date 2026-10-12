@@ -9,8 +9,7 @@ import { desktopInvoke, errText } from '../../lib/desktop'
 import { dragDropEnabled, setDragDropEnabled } from '../../lib/dragDropGuard'
 import { isStreamingSoftwareRunning } from '../../lib/streamingSoftware'
 import { Select, Toggle } from './shared'
-import { forgetRememberedLogin, sessionStorageStatus } from '../../lib/localSession'
-import { rememberOnDevice, setRememberOnDevice } from '../../store/auth'
+import { sessionStorageStatus } from '../../lib/localSession'
 
 interface SystemState {
   close_to_tray: boolean
@@ -45,7 +44,6 @@ export default function SystemSection({ onOpenKeybindings }: { onOpenKeybindings
   const [dnd, setDnd] = useState(dragDropEnabled)
   const [stream, setStream] = useState<boolean | null>(null)
   const [vault, setVault] = useState<string | null>(null)
-  const [remember, setRemember] = useState(rememberOnDevice)
 
   useEffect(() => {
     desktopInvoke<SystemState>('system_get')
@@ -135,13 +133,6 @@ export default function SystemSection({ onOpenKeybindings }: { onOpenKeybindings
 
       <section className="space-y-2">
         <H>{t('system.session.title')}</H>
-        <Row label={t('auth.login.rememberMe')} hint={t('system.session.rememberHint')}>
-          <Toggle
-            value={remember}
-            onChange={v => { setRemember(v); setRememberOnDevice(v); if (!v) void forgetRememberedLogin() }}
-            label={t('auth.login.rememberMe')}
-          />
-        </Row>
         {vault && (
           <Row label={t('system.session.vault')} hint={t(`system.session.vault.${vault === 'os' || vault === 'file' ? vault : 'memory'}`)}>
             <span className={`text-xs font-semibold ${vault === 'memory' ? 'text-red-400' : 'text-green-400'}`}>{vault === 'memory' ? '✗' : '✓'}</span>

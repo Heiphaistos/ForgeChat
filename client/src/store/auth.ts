@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { immer } from 'zustand/middleware/immer'
 import api from '../api/client'
-import { clearLocalSession, migrateLegacySession, rememberLoginOnDevice, rememberedLogin, forgetRememberedLogin, resumeSession, storeSession } from '../lib/localSession'
+import { clearLocalSession, migrateLegacySession, resumeSession, storeSession } from '../lib/localSession'
 import { useChat, useDraft } from './chat'
 import { usePresence } from './presence'
 import { useUnread } from './unread'
@@ -20,10 +20,6 @@ import { guardArgon, markMigrated, markUserMigrated } from '../e2e/authGuard'
 
 const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
 
-/** Bureau : « Se souvenir de moi » (coché par défaut). Préférence de l'appareil, pas un secret. */
-const REMEMBER_PREF = 'fc_remember_login'
-export const rememberOnDevice = () => { try { return localStorage.getItem(REMEMBER_PREF) !== '0' } catch { return true } }
-export const setRememberOnDevice = (on: boolean) => { try { localStorage.setItem(REMEMBER_PREF, on ? '1' : '0') } catch { /* stockage indisponible */ } }
 
 interface User {
   id: string
@@ -90,13 +86,7 @@ export const useAuth = create<AuthState>()(
       if (typeof data?.user?.id === 'string') void markUserMigrated(data.user.id)
       // Web : jetons dans les cookies HttpOnly (automatiques via withCredentials)
       // Tauri : accès en mémoire, rafraîchissement dans le trousseau de l'OS (côté Rust)
-      if (isTauri) {
-        await storeSession(data.access_token, data.refresh_token)
-        // Identifiants au trousseau de l'OS : si la session de rafraîchissement est perdue (trousseau
-        // verrouillé au démarrage, jeton révoqué), la reconnexion se fait seule au prochain lancement.
-        if (rememberOnDevice()) void rememberLoginOnDevice(email, password)
-        else void forgetRememberedLogin()
-      }
+      if (isTauri) await storeSession(data.access_token, data.refresh_token)
       // Compte encore en PBKDF2 : bascule vers Argon2id tant que le mot de passe est là (audit M3).
       if (kdf === 'pbkdf2' && typeof data?.user?.id === 'string') {
         const upgraded = await upgradeKdf(data.user.id, password, secrets, email)
@@ -155,10 +145,7 @@ export const useAuth = create<AuthState>()(
       if (isTauri) {
         await migrateLegacySession()
         // Jamais de /users/me sans jeton : son 401 passait pour un refus et effaçait la session.
-        if (!(await resumeSession())) {
-          if (!(await loginWithRemembered())) set(s => { s.loading = false })
-          return
-        }
+        if (!(await resumeSession())) { set(s => { s.loading = false }); return }
       }
       // Réseau instable au lancement (réveil de veille, Wi-Fi qui s'accroche) : on réessaie un peu avant
       // d'abandonner, et on ne touche JAMAIS à la session sur une simple erreur réseau.
@@ -171,10 +158,7 @@ export const useAuth = create<AuthState>()(
           const status = err?.response?.status
           if ((status === 401 || status === 403) && !err?.sessionKept) {
             // Refus définitif (l'intercepteur a déjà tenté le rafraîchissement).
-            if (isTauri) {
-              await clearLocalSession()
-              if (await loginWithRemembered()) return
-            }
+            if (isTauri) await clearLocalSession()
             break
           }
           if (attempt >= 3) {
@@ -191,26 +175,6 @@ export const useAuth = create<AuthState>()(
     updateMe: (data) => set(s => { if (s.user) Object.assign(s.user, data) }),
   }))
 )
-
-/**
- * Bureau : reconnexion avec les identifiants du trousseau. Mot de passe refusé : ils sont oubliés ;
- * double authentification demandée ou réseau absent : l'écran de connexion s'affiche, prérempli.
- */
-async function loginWithRemembered(): Promise<boolean> {
-  if (!isTauri || !rememberOnDevice()) return false
-  const saved = await rememberedLogin()
-  if (!saved?.email || !saved.password) return false
-  try {
-    await useAuth.getState().login(saved.email, saved.password)
-    useAuth.setState({ loading: false })
-    return true
-  } catch (err: any) {
-    const status = err?.response?.status
-    const totp = err?.response?.data?.error === 'totp_required'
-    if (status === 401 && !totp) await forgetRememberedLogin()
-    return false
-  }
-}
 
 // Bureau : la session enregistrée reprend d'elle-même quand le réseau revient (lancement hors ligne).
 if (isTauri && typeof window !== 'undefined') {

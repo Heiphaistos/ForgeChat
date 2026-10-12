@@ -288,54 +288,6 @@ mod tests {
     }
 }
 
-const REMEMBER: &str = "login:remembered";
-
-#[derive(serde::Serialize, serde::Deserialize)]
-pub struct Remembered {
-    pub email: String,
-    pub password: String,
-}
-
-fn encode_remembered(r: &Remembered) -> Option<String> {
-    use base64::Engine;
-    let json = serde_json::to_vec(r).ok()?;
-    Some(base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(json))
-}
-
-fn decode_remembered(s: &str) -> Option<Remembered> {
-    use base64::Engine;
-    let bytes = base64::engine::general_purpose::URL_SAFE_NO_PAD
-        .decode(s)
-        .ok()?;
-    serde_json::from_slice(&bytes).ok()
-}
-
-#[tauri::command]
-pub async fn login_remember(email: String, password: String) -> Result<(), String> {
-    if email.is_empty()
-        || email.len() > 254
-        || !email.contains('@')
-        || password.is_empty()
-        || password.len() > 512
-    {
-        return Err("INVALID_LOGIN".into());
-    }
-    let enc = encode_remembered(&Remembered { email, password }).ok_or("INVALID_LOGIN")?;
-    kr_set(REMEMBER.into(), enc).await
-}
-
-#[tauri::command]
-pub async fn login_remembered() -> Option<Remembered> {
-    kr_get(REMEMBER.into())
-        .await
-        .and_then(|s| decode_remembered(&s))
-}
-
-#[tauri::command]
-pub async fn login_forget() -> Result<(), String> {
-    kr_del(REMEMBER.into()).await
-}
-
 /// Où la session est gardée : `os` (trousseau du système), `file` (repli chiffré Linux) ou
 /// `memory` (rien ne survivra à la fermeture) — affiché dans Paramètres > Système.
 #[tauri::command]
@@ -347,25 +299,4 @@ pub async fn session_storage_status() -> String {
     })
     .await
     .unwrap_or_else(|_| "memory".into())
-}
-
-#[cfg(test)]
-mod remember_tests {
-    use super::*;
-
-    #[test]
-    fn remembered_round_trip_survives_any_password() {
-        let r = Remembered {
-            email: "a@b.c".into(),
-            password: "mot de passe éàü \" { } 🔑".into(),
-        };
-        let enc = encode_remembered(&r).unwrap();
-        assert!(valid_token(&enc), "rangé comme un jeton (ASCII imprimable)");
-        let back = decode_remembered(&enc).unwrap();
-        assert_eq!(
-            (back.email.as_str(), back.password.as_str()),
-            ("a@b.c", r.password.as_str())
-        );
-        assert!(decode_remembered("pas du base64 !").is_none());
-    }
 }
