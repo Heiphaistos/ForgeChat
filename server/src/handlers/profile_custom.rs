@@ -59,6 +59,7 @@ pub async fn store_image(state: &AppState, dir: &'static str, data: &[u8]) -> Re
     let name = format!("{}{}.{}", if still.is_some() { "a_" } else { "" }, Uuid::new_v4(), probe.ext);
     let folder = std::path::Path::new(&state.config.upload_dir).join(dir);
     tokio::fs::create_dir_all(&folder).await.map_err(|e| AppError::Internal(e.into()))?;
+    crate::antivirus::check(&data).await?;
     if let Some(still) = still {
         tokio::fs::write(folder.join(still_name(&name)), still).await.map_err(|e| AppError::Internal(e.into()))?;
     }

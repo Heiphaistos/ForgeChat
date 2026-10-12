@@ -147,6 +147,7 @@ pub async fn create_sticker(
                 let file_id = Uuid::new_v4();
                 let filename = format!("sticker_{}.{}", file_id, ext);
                 let file_path = upload_dir.join(&filename);
+                crate::antivirus::check(&data).await?;
                 tokio::fs::write(&file_path, &data).await
                     .map_err(|e| AppError::Internal(e.into()))?;
                 sticker_url = Some(format!("/uploads/stickers/{}", filename));

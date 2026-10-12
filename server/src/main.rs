@@ -20,6 +20,9 @@ mod cookies;
 mod security_events;
 mod webauthn;
 mod key_log;
+mod antivirus;
+#[cfg(test)]
+mod fuzz_props;
 
 use axum::{
     middleware as axum_middleware,

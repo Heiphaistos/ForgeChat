@@ -839,6 +839,7 @@ pub async fn upload_server_icon(
         if let Some(parent) = path.parent() {
             tokio::fs::create_dir_all(parent).await.map_err(|e| AppError::Internal(e.into()))?;
         }
+        crate::antivirus::check(&data).await?;
         tokio::fs::write(&path, &data).await.map_err(|e| AppError::Internal(e.into()))?;
         let icon_url = format!("/uploads/{}", filename);
         sqlx::query("UPDATE servers SET icon=$2 WHERE id=$1")
@@ -881,6 +882,7 @@ pub async fn upload_server_banner(
         if let Some(parent) = path.parent() {
             tokio::fs::create_dir_all(parent).await.map_err(|e| AppError::Internal(e.into()))?;
         }
+        crate::antivirus::check(&data).await?;
         tokio::fs::write(&path, &data).await.map_err(|e| AppError::Internal(e.into()))?;
         let banner_url = format!("/uploads/{}", filename);
         sqlx::query("UPDATE servers SET banner=$2 WHERE id=$1")

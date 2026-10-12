@@ -4,6 +4,7 @@ import { googleServicesFile } from './plugins/googleServices.js'
 import { distributedServerConfig } from './plugins/serverConfig.js'
 import { versionCodeOf } from './plugins/versionCode.js'
 import withLanCleartext from './plugins/withLanCleartext.js'
+import withCertPinning from './plugins/withCertPinning.js'
 import withPictureInPicture from './plugins/withPictureInPicture.js'
 import withReleaseSigning from './plugins/withReleaseSigning.js'
 import withScreenShare from './plugins/withScreenShare.js'
@@ -94,8 +95,11 @@ export default (ctx: ConfigContext): ExpoConfig => {
   if (APP_ENV === 'lan') return withLanCleartext(expoConfig, { host: LAN_CLEARTEXT_HOST })
   // APK distribués (APK DEV, bêta) : signés avec la clé de release hors dépôt, jamais la clé debug.
   // (et sans chemin de la machine de build dans les bibliothèques natives).
-  if (APP_ENV === 'production') return withoutDevClientScheme(withStripBuildPaths(withReleaseSigning(expoConfig)))
-  if (APP_ENV === 'preview') return withStripBuildPaths(withReleaseSigning(expoConfig))
+  // Applis distribuées : autorités de certification du serveur épinglées (plugins/withCertPinning.js).
+  if (APP_ENV === 'production') {
+    return withCertPinning(withoutDevClientScheme(withStripBuildPaths(withReleaseSigning(expoConfig))), { apiUrl: API_URL })
+  }
+  if (APP_ENV === 'preview') return withCertPinning(withStripBuildPaths(withReleaseSigning(expoConfig)), { apiUrl: API_URL })
   return expoConfig
 }
 

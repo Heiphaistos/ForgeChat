@@ -1,0 +1,30 @@
+# Fuzzing guidé par la couverture (audit 2026-10-12, amélioration n° 22). Chaîne nightly :
+#   cd server/fuzz && cargo +nightly fuzz run webauthn -- -max_total_time=300
+# Le module est inclus tel quel (#[path]) : c'est exactement le code du serveur qui est fuzzé.
+# Les propriétés équivalentes tournent en stable avec `cargo test` (src/fuzz_props.rs).
+[package]
+name = "forgechat-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2021"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+base64 = "0.22"
+ciborium = "0.2"
+p256 = { version = "0.13", default-features = false, features = ["ecdsa", "std"] }
+sha2 = "0.10"
+rand = "0.8"
+serde_json = "1"
+
+[[bin]]
+name = "webauthn"
+path = "fuzz_targets/webauthn.rs"
+test = false
+doc = false
+bench = false
+
+[workspace]

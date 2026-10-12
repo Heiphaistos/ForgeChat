@@ -266,7 +266,14 @@ pub async fn upload_role_icon(
     tokio::fs::create_dir_all(&upload_dir).await.map_err(|e| AppError::Internal(e.into()))?;
     let url = format!("{ROLE_ICON_PREFIX}{}.{ext}", Uuid::new_v4());
     let filename = url.trim_start_matches("/uploads/");
-    crate::handlers::uploads::save_field(field, &upload_dir.join(filename), 256 * 1024).await?;
+    let path = upload_dir.join(filename);
+    crate::handlers::uploads::save_field(field, &path, 256 * 1024).await?;
+    // Antivirus (amélioration n° 19) : fichier infecté effacé aussitôt.
+    let bytes = tokio::fs::read(&path).await.map_err(|e| AppError::Internal(e.into()))?;
+    if let Err(e) = crate::antivirus::check(&bytes).await {
+        let _ = tokio::fs::remove_file(&path).await;
+        return Err(e);
+    }
 
     let role = sqlx::query_as::<_, Role>("UPDATE roles SET icon=$3 WHERE id=$1 AND server_id=$2 RETURNING *")
         .bind(role_id).bind(server_id).bind(&url)

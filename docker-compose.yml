@@ -94,6 +94,9 @@ services:
       RETENTION_PUSH_DEVICES_DAYS: ${RETENTION_PUSH_DEVICES_DAYS:-60}
       RETENTION_AUDIT_LOG_DAYS: ${RETENTION_AUDIT_LOG_DAYS:-90}
       RETENTION_REPORTS_DAYS: ${RETENTION_REPORTS_DAYS:-90}
+      # Antivirus facultatif des fichiers en clair (avatars, émojis…) : tcp:hôte:3310 ou unix:/chemin.
+      CLAMAV_ADDR: ${CLAMAV_ADDR:-}
+      CLAMAV_REQUIRED: ${CLAMAV_REQUIRED:-false}
     volumes:
       - uploads:/app/uploads
       # Artefacts et manifeste des applications de bureau, deposes sur l'hote.
