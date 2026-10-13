@@ -106,7 +106,11 @@ export async function prepareFiles(kind: ConvKind, id: string, files: PendingUpl
   if (!files.length) return { form, bytes, count: 0 }
   const encrypt = await mustEncrypt(kind, id)
   const entries: c.FileEntry[] = []
+  let ttl: number | null = null
   for (const { file, ttlHours } of files) {
+    // Le serveur applique le dernier `ttl_hours` lu aux fichiers qui SUIVENT (handlers/uploads.rs) :
+    // il part avant le fichier quand il change, vide (= sans expiration) pour remettre à zéro.
+    if ((ttlHours ?? null) !== ttl) { form.append('ttl_hours', ttlHours != null ? String(ttlHours) : ''); ttl = ttlHours ?? null }
     if (encrypt) {
       const sealed = await sealFile(file)
       entries.push(sealed.entry)
@@ -116,7 +120,6 @@ export async function prepareFiles(kind: ConvKind, id: string, files: PendingUpl
       form.append('files', file)
       bytes += file.size
     }
-    if (ttlHours != null) form.append('ttl_hours', String(ttlHours))
   }
   return { ...(encrypt ? { entries } : {}), form, bytes, count: files.length }
 }
