@@ -15,8 +15,17 @@ pkg-config --exists webkit2gtk-4.1 || { echo "[ERREUR] libwebkit2gtk-4.1-dev man
 # qui exige clang 21 ou plus récent (« hermetic libc++ ... requires clang 21 »).
 # Ubuntu 22.04 n'a que clang 14 : installer par https://apt.llvm.org/llvm.sh 21
 # puis libc++-21-dev.
-command -v clang++-21 >/dev/null || { echo "[ERREUR] clang 21 manquant : wget https://apt.llvm.org/llvm.sh && sudo bash llvm.sh 21 && sudo apt install libc++-21-dev"; exit 1; }
-export CC=clang-21 CXX=clang++-21
+# Arch / Omarchy : le clang du système (22 en 2026-10) suffit.
+if command -v clang++-21 >/dev/null; then
+    export CC=clang-21 CXX=clang++-21
+elif command -v clang++ >/dev/null && [ "$(clang++ -dumpversion | cut -d. -f1)" -ge 21 ]; then
+    export CC=clang CXX=clang++
+else
+    echo "[ERREUR] clang 21 manquant : wget https://apt.llvm.org/llvm.sh && sudo bash llvm.sh 21 && sudo apt install libc++-21-dev (Arch : sudo pacman -S clang)"; exit 1
+fi
+# Arch / Omarchy (makepkg présent) : seul le .deb sert, repris tel quel dans le
+# paquet pacman (arch/PKGBUILD). FORGECHAT_BUNDLES force une autre liste.
+if command -v makepkg >/dev/null; then BUNDLES="${FORGECHAT_BUNDLES:-deb}"; else BUNDLES="${FORGECHAT_BUNDLES:-deb,rpm,appimage}"; fi
 # Compiler hors de /mnt/c (WSL) : plusieurs fois plus rapide.
 export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-$HOME/.cache/forgechat-target}"
 
@@ -44,8 +53,8 @@ echo "[2/4] Installation deps desktop..."
 cd "$SCRIPT_DIR"
 npm install --silent
 
-echo "[3/4] Compilation Tauri (deb + rpm + appimage)..."
-npx tauri build --bundles deb,rpm,appimage
+echo "[3/4] Compilation Tauri ($BUNDLES)..."
+npx tauri build --bundles "$BUNDLES"
 
 echo "[4/4] Copie des artefacts dans dist-desktop/..."
 mkdir -p "$OUT"
@@ -106,6 +115,12 @@ if [ -n "$APPIMAGE_SRC" ]; then
     echo "[OK] AppImage   : dist-desktop/ForgeChat-v$VERSION-amd64.AppImage"
 else
     echo "[WARN] AppImage non trouve dans $BUNDLE/appimage/"
+fi
+
+# Arch, Omarchy, Manjaro, EndeavourOS : paquet pacman tire du .deb (meme binaire).
+if command -v makepkg >/dev/null && [ -f "$OUT/ForgeChat-v$VERSION-amd64.deb" ]; then
+    bash "$SCRIPT_DIR/arch/paquet.sh" "$OUT/ForgeChat-v$VERSION-amd64.deb" "$OUT/ForgeChat-v$VERSION-x86_64.pkg.tar.zst"
+    echo "[OK] .pkg.tar.zst : dist-desktop/ForgeChat-v$VERSION-x86_64.pkg.tar.zst"
 fi
 
 echo

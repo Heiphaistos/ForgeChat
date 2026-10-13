@@ -1,0 +1,3 @@
+- Nouvelle version pour Arch Linux et Omarchy (paquet pacman `.pkg.tar.zst`), avec mise à jour automatique
+- Linux : relancer ForgeChat alors qu'il est déjà ouvert ne fait plus basculer le lancement suivant en mode compatibilité
+- Pièces jointes : les paquets Arch, Flatpak, Snap et les scripts bash, zsh et fish demandent toujours où les enregistrer

@@ -45,6 +45,7 @@ declare -A ARTEFACTS=(
     [windows-portable]="ForgeChat-Portable-v$VERSION.exe"
     [linux-x86_64]="ForgeChat-v$VERSION-amd64.deb"
     [linux-rpm]="ForgeChat-v$VERSION-x86_64.rpm"
+    [linux-arch]="ForgeChat-v$VERSION-x86_64.pkg.tar.zst"
     [linux-portable]="ForgeChat-v$VERSION-amd64.AppImage"
 )
 
@@ -75,7 +76,7 @@ for cible in "${!ARTEFACTS[@]}"; do
     ' "$PLATFORMS" "$cible" "${ARTEFACTS[$cible]}" "$sha" "$taille")"
 done
 
-if [ "$MANQUANTS" -eq 4 ]; then
+if [ "$MANQUANTS" -eq "${#ARTEFACTS[@]}" ]; then
     echo "[ERREUR] Aucun artefact trouve dans $OUT pour la version $VERSION."
     exit 1
 fi

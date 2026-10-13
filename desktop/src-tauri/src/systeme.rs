@@ -209,13 +209,17 @@ const EXTENSIONS_EXECUTABLES: &[&str] = &[
     "exe", "com", "scr", "pif", "bat", "cmd", "msi", "msix", "msp", "appx", "appxbundle", "ps1", "psm1",
     "vbs", "vbe", "js", "jse", "wsf", "wsh", "hta", "cpl", "lnk", "url", "reg", "inf", "scf", "jar",
     "dll", "sys", "iso", "img", "vhd", "vhdx", "chm", "xll", "app", "command", "pkg", "dmg", "sh",
-    "run", "appimage", "deb", "rpm", "desktop", "py", "pl",
+    "run", "appimage", "deb", "rpm", "desktop", "py", "pl", "bash", "zsh", "fish", "flatpak", "flatpakref",
+    "snap",
 ];
 
 fn extension_executable(nom: &str) -> bool {
-    nom.rsplit_once('.')
-        .map(|(_, ext)| EXTENSIONS_EXECUTABLES.contains(&ext.to_ascii_lowercase().as_str()))
-        .unwrap_or(false)
+    // Paquet pacman (Arch, Omarchy) : double extension `.pkg.tar.zst`, `.pkg.tar.xz`…
+    nom.to_ascii_lowercase().contains(".pkg.tar.")
+        || nom
+            .rsplit_once('.')
+            .map(|(_, ext)| EXTENSIONS_EXECUTABLES.contains(&ext.to_ascii_lowercase().as_str()))
+            .unwrap_or(false)
 }
 
 /// « Téléchargé d'Internet » : sous Windows le flux `Zone.Identifier` (ZoneId=3), que SmartScreen
@@ -586,10 +590,10 @@ mod tests {
 
     #[test]
     fn executables_reconnus() {
-        for n in ["setup.EXE", "facture.pdf.lnk", "a.ps1", "x.AppImage", "photo.scr"] {
+        for n in ["setup.EXE", "facture.pdf.lnk", "a.ps1", "x.AppImage", "photo.scr", "maj-1.0-1-x86_64.pkg.tar.zst", "a.PKG.TAR.XZ", "x.flatpakref"] {
             assert!(super::extension_executable(n), "{n}");
         }
-        for n in ["photo.png", "doc.pdf", "notes.txt", "sans-extension", "archive.zip"] {
+        for n in ["photo.png", "doc.pdf", "notes.txt", "sans-extension", "archive.zip", "sauvegarde.tar.zst"] {
             assert!(!super::extension_executable(n), "{n}");
         }
     }
