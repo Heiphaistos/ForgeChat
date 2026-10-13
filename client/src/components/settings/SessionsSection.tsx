@@ -4,6 +4,7 @@ import { Monitor, Smartphone, Trash2, Shield, ShieldAlert, Clock, Cpu } from 'lu
 import { useAuth } from '../../store/auth'
 import { formatDistanceToNow } from 'date-fns'
 import { useT, t as tr, dateLocale, intlLocale } from '../../i18n'
+import { confirm } from '../ui/ConfirmModal'
 
 interface Session {
   id: string
@@ -159,7 +160,7 @@ export default function SessionsSection() {
         </h3>
         <p className="text-xs text-fc-muted">{t('guard.lock.intro')}</p>
         <button
-          onClick={() => { if (window.confirm(t('guard.lock.confirm'))) lock.mutate() }}
+          onClick={() => { void confirm({ message: t('guard.lock.confirm'), danger: true, confirmLabel: t('guard.lock.button') }).then(ok => { if (ok) lock.mutate() }) }}
           disabled={lock.isPending}
           className="px-3 py-1.5 bg-fc-red rounded-lg text-white text-sm font-medium disabled:opacity-50"
         >

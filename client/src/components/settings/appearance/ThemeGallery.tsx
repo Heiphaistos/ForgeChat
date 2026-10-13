@@ -8,6 +8,7 @@ import {
 } from '../../../theme/themeCore'
 import { resolveTheme, useThemeStore } from '../../../theme/themeStore'
 import ThemePreview from './ThemePreview'
+import { confirm } from '../../ui/ConfirmModal'
 import { copyThemeCode, downloadTheme, readThemeFile } from './themeIO'
 
 type Tab = PresetGroup | 'custom'
@@ -223,7 +224,7 @@ export default function ThemeGallery({ onEdit }: { onEdit: (t: CustomTheme) => v
             <button className={iconBtn} onClick={() => copy(c)} title={t('themes.copyCode')} aria-label={t('themes.copyCode')}><Copy size={13} /></button>
             <button className={iconBtn} onClick={() => downloadTheme(c)} title={t('themes.download')} aria-label={t('themes.download')}><Download size={13} /></button>
             <button className={`${iconBtn} hover:text-fc-red`} title={t('themes.delete')} aria-label={t('themes.delete')}
-              onClick={() => { if (window.confirm(t('themes.deleteConfirm', { name: c.name }))) removeCustom(c.id) }}>
+              onClick={() => { void confirm({ message: t('themes.deleteConfirm', { name: c.name }), danger: true, confirmLabel: t('themes.delete') }).then(ok => { if (ok) removeCustom(c.id) }) }}>
               <Trash2 size={13} />
             </button>
           </Card>

@@ -10,6 +10,7 @@ import { DEFAULT_LAYOUT } from '../../theme/applyTheme'
 import { useThemeStore } from '../../theme/themeStore'
 import { FONTS, fontId } from '../../theme/fonts'
 import { Toggle } from './shared'
+import { confirm } from '../ui/ConfirmModal'
 import ThemeGallery from './appearance/ThemeGallery'
 import ThemeEditor from './appearance/ThemeEditor'
 import LayoutSettings from './appearance/LayoutSettings'
@@ -115,8 +116,8 @@ export default function AppearanceSection() {
   }
 
   /** Tout revient à l'apparence d'origine (les thèmes perso enregistrés sont conservés). */
-  const resetAll = () => {
-    if (!window.confirm(t('themes.resetAllConfirm'))) return
+  const resetAll = async () => {
+    if (!(await confirm({ message: t('themes.resetAllConfirm'), confirmLabel: t('themes.resetAll') }))) return
     const s = useThemeStore.getState()
     s.select(DEFAULT_THEME_ID)
     s.setAccent(null)
@@ -218,7 +219,7 @@ export default function AppearanceSection() {
           className="flex-1 py-2.5 bg-fc-accent hover:bg-fc-accent/80 text-white rounded-lg font-medium text-sm transition disabled:opacity-50">
           {saveMutation.isPending ? t('common.saving') : t('settings.appearance.save')}
         </button>
-        <button onClick={resetAll} className="flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-lg text-sm border border-fc-hover text-fc-muted hover:text-white">
+        <button onClick={() => { void resetAll() }} className="flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-lg text-sm border border-fc-hover text-fc-muted hover:text-white">
           <RotateCcw size={14} /> {t('themes.resetAll')}
         </button>
       </div>

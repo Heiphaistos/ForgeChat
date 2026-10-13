@@ -5,6 +5,7 @@ import toast from 'react-hot-toast'
 import api from '../../api/client'
 import { dateLocale, useT } from '../../i18n'
 import { createPasskey, passkeySupported } from '../../lib/passkey'
+import { confirm } from '../ui/ConfirmModal'
 
 interface Passkey { id: string; name: string; created_at: string; last_used_at: string | null }
 
@@ -58,7 +59,7 @@ export default function PasskeysSection() {
               </p>
             </div>
             <button
-              onClick={() => { if (window.confirm(t('guard.passkey.removeConfirm'))) remove.mutate(k.id) }}
+              onClick={() => { void confirm({ message: t('guard.passkey.removeConfirm'), danger: true, confirmLabel: t('guard.passkey.remove') }).then(ok => { if (ok) remove.mutate(k.id) }) }}
               className="p-1.5 text-fc-muted hover:text-fc-red rounded-lg hover:bg-fc-red/10"
               aria-label={t('guard.passkey.remove')}
               title={t('guard.passkey.remove')}
