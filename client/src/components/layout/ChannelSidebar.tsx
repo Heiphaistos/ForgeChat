@@ -22,6 +22,8 @@ import CreateChannelModal from '../modals/CreateChannelModal'
 import InviteModal from '../modals/InviteModal'
 import ServerSettingsModal, { type ServerSettingsTab } from '../modals/ServerSettingsModal'
 import ServerHeader from './ServerHeader'
+import { useServerAppearance } from '../../hooks/useServerAppearance'
+import { hex } from '../../lib/nameStyle'
 import ChannelSettingsModal from '../modals/ChannelSettingsModal'
 import VoicePasswordPrompt from '../modals/VoicePasswordPrompt'
 import toast from 'react-hot-toast'
@@ -110,6 +112,9 @@ export default function ChannelSidebar() {
 
   // Mentions non lues par salon (GET /unread puis MENTION_CREATE / READ_STATE_UPDATE)
   const mentionCounts = useUnread(s => s.mentionCounts)
+  // Couleur des non-lus choisie dans l'apparence du serveur.
+  const look = useServerAppearance(serverId)
+  const unreadDot = look?.unread_color != null ? { backgroundColor: hex(look.unread_color) } : undefined
   const { setSplitChannelId } = useContext(SplitContext)
 
   const { data } = useQuery({
@@ -512,7 +517,7 @@ export default function ChannelSidebar() {
               <span aria-hidden>{mentionCounts[ch.id] > 99 ? '99+' : mentionCounts[ch.id]}</span>
             </span>
           ) : unreadCounts[ch.id] > 0 && !effectiveMuted(ch.id) && (
-            <span role="status" aria-label={t('common.unreadMessages')} className="flex-shrink-0 w-2 h-2 bg-white rounded-full" />
+            <span role="status" aria-label={t('common.unreadMessages')} className="flex-shrink-0 w-2 h-2 bg-white rounded-full" style={unreadDot} />
           ))}
 
           {/* Poignée drag (visible au hover si droit de modifier les salons) */}

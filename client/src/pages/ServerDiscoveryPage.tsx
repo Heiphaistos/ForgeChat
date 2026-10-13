@@ -3,6 +3,7 @@ import { usePageTitle } from '../hooks/usePageTitle'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Search, Users, Compass, Tag, ChevronLeft, Activity, X } from 'lucide-react'
 import api, { mediaUrl } from '../api/client'
+import ProfileBanner from '../components/ui/ProfileBanner'
 import toast from 'react-hot-toast'
 import { useNavigate } from 'react-router-dom'
 import { useMobile } from '../contexts/MobileContext'
@@ -39,11 +40,11 @@ function ServerCard({ server, onOpen, onJoin, onTag, isJoining }: {
   const fmt = (n: number) => n.toLocaleString(intlLocale())
   return (
     <div className="group bg-fc-channel rounded-xl overflow-hidden hover:bg-fc-hover/20 transition-colors flex flex-col border border-transparent hover:border-fc-hover/40">
-      <button onClick={onOpen} className="relative h-28 overflow-hidden flex-shrink-0 text-left" aria-label={t('community.directory.open', { name: server.name })}>
-        {server.banner
-          ? <img src={mediaUrl(server.banner)} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
-          : <div className="w-full h-full bg-gradient-to-br from-fc-bg to-fc-channel" />}
-        <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
+      <button onClick={onOpen} className="relative block w-full flex-shrink-0 text-left" aria-label={t('community.directory.open', { name: server.name })}>
+        {/* Bannière entière, à ses proportions (bornées pour garder des cartes régulières). */}
+        <ProfileBanner src={server.banner} minHeight={96} maxHeight={160} emptyClassName="h-28 bg-gradient-to-br from-fc-bg to-fc-channel">
+          <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent pointer-events-none" />
+        </ProfileBanner>
         <div className="absolute -bottom-5 left-4 w-12 h-12 rounded-xl bg-fc-bg border-2 border-fc-channel flex items-center justify-center font-bold text-lg text-white shadow-lg overflow-hidden">
           {server.icon ? <img src={mediaUrl(server.icon)} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" /> : server.name.charAt(0).toUpperCase()}
         </div>

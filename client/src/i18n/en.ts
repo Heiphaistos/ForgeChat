@@ -14,6 +14,7 @@ import * as themesMore from './parts/themesMore.ts'
 import * as avSettings from './parts/avSettings.ts'
 import * as profileEditor from './parts/profileEditor.ts'
 import * as nameStyleMore from './parts/nameStyleMore.ts'
+import * as serverLook from './parts/serverLook.ts'
 import { profileEn } from './profileEn.ts'
 import { profileStyleEn } from './profileStyleEn.ts'
 import { socialEn } from './socialEn.ts'
@@ -43,6 +44,7 @@ export const en: Partial<Record<Key, string>> = {
   ...avSettings.en,
   ...profileEditor.en,
   ...nameStyleMore.en,
+  ...serverLook.en,
   // --- Connexion, inscription, mot de passe oublié ---
   'auth.email': 'Email',
   'auth.password': 'Password',

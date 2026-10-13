@@ -2,6 +2,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { Activity, Calendar, Hash, Tag, Users, X } from 'lucide-react'
 import api, { mediaUrl } from '../../api/client'
+import ProfileBanner from '../ui/ProfileBanner'
 import { useEscapeKey } from '../../hooks/useEscapeKey'
 import { intlLocale, useT, type Key } from '../../i18n'
 
@@ -39,8 +40,9 @@ export default function ServerProfileModal({ serverId, onClose, onJoin, joining,
   return (
     <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4" onClick={onClose} role="dialog" aria-modal="true" aria-label={s?.name ?? t('common.loading')}>
       <div className="bg-fc-channel rounded-2xl w-full max-w-lg max-h-[90dvh] overflow-y-auto shadow-2xl" onClick={e => e.stopPropagation()}>
-        <div className="relative h-32 bg-gradient-to-br from-fc-bg to-fc-accent/40">
-          {s?.banner && <img src={mediaUrl(s.banner)} alt="" className="w-full h-full object-cover" />}
+        <div className="relative">
+          {/* Bannière entière (jamais rognée) ; l'icône déborde dessous. */}
+          <ProfileBanner src={s?.banner} minHeight={96} maxHeight={260} className="rounded-t-2xl" emptyClassName="h-32 bg-gradient-to-br from-fc-bg to-fc-accent/40" />
           <button onClick={onClose} aria-label={t('common.close')} className="absolute top-2 right-2 p-2 rounded-full bg-black/40 text-white"><X size={16} /></button>
           <div className="absolute -bottom-8 left-5 w-16 h-16 rounded-2xl bg-fc-bg border-4 border-fc-channel overflow-hidden flex items-center justify-center text-2xl font-bold text-white">
             {s?.icon ? <img src={mediaUrl(s.icon)} alt="" className="w-full h-full object-cover" /> : s?.name[0]?.toUpperCase()}

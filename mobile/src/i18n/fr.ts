@@ -21,6 +21,7 @@ import * as themesMore from './parts/themesMore'
 import * as profileStyle from './parts/profileStyle'
 import * as appIcon from './parts/appIcon'
 import * as nameStyleMore from './parts/nameStyleMore'
+import * as serverLook from './parts/serverLook'
 
 export const fr = {
   ...settings.fr,
@@ -43,6 +44,7 @@ export const fr = {
   ...profileStyle.fr,
   ...appIcon.fr,
   ...nameStyleMore.fr,
+  ...serverLook.fr,
 
   // --- Commun ---
   'common.cancel': 'Annuler',

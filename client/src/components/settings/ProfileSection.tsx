@@ -4,6 +4,7 @@ import { useMutation } from '@tanstack/react-query'
 import { Camera, Trash2 } from 'lucide-react'
 import { Field } from './shared'
 import api, { mediaUrl } from '../../api/client'
+import ProfileBanner from '../ui/ProfileBanner'
 import toast from 'react-hot-toast'
 import ProfileCosmetics from './ProfileCosmetics'
 import ProfileIdentity from './ProfileIdentity'
@@ -58,17 +59,18 @@ export default function ProfileSection({ user, updateMe }: Props) {
       <div>
         <label className="block text-xs font-semibold text-fc-muted uppercase tracking-wide mb-2">{t('settings.profile.banner')}</label>
         <div
-          className="relative h-24 rounded-lg overflow-hidden cursor-pointer group border border-fc-hover hover:border-fc-accent transition"
+          className="relative rounded-lg overflow-hidden cursor-pointer group border border-fc-hover hover:border-fc-accent transition"
           onClick={() => bannerRef.current?.click()}
         >
-          {bannerPreview
-            ? <img src={mediaUrl(bannerPreview)} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
-            : <div className="w-full h-full bg-fc-channel flex items-center justify-center">
-                <div className="text-center">
-                  <Camera size={20} className="text-fc-muted mx-auto mb-1" />
-                  <p className="text-xs text-fc-muted">{t('settings.profile.addBanner')}</p>
-                </div>
-              </div>}
+          {/* Aperçu : la bannière entière, telle que les autres la verront (jamais rognée). */}
+          <ProfileBanner src={bannerPreview} minHeight={72} maxHeight={220} emptyClassName="h-24 bg-fc-channel flex items-center justify-center">
+            {!bannerPreview && (
+              <div className="text-center">
+                <Camera size={20} className="text-fc-muted mx-auto mb-1" />
+                <p className="text-xs text-fc-muted">{t('settings.profile.addBanner')}</p>
+              </div>
+            )}
+          </ProfileBanner>
           <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition flex items-center justify-center">
             <Camera size={20} className="text-white opacity-0 group-hover:opacity-100 transition" />
           </div>

@@ -10,6 +10,7 @@ import UserSocialInfo from './UserSocialInfo'
 import { AvatarDecoration, ProfileEffect, profileThemeBackground } from './ui/ProfileDecor'
 import { dateLocale, t as tr } from '../i18n'
 import AnimatedImg from './ui/AnimatedImg'
+import ProfileBanner from './ui/ProfileBanner'
 import UserName from './ui/UserName'
 import ProfileLinks from './ui/ProfileLinks'
 import { renderMarkdown } from '../utils/markdown'
@@ -145,14 +146,15 @@ export default function UserPopup({ userId, serverId, anchorX, anchorY, onClose 
     >
       {user && <ProfileEffect id={user.profile_effect} />}
       {/* Banner */}
-      <div className="h-28 relative" aria-hidden>
-        {banner
-          ? <AnimatedImg src={banner} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
-          : <div
-              className="w-full h-full"
-              style={{ background: theme ?? (user ? getUserGradient(user.username) : 'linear-gradient(135deg, #5865f2 0%, #9b59b6 100%)') }}
-            />
-        }
+      {/* Bannière entière (jamais rognée) ; l'avatar déborde dessous, hors de son cadre. */}
+      <div className="relative" aria-hidden>
+        <ProfileBanner
+          src={banner}
+          minHeight={80}
+          maxHeight={220}
+          emptyClassName="h-28"
+          emptyStyle={{ background: theme ?? (user ? getUserGradient(user.username) : 'linear-gradient(135deg, #5865f2 0%, #9b59b6 100%)') }}
+        />
         {/* Avatar */}
         <div className="absolute -bottom-12 left-4">
           <AvatarDecoration id={user?.avatar_decoration} size={84}>

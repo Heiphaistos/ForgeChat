@@ -3,6 +3,7 @@ import { Camera, Trash2 } from 'lucide-react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
 import api, { mediaUrl } from '../../api/client'
+import ProfileBanner from '../ui/ProfileBanner'
 import { useAuth } from '../../store/auth'
 import { Field, Toggle } from '../settings/shared'
 import { useT } from '../../i18n'
@@ -128,11 +129,12 @@ export default function MyServerProfileTab({ serverId }: { serverId: string }) {
           tabIndex={0}
           onClick={() => bannerRef.current?.click()}
           onKeyDown={e => { if (e.key === 'Enter') bannerRef.current?.click() }}
-          className="relative h-24 rounded-lg overflow-hidden cursor-pointer border border-fc-hover hover:border-fc-accent transition bg-fc-channel flex items-center justify-center"
+          className="relative rounded-lg overflow-hidden cursor-pointer border border-fc-hover hover:border-fc-accent transition bg-fc-channel"
         >
-          {banner
-            ? <img src={mediaUrl(banner)} alt="" className="w-full h-full object-cover" />
-            : <Camera size={20} className="text-fc-muted" />}
+          {/* Bannière entière, telle que les membres la verront. */}
+          <ProfileBanner src={banner} minHeight={72} maxHeight={220} emptyClassName="h-24 flex items-center justify-center">
+            {!banner && <Camera size={20} className="text-fc-muted" />}
+          </ProfileBanner>
           {member?.server_banner && removeBtn('banner', t('myProfile.resetBanner'))}
         </div>
         {picker('banner', bannerRef)}

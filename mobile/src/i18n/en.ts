@@ -20,6 +20,7 @@ import * as themesMore from './parts/themesMore'
 import * as profileStyle from './parts/profileStyle'
 import * as appIcon from './parts/appIcon'
 import * as nameStyleMore from './parts/nameStyleMore'
+import * as serverLook from './parts/serverLook'
 
 export const en: Partial<Record<Key, string>> = {
   ...settings.en,
@@ -42,6 +43,7 @@ export const en: Partial<Record<Key, string>> = {
   ...profileStyle.en,
   ...appIcon.en,
   ...nameStyleMore.en,
+  ...serverLook.en,
 
   // --- Commun ---
   'common.cancel': 'Cancel',

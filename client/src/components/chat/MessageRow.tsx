@@ -1,6 +1,6 @@
 import { mediaUrl } from '../../api/client'
 import { desktopDownloadClick } from '../../lib/saveFile'
-import { RoleIcon, type RoleDecor } from '../../hooks/useRoleDecor'
+import { RoleIcon, RoleMark, type RoleDecor } from '../../hooks/useRoleDecor'
 import { memo, useEffect, useRef, useState, useContext } from 'react'
 import { Pencil, Trash2, SmilePlus, MessagesSquare, Check, X, Pin, CornerUpLeft, Bot, Clock, Bookmark, Forward, Bell, Languages, Flag, Copy, Link, Loader2, Megaphone, Sparkles } from 'lucide-react'
 import { format, formatDistanceToNow } from 'date-fns'
@@ -214,6 +214,7 @@ function MessageRow({
               >
                 <UserName userId={msg.author_id} name={msg.author_username} roleStyle={roleDecor?.style} roleOverrides={roleDecor?.overridesName} serverStyle={roleDecor?.nameStyle} clanTags={roleDecor?.tags} withTag />
               </button>
+              <RoleMark mark={roleDecor?.mark} />
               <RoleIcon icon={roleDecor?.icon} title={roleDecor?.iconTitle} />
               {msg.author_verified && (
                 <span

@@ -863,47 +863,15 @@ pub async fn upload_server_icon(
     Err(AppError::BadRequest("Champ image manquant".into()))
 }
 
-/// ServerSettingsModal.tsx's "upload banner file" button called POST .../icon (the
-/// only upload endpoint that existed) -- silently overwriting the server's icon with
-/// what the admin thought was a banner upload. No banner-file endpoint ever existed;
-/// only the URL text field (banner column, via the main PATCH) worked as intended.
+/// POST /servers/:server_id/banner : vérification complète de l'image (format réel,
+/// dimensions, antivirus, animations gardées), voir handlers/server_look.rs.
 pub async fn upload_server_banner(
     State(state): State<AppState>,
     Extension(claims): Extension<Claims>,
     Path(server_id): Path<Uuid>,
-    mut multipart: Multipart,
+    multipart: Multipart,
 ) -> Result<Json<serde_json::Value>> {
-    require_owner(&state, claims.sub, server_id).await?;
-
-    if let Some(field) = multipart.next_field().await.map_err(|e| AppError::BadRequest(e.to_string()))? {
-        let ct = field.content_type().unwrap_or("image/jpeg").to_string();
-        if !ct.starts_with("image/") {
-            return Err(AppError::BadRequest("Type de fichier non supporté".into()));
-        }
-        let ext = match ct.as_str() {
-            "image/png" => "png", "image/gif" => "gif", "image/webp" => "webp", _ => "jpg",
-        };
-        let data = field.bytes().await.map_err(|e| AppError::BadRequest(e.to_string()))?;
-        if data.len() > 2 * 1024 * 1024 {
-            return Err(AppError::BadRequest("Fichier trop grand (max 2 MB)".into()));
-        }
-        let filename = format!("server-banners/{}.{}", Uuid::new_v4(), ext);
-        let path = std::path::Path::new(&state.config.upload_dir).join(&filename);
-        if let Some(parent) = path.parent() {
-            tokio::fs::create_dir_all(parent).await.map_err(|e| AppError::Internal(e.into()))?;
-        }
-        crate::antivirus::check(&data).await?;
-        tokio::fs::write(&path, &data).await.map_err(|e| AppError::Internal(e.into()))?;
-        let banner_url = format!("/uploads/{}", filename);
-        sqlx::query("UPDATE servers SET banner=$2 WHERE id=$1")
-            .bind(server_id)
-            .bind(&banner_url)
-            .execute(&state.db)
-            .await?;
-        return Ok(Json(serde_json::json!({ "banner": banner_url })));
-    }
-
-    Err(AppError::BadRequest("Champ image manquant".into()))
+    crate::handlers::server_look::upload_server_banner(state, claims, server_id, multipart).await
 }
 
 pub async fn get_server_stats(

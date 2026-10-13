@@ -71,6 +71,7 @@ pub mod privacy;
 pub mod desktop;
 pub mod discord_import;
 pub mod diagnostics;
+pub mod server_look;
 pub mod announcements;
 pub mod onboarding;
 pub mod event_tools;

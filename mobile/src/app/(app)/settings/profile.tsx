@@ -123,9 +123,10 @@ export default function ProfileSettings() {
     if (!(await ensurePhotoAccess())) return
     const res = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'],
-      allowsEditing: true,
-      aspect: kind === 'avatar' ? [1, 1] : [16, 5],
-      quality: 0.8, // ré-encodage JPEG : retire les métadonnées EXIF (GPS…)
+      // Bannière gardée entière (aucun recadrage) : elle est affichée sans rognage partout.
+      allowsEditing: kind === 'avatar',
+      aspect: kind === 'avatar' ? [1, 1] : undefined,
+      quality: kind === 'avatar' ? 0.8 : 0.92, // ré-encodage JPEG : retire les métadonnées EXIF (GPS…)
     })
     if (res.canceled || !res.assets[0]) return
     const a = res.assets[0]
