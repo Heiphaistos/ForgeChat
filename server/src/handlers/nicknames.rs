@@ -102,7 +102,7 @@ pub async fn set_member_nickname(
     }
     crate::handlers::audit::log_event(
         &state, server_id, "MEMBER_NICKNAME_CHANGE",
-        Some(claims.sub), None,
+        Some(claims.sub),
         Some(user_id), None,
         Some(serde_json::json!({ "nickname": nickname })),
     ).await;

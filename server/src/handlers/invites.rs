@@ -31,7 +31,7 @@ pub async fn create_invite(
         Utc::now() + chrono::Duration::hours(h)
     });
     if let Some(uses) = body.max_uses {
-        if uses < 1 || uses > 1000 {
+        if !(1..=1000).contains(&uses) {
             return Err(AppError::BadRequest("max_uses doit être entre 1 et 1000".into()));
         }
     }

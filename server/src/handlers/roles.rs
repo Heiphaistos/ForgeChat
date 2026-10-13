@@ -112,7 +112,7 @@ pub async fn create_role(
 
     log_event(
         &state, server_id, "ROLE_CREATE",
-        Some(claims.sub), None,
+        Some(claims.sub),
         Some(role.id), Some(role.name.as_str()), None,
     ).await;
 
@@ -215,7 +215,7 @@ pub async fn update_role(
 
     log_event(
         &state, server_id, "ROLE_UPDATE",
-        Some(claims.sub), None,
+        Some(claims.sub),
         Some(role.id), Some(role.name.as_str()), None,
     ).await;
 
@@ -282,7 +282,7 @@ pub async fn upload_role_icon(
 
     log_event(
         &state, server_id, "ROLE_UPDATE",
-        Some(claims.sub), None,
+        Some(claims.sub),
         Some(role.id), Some(role.name.as_str()), None,
     ).await;
     state.broadcast_to_server_members(server_id, role_update_event(server_id, &role)).await;
@@ -310,7 +310,7 @@ pub async fn delete_role(
 
     log_event(
         &state, server_id, "ROLE_DELETE",
-        Some(claims.sub), None,
+        Some(claims.sub),
         Some(role_id), None, None,
     ).await;
 
@@ -483,7 +483,7 @@ pub async fn reorder_roles(
             .execute(&mut *tx).await?;
     }
     if shift != 0 {
-        for (id, _) in &locked {
+        for id in locked.keys() {
             sqlx::query("UPDATE roles SET position = position + $1 WHERE id=$2 AND server_id=$3")
                 .bind(shift).bind(id).bind(server_id)
                 .execute(&mut *tx).await?;
@@ -493,7 +493,7 @@ pub async fn reorder_roles(
         .bind(server_id).execute(&mut *tx).await?;
     tx.commit().await?;
 
-    log_event(&state, server_id, "ROLE_UPDATE", Some(claims.sub), None, None, None,
+    log_event(&state, server_id, "ROLE_UPDATE", Some(claims.sub), None, None,
         Some(serde_json::json!({ "reordered": true }))).await;
     state.broadcast_to_server_members(server_id, serde_json::json!({
         "type": "ROLE_UPDATE", "server_id": server_id, "reordered": true,
@@ -539,7 +539,7 @@ pub async fn transfer_ownership(
     crate::handlers::e2e_server_key::transfer(&mut tx, server_id, target, body.get("server_key_owner_wrapped")).await?;
     tx.commit().await?;
 
-    log_event(&state, server_id, "OWNER_TRANSFER", Some(claims.sub), None,
+    log_event(&state, server_id, "OWNER_TRANSFER", Some(claims.sub),
         Some(target), Some(target_name.as_str()), None).await;
     state.broadcast_to_server_members(server_id, serde_json::json!({
         "type": "SERVER_UPDATE", "server_id": server_id, "owner_id": target,

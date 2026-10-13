@@ -59,7 +59,7 @@ pub async fn store_image(state: &AppState, dir: &'static str, data: &[u8]) -> Re
     let name = format!("{}{}.{}", if still.is_some() { "a_" } else { "" }, Uuid::new_v4(), probe.ext);
     let folder = std::path::Path::new(&state.config.upload_dir).join(dir);
     tokio::fs::create_dir_all(&folder).await.map_err(|e| AppError::Internal(e.into()))?;
-    crate::antivirus::check(&data).await?;
+    crate::antivirus::check(data).await?;
     if let Some(still) = still {
         tokio::fs::write(folder.join(still_name(&name)), still).await.map_err(|e| AppError::Internal(e.into()))?;
     }
@@ -70,8 +70,8 @@ pub async fn store_image(state: &AppState, dir: &'static str, data: &[u8]) -> Re
 /// Diffuse le profil à soi-même et aux membres des serveurs communs, sans l'activité
 /// (elle suit son propre réglage de visibilité, voir users::update_me).
 async fn broadcast_profile(state: &AppState, user: crate::models::user::User) -> UserPublic {
-    let public = UserPublic::from(user.clone());
-    let mut shared = public.clone().for_others();
+    let public = user.clone().into_self_public();
+    let mut shared = UserPublic::from(user.clone()).for_others();
     shared.activity_type = None;
     shared.activity_name = None;
     shared.activity_detail = None;
@@ -104,6 +104,10 @@ pub async fn upload_avatar(
     upload_rate_limit(&state, claims.sub).await?;
     let data = read_image_field(&mut multipart, "avatar", AVATAR_MAX).await?;
     let url = store_image(&state, "avatars", &data).await?;
+    let old: Option<String> = sqlx::query_scalar("SELECT avatar FROM users WHERE id=$1")
+        .bind(claims.sub)
+        .fetch_one(&state.db)
+        .await?;
     let user = sqlx::query_as::<_, crate::models::user::User>(
         "UPDATE users SET avatar=$2, updated_at=NOW() WHERE id=$1 RETURNING *",
     )
@@ -111,6 +115,8 @@ pub async fn upload_avatar(
     .bind(&url)
     .fetch_one(&state.db)
     .await?;
+    // L'ancienne image ne restait jamais sur le disque pour rien.
+    crate::handlers::upload_gc::drop_replaced(&state, old).await;
     Ok(Json(broadcast_profile(&state, user).await))
 }
 
@@ -123,6 +129,10 @@ pub async fn upload_banner(
     upload_rate_limit(&state, claims.sub).await?;
     let data = read_image_field(&mut multipart, "banner", BANNER_MAX).await?;
     let url = store_image(&state, "banners", &data).await?;
+    let old: Option<String> = sqlx::query_scalar("SELECT banner FROM users WHERE id=$1")
+        .bind(claims.sub)
+        .fetch_one(&state.db)
+        .await?;
     let user = sqlx::query_as::<_, crate::models::user::User>(
         "UPDATE users SET banner=$2, updated_at=NOW() WHERE id=$1 RETURNING *",
     )
@@ -130,6 +140,8 @@ pub async fn upload_banner(
     .bind(&url)
     .fetch_one(&state.db)
     .await?;
+    // L'ancienne image ne restait jamais sur le disque pour rien.
+    crate::handlers::upload_gc::drop_replaced(&state, old).await;
     broadcast_profile(&state, user).await;
     Ok(Json(serde_json::json!({ "banner": url })))
 }
@@ -215,6 +227,49 @@ pub async fn expire_custom_statuses(state: &AppState) {
     }
 }
 
+/// Champs de personnalisation de PATCH /users/me, validés. `None` = champ absent
+/// (inchangé) ; `Some(None)` = effacer.
+pub struct ProfileCustom {
+    pub display_name: Option<Option<String>>,
+    pub name_style: Option<Option<serde_json::Value>>,
+    pub profile_tag: Option<Option<String>>,
+    pub profile_links: Option<Option<serde_json::Value>>,
+    /// Réglages de la décoration d'avatar (profile_style::parse_decoration_opts).
+    pub decoration_opts: Option<Option<serde_json::Value>>,
+    /// Anneau d'avatar global (avatar_ring::parse_avatar_ring) ; null = effacer.
+    pub avatar_ring: Option<Option<serde_json::Value>>,
+    /// Carte de profil (profile_card::parse_profile_card) ; null = effacer.
+    pub profile_card: Option<Option<serde_json::Value>>,
+    /// Utilisé seulement si `custom_status` est envoyé dans la même requête.
+    pub status_expires_at: Option<chrono::DateTime<chrono::Utc>>,
+}
+
+impl ProfileCustom {
+    pub fn from_request(body: &crate::models::user::UpdateProfileRequest) -> Result<Self> {
+        use crate::models::profile_style as ps;
+        let bad = |e: String| AppError::BadRequest(e);
+        Ok(Self {
+            display_name: body.display_name.as_deref()
+                .map(|s| ps::clean_label(s, ps::DISPLAY_NAME_MAX, "Nom d'affichage")).transpose().map_err(bad)?,
+            name_style: body.name_style.as_ref()
+                .map(ps::parse_name_style).transpose().map_err(|e| AppError::BadRequest(e.into()))?,
+            profile_tag: body.profile_tag.as_deref()
+                .map(|s| ps::clean_label(s, ps::TAG_MAX, "Étiquette")).transpose().map_err(bad)?,
+            profile_links: body.profile_links.as_ref().map(ps::parse_links).transpose().map_err(bad)?,
+            decoration_opts: body.avatar_decoration_opts.as_ref()
+                .map(ps::parse_decoration_opts).transpose().map_err(|e| AppError::BadRequest(e.into()))?,
+            // Some(None) (null) passe par parse_* qui rend Ok(None) : effacer.
+            avatar_ring: body.avatar_ring.as_ref()
+                .map(|v| crate::models::avatar_ring::parse_avatar_ring(v.as_ref().unwrap_or(&serde_json::Value::Null)))
+                .transpose().map_err(|e| AppError::BadRequest(e.into()))?,
+            profile_card: body.profile_card.as_ref()
+                .map(|v| crate::models::profile_card::parse_profile_card(v.as_ref().unwrap_or(&serde_json::Value::Null)))
+                .transpose().map_err(|e| AppError::BadRequest(e.into()))?,
+            status_expires_at: status_expiry(body.custom_status_clear_after)?,
+        })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -236,42 +291,28 @@ mod tests {
     }
 
     #[test]
+    fn anneau_et_carte_absent_null_objet() {
+        let custom = |v: serde_json::Value| {
+            ProfileCustom::from_request(&serde_json::from_value(v).unwrap())
+        };
+        // Absent : inchangé ; null : effacer ; objet : validé.
+        let c = custom(serde_json::json!({})).unwrap();
+        assert!(c.avatar_ring.is_none() && c.profile_card.is_none());
+        let c = custom(serde_json::json!({ "avatar_ring": null, "profile_card": null })).unwrap();
+        assert_eq!((c.avatar_ring, c.profile_card), (Some(None), Some(None)));
+        let c = custom(serde_json::json!({ "avatar_ring": { "colors": [1], "shape": "squircle" }, "profile_card": { "layout": "wide" } })).unwrap();
+        assert_eq!(c.avatar_ring.flatten().unwrap()["shape"], "squircle");
+        assert_eq!(c.profile_card.flatten().unwrap()["layout"], "wide");
+        assert!(custom(serde_json::json!({ "avatar_ring": { "colors": [1], "width": 13 } })).is_err());
+        assert!(custom(serde_json::json!({ "profile_card": { "radius": 25 } })).is_err());
+        assert!(custom(serde_json::json!({ "profile_card": "wide" })).is_err());
+    }
+
+    #[test]
     fn type_declare_en_liste_blanche() {
         // Le type déclaré doit être une image connue ; le format réel est relu ensuite.
         assert!(crate::handlers::uploads::image_ext("image/gif").is_ok());
         assert!(crate::handlers::uploads::image_ext("image/svg+xml").is_err());
         assert!(crate::handlers::uploads::image_ext("text/html").is_err());
-    }
-}
-
-/// Champs de personnalisation de PATCH /users/me, validés. `None` = champ absent
-/// (inchangé) ; `Some(None)` = effacer.
-pub struct ProfileCustom {
-    pub display_name: Option<Option<String>>,
-    pub name_style: Option<Option<serde_json::Value>>,
-    pub profile_tag: Option<Option<String>>,
-    pub profile_links: Option<Option<serde_json::Value>>,
-    /// Réglages de la décoration d'avatar (profile_style::parse_decoration_opts).
-    pub decoration_opts: Option<Option<serde_json::Value>>,
-    /// Utilisé seulement si `custom_status` est envoyé dans la même requête.
-    pub status_expires_at: Option<chrono::DateTime<chrono::Utc>>,
-}
-
-impl ProfileCustom {
-    pub fn from_request(body: &crate::models::user::UpdateProfileRequest) -> Result<Self> {
-        use crate::models::profile_style as ps;
-        let bad = |e: String| AppError::BadRequest(e);
-        Ok(Self {
-            display_name: body.display_name.as_deref()
-                .map(|s| ps::clean_label(s, ps::DISPLAY_NAME_MAX, "Nom d'affichage")).transpose().map_err(bad)?,
-            name_style: body.name_style.as_ref()
-                .map(ps::parse_name_style).transpose().map_err(|e| AppError::BadRequest(e.into()))?,
-            profile_tag: body.profile_tag.as_deref()
-                .map(|s| ps::clean_label(s, ps::TAG_MAX, "Étiquette")).transpose().map_err(bad)?,
-            profile_links: body.profile_links.as_ref().map(ps::parse_links).transpose().map_err(bad)?,
-            decoration_opts: body.avatar_decoration_opts.as_ref()
-                .map(ps::parse_decoration_opts).transpose().map_err(|e| AppError::BadRequest(e.into()))?,
-            status_expires_at: status_expiry(body.custom_status_clear_after)?,
-        })
     }
 }

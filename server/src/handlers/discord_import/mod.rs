@@ -10,6 +10,9 @@ mod format;
 mod importer;
 pub mod sync;
 mod sync_rules;
+
+/// Pièce jointe importée : (nom, type MIME, taille, URL locale).
+type Att = (String, String, i64, String);
 #[cfg(test)]
 mod e2e_test;
 

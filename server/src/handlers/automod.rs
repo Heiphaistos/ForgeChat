@@ -123,7 +123,7 @@ pub async fn put_advanced(
              raid_join_seconds=$5, block_dangerous_links=$6, blocked_domains=$7, updated_at=NOW()"
     ).bind(server_id).bind(b.rate_limit_count).bind(b.rate_limit_seconds).bind(b.raid_join_count)
     .bind(b.raid_join_seconds).bind(b.block_dangerous_links).bind(&domains).execute(&state.db).await?;
-    crate::handlers::audit::log_event(&state, server_id, "AUTOMOD_UPDATE", Some(claims.sub), None, None, None, None).await;
+    crate::handlers::audit::log_event(&state, server_id, "AUTOMOD_UPDATE", Some(claims.sub), None, None, None).await;
     Ok(Json(serde_json::json!({ "ok": true })))
 }
 
@@ -143,7 +143,7 @@ async fn set_lockdown(state: &AppState, server_id: Uuid, on: bool, reason: Optio
     ).bind(server_id).bind(on).bind(reason).execute(&state.db).await?.rows_affected() > 0;
     if changed {
         crate::handlers::audit::log_event(state, server_id, if on { "LOCKDOWN_ON" } else { "LOCKDOWN_OFF" },
-            actor, None, None, None, reason.map(|r| serde_json::json!({ "reason": r }))).await;
+            actor, None, None, reason.map(|r| serde_json::json!({ "reason": r }))).await;
         state.broadcast_to_server_members(server_id, serde_json::json!({
             "type": "SERVER_LOCKDOWN", "server_id": server_id, "lockdown": on, "reason": reason,
         }).to_string()).await;

@@ -5,6 +5,7 @@
 //! - le propriétaire du site, dont l'e-mail est `FORGECHAT_ADMIN_EMAIL` (`heiphaistos44@gmail.com` par
 //!   défaut), qui détient le rôle d'office ;
 //! - les comptes à qui le propriétaire a attribué le rôle (table `site_role_members`).
+//!
 //! Seul le propriétaire attribue ou retire le rôle : aucun El Patron ne peut en nommer un autre.
 //! Les e-mails sont uniques et la création d'un compte se fait sur invitation.
 use axum::{

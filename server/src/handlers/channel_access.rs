@@ -12,6 +12,84 @@ use crate::{
     state::AppState,
 };
 
+/// Refuse (403) toute lecture d'historique sans READ_HISTORY effectif sur le
+/// salon : recherche, épingles, fils, forum, éditions, source d'un transfert.
+pub async fn require_read_history(state: &AppState, user: Uuid, channel_id: Uuid) -> Result<()> {
+    require_channel_perm(state, user, channel_id, Permissions::READ_HISTORY).await
+}
+
+/// Salons (de tous les serveurs de `user`) dont l'historique lui est fermé :
+/// exclus de la recherche globale. Même calcul que
+/// `effective_channel_permissions`, en lot (3 requêtes, quel que soit le nombre de salons).
+pub async fn channels_without_history(state: &AppState, user: Uuid) -> Result<Vec<Uuid>> {
+    use std::collections::{HashMap, HashSet};
+    type Override = (Uuid, String, i64, i64);
+    let channels: Vec<(Uuid, bool, i64, Option<Uuid>)> = sqlx::query_as(
+        "WITH s AS (
+           SELECT sm.server_id, (sm.is_owner OR fc_is_god(sm.user_id)) AS is_owner,
+                  COALESCE((SELECT BIT_OR(r.permissions) FROM member_roles mr JOIN roles r ON r.id = mr.role_id
+                            WHERE mr.user_id = sm.user_id AND mr.server_id = sm.server_id), 0)
+                  | COALESCE((SELECT permissions FROM roles WHERE server_id = sm.server_id AND is_everyone LIMIT 1), 0) AS base,
+                  (SELECT id FROM roles WHERE server_id = sm.server_id AND is_everyone LIMIT 1) AS everyone
+           FROM server_members sm WHERE sm.user_id = $1)
+         SELECT c.id, s.is_owner, s.base, s.everyone FROM channels c JOIN s ON s.server_id = c.server_id",
+    )
+    .bind(user)
+    .fetch_all(&state.db)
+    .await?;
+    let rows: Vec<(Uuid, Uuid, String, i64, i64)> = sqlx::query_as(
+        "SELECT cp.channel_id, cp.target_id, cp.target_type, cp.allow, cp.deny
+         FROM channel_permissions cp JOIN channels c ON c.id = cp.channel_id
+         JOIN server_members sm ON sm.server_id = c.server_id AND sm.user_id = $1",
+    )
+    .bind(user)
+    .fetch_all(&state.db)
+    .await?;
+    let my_roles: HashSet<Uuid> =
+        sqlx::query_scalar("SELECT role_id FROM member_roles WHERE user_id = $1")
+            .bind(user)
+            .fetch_all(&state.db)
+            .await?
+            .into_iter()
+            .collect();
+    let mut overrides: HashMap<Uuid, Vec<Override>> = HashMap::new();
+    for (cid, target, kind, allow, deny) in rows {
+        overrides
+            .entry(cid)
+            .or_default()
+            .push((target, kind, allow, deny));
+    }
+    Ok(channels
+        .into_iter()
+        .filter(|(cid, is_owner, base, everyone)| {
+            let ov = overrides.get(cid).map(Vec::as_slice).unwrap_or_default();
+            let perms = crate::state::apply_channel_overrides(
+                *base,
+                *is_owner,
+                user,
+                Some(&my_roles),
+                *everyone,
+                ov,
+            );
+            perms & Permissions::READ_HISTORY == 0
+        })
+        .map(|(cid, ..)| cid)
+        .collect())
+}
+
+/// Permission effective `perm` sur le salon (rôles, @everyone, surcharges), 403 sinon.
+pub async fn require_channel_perm(
+    state: &AppState,
+    user: Uuid,
+    channel_id: Uuid,
+    perm: i64,
+) -> Result<()> {
+    match state.effective_channel_permissions(user, channel_id).await {
+        Some((_, p)) if p & perm != 0 => Ok(()),
+        _ => Err(AppError::Forbidden),
+    }
+}
+
 /// Créer un salon ou une catégorie.
 pub const CAN_CREATE: i64 = Permissions::MANAGE_CHANNELS | Permissions::CREATE_CHANNELS;
 /// Modifier un salon (nom, réglages, ordre, surcharges, tags, flux, webhook…).

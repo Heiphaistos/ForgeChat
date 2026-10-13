@@ -13,6 +13,7 @@ use crate::{
 };
 
 use super::e2e_channel::check_content;
+use super::channel_access::{require_channel_perm, require_read_history};
 use super::servers::require_member_and_channel;
 use super::threads::CursorQuery;
 use super::uploads::{attachments_by_owner, remove_upload_files, AttachmentOwner};
@@ -111,6 +112,7 @@ pub async fn list_posts(
     Query(q): Query<CursorQuery>,
 ) -> Result<Json<Vec<serde_json::Value>>> {
     require_member_and_channel(&state, claims.sub, server_id, channel_id).await?;
+    require_read_history(&state, claims.sub, channel_id).await?;
 
     let default_sort: String = sqlx::query_scalar(
         "SELECT default_sort FROM channels WHERE id = $1"
@@ -265,6 +267,7 @@ pub async fn get_post(
     Query(q): Query<CursorQuery>,
 ) -> Result<Json<serde_json::Value>> {
     require_member_and_channel(&state, claims.sub, server_id, channel_id).await?;
+    require_read_history(&state, claims.sub, channel_id).await?;
 
     let post_row = sqlx::query(
         "SELECT fp.*, COALESCE(fp.webhook_display_name, u.username) as creator_username, NULLIF(COALESCE(fp.webhook_avatar_url, u.avatar), '') as creator_avatar
@@ -370,6 +373,8 @@ pub async fn toggle_reply_reaction(
     Path((server_id, channel_id, post_id, reply_id, emoji)): Path<(Uuid, Uuid, Uuid, Uuid, String)>,
 ) -> Result<Json<serde_json::Value>> {
     require_member_and_channel(&state, claims.sub, server_id, channel_id).await?;
+    let add = crate::models::role::Permissions::ADD_REACTIONS;
+    require_channel_perm(&state, claims.sub, channel_id, add).await?;
     crate::handlers::servers::require_not_timed_out(&state, claims.sub, server_id).await?;
 
     let reply_ok: bool = sqlx::query_scalar(
@@ -477,7 +482,7 @@ pub async fn reply_to_post(
     )
     .bind(post_id)
     .bind(claims.sub)
-    .bind(Some(&content).filter(|_| enc.is_none()))
+    .bind(enc.is_none().then_some(&content))
     .bind(&enc)
     .bind(enc.as_ref().and(body.client_msg_id))
     .fetch_one(&mut *tx)
@@ -541,6 +546,10 @@ pub async fn update_post(
     // content : réservé au créateur indépendamment des autres champs
     if (content.is_some() || enc.is_some()) && creator_id != claims.sub {
         return Err(AppError::Forbidden);
+    }
+    if content.is_some() || enc.is_some() {
+        let plain = content.filter(|_| enc.is_none());
+        super::post_guard::check_edit(&state, server_id, claims.sub, plain).await?;
     }
 
     // Chiffré : le titre et le contenu en clair disparaissent ; jamais de clair sur du chiffré.
@@ -651,6 +660,8 @@ pub async fn edit_reply(
     if content.is_empty() && enc.is_none() {
         return Err(AppError::BadRequest("Contenu invalide (1-4000 caractères)".into()));
     }
+    let plain = enc.is_none().then_some(content.as_str());
+    super::post_guard::check_edit(&state, server_id, claims.sub, plain).await?;
 
     // Vérifier que la réponse appartient à ce post et à l'utilisateur
     let rows = sqlx::query(
@@ -660,7 +671,7 @@ pub async fn edit_reply(
            AND ($6::jsonb IS NOT NULL OR enc IS NULL)
          RETURNING id"
     )
-    .bind(Some(&content).filter(|_| enc.is_none()))
+    .bind(enc.is_none().then_some(&content))
     .bind(reply_id)
     .bind(post_id)
     .bind(claims.sub)

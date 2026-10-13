@@ -139,12 +139,7 @@ pub async fn register(
         }
         return Err(AppError::BadRequest("auth et kdf_salt requis".into()));
     };
-    if body.username.len() < 2 || body.username.len() > 32 {
-        return Err(AppError::BadRequest("Nom d'utilisateur 2-32 chars".into()));
-    }
-    if !body.username.chars().all(|c| c.is_alphanumeric() || c == '_' || c == '-') {
-        return Err(AppError::BadRequest("Nom : lettres, chiffres, _ ou - uniquement".into()));
-    }
+    crate::models::username::validate_username(&body.username).map_err(|e| AppError::BadRequest(e.into()))?;
     check_auth(auth)?;
     check_salt(kdf_salt)?;
     let kdf = auth_v2::check_kdf(body.kdf.as_deref())?;

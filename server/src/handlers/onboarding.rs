@@ -258,7 +258,8 @@ pub async fn put_answers(
     }
     let old: HashSet<Uuid> = sqlx::query_scalar::<_, Uuid>("SELECT option_id FROM onboarding_responses WHERE user_id=$1 AND server_id=$2")
         .bind(user).bind(server_id).fetch_all(&state.db).await?.into_iter().collect();
-    let union = |set: &HashSet<Uuid>, pick: fn(&(Uuid, bool, Vec<Uuid>, Vec<Uuid>)) -> &Vec<Uuid>| -> HashSet<Uuid> {
+    type OptionRow = (Uuid, bool, Vec<Uuid>, Vec<Uuid>);
+    let union = |set: &HashSet<Uuid>, pick: fn(&OptionRow) -> &Vec<Uuid>| -> HashSet<Uuid> {
         set.iter().filter_map(|id| options.get(id)).flat_map(|o| pick(o).iter().copied()).collect()
     };
     let roles = server_roles(&state, server_id).await?;

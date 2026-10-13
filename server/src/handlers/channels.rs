@@ -11,7 +11,7 @@ use crate::{
     handlers::servers::{require_member, require_permission, require_member_and_channel},
     middleware::auth::Claims,
     models::{
-        channel::{Channel, CreateChannelRequest, UpdateChannelRequest, CreateCategoryRequest, Category},
+        channel::{check_channel_fields, clean_name, Channel, CreateChannelRequest, UpdateChannelRequest, CreateCategoryRequest, Category, VOICE_PASSWORD_MAX_BYTES},
         role::Permissions,
     },
     state::AppState,
@@ -66,6 +66,9 @@ pub async fn get_channels(
             "waiting_room": r.try_get::<bool, _>("waiting_room").unwrap_or(false),
             "disappear_seconds": r.get::<Option<i32>, _>("disappear_seconds"),
             "auto_threads": r.get::<bool, _>("auto_threads"),
+            "voice_status": r.get::<Option<String>, _>("voice_status"),
+            "default_reaction_emoji": r.get::<Option<String>, _>("default_reaction_emoji"),
+            "post_guidelines": r.get::<Option<String>, _>("post_guidelines"),
         })
     }).collect();
 
@@ -80,13 +83,10 @@ pub async fn create_channel(
 ) -> Result<Json<Channel>> {
     require_permission(&state, claims.sub, server_id, CAN_CREATE).await?;
 
-    let name = body.name.trim();
-    if name.is_empty() {
-        return Err(AppError::BadRequest("Le nom du canal ne peut pas être vide".into()));
-    }
-    if name.len() > 100 {
-        return Err(AppError::BadRequest("Le nom du canal ne peut pas dépasser 100 caractères".into()));
-    }
+    let bad = |e: &'static str| AppError::BadRequest(e.into());
+    let name = clean_name(&body.name).map_err(bad)?;
+    check_channel_fields(body.topic.as_deref(), body.slowmode_delay, body.user_limit)
+        .map_err(bad)?;
 
     // IDOR : category_id n'était jamais vérifié comme appartenant à ce serveur --
     // reproduit en direct (compte+2 serveurs jetables) : un canal du serveur A
@@ -129,13 +129,17 @@ pub async fn create_channel(
              ON CONFLICT (channel_id, target_id) DO NOTHING"
         ).bind(channel.id).bind(Permissions::VIEW_CHANNEL).bind(server_id).execute(&state.db).await?;
     }
+    // Salon créé dans une catégorie : hérite de ses surcharges (comme Discord).
+    if let Some(cat) = body.category_id {
+        crate::handlers::categories::inherit_category_overwrites(&state.db, channel.id, cat).await?;
+    }
 
     let event = serde_json::json!({ "type": "CHANNEL_CREATE", "server_id": server_id, "channel": &channel });
     state.broadcast_to_channel_members(channel.id, event.to_string()).await;
 
     log_event(
         &state, server_id, "CHANNEL_CREATE",
-        Some(claims.sub), None,
+        Some(claims.sub),
         Some(channel.id), Some(channel.name.as_str()), None,
     ).await;
 
@@ -151,6 +155,7 @@ pub async fn update_channel(
     // P3-3 — le créateur d'un salon temporaire (« rejoindre pour créer ») peut
     // le renommer, fixer sa limite de places et le verrouiller par mot de
     // passe, comme un salon temporaire TeamSpeak. Rien d'autre sans droit de modification.
+    let mut temp_owner_only = false;
     if let Err(e) = require_permission(&state, claims.sub, server_id, CAN_EDIT).await {
         let owner_fields_only = body.topic.is_none() && body.position.is_none()
             && body.slowmode_delay.is_none() && body.is_nsfw.is_none()
@@ -168,21 +173,31 @@ pub async fn update_channel(
         if !(temp_owner && owner_fields_only) {
             return Err(e);
         }
+        temp_owner_only = true;
     }
 
-    if let Some(Some(limit)) = body.user_limit {
-        if !(0..=99).contains(&limit) {
-            return Err(AppError::BadRequest("Limite de places : 0 à 99".into()));
-        }
+    let bad = |e: &'static str| AppError::BadRequest(e.into());
+    let limit = body.user_limit.flatten();
+    check_channel_fields(body.topic.as_deref(), body.slowmode_delay, limit).map_err(bad)?;
+    let name = body.name.as_deref().map(clean_name).transpose().map_err(bad)?;
+    let name = name.map(str::to_string);
+    let password = body.voice_password.as_deref().unwrap_or_default();
+    if password.len() > VOICE_PASSWORD_MAX_BYTES {
+        return Err(bad("Mot de passe vocal : 72 octets au plus"));
     }
-
-    if let Some(ref name) = body.name {
-        let trimmed = name.trim();
-        if trimmed.is_empty() {
-            return Err(AppError::BadRequest("Le nom du canal ne peut pas être vide".into()));
-        }
-        if trimmed.len() > 100 {
-            return Err(AppError::BadRequest("Le nom du canal ne peut pas dépasser 100 caractères".into()));
+    // Surcharges du salon : masqué pour ce membre, ou droit de modification retiré
+    // sur CE salon = refus, même avec le droit au niveau du serveur (avant : ignorées).
+    let hidden = state.hidden_channels(claims.sub, Some(server_id), Some(channel_id));
+    if hidden.await?.contains(&channel_id) {
+        return Err(AppError::Forbidden);
+    }
+    if !temp_owner_only {
+        let perms = state.effective_channel_permissions(claims.sub, channel_id);
+        let edit_here = perms
+            .await
+            .is_some_and(|(sid, p)| sid == server_id && p & CAN_EDIT != 0);
+        if !edit_here {
+            return Err(AppError::Forbidden);
         }
     }
 
@@ -221,7 +236,7 @@ pub async fn update_channel(
              WHERE id=$1 AND server_id=$14 RETURNING *"
         )
         .bind(channel_id)
-        .bind(body.name)
+        .bind(&name)
         .bind(body.topic)
         .bind(body.position)
         .bind(body.slowmode_delay)
@@ -256,7 +271,7 @@ pub async fn update_channel(
              WHERE id=$1 AND server_id=$13 RETURNING *"
         )
         .bind(channel_id)
-        .bind(body.name)
+        .bind(&name)
         .bind(body.topic)
         .bind(body.position)
         .bind(body.slowmode_delay)
@@ -326,7 +341,7 @@ pub async fn delete_channel(
 
     log_event(
         &state, server_id, "CHANNEL_DELETE",
-        Some(claims.sub), None,
+        Some(claims.sub),
         Some(channel_id), None, None,
     ).await;
 
@@ -340,12 +355,13 @@ pub async fn create_category(
     Json(body): Json<CreateCategoryRequest>,
 ) -> Result<Json<Category>> {
     require_permission(&state, claims.sub, server_id, CAN_CREATE).await?;
+    let name = clean_name(&body.name).map_err(|e| AppError::BadRequest(e.into()))?;
 
     let cat = sqlx::query_as::<_, Category>(
         "INSERT INTO categories (server_id, name, created_by) VALUES ($1, $2, $3) RETURNING *"
     )
     .bind(server_id)
-    .bind(&body.name)
+    .bind(name)
     .bind(claims.sub)
     .fetch_one(&state.db)
     .await?;
@@ -435,6 +451,7 @@ pub async fn get_pinned(
     Path((server_id, channel_id)): Path<(Uuid, Uuid)>,
 ) -> Result<Json<Vec<serde_json::Value>>> {
     crate::handlers::servers::require_member_and_channel(&state, claims.sub, server_id, channel_id).await?;
+    crate::handlers::channel_access::require_read_history(&state, claims.sub, channel_id).await?;
 
     let pinned = sqlx::query(
         "SELECT m.*, u.username, NULLIF(COALESCE(m.webhook_avatar_url, u.avatar), '') AS avatar FROM messages m
@@ -583,7 +600,7 @@ async fn actor_channel_perms(state: &AppState, actor: Uuid, channel_id: Uuid) ->
 
 /// Une surcharge ne peut accorder ni refuser qu'un bit que l'acteur possède lui-même
 /// sur le salon (même règle que create_role/assign_role), jamais ADMINISTRATOR.
-fn check_override_bits(actor_perms: i64, allow: i64, deny: i64) -> Result<(i64, i64)> {
+pub(crate) fn check_override_bits(actor_perms: i64, allow: i64, deny: i64) -> Result<(i64, i64)> {
     // Bit retiré : une ancienne appli qui le renvoie ne doit pas voir sa surcharge refusée.
     let (allow, deny) = (allow & !Permissions::RETIRED_PRIORITY_SPEAKER, deny & !Permissions::RETIRED_PRIORITY_SPEAKER);
     if allow < 0 || deny < 0 || (allow | deny) & !Permissions::ALL != 0 {
@@ -599,7 +616,7 @@ fn check_override_bits(actor_perms: i64, allow: i64, deny: i64) -> Result<(i64, 
 }
 
 /// La cible doit appartenir au serveur et être strictement sous l'acteur.
-async fn require_override_target(state: &AppState, actor: Uuid, server_id: Uuid, target_id: Uuid, target_type: &str) -> Result<()> {
+pub(crate) async fn require_override_target(state: &AppState, actor: Uuid, server_id: Uuid, target_id: Uuid, target_type: &str) -> Result<()> {
     if target_type == "role" {
         // require_role_below vérifie aussi que le rôle est bien de ce serveur.
         return crate::handlers::servers::require_role_below(state, actor, target_id, server_id).await;

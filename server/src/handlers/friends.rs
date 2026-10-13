@@ -339,35 +339,8 @@ pub async fn open_dm(
     // n'importe qui pouvait ouvrir un salon DM avec n'importe qui, y compris un
     // utilisateur l'ayant bloqué ou ayant explicitement désactivé "Autoriser les DMs
     // de tout le monde" dans PrivacySection.tsx (réglage 100% placebo côté serveur).
-    let blocked = sqlx::query_scalar::<_, bool>(
-        "SELECT EXISTS(SELECT 1 FROM blocks WHERE
-         (blocker_id=$1 AND blocked_id=$2) OR (blocker_id=$2 AND blocked_id=$1))"
-    )
-    .bind(claims.sub)
-    .bind(user_id)
-    .fetch_one(&state.db)
-    .await?;
-    if blocked {
-        return Err(AppError::Forbidden);
-    }
-
-    let dm_from_all: bool = sqlx::query_scalar("SELECT dm_from_all FROM user_settings WHERE user_id=$1")
-        .bind(user_id)
-        .fetch_optional(&state.db)
-        .await?
-        .unwrap_or(true);
-    if !dm_from_all {
-        let is_friend: bool = sqlx::query_scalar(
-            "SELECT EXISTS(SELECT 1 FROM friendships WHERE ((user_id=$1 AND friend_id=$2) OR (user_id=$2 AND friend_id=$1)) AND status='accepted')"
-        )
-        .bind(claims.sub)
-        .bind(user_id)
-        .fetch_one(&state.db)
-        .await?;
-        if !is_friend {
-            return Err(AppError::Forbidden);
-        }
-    }
+    // Garde partagée avec les groupes (dm_guard) ; 404 si l'utilisateur n'existe pas.
+    crate::handlers::dm_guard::ensure_can_dm(&state.db, claims.sub, user_id).await?;
 
     let (u1, u2) = if claims.sub < user_id {
         (claims.sub, user_id)
@@ -413,7 +386,7 @@ pub async fn get_dm_messages(
 
     if !ok { return Err(AppError::Forbidden); }
 
-    let limit: i64 = params.get("limit").and_then(|l| l.parse().ok()).unwrap_or(50).min(100).max(1);
+    let limit: i64 = params.get("limit").and_then(|l| l.parse().ok()).unwrap_or(50).clamp(1, 100);
     let before: Option<Uuid> = params.get("before").and_then(|s| s.parse().ok());
     let around: Option<Uuid> = params.get("around").and_then(|s| s.parse().ok());
     // Voir messages.rs::get_messages -- la branche `around` construit déjà son
@@ -1904,14 +1877,8 @@ pub async fn delete_dm_message(
     }
 
     // Supprimer les fichiers du disque
-    let upload_dir = state.config.upload_dir.clone();
-    tokio::spawn(async move {
-        for url in attachment_urls {
-            if let Some(rel) = url.strip_prefix("/uploads/") {
-                let _ = tokio::fs::remove_file(std::path::Path::new(&upload_dir).join(rel)).await;
-            }
-        }
-    });
+    // Chemin validé (pas de traversée) par le nettoyeur commun.
+    crate::handlers::uploads::remove_upload_files(&state, attachment_urls);
 
     // Notifier les deux participants
     let event = serde_json::json!({

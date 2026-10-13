@@ -8,25 +8,25 @@ use uuid::Uuid;
 
 use crate::{error::AppError, middleware::auth::Claims, state::AppState};
 
-// Fonction utilitaire appelée par d'autres handlers pour logger un event
+// Fonction utilitaire appelée par d'autres handlers pour logger un event.
+// Le pseudo de l'auteur est relevé en base au moment de l'action (un seul appelant
+// le passait, toujours celui de `user_id` : paramètre retiré).
 pub async fn log_event(
     state: &AppState,
     server_id: Uuid,
     action: &str,
     user_id: Option<Uuid>,
-    username: Option<&str>,
     target_id: Option<Uuid>,
     target_name: Option<&str>,
     details: Option<serde_json::Value>,
 ) {
     let result = sqlx::query(
         "INSERT INTO audit_log (server_id, action, user_id, username, target_id, target_name, details)
-         VALUES ($1,$2,$3,$4,$5,$6,$7)"
+         VALUES ($1,$2,$3,(SELECT username FROM users WHERE id=$3),$4,$5,$6)"
     )
     .bind(server_id)
     .bind(action)
     .bind(user_id)
-    .bind(username)
     .bind(target_id)
     .bind(target_name)
     .bind(details)

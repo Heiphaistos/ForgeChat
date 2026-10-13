@@ -493,7 +493,7 @@ async fn security_passkey_second_factor() {
         client_data_json: b(&client_data("webauthn.create", &ch, origin)),
         attestation_object: b(&key.attestation("forgechat.example")),
     };
-    crate::handlers::passkeys::register_finish(axum::extract::State(state.clone()), claims(), axum::Json(body)).await.expect("enregistrée");
+    let _ = crate::handlers::passkeys::register_finish(axum::extract::State(state.clone()), claims(), axum::Json(body)).await.expect("enregistrée");
 
     // Connexion : options liées au compte, assertion acceptée une fois.
     let opts = crate::handlers::passkeys::login_options(&state, u).await.unwrap().expect("options");
@@ -566,11 +566,11 @@ async fn product_reminders_dnd_status() {
     let list = crate::handlers::reminders::list(axum::extract::State(state.clone()), claims(a)).await.unwrap().0;
     assert_eq!(list[0]["dm_id"], serde_json::json!(dm));
     assert!(crate::handlers::reminders::cancel(axum::extract::State(state.clone()), claims(b), axum::extract::Path(r)).await.is_err());
-    crate::handlers::reminders::cancel(axum::extract::State(state.clone()), claims(a), axum::extract::Path(r)).await.unwrap();
+    let _ = crate::handlers::reminders::cancel(axum::extract::State(state.clone()), claims(a), axum::extract::Path(r)).await.unwrap();
 
     // Ne pas déranger toute la journée : silence, sauf pour un favori.
     let all_day = crate::dnd::Schedule { enabled: true, days: 127, start_min: 0, end_min: 1439, tz: "UTC".into(), allow_favorites: true };
-    crate::dnd::put_schedule(axum::extract::State(state.clone()), claims(a), axum::Json(all_day.clone())).await.unwrap();
+    let _ = crate::dnd::put_schedule(axum::extract::State(state.clone()), claims(a), axum::Json(all_day.clone())).await.unwrap();
     let now_quiet = crate::dnd::in_quiet(chrono::Utc::now(), &all_day);
     assert_eq!(crate::dnd::silenced(&state, a, Some(b)).await, now_quiet);
     sqlx::query("INSERT INTO user_favorites (user_id, target_id) VALUES ($1, $2)").bind(a).bind(b).execute(&db).await.unwrap();
@@ -616,11 +616,11 @@ async fn product_report_quick_actions() {
 
     let (msg, r1) = report(db.clone()).await;
     assert!(act(reporter, r1, "delete").await.is_err(), "membre sans droit");
-    act(owner, r1, "delete").await.unwrap();
+    let _ = act(owner, r1, "delete").await.unwrap();
     let left: i64 = sqlx::query_scalar("SELECT count(*) FROM messages WHERE id=$1").bind(msg).fetch_one(&db).await.unwrap();
     assert_eq!(left, 0);
     let (_, r2) = report(db.clone()).await;
-    act(owner, r2, "timeout").await.unwrap();
+    let _ = act(owner, r2, "timeout").await.unwrap();
     let list = crate::handlers::reports::list_reports(axum::extract::State(state.clone()), claims(owner), axum::extract::Path(s)).await.unwrap().0;
     let entry = list.iter().find(|e| e["id"] == serde_json::json!(r2)).unwrap();
     assert_eq!(entry["status"], "resolved");
@@ -630,7 +630,7 @@ async fn product_report_quick_actions() {
     // Message supprimé : seule la clôture reste possible.
     let r1_again = act(owner, r1, "kick").await;
     assert!(r1_again.is_err());
-    act(owner, r1, "dismiss").await.unwrap();
+    let _ = act(owner, r1, "dismiss").await.unwrap();
 }
 
 #[tokio::test]

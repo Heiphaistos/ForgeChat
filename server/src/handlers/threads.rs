@@ -13,7 +13,9 @@ use crate::{
 };
 
 use super::e2e_channel::check_content;
+use super::channel_access::{require_channel_perm, require_read_history};
 use super::servers::require_member_and_channel;
+use crate::models::role::Permissions;
 use super::uploads::{attachments_by_owner, remove_upload_files, AttachmentOwner};
 
 #[derive(Debug, Serialize, FromRow)]
@@ -103,6 +105,7 @@ pub async fn list_threads(
     Query(q): Query<ListThreadsQuery>,
 ) -> Result<Json<Vec<serde_json::Value>>> {
     require_member_and_channel(&state, claims.sub, server_id, channel_id).await?;
+    require_read_history(&state, claims.sub, channel_id).await?;
     let limit = q.limit.unwrap_or(50).clamp(1, 100);
 
     // unread_count : messages des autres postés après le dernier lu. Sans ligne
@@ -221,7 +224,7 @@ pub async fn create_thread(
     )
     .bind(thread.id)
     .bind(claims.sub)
-    .bind(Some(first_msg.trim()).filter(|_| enc.is_none()))
+    .bind(enc.is_none().then_some(first_msg.trim()))
     .bind(&enc)
     .bind(enc.as_ref().and(body.client_msg_id))
     .fetch_one(&mut *tx)
@@ -289,6 +292,7 @@ pub async fn get_thread_messages(
     Query(q): Query<CursorQuery>,
 ) -> Result<Json<Vec<serde_json::Value>>> {
     require_member_and_channel(&state, claims.sub, server_id, channel_id).await?;
+    require_read_history(&state, claims.sub, channel_id).await?;
     let thread_ok = sqlx::query_scalar::<_, bool>(
         "SELECT EXISTS(SELECT 1 FROM threads WHERE id=$1 AND channel_id=$2)"
     )
@@ -385,6 +389,8 @@ pub async fn toggle_thread_reaction(
     Path((server_id, channel_id, thread_id, msg_id, emoji)): Path<(Uuid, Uuid, Uuid, Uuid, String)>,
 ) -> Result<Json<serde_json::Value>> {
     require_member_and_channel(&state, claims.sub, server_id, channel_id).await?;
+    // Comme les réactions de salon : ADD_REACTIONS requis (avant : ignoré dans les fils).
+    require_channel_perm(&state, claims.sub, channel_id, Permissions::ADD_REACTIONS).await?;
     crate::handlers::servers::require_not_timed_out(&state, claims.sub, server_id).await?;
 
     let msg_ok: bool = sqlx::query_scalar(
@@ -507,7 +513,7 @@ pub async fn send_thread_message(
     .bind(thread_id)
     .bind(claims.sub)
     // Pièce jointe seule : texte vide comme avant ; chiffré : aucun texte.
-    .bind(Some(&content_trimmed).filter(|_| enc.is_none()))
+    .bind(enc.is_none().then_some(&content_trimmed))
     .bind(body.reply_to)
     .bind(&enc)
     .bind(enc.as_ref().and(body.client_msg_id))
@@ -608,14 +614,9 @@ pub async fn archive_thread(
 
     // Locker un thread nécessite toujours MANAGE_MESSAGES (pas juste être créateur)
     // Archiver : créateur OU modérateur
-    if locked.is_some() {
-        use super::servers::require_permission;
-        use crate::models::role::Permissions;
-        require_permission(&state, claims.sub, server_id, Permissions::MANAGE_MESSAGES).await?;
-    } else if creator_id != claims.sub {
-        use super::servers::require_permission;
-        use crate::models::role::Permissions;
-        require_permission(&state, claims.sub, server_id, Permissions::MANAGE_MESSAGES).await?;
+    if locked.is_some() || creator_id != claims.sub {
+        let manage = Permissions::MANAGE_MESSAGES;
+        super::servers::require_permission(&state, claims.sub, server_id, manage).await?;
     }
 
     let thread = sqlx::query_as::<_, Thread>(
@@ -673,6 +674,8 @@ pub async fn edit_thread_message(
     if content.is_empty() && enc.is_none() {
         return Err(AppError::BadRequest("Contenu invalide (1-4000 caractères)".into()));
     }
+    let plain = enc.is_none().then_some(content.as_str());
+    crate::handlers::post_guard::check_edit(&state, server_id, claims.sub, plain).await?;
 
     // Jamais de clair par-dessus un message chiffré ; une édition chiffrée efface le clair.
     let rows = sqlx::query(
@@ -681,7 +684,7 @@ pub async fn edit_thread_message(
            AND thread_id IN (SELECT id FROM threads WHERE channel_id=$5)
            AND ($6::jsonb IS NOT NULL OR enc IS NULL)"
     )
-    .bind(Some(&content).filter(|_| enc.is_none()))
+    .bind(enc.is_none().then_some(&content))
     .bind(msg_id)
     .bind(thread_id)
     .bind(claims.sub)

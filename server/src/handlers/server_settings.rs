@@ -78,7 +78,7 @@ pub async fn unban_member(
         .await?;
 
     if result.rows_affected() > 0 {
-        log_event(&state, server_id, "MEMBER_UNBAN", Some(claims.sub), None, Some(user_id), None, None).await;
+        log_event(&state, server_id, "MEMBER_UNBAN", Some(claims.sub), Some(user_id), None, None).await;
         state.broadcast_to_server_members(server_id, serde_json::json!({
             "type": "MEMBER_UNBAN",
             "server_id": server_id,

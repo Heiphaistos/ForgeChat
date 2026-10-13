@@ -83,6 +83,15 @@ pub async fn get_user(
         // distinction : n'importe quel utilisateur authentifié pouvait récupérer la date
         // de naissance exacte de n'importe qui via GET /users/:id, sans même être ami.
         public = public.for_others();
+        // Présence réservée aux amis et membres d'un serveur commun (comme search_users).
+        let target = [user_id];
+        let related = crate::handlers::presence::related_users(&state.db, claims.sub, &target);
+        if related.await?.is_empty() {
+            public.status = "offline".into();
+            public.custom_status = None;
+            public.custom_status_emoji = None;
+            public.custom_status_expires_at = None;
+        }
     }
 
     Ok(Json(public))
@@ -93,17 +102,10 @@ pub async fn update_me(
     Extension(claims): Extension<Claims>,
     Json(body): Json<UpdateProfileRequest>,
 ) -> Result<Json<UserPublic>> {
+    // Même règle que l'inscription (models/username.rs) : longueur en caractères, pas de sosies.
     if let Some(ref username) = body.username {
-        if username.len() < 2 || username.len() > 32 {
-            return Err(AppError::BadRequest("Nom 2-32 chars".into()));
-        }
-        // Même règle que l'inscription (auth.rs::register) -- jamais reportée ici,
-        // donc modifier son profil permettait de contourner entièrement la
-        // validation de caractères imposée à la création du compte (espaces,
-        // emoji, HTML/scripts, caractères de contrôle, tout passait).
-        if !username.chars().all(|c| c.is_alphanumeric() || c == '_' || c == '-') {
-            return Err(AppError::BadRequest("Le nom d'utilisateur ne peut contenir que des lettres, chiffres, _ et -".into()));
-        }
+        crate::models::username::validate_username(username)
+            .map_err(|e| AppError::BadRequest(e.into()))?;
     }
 
     // Valider activity_type si fourni
@@ -133,6 +135,11 @@ pub async fn update_me(
         if !crate::models::profile_style::valid_banner_ref(banner) {
             return Err(AppError::BadRequest("Bannière : envoyez l'image via /users/me/banner".into()));
         }
+    }
+    // C4 : `avatar: ""` retire l'avatar (comme la bannière) ; toute autre valeur est refusée.
+    if body.avatar.as_deref().is_some_and(|a| !a.is_empty()) {
+        let msg = "Avatar : envoyez l'image via /users/me/avatar";
+        return Err(AppError::BadRequest(msg.into()));
     }
     if let Some(ref bio) = body.bio {
         if bio.chars().count() > 190 {
@@ -171,8 +178,20 @@ pub async fn update_me(
         _ => return Err(crate::error::AppError::BadRequest("birthday invalide".into())),
     };
 
+    // Anciennes images, pour effacer du disque celles que ce PATCH remplace ou retire.
+    let old_images: Option<(Option<String>, Option<String>)> =
+        if body.avatar.is_some() || body.banner.is_some() {
+            sqlx::query_as("SELECT avatar, banner FROM users WHERE id=$1")
+                .bind(claims.sub)
+                .fetch_optional(&state.db)
+                .await?
+        } else {
+            None
+        };
+
     let user = sqlx::query_as::<_, crate::models::user::User>(
         "UPDATE users SET
+            avatar = CASE WHEN $33 THEN NULL ELSE avatar END,
             username = COALESCE($2, username),
             bio = COALESCE($3, bio),
             custom_status = CASE WHEN $4::TEXT IS NOT NULL THEN NULLIF($4, '') ELSE custom_status END,
@@ -195,6 +214,8 @@ pub async fn update_me(
             custom_status_expires_at = CASE WHEN $4::TEXT IS NOT NULL THEN $25 ELSE custom_status_expires_at END,
             avatar_decoration_opts = CASE WHEN $26 THEN $27 ELSE avatar_decoration_opts END,
             profile_effect_intensity = CASE WHEN $28::SMALLINT IS NULL THEN profile_effect_intensity WHEN $28 = 100 THEN NULL ELSE $28 END,
+            avatar_ring = CASE WHEN $29 THEN $30 ELSE avatar_ring END,
+            profile_card = CASE WHEN $31 THEN $32 ELSE profile_card END,
             updated_at = NOW()
          WHERE id=$1 RETURNING *"
     )
@@ -226,6 +247,11 @@ pub async fn update_me(
     .bind(custom.decoration_opts.is_some())
     .bind(custom.decoration_opts.flatten())
     .bind(body.profile_effect_intensity)
+    .bind(custom.avatar_ring.is_some())
+    .bind(custom.avatar_ring.flatten())
+    .bind(custom.profile_card.is_some())
+    .bind(custom.profile_card.flatten())
+    .bind(body.avatar.is_some())
     .fetch_one(&state.db)
     .await
     .map_err(|e| {
@@ -254,6 +280,13 @@ pub async fn update_me(
     if status_changed {
         crate::handlers::presence::refresh(&state, claims.sub).await;
     }
+    if let Some((old_avatar, old_banner)) = old_images {
+        for (old, new) in [(old_avatar, &user.avatar), (old_banner, &user.banner)] {
+            if old.is_some() && old.as_ref() != new.as_ref() {
+                crate::handlers::upload_gc::drop_replaced(&state, old).await;
+            }
+        }
+    }
 
     // Date de naissance et 2FA : jamais diffusées aux autres (voir get_user).
     let public_full = UserPublic::from(user.clone()).for_others();
@@ -266,7 +299,8 @@ pub async fn update_me(
     let event_no_activity = serde_json::json!({ "type": "USER_UPDATE", "user": public_no_activity }).to_string();
 
     // Soi-même voit toujours sa propre fiche complète (autres onglets/appareils)
-    state.broadcast_to_user(claims.sub, serde_json::json!({ "type": "USER_UPDATE", "user": UserPublic::from(user.clone()) }).to_string()).await;
+    // Statut CHOISI (invisible, ne pas déranger) pour soi, comme get_me.
+    state.broadcast_to_user(claims.sub, serde_json::json!({ "type": "USER_UPDATE", "user": user.clone().into_self_public() }).to_string()).await;
 
     let visible_to: Vec<Uuid> = sqlx::query_scalar(
         "SELECT DISTINCT sm2.user_id
@@ -348,15 +382,14 @@ pub async fn delete_account(
     // contrairement aux groupes DM, on ne réassigne pas silencieusement la propriété
     // d'un serveur entier à un membre au hasard). Sans ce check, DELETE FROM users
     // plus bas heurtait la contrainte FK (code Postgres 23503) et remontait en 500
-    // générique "Erreur base de données" -- aucune fonctionnalité de transfert de
-    // propriété n'existe (grep négatif sur servers.rs), donc un owner de serveur ne
-    // pouvait JAMAIS supprimer son compte sans un message expliquant pourquoi.
+    // générique "Erreur base de données". Le message indique les deux issues :
+    // transfert (POST /servers/:id/transfer) ou suppression du serveur.
     let owns_server: bool = sqlx::query_scalar(
         "SELECT EXISTS(SELECT 1 FROM servers WHERE owner_id=$1)"
     ).bind(claims.sub).fetch_one(&state.db).await?;
     if owns_server {
         return Err(AppError::BadRequest(
-            "Vous devez d'abord supprimer les serveurs dont vous êtes propriétaire.".into()
+            "Vous êtes propriétaire d'au moins un serveur : transférez-en la propriété              à un autre membre ou supprimez-le avant de supprimer votre compte.".into()
         ));
     }
 
@@ -439,19 +472,7 @@ pub async fn search_users(
         users.iter().map(|u| u.id).collect()
     } else {
         let ids: Vec<uuid::Uuid> = users.iter().map(|u| u.id).collect();
-        sqlx::query_scalar(
-            "SELECT u FROM UNNEST($1::uuid[]) AS u WHERE
-                EXISTS(SELECT 1 FROM server_members a JOIN server_members b ON a.server_id=b.server_id
-                       WHERE a.user_id=$2 AND b.user_id=u)
-             OR EXISTS(SELECT 1 FROM friendships f WHERE f.status='accepted'
-                       AND ((f.user_id=$2 AND f.friend_id=u) OR (f.friend_id=$2 AND f.user_id=u)))",
-        )
-        .bind(&ids)
-        .bind(claims.sub)
-        .fetch_all(&state.db)
-        .await?
-        .into_iter()
-        .collect()
+        crate::handlers::presence::related_users(&state.db, claims.sub, &ids).await?
     };
 
     // Fiches d'autres comptes : même masquage que get_user (date de naissance, 2FA),
@@ -511,8 +532,8 @@ pub async fn get_user_profile(
     let user = sqlx::query(
         "SELECT id, username, discriminator, avatar, banner, bio, status, custom_status,
                 custom_status_emoji, activity_type, activity_name, activity_detail,
-                is_verified, created_at, avatar_decoration, avatar_decoration_opts, profile_color_primary,
-                profile_color_accent, profile_effect, profile_effect_intensity, pronouns, display_name, name_style,
+                is_verified, created_at, avatar_decoration, avatar_decoration_opts, avatar_ring, profile_card,
+                profile_color_primary, profile_color_accent, profile_effect, profile_effect_intensity, pronouns, display_name, name_style,
                 profile_tag, profile_links, custom_status_expires_at
          FROM users WHERE id=$1"
     )
@@ -538,6 +559,8 @@ pub async fn get_user_profile(
         "created_at":           user.get::<chrono::DateTime<chrono::Utc>, _>("created_at"),
         "avatar_decoration":    user.get::<Option<String>, _>("avatar_decoration"),
         "avatar_decoration_opts": user.get::<Option<serde_json::Value>, _>("avatar_decoration_opts"),
+        "avatar_ring":          user.get::<Option<serde_json::Value>, _>("avatar_ring"),
+        "profile_card":         user.get::<Option<serde_json::Value>, _>("profile_card"),
         "profile_color_primary": user.get::<Option<i32>, _>("profile_color_primary"),
         "profile_color_accent": user.get::<Option<i32>, _>("profile_color_accent"),
         "profile_effect":       user.get::<Option<String>, _>("profile_effect"),
@@ -550,10 +573,31 @@ pub async fn get_user_profile(
         "custom_status_expires_at": user.get::<Option<chrono::DateTime<chrono::Utc>>, _>("custom_status_expires_at"),
         "relationship":         "none",
         "is_favorite":          false,
+        "connected_accounts":   crate::handlers::connections::visible_connections(&state.db, user_id).await?,
     });
 
     let mut is_self = false;
     let mut is_friend = false;
+    // Visiteur anonyme ou inconnu : ni présence ni statut personnalisé (voir get_user).
+    let related = match &claims {
+        Some(Extension(c)) => {
+            c.sub == user_id
+                || !crate::handlers::presence::related_users(&state.db, c.sub, &[user_id])
+                    .await?
+                    .is_empty()
+        }
+        None => false,
+    };
+    if !related {
+        profile["status"] = "offline".into();
+        for k in [
+            "custom_status",
+            "custom_status_emoji",
+            "custom_status_expires_at",
+        ] {
+            profile[k] = serde_json::Value::Null;
+        }
+    }
 
     if let Some(Extension(claims)) = claims {
         let me = claims.sub;

@@ -8,7 +8,7 @@ use uuid::Uuid;
 
 use crate::{
     error::{AppError, Result},
-    handlers::e2e_conv,
+    handlers::{dm_guard, e2e_conv, password_reset::over_limit},
     middleware::auth::Claims,
     state::AppState,
 };
@@ -32,64 +32,46 @@ pub async fn create_group_dm(
     members.sort();
     members.dedup();
     members.retain(|id| *id != claims.sub);
-    if members.len() < 1 {
+    if members.is_empty() {
         return Err(AppError::BadRequest("Au moins 1 autre membre requis".into()));
+    }
+    if over_limit(&state, &format!("gdm_create:{}", claims.sub), 10, 3600).await {
+        return Err(AppError::TooManyRequests);
     }
 
     use sqlx::Row;
     let name = body.name.as_deref().unwrap_or("Groupe").trim().chars().take(64).collect::<String>();
     let name = if name.is_empty() { "Groupe".to_string() } else { name };
 
+    // Même garde que le DM 1:1 (blocage dans les deux sens, dm_from_all/amitié,
+    // 404 si inconnu) ; un seul refus annule tout : pas de groupe amputé en silence.
+    // Tout se fait dans une transaction : un échec ne laisse pas de groupe fantôme.
+    let mut tx = state.db.begin().await?;
+    for uid in &members {
+        dm_guard::ensure_can_dm(&mut *tx, claims.sub, *uid).await?;
+    }
+
     let group = sqlx::query(
         "INSERT INTO group_dm_channels (name, owner_id) VALUES ($1, $2) RETURNING id"
     )
     .bind(&name)
     .bind(claims.sub)
-    .fetch_one(&state.db)
+    .fetch_one(&mut *tx)
     .await?;
 
     let group_id: Uuid = group.get("id");
 
-    // Ajouter le créateur comme membre
-    sqlx::query("INSERT INTO group_dm_members (dm_id, user_id) VALUES ($1, $2)")
-        .bind(group_id).bind(claims.sub).execute(&state.db).await?;
-
-    // Batch: récupérer tous les utilisateurs qui ont bloqué le créateur en une seule requête
-    let blockers: std::collections::HashSet<Uuid> = sqlx::query_scalar(
-        "SELECT blocker_id FROM blocks WHERE blocker_id = ANY($1) AND blocked_id=$2"
+    let all_members: Vec<Uuid> = std::iter::once(claims.sub).chain(members.iter().copied()).collect();
+    sqlx::query(
+        "INSERT INTO group_dm_members (dm_id, user_id)
+         SELECT $1, UNNEST($2::uuid[]) ON CONFLICT DO NOTHING"
     )
-    .bind(&members)
-    .bind(claims.sub)
-    .fetch_all(&state.db)
-    .await
-    .unwrap_or_default()
-    .into_iter()
-    .collect();
+    .bind(group_id)
+    .bind(&all_members)
+    .execute(&mut *tx)
+    .await?;
+    tx.commit().await?;
 
-    let allowed: Vec<Uuid> = members.iter().filter(|u| !blockers.contains(u)).copied().collect();
-    if !allowed.is_empty() {
-        // Propager l'échec (comme les inserts group/creator juste au-dessus) : avaler
-        // silencieusement laissait la requête renvoyer 200 + broadcaster GROUP_DM_CREATE
-        // à des membres jamais réellement insérés dans group_dm_members -- groupe fantôme
-        // que le créateur croit créé avec succès mais où les autres n'ont jamais accès.
-        sqlx::query(
-            "INSERT INTO group_dm_members (dm_id, user_id)
-             SELECT $1, UNNEST($2::uuid[]) ON CONFLICT DO NOTHING"
-        )
-        .bind(group_id)
-        .bind(&allowed)
-        .execute(&state.db)
-        .await?;
-    }
-
-    // Notifier les membres RÉELLEMENT ajoutés -- `members` est la liste demandée avant
-    // filtrage des bloqueurs, `allowed` est celle effectivement insérée. Utiliser
-    // `members` ici notifiait aussi quelqu'un qui avait bloqué le créateur (donc jamais
-    // inséré dans group_dm_members) : GROUP_DM_CREATE lui parvenait quand même,
-    // révélant l'activité du créateur à une personne qui a explicitement coupé le
-    // contact -- fuite mineure mais réelle, en plus d'un événement pour un groupe
-    // auquel cette personne n'appartient en fait pas.
-    let all_members: Vec<Uuid> = std::iter::once(claims.sub).chain(allowed.iter().copied()).collect();
     let event = serde_json::json!({ "type": "GROUP_DM_CREATE", "group": { "id": group_id, "name": name } });
     let event_str = event.to_string();
     for uid in &all_members {
@@ -195,7 +177,7 @@ pub async fn get_group_messages(
     .bind(group_id).bind(claims.sub).fetch_one(&state.db).await?;
     if !is_member { return Err(AppError::Forbidden); }
 
-    let limit: i64 = params.get("limit").and_then(|l| l.parse().ok()).unwrap_or(50).min(100).max(1);
+    let limit: i64 = params.get("limit").and_then(|l| l.parse().ok()).unwrap_or(50).clamp(1, 100);
     let before: Option<Uuid> = params.get("before").and_then(|s| s.parse().ok());
     let around: Option<Uuid> = params.get("around").and_then(|s| s.parse().ok());
     // Voir messages.rs::get_messages -- la branche `around` construit déjà son
@@ -884,23 +866,31 @@ pub async fn add_group_dm_member(
         "SELECT EXISTS(SELECT 1 FROM group_dm_members WHERE dm_id=$1 AND user_id=$2)"
     ).bind(group_id).bind(claims.sub).fetch_one(&state.db).await?;
     if !is_member { return Err(AppError::Forbidden); }
+    if over_limit(&state, &format!("gdm_add:{}", claims.sub), 30, 600).await {
+        return Err(AppError::TooManyRequests);
+    }
 
-    let member_count: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM group_dm_members WHERE dm_id=$1"
-    ).bind(group_id).fetch_one(&state.db).await.unwrap_or(0);
+    // Verrou sur la ligne du groupe : deux ajouts concurrents ne peuvent plus lire
+    // tous deux 9 membres et dépasser le plafond de 10.
+    let mut tx = state.db.begin().await?;
+    sqlx::query("SELECT 1 FROM group_dm_channels WHERE id=$1 FOR UPDATE")
+        .bind(group_id).fetch_optional(&mut *tx).await?
+        .ok_or_else(|| AppError::NotFound("Groupe introuvable".into()))?;
+    let (member_count, already): (i64, bool) = sqlx::query_as(
+        "SELECT COUNT(*), COALESCE(BOOL_OR(user_id=$2), FALSE) FROM group_dm_members WHERE dm_id=$1"
+    ).bind(group_id).bind(body.user_id).fetch_one(&mut *tx).await?;
+    if already {
+        return Ok(Json(serde_json::json!({ "ok": true })));
+    }
     if member_count >= 10 {
         return Err(AppError::BadRequest("Maximum 10 membres par groupe".into()));
     }
-
-    // Vérifier que l'utilisateur à ajouter n'a pas bloqué le demandeur
-    let blocked: bool = sqlx::query_scalar(
-        "SELECT EXISTS(SELECT 1 FROM blocks WHERE blocker_id=$1 AND blocked_id=$2)"
-    ).bind(body.user_id).bind(claims.sub).fetch_one(&state.db).await.unwrap_or(false);
-    if blocked { return Err(AppError::Forbidden); }
+    dm_guard::ensure_can_dm(&mut *tx, claims.sub, body.user_id).await?;
 
     sqlx::query(
         "INSERT INTO group_dm_members (dm_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING"
-    ).bind(group_id).bind(body.user_id).execute(&state.db).await?;
+    ).bind(group_id).bind(body.user_id).execute(&mut *tx).await?;
+    tx.commit().await?;
 
     let new_user = sqlx::query(
         "SELECT username, avatar FROM users WHERE id=$1"

@@ -55,6 +55,14 @@ pub struct Channel {
     /// Fils automatiques : chaque message ouvre son fil.
     #[sqlx(default)]
     pub auto_threads: bool,
+    /// Statut d'un salon vocal (137, handlers/channel_extras.rs).
+    #[sqlx(default)]
+    pub voice_status: Option<String>,
+    /// Forum : réaction par défaut et consignes de publication (137).
+    #[sqlx(default)]
+    pub default_reaction_emoji: Option<String>,
+    #[sqlx(default)]
+    pub post_guidelines: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -109,4 +117,57 @@ pub struct Category {
 #[derive(Debug, Deserialize)]
 pub struct CreateCategoryRequest {
     pub name: String,
+}
+
+/// Mode lent : 6 h au plus (comme Discord).
+pub const SLOWMODE_MAX: i32 = 21_600;
+/// Sujet du salon, en caractères.
+pub const TOPIC_MAX: usize = 1024;
+/// Mot de passe vocal : bcrypt n'utilise que 72 octets, au-delà il serait ignoré en silence.
+pub const VOICE_PASSWORD_MAX_BYTES: usize = 72;
+
+/// Nom de salon ou de catégorie rogné : 1 à 100 caractères (VARCHAR(100)). Avant : vide
+/// ou trop long passait jusqu'à la base (500) pour les catégories ; octets comptés pour les salons.
+pub fn clean_name(name: &str) -> Result<&str, &'static str> {
+    let name = name.trim();
+    if name.is_empty() || name.chars().count() > 100 {
+        return Err("Nom : 1 à 100 caractères");
+    }
+    Ok(name)
+}
+
+/// Bornes communes à la création et à la modification d'un salon.
+pub fn check_channel_fields(
+    topic: Option<&str>,
+    slowmode: Option<i32>,
+    user_limit: Option<i32>,
+) -> Result<(), &'static str> {
+    if topic.is_some_and(|t| t.chars().count() > TOPIC_MAX) {
+        return Err("Sujet : 1024 caractères au plus");
+    }
+    if slowmode.is_some_and(|s| !(0..=SLOWMODE_MAX).contains(&s)) {
+        return Err("Mode lent : 0 à 21600 secondes");
+    }
+    if user_limit.is_some_and(|l| !(0..=99).contains(&l)) {
+        return Err("Limite de places : 0 à 99");
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn bornes_salon() {
+        assert_eq!(clean_name("  général "), Ok("général"));
+        assert!(clean_name("   ").is_err());
+        assert!(clean_name(&"é".repeat(100)).is_ok());
+        assert!(clean_name(&"é".repeat(101)).is_err());
+        assert!(check_channel_fields(Some("ok"), Some(0), Some(99)).is_ok());
+        assert!(check_channel_fields(None, Some(SLOWMODE_MAX + 1), None).is_err());
+        assert!(check_channel_fields(None, Some(-1), None).is_err());
+        assert!(check_channel_fields(Some(&"x".repeat(TOPIC_MAX + 1)), None, None).is_err());
+        assert!(check_channel_fields(None, None, Some(100)).is_err());
+    }
 }

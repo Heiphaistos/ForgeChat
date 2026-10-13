@@ -7,6 +7,17 @@ use uuid::Uuid;
 
 use crate::state::AppState;
 
+/// Rappels en attente par utilisateur, au plus.
+pub const MAX_PENDING: i64 = 100;
+
+/// Échéance admise : pas dans le passé (1 min de marge d'horloge), au plus un an.
+pub fn valid_remind_at(
+    at: chrono::DateTime<chrono::Utc>,
+    now: chrono::DateTime<chrono::Utc>,
+) -> bool {
+    at >= now - chrono::Duration::minutes(1) && at <= now + chrono::Duration::days(366)
+}
+
 /// Livre les rappels échus des utilisateurs connectés (tous, ou un seul).
 /// Le rappel est réservé (`sent = TRUE`) dans la même requête qui le lit :
 /// la boucle périodique et une reconnexion simultanée ne l'envoient pas deux fois.
@@ -165,4 +176,19 @@ pub async fn cancel(
         return Err(crate::error::AppError::NotFound("Rappel introuvable".into()));
     }
     Ok(axum::Json(serde_json::json!({ "ok": true })))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::valid_remind_at;
+    use chrono::{Duration, Utc};
+
+    #[test]
+    fn echeance_bornee() {
+        let now = Utc::now();
+        assert!(valid_remind_at(now + Duration::minutes(10), now));
+        assert!(valid_remind_at(now - Duration::seconds(30), now));
+        assert!(!valid_remind_at(now - Duration::hours(1), now));
+        assert!(!valid_remind_at(now + Duration::days(400), now));
+    }
 }

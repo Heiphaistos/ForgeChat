@@ -2,6 +2,7 @@
 //! tout son contenu. En cas d'échec, le serveur créé et les fichiers copiés sont
 //! supprimés (jamais de serveur à moitié importé).
 
+use super::Att;
 use std::{
     collections::{HashMap, HashSet},
     io::{BufReader, Read},
@@ -92,7 +93,7 @@ struct Prepared {
     pinned: bool,
     reply_ref: Option<String>,
     /// (filename, content_type, size, url)
-    attachments: Vec<(String, String, i64, String)>,
+    attachments: Vec<Att>,
 }
 
 pub struct Importer {
@@ -163,7 +164,7 @@ impl Importer {
 
     async fn progress(&self, label: &str) {
         // Téléchargement = 0-20 %, import = 20-99 %
-        let pct = 20 + if self.total == 0 { 0 } else { (self.done * 79 / self.total) as i32 };
+        let pct = 20 + (self.done * 79).checked_div(self.total).unwrap_or(0) as i32;
         let _ = sqlx::query("UPDATE server_imports SET progress=$2, label=$3, updated_at=NOW() WHERE id=$1")
             .bind(self.import_id)
             .bind(pct.min(99))
@@ -526,7 +527,7 @@ impl Importer {
         let mut copied = self.copy(jobs).await?.into_iter();
 
         let mut extra: Vec<Vec<String>> = vec![Vec::new(); kept.len()];
-        let mut atts: Vec<Vec<(String, String, i64, String)>> = vec![Vec::new(); kept.len()];
+        let mut atts: Vec<Vec<Att>> = vec![Vec::new(); kept.len()];
         for (i, filename, in_zip, url) in targets {
             let size = if in_zip { copied.next().flatten() } else { None };
             match size {
@@ -598,7 +599,7 @@ impl Importer {
             .await
             .context("insertion des messages")?;
 
-            let atts: Vec<(Uuid, DateTime<Utc>, &(String, String, i64, String))> =
+            let atts: Vec<(Uuid, DateTime<Utc>, &Att)> =
                 rows.iter().flat_map(|r| r.attachments.iter().map(move |a| (r.id, r.created_at, a))).collect();
             if !atts.is_empty() {
                 sqlx::query(
