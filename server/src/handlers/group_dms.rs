@@ -215,7 +215,7 @@ pub async fn get_group_messages(
 
         let mut before_rows = sqlx::query(
             "SELECT m.id, m.content, m.created_at, m.edited_at, m.sender_id,
-                    u.username as sender_username, u.avatar as sender_avatar, u.avatar_decoration as sender_avatar_decoration,
+                    u.username as sender_username, u.avatar as sender_avatar, u.avatar_decoration as sender_avatar_decoration, u.avatar_decoration_opts as sender_avatar_decoration_opts,
                     m.reply_to, ru.username as reply_to_username, rm.content as reply_to_content,
                     m.enc, m.client_msg_id, m.purged, m.expires_at, m.expire_on_read, rm.enc as reply_to_enc,
                     rm.client_msg_id as reply_to_client_msg_id, rm.sender_id as reply_to_sender_id
@@ -231,7 +231,7 @@ pub async fn get_group_messages(
 
         let after_rows = sqlx::query(
             "SELECT m.id, m.content, m.created_at, m.edited_at, m.sender_id,
-                    u.username as sender_username, u.avatar as sender_avatar, u.avatar_decoration as sender_avatar_decoration,
+                    u.username as sender_username, u.avatar as sender_avatar, u.avatar_decoration as sender_avatar_decoration, u.avatar_decoration_opts as sender_avatar_decoration_opts,
                     m.reply_to, ru.username as reply_to_username, rm.content as reply_to_content,
                     m.enc, m.client_msg_id, m.purged, m.expires_at, m.expire_on_read, rm.enc as reply_to_enc,
                     rm.client_msg_id as reply_to_client_msg_id, rm.sender_id as reply_to_sender_id
@@ -251,7 +251,7 @@ pub async fn get_group_messages(
     } else if let Some(before_id) = before {
         sqlx::query(
             "SELECT m.id, m.content, m.created_at, m.edited_at, m.sender_id,
-                    u.username as sender_username, u.avatar as sender_avatar, u.avatar_decoration as sender_avatar_decoration,
+                    u.username as sender_username, u.avatar as sender_avatar, u.avatar_decoration as sender_avatar_decoration, u.avatar_decoration_opts as sender_avatar_decoration_opts,
                     m.reply_to, ru.username as reply_to_username, rm.content as reply_to_content,
                     m.enc, m.client_msg_id, m.purged, m.expires_at, m.expire_on_read, rm.enc as reply_to_enc,
                     rm.client_msg_id as reply_to_client_msg_id, rm.sender_id as reply_to_sender_id
@@ -268,7 +268,7 @@ pub async fn get_group_messages(
     } else {
         sqlx::query(
             "SELECT m.id, m.content, m.created_at, m.edited_at, m.sender_id,
-                    u.username as sender_username, u.avatar as sender_avatar, u.avatar_decoration as sender_avatar_decoration,
+                    u.username as sender_username, u.avatar as sender_avatar, u.avatar_decoration as sender_avatar_decoration, u.avatar_decoration_opts as sender_avatar_decoration_opts,
                     m.reply_to, ru.username as reply_to_username, rm.content as reply_to_content,
                     m.enc, m.client_msg_id, m.purged, m.expires_at, m.expire_on_read, rm.enc as reply_to_enc,
                     rm.client_msg_id as reply_to_client_msg_id, rm.sender_id as reply_to_sender_id
@@ -344,6 +344,7 @@ pub async fn get_group_messages(
             "sender_username": r.get::<String, _>("sender_username"),
             "sender_avatar": r.get::<Option<String>, _>("sender_avatar"),
             "sender_avatar_decoration": r.get::<Option<String>, _>("sender_avatar_decoration"),
+            "sender_avatar_decoration_opts": r.get::<Option<serde_json::Value>, _>("sender_avatar_decoration_opts"),
             "reply_to": r.get::<Option<Uuid>, _>("reply_to"),
             "reply_to_username": r.get::<Option<String>, _>("reply_to_username"),
             "reply_to_content": r.get::<Option<String>, _>("reply_to_content"),
@@ -451,7 +452,7 @@ pub async fn send_group_message(
         .bind(rid).fetch_optional(&state.db).await?
     } else { None };
 
-    let user = sqlx::query("SELECT username, avatar, avatar_decoration FROM users WHERE id=$1")
+    let user = sqlx::query("SELECT username, avatar, avatar_decoration, avatar_decoration_opts FROM users WHERE id=$1")
         .bind(claims.sub).fetch_one(&state.db).await?;
 
     let msg_json = serde_json::json!({
@@ -463,6 +464,7 @@ pub async fn send_group_message(
         "sender_username": user.get::<String, _>("username"),
         "sender_avatar": user.get::<Option<String>, _>("avatar"),
         "sender_avatar_decoration": user.get::<Option<String>, _>("avatar_decoration"),
+        "sender_avatar_decoration_opts": user.get::<Option<serde_json::Value>, _>("avatar_decoration_opts"),
         "reply_to": reply_to,
         "reply_to_username": reply_info.as_ref().map(|r| r.get::<String, _>("username")),
         "reply_to_content": reply_info.as_ref().and_then(|r| r.get::<Option<String>, _>("content")),

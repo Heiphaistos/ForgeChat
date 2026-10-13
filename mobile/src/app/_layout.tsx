@@ -32,6 +32,7 @@ import { bindWidgets } from '@/services/widgets'
 import { useSettings } from '@/stores/settings'
 import { colors, isLight } from '@/theme'
 import { clearFileCache } from '@/e2e/files'
+import { loadNameFonts } from '@/components/nameFonts'
 
 void SplashScreen.preventAutoHideAsync()
 /** Le lien de lancement n'est rejoué qu'une fois par process (jamais après une reconnexion). */
@@ -63,6 +64,11 @@ export default function RootLayout() {
   const pushPreview = useSettings((s) => s.pushPreview)
   const keepConnected = useSettings((s) => s.keepConnected)
   const keepAlive = useKeepAlive((s) => s.active)
+
+  // Polices embarquées du pseudo (expo-font) : chargées en tâche de fond, police système en attendant.
+  useEffect(() => {
+    void loadNameFonts()
+  }, [])
 
   // Démarrage : attendre les préférences (verrouillage) avant de restaurer la session.
   useEffect(() => {

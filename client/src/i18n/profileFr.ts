@@ -8,7 +8,7 @@ export const profileFr = {
   'profileId.displayName': "Nom d'affichage",
   'profileId.displayNameHint': "Affiché à la place de ton nom d'utilisateur (accents, espaces et emoji acceptés, 32 caractères). Vide = nom d'utilisateur.",
   'profileId.color': 'Couleur du pseudo',
-  'profileId.colorHint': "Une couleur = unie, 2 ou 3 = dégradé. Une couleur trop sombre est éclaircie à l'affichage pour rester lisible. Dans un serveur, la couleur des rôles peut passer devant (réglage du serveur).",
+  'profileId.colorHint': "Une couleur = unie, 2 à 5 = dégradé. Une couleur trop sombre est éclaircie à l'affichage pour rester lisible. Dans un serveur, la couleur des rôles peut passer devant (réglage du serveur).",
   'profileId.defaultColor': 'Par défaut',
   'profileId.preset': 'Préréglage {n}',
   'profileId.colorN': 'Couleur {n}',

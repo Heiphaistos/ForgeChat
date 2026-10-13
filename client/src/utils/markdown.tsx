@@ -265,7 +265,7 @@ function tokenize(text: string, customEmojis?: Record<string, string>): React.Re
         result.push(
           <StillableImg key={match.index} src={mediaUrl(url)} alt={name} title={`:${name}:`}
             loading="lazy" decoding="async"
-            className="inline-block w-5 h-5 object-contain align-middle mx-0.5" />
+            className="fc-emoji inline-block w-5 h-5 object-contain align-middle mx-0.5" />
         )
       } else {
         result.push(full)
@@ -370,6 +370,6 @@ function RemoteEmoji({ id, name }: { id: string; name: string }) {
   if (!data?.url) return <>{`:${name}:`}</>
   return (
     <StillableImg src={mediaUrl(data.url)} alt={name} title={`:${name}:`} loading="lazy" decoding="async"
-      className="inline-block w-5 h-5 object-contain align-middle mx-0.5" />
+      className="fc-emoji inline-block w-5 h-5 object-contain align-middle mx-0.5" />
   )
 }

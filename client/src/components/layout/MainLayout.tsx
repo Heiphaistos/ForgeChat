@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback, lazy, Suspense, useSyncExternalStore } from 'react'
+import { useState, useEffect, useRef, useCallback, lazy, Suspense, useSyncExternalStore, type CSSProperties } from 'react'
 import { Outlet, useLocation } from 'react-router-dom'
 import ServerSidebar from './ServerSidebar'
 import ChannelSidebar from './ChannelSidebar'
@@ -9,6 +9,9 @@ import ConnectionBanner from './ConnectionBanner'
 import { SplitContext } from '../../contexts/SplitContext'
 import { MobileContext } from '../../contexts/MobileContext'
 import { SIDEBAR_MIN, SIDEBAR_MAX, SIDEBAR_DEFAULT } from '../../constants/layout'
+import LookBackdrop from '../ui/LookBackdrop'
+import { useServerAppearance } from '../../hooks/useServerAppearance'
+import { accentVars } from '../../lib/serverAppearance'
 
 const ChannelPage = lazy(() => import('../../pages/ChannelPage'))
 
@@ -73,6 +76,10 @@ export default function MainLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const isMobile = useIsMobile()
   const location = useLocation()
+  // Apparence du serveur ouvert (accent, fond de la liste des salons) : vue par tous ses membres.
+  const lookServerId = /^\/servers\/([0-9a-f-]{36})(?:\/|$)/i.exec(location.pathname)?.[1]
+  const look = useServerAppearance(lookServerId)
+  const lookAccent = accentVars(look) as CSSProperties | undefined
 
   // Sidebar resize
   const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
@@ -191,7 +198,7 @@ export default function MainLayout() {
           <nav
             aria-label="Navigation"
             className={[
-              'flex flex-col h-full flex-shrink-0',
+              'fc-nav flex flex-col h-full flex-shrink-0',
               'fixed inset-y-0 left-0 z-50',
               'md:static md:inset-auto md:z-auto',
               'transition-transform duration-300 ease-in-out will-change-transform',
@@ -204,15 +211,20 @@ export default function MainLayout() {
               navSwipeX.current = null
             }}
           >
-            <div className="flex flex-1 min-h-0">
+            <div className="fc-nav-row flex flex-1 min-h-0">
               <ServerSidebar />
               {/* Actualités : la page a sa propre colonne de rubriques ; la liste des MP ne ferait que
                   manger de la place (sur téléphone, le tiroir reste là pour naviguer). */}
               <div
-                className={`flex flex-col bg-fc-channel flex-shrink-0 h-full ${location.pathname.startsWith('/news') ? 'md:hidden' : ''}`}
-                style={{ width: isMobile ? 'calc(100vw - 72px)' : `${sidebarWidth}px` }}
+                className={`relative flex flex-col bg-fc-channel flex-shrink-0 h-full ${location.pathname.startsWith('/news') ? 'md:hidden' : ''}`}
+                style={{ width: isMobile ? 'calc(100vw - 72px)' : `${sidebarWidth}px`, ...lookAccent }}
               >
-                <div className="flex-1 overflow-hidden flex flex-col min-h-0">
+                <LookBackdrop bg={look?.sidebar_bg} />
+                <div
+                  className="relative flex-1 overflow-hidden flex flex-col min-h-0"
+                  // Fond choisi par le serveur : les surfaces de la liste deviennent translucides par-dessus.
+                  style={look?.sidebar_bg ? ({ '--fc-surface-a': '0.6' } as CSSProperties) : undefined}
+                >
                   <ChannelSidebar />
                 </div>
               </div>
@@ -224,7 +236,7 @@ export default function MainLayout() {
 
           {/* Handle de redimensionnement sidebar — desktop uniquement */}
           <div
-            className="hidden md:flex w-1 flex-shrink-0 cursor-col-resize bg-transparent hover:bg-fc-accent/40 transition-colors group z-10"
+            className="fc-nav-handle hidden md:flex w-1 flex-shrink-0 cursor-col-resize bg-transparent hover:bg-fc-accent/40 transition-colors group z-10"
             onMouseDown={onResizeStart}
             onDoubleClick={() => { setSidebarWidth(SIDEBAR_DEFAULT); localStorage.setItem('fc_sidebar_width', String(SIDEBAR_DEFAULT)) }}
             title="Redimensionner la barre latérale (double-clic : largeur par défaut)"
@@ -236,6 +248,7 @@ export default function MainLayout() {
           <main
             id="fc-main"
             className="relative flex flex-1 overflow-hidden min-w-0"
+            style={lookAccent}
             onTouchStart={e => {
               const t = e.touches[0]
               edgeSwipe.current = isMobile && !sidebarOpen && t.clientX <= 20

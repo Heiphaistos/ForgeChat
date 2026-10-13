@@ -43,6 +43,7 @@ import { isIgnored } from './store/uxPrefs'
 import FloatingCallPiP from './components/voice/FloatingCallPiP'
 import VoiceHotkeys from './components/voice/VoiceHotkeys'
 import AppLockOverlay from './components/AppLockOverlay'
+import Logo3D from './components/Logo3D'
 import { setOfflineOwner } from './lib/offline'
 import { sendOutbox } from './lib/outboxSend'
 import { startAfkWatch } from './store/afk'
@@ -56,8 +57,7 @@ const AidePage = lazy(() => import('./pages/site/SitePages').then(m => ({ defaul
 const AProposPage = lazy(() => import('./pages/site/SitePages').then(m => ({ default: m.AProposPage })))
 const TelechargerPage = lazy(() => import('./pages/site/TelechargerPage'))
 const TelechargerPlateformePage = lazy(() => import('./pages/site/TelechargerPage').then(m => ({ default: m.TelechargerPlateformePage })))
-// Login/Register embarquent Logo3D (three.js, vendor-three ~150KB gzip) --
-// plus "légers" depuis son ajout, donc plus question de les charger en eager.
+// Pages de connexion chargées à la demande (le logo animé, lui, est léger : SVG + CSS).
 const LoginPage = lazy(() => import('./pages/LoginPage'))
 const RegisterPage = lazy(() => import('./pages/RegisterPage'))
 const MentionsLegalesPage = lazy(() => import('./pages/LegalPages').then(m => ({ default: m.MentionsLegalesPage })))
@@ -95,6 +95,13 @@ const SiteAdminPage = lazy(() => import('./pages/SiteAdminPage'))
 const ImportDiscordPage = lazy(() => import('./pages/ImportDiscordPage'))
 const KeyboardShortcutsModal = lazy(() => import('./components/KeyboardShortcutsModal'))
 
+/** Écran de chargement (session en cours de vérification) : logo 3D animé. */
+const SplashScreen = () => (
+  <div className="flex items-center justify-center h-screen bg-fc-bg" role="status" aria-label={tr('common.loading')}>
+    <Logo3D size={88} />
+  </div>
+)
+
 const PageFallback = () => (
   <div className="flex items-center justify-center h-full w-full min-h-[200px]">
     <div className="w-7 h-7 border-2 border-fc-accent border-t-transparent rounded-full animate-spin" />
@@ -105,9 +112,7 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth()
   const location = useLocation()
   if (loading) return (
-    <div className="flex items-center justify-center h-screen bg-fc-bg">
-      <div className="w-8 h-8 border-2 border-fc-accent border-t-transparent rounded-full animate-spin" />
-    </div>
+    <SplashScreen />
   )
   if (user) return <>{children}</>
   // Garder la destination (ex. lien profond /import-discord?src=…) pour y revenir après connexion
@@ -901,7 +906,7 @@ function AppInner() {
     const offUserUpdate = on('USER_UPDATE', (d: any) => {
       const u = d.user
       if (!u?.id) return
-      updateUserInMessages(u.id, u.username, u.avatar ?? null, u.avatar_decoration ?? null)
+      updateUserInMessages(u.id, u.username, u.avatar ?? null, u.avatar_decoration ?? null, u.avatar_decoration_opts ?? null)
       useNameStyles.getState().set(u.id, u)
       qcHook.invalidateQueries({ queryKey: ['members'] })
       qcHook.invalidateQueries({ queryKey: ['user', u.id] })
@@ -1200,9 +1205,7 @@ function HomeRoute() {
   const { user, loading } = useAuth()
   if (!isTauri) return <AccueilPage />
   if (loading) return (
-    <div className="flex items-center justify-center h-screen bg-fc-bg">
-      <div className="w-8 h-8 border-2 border-fc-accent border-t-transparent rounded-full animate-spin" />
-    </div>
+    <SplashScreen />
   )
   return <Navigate to={user ? '/friends' : '/login'} replace />
 }

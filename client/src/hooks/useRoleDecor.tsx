@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import api, { mediaUrl } from '../api/client'
 import { useUxPrefs } from '../lib/uxPrefs'
 import type { MemberClanTag } from '../components/ui/UserName'
+import { useServerAppearance } from './useServerAppearance'
 
 interface DecorRole {
   id: string
@@ -27,6 +28,8 @@ export interface RoleDecor {
   nameStyle?: unknown
   /** Marques de clan du membre. */
   tags?: MemberClanTag[]
+  /** Apparence du serveur : couleur du rôle montrée en pastille ou en badge (au lieu du pseudo). */
+  mark?: { kind: 'dot' | 'badge'; color: number; name: string }
 }
 
 const hex = (c: number) => '#' + (c >>> 0).toString(16).padStart(6, '0')
@@ -76,6 +79,8 @@ export function useRoleDecor(serverId?: string) {
     staleTime: 60_000,
   })
   const overridesName = server?.server?.role_color_overrides_name !== false
+  // Affichage des couleurs de rôle choisi dans l'apparence du serveur (pseudo, pastille, badge).
+  const roleDisplay = useServerAppearance(serverId)?.role_display ?? 'name'
 
   const map = useMemo(() => {
     const byId = new Map(roles.map(r => [r.id, r]))
@@ -89,8 +94,10 @@ export function useRoleDecor(serverId?: string) {
       const withIcon = mine.find(r => r.icon)
       const tags = Array.isArray(m.tags) && m.tags.length ? m.tags : undefined
       if (!colored && !withIcon && !m.server_avatar_ring && !m.server_name_style && !tags) continue
+      const asMark = roleDisplay !== 'name' && showColors && !!colored
       out.set(m.user_id, {
-        style: showColors && colored ? roleNameStyle(colored.color, colored.secondary_color) : undefined,
+        style: showColors && colored && !asMark ? roleNameStyle(colored.color, colored.secondary_color) : undefined,
+        mark: asMark ? { kind: roleDisplay, color: colored.color, name: colored.name } : undefined,
         icon: withIcon?.icon ?? undefined,
         iconTitle: withIcon?.name,
         overridesName,
@@ -100,9 +107,26 @@ export function useRoleDecor(serverId?: string) {
       })
     }
     return out
-  }, [roles, members, showColors, overridesName])
+  }, [roles, members, showColors, overridesName, roleDisplay])
 
   return useCallback((userId: string): RoleDecor | undefined => map.get(userId), [map])
+}
+
+/** Couleur du rôle en pastille ou en badge (apparence du serveur), à côté du pseudo. */
+export function RoleMark({ mark }: { mark?: RoleDecor['mark'] }) {
+  if (!mark) return null
+  const c = hex(mark.color)
+  return mark.kind === 'dot'
+    ? <span title={mark.name} role="img" aria-label={mark.name} className="inline-block w-2.5 h-2.5 rounded-full flex-shrink-0 align-middle" style={{ backgroundColor: c }} />
+    : (
+      <span
+        title={mark.name}
+        className="inline-flex items-center px-1.5 rounded text-[10px] font-semibold leading-4 flex-shrink-0 max-w-[8rem] truncate align-middle"
+        style={{ backgroundColor: `${c}33`, color: c, border: `1px solid ${c}66` }}
+      >
+        {mark.name}
+      </span>
+    )
 }
 
 /** Icône de rôle : image téléversée ou emoji (masquable : Accessibilité > icônes des rôles). */

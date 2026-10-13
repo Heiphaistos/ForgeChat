@@ -257,7 +257,7 @@ export const MessageItem = memo(function MessageItem({
         <View style={styles.gutter}>
           {grouped ? null : (
             <Pressable onPress={() => onPressAuthor(m.authorId)} onLongPress={authorMenu} delayLongPress={300} accessibilityRole="button" accessibilityLabel={t('msg.authorProfile', { name: m.authorName })}>
-              <Avatar uri={m.authorAvatar} name={m.authorName} size={40} decoration={m.authorDecoration} />
+              <Avatar uri={m.authorAvatar} name={m.authorName} size={40} decoration={m.authorDecoration} decorationOpts={m.authorDecorationOpts} />
             </Pressable>
           )}
         </View>

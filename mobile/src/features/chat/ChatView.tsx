@@ -72,8 +72,11 @@ export function ChatView({
   header,
   publishable,
   autoThreads,
+  backdrop,
 }: {
   conversation: ConversationRef
+  /** Fond posé sous les messages (apparence du serveur). */
+  backdrop?: React.ReactNode
   placeholder: string
   readOnly?: boolean
   readOnlyReason?: string
@@ -465,6 +468,7 @@ ${t('e2e.report.notice')}` : t('chat.reportReason'), [
   return (
     <CustomEmojiContext.Provider value={customEmojis}>
       <KeyboardAvoidingView behavior="padding" keyboardVerticalOffset={topOffset} onLayout={onKavLayout} style={{ flex: 1, backgroundColor: colors.bg }}>
+        {backdrop}
         {detached ? (
           <View style={styles.detached}>
             <Text style={styles.detachedText}>{t('chat.olderMessages')}</Text>

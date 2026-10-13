@@ -1,6 +1,6 @@
 // En-tête du serveur et menu déroulant de son nom (en haut de la liste des salons), comme Discord. Reprend les
 // entrées du clic droit du rail et ajoute catégorie, événements, fils, confidentialité, infos…
-import { useState } from 'react'
+import { useState, type CSSProperties } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Bell, CalendarPlus, ChevronDown, Copy, EyeOff, FolderPlus, Info, Lock, MessagesSquare, Palette, Plus, Bot,
@@ -19,6 +19,11 @@ import { useServerMenuExtras } from '../community/ServerMenuExtras'
 import ServerNotifModal from '../modals/ServerNotifModal'
 import ServerBoostBanner from '../server/ServerBoostBanner'
 import type { ServerSettingsTab } from '../modals/ServerSettingsModal'
+import ProfileBanner from '../ui/ProfileBanner'
+import ServerIcon from '../ui/ServerIcon'
+import StyledNameText from '../ui/StyledNameText'
+import { useServerAppearance } from '../../hooks/useServerAppearance'
+import { accentFill, bannerBounds, bannerFocus, bannerOverlayCss } from '../../lib/serverAppearance'
 
 interface ServerData {
   server?: { id: string; name: string; owner_id: string; created_at: string; member_count?: number; banner?: string | null; icon?: string | null }
@@ -89,6 +94,7 @@ export default function ServerHeader({ serverId, data, isAdmin, canCreate, open 
   const [menuAt, setMenuAt] = useState<{ x: number; y: number } | null>(null)
   const onClose = () => setMenuAt(null)
   const t = useT()
+  const look = useServerAppearance(serverId)
   const nav = useNavigate()
   const qc = useQueryClient()
   const { channelId } = useParams()
@@ -170,6 +176,9 @@ export default function ServerHeader({ serverId, data, isAdmin, canCreate, open 
   ]
 
   const server = data?.server
+  const bounds = bannerBounds(look?.banner)
+  const overlay = bannerOverlayCss(look?.banner, look?.accent) as CSSProperties | undefined
+  const fill = accentFill(look)
   return (
     <>
     <div className="relative">
@@ -184,34 +193,30 @@ export default function ServerHeader({ serverId, data, isAdmin, canCreate, open 
         aria-label={menuAt ? t('channels.closeMenu') : t('channels.openMenu')}
         aria-expanded={!!menuAt}
       >
-        {server?.banner ? (
-          <div className="relative">
-            {/* Bannière entière, à son format (jamais rognée) ; le nom passe sur un dégradé en bas. */}
-            <img src={mediaUrl(server.banner)} alt="" loading="lazy" decoding="async" className="w-full h-auto block" />
-            <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent" />
+        {server?.banner && mediaUrl(server.banner) ? (
+          // Bannière entière, à ses proportions (bornées selon le mode choisi), jamais rognée ;
+          // le nom passe sur le voile choisi dans l'apparence du serveur.
+          <ProfileBanner src={server.banner} minHeight={bounds.min} maxHeight={bounds.max} focus={bannerFocus(look?.banner)}>
+            {overlay && <div aria-hidden className="absolute inset-0 pointer-events-none" style={overlay} />}
             <div className="absolute inset-0 flex items-end justify-between px-4 py-2">
-              <span className="font-semibold text-white text-sm truncate drop-shadow">{server.name}</span>
+              <StyledNameText text={server.name} style={look?.name ?? null} className="font-semibold text-white text-sm truncate drop-shadow" />
               <ChevronDown size={16} className="text-white/80 flex-shrink-0" />
             </div>
-          </div>
+          </ProfileBanner>
         ) : server?.icon ? (
           <div className="relative h-16">
             <img src={mediaUrl(server.icon)} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
             <div className="absolute inset-0 bg-black/40" />
             <div className="absolute inset-0 flex items-end justify-between px-4 py-2">
-              <span className="font-semibold text-white text-sm truncate drop-shadow">{server.name}</span>
+              <StyledNameText text={server.name} style={look?.name ?? null} className="font-semibold text-white text-sm truncate drop-shadow" />
               <ChevronDown size={16} className="text-white/80 flex-shrink-0" />
             </div>
           </div>
         ) : (
-          <div className="flex items-center gap-3 px-4 py-3">
-            <div className="w-8 h-8 rounded-full bg-fc-accent flex items-center justify-center flex-shrink-0">
-              <span className="text-xs font-bold text-white uppercase">
-                {(server?.name ?? '?').split(' ').map((w: string) => w[0]).slice(0, 2).join('')}
-              </span>
-            </div>
-            <span className="font-semibold text-white truncate flex-1">{server?.name ?? '...'}</span>
-            <ChevronDown size={16} className="text-fc-muted flex-shrink-0" />
+          <div className="flex items-center gap-3 px-4 py-3" style={fill ? { background: fill } : undefined}>
+            <ServerIcon name={server?.name ?? '?'} look={look} size={32} />
+            <StyledNameText text={server?.name ?? '...'} style={look?.name ?? null} className="font-semibold text-white truncate flex-1 text-left" />
+            <ChevronDown size={16} className={`${fill ? 'text-white/80' : 'text-fc-muted'} flex-shrink-0`} />
           </div>
         )}
       </button>

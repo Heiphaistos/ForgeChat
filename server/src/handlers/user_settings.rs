@@ -172,11 +172,19 @@ pub async fn get_user_settings(
     Ok(Json(row))
 }
 
+/// Formes d'avatar acceptées (contrainte user_settings_avatar_shape_ok, migration 132).
+const AVATAR_SHAPES: [&str; 4] = ["round", "square", "rounded", "squircle"];
+
 pub async fn update_user_settings(
     Extension(claims): Extension<Claims>,
     State(state): State<AppState>,
     Json(body): Json<UpdateUserSettings>,
 ) -> Result<Json<UserSettings>> {
+    if let Some(shape) = body.avatar_shape.as_deref() {
+        if !AVATAR_SHAPES.contains(&shape) {
+            return Err(AppError::BadRequest("Forme d'avatar invalide".into()));
+        }
+    }
     if let Some(sz) = body.font_size_px {
         if !(10..=24).contains(&sz) {
             return Err(AppError::BadRequest("font_size_px doit être entre 10 et 24".into()));
@@ -879,6 +887,16 @@ mod theme_tests {
         assert!(valid_theme("dark") && valid_theme("tokyo-night") && valid_theme("rose_pine"));
         assert!(!valid_theme("") && !valid_theme("Dark") && !valid_theme("a b") && !valid_theme(&"x".repeat(41)));
         assert!(valid_theme("c-mgx3k2ab9f1z") && valid_theme("g-aurora"));
+    }
+
+    #[test]
+    fn avatar_shapes() {
+        use super::AVATAR_SHAPES;
+        for s in ["round", "square", "rounded", "squircle"] {
+            assert!(AVATAR_SHAPES.contains(&s));
+        }
+        assert!(!AVATAR_SHAPES.contains(&"hexagon") && !AVATAR_SHAPES.contains(&""));
+        assert!(AVATAR_SHAPES.iter().all(|s| s.len() <= 10), "VARCHAR(10)");
     }
 
     #[test]

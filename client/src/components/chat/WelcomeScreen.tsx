@@ -1,6 +1,11 @@
 import { mediaUrl } from '../../api/client'
 import { useNavigate } from 'react-router-dom'
 import { Hash, Volume2, Video, Megaphone, MessagesSquare, Images, Radio, Users } from 'lucide-react'
+import ProfileBanner from '../ui/ProfileBanner'
+import ServerIcon from '../ui/ServerIcon'
+import StyledNameText from '../ui/StyledNameText'
+import { useServerAppearance } from '../../hooks/useServerAppearance'
+import { accentFill, bannerFocus } from '../../lib/serverAppearance'
 
 interface Channel {
   id: string
@@ -38,54 +43,60 @@ function channelIcon(type: string) {
 
 export default function WelcomeScreen({ server, channels }: Props) {
   const nav = useNavigate()
+  const look = useServerAppearance(server.id)
+  const style = look?.welcome ?? 'classic'
+  const fill = accentFill(look)
 
   const textChannels = channels.filter(c => c.type === 'text' || c.type === 'announcement')
   const firstText = textChannels[0]
   const publicChannels = channels.filter(c => c.type !== 'voice' && c.type !== 'video' && c.type !== 'stage').slice(0, 8)
+  const hasBanner = !!mediaUrl(server.banner)
 
-  const initials = server.name
-    .split(' ')
-    .map(w => w[0])
-    .slice(0, 2)
-    .join('')
-    .toUpperCase()
+  // Style d'accueil choisi dans l'apparence du serveur : classique (bannière en tête),
+  // centré (sur la bannière floutée), carte (tout dans une carte), minimal (sans bannière).
+  // La bannière est toujours montrée entière (ProfileBanner), jamais rognée.
+  const banner = hasBanner && style !== 'minimal' && (
+    <ProfileBanner
+      src={server.banner}
+      alt="Bannière du serveur"
+      minHeight={120}
+      maxHeight="45vh"
+      focus={bannerFocus(look?.banner)}
+      className={style === 'classic' ? 'flex-shrink-0' : 'rounded-2xl flex-shrink-0'}
+    />
+  )
 
   return (
-    <div className="flex flex-col items-center h-full overflow-y-auto overscroll-contain">
-      {/* Banner */}
-      {server.banner ? (
-        // Bannière entière à son format : l'image floutée remplit les côtés, jamais de rognage.
-        <div className="relative w-full flex-shrink-0 overflow-hidden bg-black">
-          <img src={mediaUrl(server.banner)} alt="" aria-hidden className="absolute inset-0 w-full h-full object-cover blur-2xl scale-110 opacity-60" />
-          <img
-            src={mediaUrl(server.banner)}
-            alt="Bannière du serveur"
-            className="relative mx-auto w-full max-h-[45vh] object-contain"
-          />
-        </div>
-      ) : (
-        <div className="w-full h-[180px] bg-gradient-to-br from-fc-accent/40 via-purple-700/30 to-fc-bg flex-shrink-0" />
+    <div className={`relative flex flex-col items-center h-full overflow-y-auto overscroll-contain ${style === 'centered' ? 'justify-center' : ''}`}>
+      {style === 'centered' && hasBanner && (
+        <img src={mediaUrl(server.banner)} alt="" aria-hidden className="absolute inset-0 w-full h-full object-cover blur-3xl scale-110 opacity-30 pointer-events-none select-none" />
       )}
-
-      {/* Contenu centré */}
-      <div className="w-full max-w-2xl px-8 py-8 flex flex-col items-center">
-        {/* Icône serveur */}
+      {style === 'classic' && (banner || (
         <div
-          aria-label={server.name}
-          className="-mt-20 mb-4 w-[90px] h-[90px] rounded-full border-4 border-fc-bg bg-fc-accent flex items-center justify-center font-bold text-3xl text-white overflow-hidden shadow-xl flex-shrink-0"
-        >
-          {server.icon
-            ? <img src={mediaUrl(server.icon)} alt={server.name} loading="lazy" decoding="async" className="w-full h-full object-cover" />
-            : <span aria-hidden>{initials}</span>}
+          className="w-full h-[180px] bg-gradient-to-br from-fc-accent/40 via-purple-700/30 to-fc-bg flex-shrink-0"
+          style={fill ? { background: fill, opacity: 0.6 } : undefined}
+        />
+      ))}
+
+      {/* Contenu */}
+      <div className={`relative w-full max-w-2xl px-8 py-8 flex flex-col ${style === 'minimal' ? 'items-start' : 'items-center'} ${
+        style === 'card' ? 'my-8 bg-fc-channel/90 rounded-2xl shadow-xl px-6' : ''}`}>
+        {(style === 'centered' || style === 'card') && banner && <div className="w-full mb-6">{banner}</div>}
+
+        {/* Icône serveur (forme et anneau de l'apparence) */}
+        <div aria-label={server.name} className={`${style === 'classic' && !hasBanner ? '-mt-20' : ''} mb-4 flex-shrink-0`}>
+          <ServerIcon name={server.name} icon={server.icon} look={look} size={style === 'minimal' ? 56 : 90} className="shadow-xl" />
         </div>
 
         {/* Titre */}
-        <h1 className="text-3xl font-extrabold text-white mb-2 text-center">
-          Bienvenue sur <span className="text-fc-accent">{server.name}</span> !
+        <h1 className={`text-3xl font-extrabold text-white mb-2 ${style === 'minimal' ? 'text-left' : 'text-center'}`}>
+          Bienvenue sur {look?.name
+            ? <StyledNameText text={server.name} style={look.name} />
+            : <span className="text-fc-accent">{server.name}</span>} !
         </h1>
 
         {/* Message de bienvenue ou description */}
-        <p className="text-fc-muted text-center text-sm max-w-lg mb-2 leading-relaxed">
+        <p className={`text-fc-muted text-sm max-w-lg mb-2 leading-relaxed ${style === 'minimal' ? 'text-left' : 'text-center'}`}>
           {server.welcome_message
             ?? server.description
             ?? `Voici le serveur ${server.name}. Commence par choisir un canal et rejoindre la conversation !`}
@@ -125,7 +136,8 @@ export default function WelcomeScreen({ server, channels }: Props) {
         {firstText && (
           <button
             onClick={() => nav(`/servers/${server.id}/channels/${firstText.id}`)}
-            className="px-6 py-2.5 bg-fc-accent hover:bg-indigo-500 text-white rounded-lg font-semibold text-sm transition shadow-lg"
+            className="px-6 py-2.5 bg-fc-accent hover:brightness-110 text-white rounded-lg font-semibold text-sm transition shadow-lg"
+            style={fill ? { background: fill } : undefined}
           >
             Rejoindre #{firstText.name}
           </button>

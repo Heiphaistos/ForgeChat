@@ -5,8 +5,8 @@ import { AccessibilityInfo, ActivityIndicator, Alert, Platform, Pressable, Scrol
 import { Section } from '@/components/ui'
 import { APP_ENV } from '@/config/env'
 import { appIconSupported, applyAppIcon, currentAppIcon } from '@/features/appearance/appIcon'
-import { APP_ICON_NUMBERS, presetId, presetNumber, type AppIconId } from '@/features/appearance/appIconIds'
-import { DEFAULT_DEV_PREVIEW, DEFAULT_PREVIEW, PRESET_PREVIEWS } from '@/features/appearance/appIconPreviews'
+import { presetId, presetNumber, type AppIconId } from '@/features/appearance/appIconIds'
+import { DEFAULT_DEV_PREVIEW, DEFAULT_PREVIEW, PRESET_GROUPS, PRESET_PREVIEWS } from '@/features/appearance/appIconPreviews'
 import { useT } from '@/i18n'
 import { errorMessage } from '@/lib/http'
 import { colors, font, radius, spacing } from '@/theme'
@@ -14,6 +14,7 @@ import { useAppearance } from '@/theme/prefs'
 
 /** Icône d'origine de CE build (app.config.ts : variante orange « DEV » hors version publique). */
 const DEFAULT_ICON = APP_ENV === 'production' ? DEFAULT_PREVIEW : DEFAULT_DEV_PREVIEW
+const PRESET_NAMES = new Map(PRESET_GROUPS.flatMap((g) => g.presets.map((p) => [p.n, p.name] as const)))
 
 function Tile({ source, label, selected, disabled, onPress }: { source: ImageSourcePropType; label: string; selected: boolean; disabled: boolean; onPress: () => void }) {
   return (
@@ -31,7 +32,7 @@ function Tile({ source, label, selected, disabled, onPress }: { source: ImageSou
   )
 }
 
-/** Réglages → Apparence → Icône de l'app : les 50 icônes du web et du bureau, plus celle d'origine. */
+/** Réglages → Apparence → Icône de l'app : les icônes du web et du bureau (par familles), plus celle d'origine. */
 export default function AppIconScreen() {
   const t = useT()
   const saved = useAppearance((s) => s.appIcon)
@@ -64,7 +65,7 @@ export default function AppIconScreen() {
   }
 
   const n = presetNumber(saved)
-  const currentName = n === null ? t('appIcon.default') : t('appIcon.preset', { n })
+  const currentName = n === null ? t('appIcon.default') : (PRESET_NAMES.get(n) ?? t('appIcon.preset', { n }))
 
   return (
     <ScrollView style={{ backgroundColor: colors.bg }} contentContainerStyle={{ padding: spacing.lg }}>
@@ -84,18 +85,24 @@ export default function AppIconScreen() {
           <Section title={t('appIcon.current', { name: currentName })} footer={t('appIcon.hint')}>
             <View style={styles.grid} accessibilityRole="radiogroup" accessibilityLabel={t('appIcon.title')}>
               <Tile source={DEFAULT_ICON} label={t('appIcon.default')} selected={saved === null} disabled={busy} onPress={() => void pick(null)} />
-              {APP_ICON_NUMBERS.map((i) => (
-                <Tile
-                  key={i}
-                  source={PRESET_PREVIEWS[i]!}
-                  label={t('appIcon.preset', { n: i })}
-                  selected={saved === presetId(i)}
-                  disabled={busy}
-                  onPress={() => void pick(presetId(i))}
-                />
-              ))}
             </View>
           </Section>
+          {PRESET_GROUPS.map((g) => (
+            <Section key={g.id} title={g.label}>
+              <View style={styles.grid} accessibilityRole="radiogroup" accessibilityLabel={g.label}>
+                {g.presets.map((p) => (
+                  <Tile
+                    key={p.n}
+                    source={PRESET_PREVIEWS[p.n]!}
+                    label={p.name}
+                    selected={saved === presetId(p.n)}
+                    disabled={busy}
+                    onPress={() => void pick(presetId(p.n))}
+                  />
+                ))}
+              </View>
+            </Section>
+          ))}
         </>
       ) : null}
     </ScrollView>

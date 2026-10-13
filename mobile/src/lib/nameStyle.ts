@@ -7,12 +7,26 @@
 export const NAME_EFFECTS = [
   '', 'shimmer', 'glow', 'outline', 'neon', 'rainbow', 'wave', 'glitch', 'shadow3d',
   'fire', 'frost', 'pulse', 'holo', 'chrome', 'retro', 'float', 'sparkle',
+  'glow2', 'flicker', 'huecycle', 'electric', 'bounce', 'typewriter', 'breathe', 'gold',
+  'aurora', 'matrix', 'draw', 'longshadow', 'vaporwave', 'gradshift', 'jelly', 'shake',
+  'blurin', 'scanline', 'emboss', 'letterpress', 'comic', 'stencil', 'smoke', 'stars',
+  'candy', 'pixel', 'galaxy', 'lava', 'toxic', 'ghost', 'heartbeat',
 ] as const
 export const NAME_FONTS = [
   '', 'serif', 'mono', 'rounded', 'heavy', 'cursive', 'slab', 'condensed', 'wide', 'elegant',
   'typewriter', 'gothic', 'comic', 'impact', 'smallcaps', 'light', 'handwritten', 'futuristic',
   'retro', 'stencil', 'code', 'italic',
+  'arial', 'times', 'courier', 'cambria', 'calibri', 'display', 'inter', 'interthin',
+  'jetbrains', 'georgia', 'palatino', 'garamond', 'baskerville', 'bodoni', 'optima', 'futura',
+  'century', 'verdana', 'tahoma', 'trebuchet', 'gill', 'helvetica', 'avenir', 'copperplate',
+  'papyrus', 'marker', 'chalk', 'brush', 'calligraphy', 'console', 'arialblack', 'franklin',
+  'bookman', 'segoe', 'hoefler', 'candara', 'cascadia', 'lucida', 'caps', 'spaced', 'tight',
+  'serifcaps', 'monocaps', 'lower',
 ] as const
+/** Type de dégradé ('' = linéaire). Sur mobile, le dégradé suit le nom lettre par lettre. */
+export const NAME_GRADIENTS = ['', 'radial', 'conic', 'flow'] as const
+/** Style du contour ('' = trait simple). */
+export const OUTLINE_STYLES = ['', 'double', 'glow'] as const
 /** Fonds d'une marque de clan (étiquette perso ou tag de serveur). */
 export const TAG_BADGES = ['', 'solid', 'soft', 'outline', 'gradient', 'glass', 'pill', 'neon', 'plain'] as const
 /** Icônes d'une marque : identifiants traduits en glyphes par components/ClanTag.tsx. */
@@ -20,10 +34,17 @@ export const TAG_ICONS = [
   '', 'star', 'crown', 'shield', 'flame', 'bolt', 'heart', 'skull', 'leaf', 'diamond',
   'moon', 'sword', 'gem', 'paw', 'music', 'gamepad',
 ] as const
+/** Couleurs d'un pseudo : 1 = unie, 2 à NAME_COLORS_MAX = dégradé (comme le serveur). */
+export const NAME_COLORS_MAX = 5
 /** Épaisseur maximale du contour du pseudo (px), comme le serveur. */
-export const OUTLINE_WIDTH_MAX = 4
+export const OUTLINE_WIDTH_MAX = 6
+/** Intensité et vitesse de l'effet : 1 à LEVEL_MAX, LEVEL_DEFAULT = normal. */
+export const LEVEL_MAX = 10
+export const LEVEL_DEFAULT = 5
 export type NameEffect = (typeof NAME_EFFECTS)[number]
 export type NameFont = (typeof NAME_FONTS)[number]
+export type NameGradient = (typeof NAME_GRADIENTS)[number]
+export type OutlineStyle = (typeof OUTLINE_STYLES)[number]
 export type TagBadge = (typeof TAG_BADGES)[number]
 export type TagIcon = (typeof TAG_ICONS)[number]
 
@@ -45,16 +66,26 @@ export interface MemberClanTag {
 }
 
 export interface NameStyle {
-  /** 0 = couleur par défaut, 1 = unie, 2-3 = dégradé. */
+  /** 0 = couleur par défaut, 1 = unie, 2 à NAME_COLORS_MAX = dégradé. */
   colors: number[]
   /** Angle du dégradé (web) ; ignoré sur mobile : le dégradé suit le nom, caractère par caractère. */
   angle?: number
+  /** Type de dégradé (web) ; sur mobile, le dégradé suit le nom. */
+  gradient?: NameGradient
   effect?: NameEffect | (string & {})
+  /** Intensité de l'effet (1-10, 5 par défaut) : force de l'ombre sur mobile. */
+  intensity?: number
+  /** Vitesse de l'animation (1-10) : animations du web seulement. */
+  speed?: number
   font?: NameFont | (string & {})
   /** Couleur du contour (0xRRGGBB), seulement si `outline_width` > 0. */
   outline?: number
   /** Épaisseur du contour en px (0 à OUTLINE_WIDTH_MAX). */
   outline_width?: number
+  /** Style du contour (OUTLINE_STYLES). */
+  outline_style?: OutlineStyle
+  /** Trait extérieur du contour double (0xRRGGBB). */
+  outline2?: number
   /** Style de l'étiquette perso. */
   tag?: TagStyle
 }
@@ -72,8 +103,10 @@ export interface ResolvedName {
   colors: string[]
   effect: string
   font: string
-  /** Contour choisi (« #rrggbb », épaisseur 1-4). */
-  outline?: { color: string; width: number }
+  /** Intensité de l'effet (1-10), seulement si différente de LEVEL_DEFAULT. */
+  intensity?: number
+  /** Contour choisi (« #rrggbb », épaisseur 1-6, style, couleur extérieure du contour double). */
+  outline?: { color: string; width: number; style?: 'double' | 'glow'; color2?: string }
 }
 
 /** Effets qui imposent leur palette (comme le web) : couleurs choisies ignorées. */
@@ -83,10 +116,21 @@ export const EFFECT_PALETTES: Partial<Record<string, number[]>> = {
   fire: [0xffb300, 0xff6d00, 0xff3d00],
   frost: [0xffffff, 0x7fd3ff, 0xbdeeff],
   chrome: [0xffffff, 0x9aa4ae, 0xe9eef2, 0x7d8894],
+  gold: [0xfff1b8, 0xf5c542, 0xc9971c, 0xffe27a],
+  aurora: [0x7cffcb, 0x4fd1ff, 0xa77bff, 0xff7ad9],
+  matrix: [0xd9ffe0, 0x00ff66, 0x00b347],
+  vaporwave: [0xff71ce, 0x01cdfe, 0xb967ff, 0xfffb96],
+  electric: [0xffffff, 0x7df9ff, 0x4dabff],
+  galaxy: [0x8ef6ff, 0xa78bfa, 0xff7ad9, 0x7c9dff],
+  lava: [0xffd000, 0xff8c00, 0xff3b00],
+  toxic: [0xeaff00, 0x7dff00, 0x39ff14],
 }
 
 const isColor = (c: unknown): c is number => Number.isInteger(c) && (c as number) >= 0 && (c as number) <= 0xffffff
 const inList = <T extends string>(list: readonly T[], v: unknown): T => ((list as readonly unknown[]).includes(v ?? '') ? ((v ?? '') as T) : ('' as T))
+/** Niveau 1-10 (intensité, vitesse) ; absent ou invalide → LEVEL_DEFAULT. */
+export const level = (v: unknown): number =>
+  typeof v === 'number' && Number.isFinite(v) ? Math.min(LEVEL_MAX, Math.max(1, Math.round(v))) : LEVEL_DEFAULT
 
 /** Style de marque valide et non vide ? (même règle que le serveur). */
 export function cleanTagStyle(s: unknown): TagStyle | null {
@@ -111,7 +155,7 @@ export function cleanTagStyle(s: unknown): TagStyle | null {
 export function cleanNameStyle(s: unknown): NameStyle | null {
   if (!s || typeof s !== 'object') return null
   const o = s as Record<string, unknown>
-  const colors = Array.isArray(o.colors) ? o.colors.filter(isColor).slice(0, 3) : []
+  const colors = Array.isArray(o.colors) ? o.colors.filter(isColor).slice(0, NAME_COLORS_MAX) : []
   const effect = inList(NAME_EFFECTS, o.effect)
   const font = inList(NAME_FONTS, o.font)
   const angle = typeof o.angle === 'number' && Number.isFinite(o.angle) ? Math.min(360, Math.max(0, o.angle)) : 90
@@ -119,9 +163,20 @@ export function cleanNameStyle(s: unknown): NameStyle | null {
   const tag = cleanTagStyle(o.tag)
   if (!colors.length && !effect && !font && !width && !tag) return null
   const out: NameStyle = { colors, angle, effect, font }
+  // Mêmes normalisations que le serveur : dégradé avec 2 couleurs, réglages avec un effet.
+  const gradient = colors.length > 1 ? inList(NAME_GRADIENTS, o.gradient) : ''
+  if (gradient) out.gradient = gradient
+  if (effect) {
+    const [intensity, speed] = [level(o.intensity), level(o.speed)]
+    if (intensity !== LEVEL_DEFAULT) out.intensity = intensity
+    if (speed !== LEVEL_DEFAULT) out.speed = speed
+  }
   if (width) {
     out.outline_width = width
     out.outline = isColor(o.outline) ? o.outline : 0
+    const os = inList(OUTLINE_STYLES, o.outline_style)
+    if (os) out.outline_style = os
+    if (os === 'double') out.outline2 = isColor(o.outline2) ? o.outline2 : 0xffffff
   }
   if (tag) out.tag = tag
   return out
@@ -212,15 +267,26 @@ export function resolveNameStyle({
 }): ResolvedName | null {
   const role = typeof roleColor === 'number' ? roleColor || null : parseHex(roleColor)
   const font = typeof style?.font === 'string' ? style.font : ''
-  const own = (style?.colors ?? []).filter(isColor).slice(0, 3)
+  const own = (style?.colors ?? []).filter(isColor).slice(0, NAME_COLORS_MAX)
   const fit = (cs: number[]) => cs.map((c) => toHex(ensureContrast(c, bg)))
   const w = Number.isInteger(style?.outline_width) ? Math.min(OUTLINE_WIDTH_MAX, Math.max(0, style!.outline_width!)) : 0
   // Police et contour perso gardés même quand la couleur du rôle passe devant (comme le web).
-  const outline = w > 0 ? { outline: { color: toHex(isColor(style?.outline) ? style!.outline! : 0), width: w } } : {}
+  const os = inList(OUTLINE_STYLES, style?.outline_style)
+  const outline: Pick<ResolvedName, 'outline'> = w > 0
+    ? {
+        outline: {
+          color: toHex(isColor(style?.outline) ? style!.outline! : 0),
+          width: w,
+          ...(os ? { style: os } : {}),
+          ...(os === 'double' ? { color2: toHex(isColor(style?.outline2) ? style!.outline2! : 0xffffff) } : {}),
+        },
+      }
+    : {}
   if (role != null && roleOverrides !== false) return { colors: fit([role]), effect: '', font, ...outline }
   const effect = typeof style?.effect === 'string' ? style.effect : ''
   const palette = EFFECT_PALETTES[effect]
   const cs = palette ?? (own.length ? own : role != null ? [role] : [])
   if (!cs.length && !effect && !font && !w) return null
-  return { colors: palette ? palette.map(toHex) : fit(cs), effect, font, ...outline }
+  const intensity = effect ? level(style?.intensity) : LEVEL_DEFAULT
+  return { colors: palette ? palette.map(toHex) : fit(cs), effect, font, ...(intensity !== LEVEL_DEFAULT ? { intensity } : {}), ...outline }
 }

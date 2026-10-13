@@ -554,7 +554,7 @@ pub async fn get_members(
     require_member(&state, claims.sub, server_id).await?;
 
     let members = sqlx::query(
-        "SELECT sm.*, u.username, u.discriminator, COALESCE(sm.server_avatar, u.avatar) AS avatar, u.avatar_decoration, u.status, u.custom_status,
+        "SELECT sm.*, u.username, u.discriminator, COALESCE(sm.server_avatar, u.avatar) AS avatar, u.avatar_decoration, u.avatar_decoration_opts, u.status, u.custom_status,
                 COALESCE((SELECT array_agg(mr.role_id) FROM member_roles mr
                           WHERE mr.user_id = sm.user_id AND mr.server_id = sm.server_id),
                          '{}'::uuid[]) AS role_ids,
@@ -585,6 +585,7 @@ pub async fn get_members(
                 // Avatar du profil de serveur s'il existe (075), sinon celui du compte.
                 "avatar": r.get::<Option<String>, _>("avatar"),
                 "avatar_decoration": r.get::<Option<String>, _>("avatar_decoration"),
+                "avatar_decoration_opts": r.get::<Option<serde_json::Value>, _>("avatar_decoration_opts"),
                 "server_banner": r.get::<Option<String>, _>("server_banner"),
                 "server_bio": r.get::<Option<String>, _>("server_bio"),
                 // Profil de serveur (129) : anneau d'avatar et style du pseudo, JSON validé.
@@ -863,47 +864,15 @@ pub async fn upload_server_icon(
     Err(AppError::BadRequest("Champ image manquant".into()))
 }
 
-/// ServerSettingsModal.tsx's "upload banner file" button called POST .../icon (the
-/// only upload endpoint that existed) -- silently overwriting the server's icon with
-/// what the admin thought was a banner upload. No banner-file endpoint ever existed;
-/// only the URL text field (banner column, via the main PATCH) worked as intended.
+/// POST /servers/:server_id/banner : vérification complète de l'image (format réel,
+/// dimensions, antivirus, animations gardées), voir handlers/server_look.rs.
 pub async fn upload_server_banner(
     State(state): State<AppState>,
     Extension(claims): Extension<Claims>,
     Path(server_id): Path<Uuid>,
-    mut multipart: Multipart,
+    multipart: Multipart,
 ) -> Result<Json<serde_json::Value>> {
-    require_owner(&state, claims.sub, server_id).await?;
-
-    if let Some(field) = multipart.next_field().await.map_err(|e| AppError::BadRequest(e.to_string()))? {
-        let ct = field.content_type().unwrap_or("image/jpeg").to_string();
-        if !ct.starts_with("image/") {
-            return Err(AppError::BadRequest("Type de fichier non supporté".into()));
-        }
-        let ext = match ct.as_str() {
-            "image/png" => "png", "image/gif" => "gif", "image/webp" => "webp", _ => "jpg",
-        };
-        let data = field.bytes().await.map_err(|e| AppError::BadRequest(e.to_string()))?;
-        if data.len() > 2 * 1024 * 1024 {
-            return Err(AppError::BadRequest("Fichier trop grand (max 2 MB)".into()));
-        }
-        let filename = format!("server-banners/{}.{}", Uuid::new_v4(), ext);
-        let path = std::path::Path::new(&state.config.upload_dir).join(&filename);
-        if let Some(parent) = path.parent() {
-            tokio::fs::create_dir_all(parent).await.map_err(|e| AppError::Internal(e.into()))?;
-        }
-        crate::antivirus::check(&data).await?;
-        tokio::fs::write(&path, &data).await.map_err(|e| AppError::Internal(e.into()))?;
-        let banner_url = format!("/uploads/{}", filename);
-        sqlx::query("UPDATE servers SET banner=$2 WHERE id=$1")
-            .bind(server_id)
-            .bind(&banner_url)
-            .execute(&state.db)
-            .await?;
-        return Ok(Json(serde_json::json!({ "banner": banner_url })));
-    }
-
-    Err(AppError::BadRequest("Champ image manquant".into()))
+    crate::handlers::server_look::upload_server_banner(state, claims, server_id, multipart).await
 }
 
 pub async fn get_server_stats(

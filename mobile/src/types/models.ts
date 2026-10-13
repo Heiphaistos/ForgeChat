@@ -28,9 +28,11 @@ export interface User {
   created_at?: string
   /** Personnalisation du profil (migration 081). */
   avatar_decoration?: string | null
+  avatar_decoration_opts?: unknown
   profile_color_primary?: number | null
   profile_color_accent?: number | null
   profile_effect?: string | null
+  profile_effect_intensity?: number | null
   /** Pseudo personnalisé (migration 088) : voir lib/nameStyle. */
   display_name?: string | null
   name_style?: NameStyle | null
@@ -66,6 +68,8 @@ export interface Server {
   boost_level?: number
   /** La couleur des rôles remplace la couleur perso du pseudo (défaut true). */
   role_color_overrides_name?: boolean
+  /** Apparence du serveur (migration 135), nettoyée par features/servers/serverLook.ts. */
+  look?: unknown
 }
 
 export type ChannelType =
@@ -192,6 +196,7 @@ export interface ServerMessage {
   author_discriminator: string
   author_avatar: string | null
   author_avatar_decoration?: string | null
+  author_avatar_decoration_opts?: unknown
   author_is_bot: boolean
   author_verified?: boolean
   attachments: Attachment[]
@@ -217,6 +222,7 @@ export interface DmMessage {
   sender_username: string
   sender_avatar: string | null
   sender_avatar_decoration?: string | null
+  sender_avatar_decoration_opts?: unknown
   edited_at?: string | null
   reply_to_id?: string | null
   reply_to?: { id: string; content: string | null; sender_id: string; sender_username: string } | null
@@ -240,6 +246,7 @@ export interface GroupMessage {
   sender_username: string
   sender_avatar: string | null
   sender_avatar_decoration?: string | null
+  sender_avatar_decoration_opts?: unknown
   reply_to?: string | null
   reply_to_username?: string | null
   reply_to_content?: string | null
@@ -262,6 +269,7 @@ export interface ChatMessage {
   authorName: string
   authorAvatar: string | null
   authorDecoration?: string | null
+  authorDecorationOpts?: unknown
   authorIsBot: boolean
   reply: { id: string | null; authorName: string | null; content: string | null } | null
   forwardedFrom: string | null
@@ -375,6 +383,7 @@ export interface Member {
   discriminator?: string
   avatar: string | null
   avatar_decoration?: string | null
+  avatar_decoration_opts?: unknown
   status?: UserStatus
   nickname?: string | null
   /** Profil propre à ce serveur ; `avatar` y est déjà substitué par le serveur. */

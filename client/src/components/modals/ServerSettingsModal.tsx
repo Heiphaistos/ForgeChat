@@ -1,9 +1,11 @@
 import { useState, useRef } from 'react'
 import BirthdayChannelSetting from '../server/BirthdayChannelSetting'
 import { createPortal } from 'react-dom'
-import { X, Trash2, Upload, SmilePlus, Bot, Plus, RefreshCw, Copy, Check, Shield, Users, Ban, Tag, Link, ScrollText, Rss, BarChart2, Image, Calendar, Sparkles, Lock, Trophy } from 'lucide-react'
+import { X, Trash2, Upload, SmilePlus, Bot, Plus, RefreshCw, Copy, Check, Shield, Users, Ban, Tag, Link, ScrollText, Rss, BarChart2, Image, Calendar, Sparkles, Lock, Trophy, Palette } from 'lucide-react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import api, { mediaUrl } from '../../api/client'
+import ProfileBanner from '../ui/ProfileBanner'
+import ServerAppearanceTab from './ServerAppearanceTab'
 import toast from 'react-hot-toast'
 import { useEscapeKey } from '../../hooks/useEscapeKey'
 import { useServerPerms, PERM } from '../../hooks/useServerPerms'
@@ -67,7 +69,7 @@ interface Props {
   initialTab?: ServerSettingsTab
 }
 
-export type ServerSettingsTab = 'general' | 'profile' | 'e2e' | 'roles' | 'members' | 'bans' | 'tags' | 'emojis' | 'bots' | 'webhooks' | 'audit' | 'automod' | 'feeds' | 'discordSync' | 'stats' | 'events' | 'onboarding' | 'community'
+export type ServerSettingsTab = 'general' | 'appearance' | 'profile' | 'e2e' | 'roles' | 'members' | 'bans' | 'tags' | 'emojis' | 'bots' | 'webhooks' | 'audit' | 'automod' | 'feeds' | 'discordSync' | 'stats' | 'events' | 'onboarding' | 'community'
 
 function BoostSection({ server }: { server: any }) {
   // Boost gratuit (un par membre et par serveur) : même appel que le bouton de la barre des salons.
@@ -322,6 +324,7 @@ export default function ServerSettingsModal({ server, onClose, isAdmin = false, 
       label: null,
       tabs: [
         { id: 'general' },
+        { id: 'appearance', icon: Palette },
         { id: 'profile' },
         { id: 'e2e', icon: Lock },
       ],
@@ -468,8 +471,9 @@ export default function ServerSettingsModal({ server, onClose, isAdmin = false, 
                 <div>
                   <label className="block text-xs font-semibold text-fc-muted uppercase tracking-wide mb-3">{t('srv.banner')}</label>
                   {bannerUrl && (
-                    <div className="mb-3 rounded-lg overflow-hidden h-[120px] bg-fc-channel">
-                      <img src={mediaUrl(bannerUrl)} alt={t('srv.bannerAlt')} loading="lazy" decoding="async" className="w-full h-full object-cover" />
+                    // Aperçu : la bannière entière, telle que les membres la verront.
+                    <div className="mb-3 rounded-lg overflow-hidden bg-fc-channel">
+                      <ProfileBanner src={bannerUrl} alt={t('srv.bannerAlt')} minHeight={72} maxHeight={260} />
                     </div>
                   )}
                   <div className="flex gap-2">
@@ -484,12 +488,12 @@ export default function ServerSettingsModal({ server, onClose, isAdmin = false, 
                       autoComplete="off"
                       className="flex-1 px-3 py-2 bg-fc-input rounded text-white outline-none focus:ring-2 focus:ring-fc-accent text-sm"
                     />
-                    <input ref={bannerInputRef} type="file" accept="image/*" className="hidden"
+                    <input ref={bannerInputRef} type="file" accept="image/png,image/jpeg,image/gif,image/webp" className="hidden"
                       onChange={e => {
                         const file = e.target.files?.[0]
                         if (!file) return
-                        if (file.size > 2 * 1024 * 1024) {
-                          toast.error(t('srv.bannerTooBig'))
+                        if (file.size > 10 * 1024 * 1024) {
+                          toast.error(t('srvLook.bannerTooBig'))
                           return
                         }
                         uploadBanner.mutate(file)
@@ -505,7 +509,7 @@ export default function ServerSettingsModal({ server, onClose, isAdmin = false, 
                       <Image size={14} />
                     </button>
                   </div>
-                  <p className="text-xs text-fc-muted mt-1">{t('srv.bannerFormats')}</p>
+                  <p className="text-xs text-fc-muted mt-1">{t('srvLook.bannerFormats')}</p>
                 </div>
 
                 <div className="flex items-center justify-between p-4 bg-fc-channel rounded-lg">
@@ -868,6 +872,7 @@ export default function ServerSettingsModal({ server, onClose, isAdmin = false, 
               </div>
             )}
 
+            {tab === 'appearance' && <ServerAppearanceTab serverId={server.id} canEdit={estProprietaire} />}
             {tab === 'profile' && <MyServerProfileTab serverId={server.id} />}
             {tab === 'e2e' && <ServerKeySettings serverId={server.id} serverName={server.name} isOwner={estProprietaire} />}
             {tab === 'events'  && <ServerEventsPage serverId={server.id} />}

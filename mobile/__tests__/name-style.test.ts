@@ -1,5 +1,14 @@
 import { animatedImageType, profileLinkError } from '@/features/account/rules'
-import { contrastRatio, displayNameOf, ensureContrast, gradientChars, parseHex, resolveNameStyle, toHex } from '@/lib/nameStyle'
+import { readFileSync } from 'fs'
+import { join } from 'path'
+import { effectStyle, outlineStyle } from '@/components/nameEffects'
+import { BUNDLED_FONTS, NAME_FONT_BUNDLED, NAME_FONT_STYLES, nameFontStyle } from '@/components/nameFonts'
+import { effectLabel, fontLabel } from '@/features/account/nameStyleLabels'
+import { fr } from '@/i18n/fr'
+import {
+  LEVEL_DEFAULT, LEVEL_MAX, NAME_COLORS_MAX, NAME_EFFECTS, NAME_FONTS, NAME_GRADIENTS, OUTLINE_STYLES, OUTLINE_WIDTH_MAX,
+  cleanNameStyle, contrastRatio, displayNameOf, ensureContrast, gradientChars, parseHex, resolveNameStyle, toHex,
+} from '@/lib/nameStyle'
 
 describe('style du pseudo', () => {
   it('dégradé : une couleur par caractère, des extrémités exactes', () => {
@@ -61,5 +70,64 @@ describe('style du pseudo', () => {
     expect(animatedImageType('image/gif', null)).toBe('image/gif')
     expect(animatedImageType(undefined, 'chat.WEBP')).toBe('image/webp')
     expect(animatedImageType('image/jpeg', 'photo.jpg')).toBeNull()
+  })
+})
+
+describe('style du pseudo : listes blanches, réglages et polices', () => {
+  const root = join(__dirname, '..', '..')
+  const read = (...p: string[]) => readFileSync(join(root, ...p), 'utf8')
+  const rustList = (src: string, name: string) =>
+    [...(src.split(`${name}: &[&str] = &[`)[1]?.split('];')[0] ?? '').matchAll(/"([^"]*)"/g)].map((m) => m[1])
+  const tsList = (src: string, name: string) =>
+    [...(src.split(`export const ${name} = [`)[1]?.split('] as const')[0] ?? '').matchAll(/'([^']*)'/g)].map((m) => m[1])
+  const rustNum = (src: string, name: string) => Number(src.match(new RegExp(`pub const ${name}: \\w+ = (\\d+);`))?.[1])
+
+  it('mêmes listes et bornes que le serveur et le web', () => {
+    const server = read('server', 'src', 'models', 'profile_style.rs')
+    const web = read('client', 'src', 'lib', 'nameStyle.ts')
+    const lists: Record<string, readonly string[]> = { NAME_EFFECTS, NAME_FONTS, NAME_GRADIENTS, OUTLINE_STYLES }
+    for (const [name, list] of Object.entries(lists)) {
+      expect(rustList(server, name)).toEqual([...list])
+      expect(tsList(web, name)).toEqual([...list])
+    }
+    const nums: Record<string, number> = { NAME_COLORS_MAX, OUTLINE_WIDTH_MAX, LEVEL_MAX, LEVEL_DEFAULT }
+    for (const [name, v] of Object.entries(nums)) expect(rustNum(server, name)).toBe(v)
+    expect(NAME_EFFECTS.length - 1).toBeGreaterThanOrEqual(40)
+    expect(NAME_FONTS.length - 1).toBeGreaterThanOrEqual(60)
+  })
+
+  it('style nettoyé : 5 couleurs, dégradé, intensité, contour double ou lumineux', () => {
+    const s = cleanNameStyle({ colors: [1, 2, 3, 4, 5, 6], gradient: 'conic', effect: 'aurora', intensity: 42, speed: 0, outline_width: 9, outline_style: 'double' })
+    expect(s).toEqual({ colors: [1, 2, 3, 4, 5], angle: 90, effect: 'aurora', font: '', gradient: 'conic', intensity: 10, speed: 1, outline_width: 6, outline: 0, outline_style: 'double', outline2: 0xffffff })
+    expect(cleanNameStyle({ colors: [1], gradient: 'radial', intensity: 9 })).toEqual({ colors: [1], angle: 90, effect: '', font: '' })
+    expect(cleanNameStyle({ colors: [1, 2], gradient: 'url(x)', outline_width: 2, outline_style: 'x;y', outline2: 3 })).toEqual({ colors: [1, 2], angle: 90, effect: '', font: '', outline_width: 2, outline: 0 })
+  })
+
+  it('rendu résolu : intensité et contour gardés, rôle prioritaire garde le contour', () => {
+    const r = resolveNameStyle({ style: { colors: [0xffd166], effect: 'glow', intensity: 9, outline: 0xff0000, outline_width: 3, outline_style: 'double', outline2: 0x00ff00 } })
+    expect(r).toEqual({ colors: ['#ffd166'], effect: 'glow', font: '', intensity: 9, outline: { color: '#ff0000', width: 3, style: 'double', color2: '#00ff00' } })
+    const role = resolveNameStyle({ style: { colors: [1], outline_width: 2, outline_style: 'glow' }, roleColor: '#3ba55c' })
+    expect(role?.outline).toEqual({ color: '#000000', width: 2, style: 'glow' })
+    expect(resolveNameStyle({ style: { colors: [], effect: 'gold' } })?.colors.length).toBeGreaterThan(1)
+  })
+
+  it('chaque police et chaque effet a un rendu et un libellé ; polices embarquées sûres', () => {
+    for (const f of NAME_FONTS.slice(1)) {
+      expect(NAME_FONT_STYLES[f]).toBeTruthy()
+      expect(fr[fontLabel(f) as keyof typeof fr]).toBeTruthy()
+    }
+    for (const e of NAME_EFFECTS) expect(fr[effectLabel(e) as keyof typeof fr]).toBeTruthy()
+    for (const fam of Object.values(NAME_FONT_BUNDLED)) expect(Object.keys(BUNDLED_FONTS)).toContain(fam)
+    // Police embarquée pas encore chargée : la famille système reste (jamais de famille inconnue).
+    expect(nameFontStyle('calibri')?.fontFamily).not.toBe('FCHumanist')
+    expect(nameFontStyle('')).toBeNull()
+    expect(nameFontStyle('Comic;x')).toBeNull()
+  })
+
+  it('effets statiques : une ombre plus forte avec l’intensité', () => {
+    expect(effectStyle('glow', '#ffffff', 2)?.textShadowRadius).toBe(16)
+    expect(effectStyle('glow', '#ffffff', 0.2)?.textShadowRadius).toBeCloseTo(1.6)
+    expect(outlineStyle({ color: '#ff0000', width: 2, style: 'glow' })?.textShadowRadius).toBe(8)
+    expect(outlineStyle({ color: '#ff0000', width: 2, style: 'double', color2: '#00ff00' })?.textShadowColor).toBe('#00ff00')
   })
 })

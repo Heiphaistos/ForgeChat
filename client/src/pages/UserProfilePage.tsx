@@ -9,6 +9,7 @@ import toast from 'react-hot-toast'
 import { AvatarDecoration, ProfileEffect, profileThemeBackground } from '../components/ui/ProfileDecor'
 import { useT, t as tr, intlLocale } from '../i18n'
 import AnimatedImg from '../components/ui/AnimatedImg'
+import ProfileBanner from '../components/ui/ProfileBanner'
 import UserName from '../components/ui/UserName'
 import ProfileLinks from '../components/ui/ProfileLinks'
 import { renderMarkdown } from '../utils/markdown'
@@ -29,6 +30,8 @@ interface UserPublic {
   activity_detail: string | null
   created_at: string
   avatar_decoration?: string | null
+  avatar_decoration_opts?: unknown
+  profile_effect_intensity?: number | null
   profile_color_primary?: number | null
   profile_color_accent?: number | null
   profile_effect?: string | null
@@ -263,32 +266,27 @@ export default function UserProfilePage() {
 
         {/* Carte profil */}
         <div className="bg-fc-channel rounded-xl overflow-hidden mb-4 relative" style={{ background: profileThemeBackground(user.profile_color_primary, user.profile_color_accent) }}>
-          <ProfileEffect id={user.profile_effect} />
+          <ProfileEffect id={user.profile_effect} intensity={user.profile_effect_intensity} />
           {/* Banner */}
-          <div className="relative h-48">
-            {user.banner ? (
-              <AnimatedImg
-                src={user.banner}
-                alt=""
-                loading="lazy"
-                decoding="async"
-                className="w-full h-full object-cover"
-              />
-            ) : (
-              <div aria-hidden className="w-full h-full bg-gradient-to-br from-indigo-700/60 via-purple-700/40 to-fc-accent/30" />
-            )}
+          {/* Bannière entière, à ses proportions (bornées) : jamais rognée. */}
+          <ProfileBanner
+            src={user.banner}
+            minHeight={120}
+            maxHeight={420}
+            emptyClassName="h-48 bg-gradient-to-br from-indigo-700/60 via-purple-700/40 to-fc-accent/30"
+          >
             {/* Gradient overlay */}
             {user.profile_color_primary == null && user.profile_color_accent == null && (
-              <div aria-hidden className="absolute inset-0 bg-gradient-to-t from-fc-channel via-transparent to-transparent" />
+              <div aria-hidden className="absolute inset-0 bg-gradient-to-t from-fc-channel via-transparent to-transparent pointer-events-none" />
             )}
-          </div>
+          </ProfileBanner>
 
           {/* Avatar + infos */}
           <div className="px-6 pb-6">
             <div className="flex items-end gap-4 -mt-12 mb-4">
               {/* Avatar */}
               <div className="relative flex-shrink-0">
-                <AvatarDecoration id={user.avatar_decoration} size={88}>
+                <AvatarDecoration id={user.avatar_decoration} opts={user.avatar_decoration_opts} size={88}>
                 <div className="w-24 h-24 rounded-full bg-fc-bg border-4 border-fc-channel overflow-hidden flex items-center justify-center font-bold text-3xl text-white">
                   {user.avatar ? (
                     <AnimatedImg src={user.avatar} alt={user.username} loading="lazy" decoding="async" className="w-full h-full object-cover" />

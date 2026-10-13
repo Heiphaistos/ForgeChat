@@ -1,6 +1,7 @@
 /*
  * Personnalisation du profil, suite (components/ui/ProfileDecor.tsx, AvatarRing.tsx,
- * ClanTag.tsx, lib/nameStyle.ts). Tout est en CSS : aucune image ni police téléchargée.
+ * ClanTag.tsx, lib/nameStyle.ts). Tout est en CSS : aucune image téléchargée, polices
+ * embarquées seulement (bundledFonts.css).
  * Toutes les animations s'arrêtent avec « réduire les animations » (système ou réglage).
  */
 
@@ -13,12 +14,6 @@
   line-height: 1; pointer-events: none;
   text-shadow: 0 0 4px currentColor;
   animation: fc-deco-twinkle 2.6s ease-in-out infinite;
-}
-.fc-deco-orbit { animation: fc-deco-spin 4s linear infinite; }
-.fc-deco-orbit > span {
-  position: absolute; left: 50%; top: 0;
-  transform: translate(-50%, -50%);
-  line-height: 1; text-shadow: 0 0 5px currentColor;
 }
 @keyframes fc-deco-twinkle {
   0%, 100% { opacity: .55; transform: scale(.85); }
@@ -45,6 +40,16 @@
 .fc-deco-flash   { animation: fc-deco-flash 3.5s linear infinite; }
 .fc-deco-steps   { animation: fc-deco-spin 6s steps(12) infinite; }
 .fc-deco-breathe { animation: fc-deco-breathe 3s ease-in-out infinite; }
+/* Vitesse réglée (lib/profileDecor.ts, decoVars) : durées divisées par --deco-speed. */
+.fc-deco-root .fc-deco-spin    { animation-duration: calc(6s / var(--deco-speed, 1)); }
+.fc-deco-root .fc-deco-pulse   { animation-duration: calc(2.4s / var(--deco-speed, 1)); }
+.fc-deco-root .fc-deco-spinrev { animation-duration: calc(7s / var(--deco-speed, 1)); }
+.fc-deco-root .fc-deco-hue     { animation-duration: calc(5s / var(--deco-speed, 1)); }
+.fc-deco-root .fc-deco-flicker { animation-duration: calc(3s / var(--deco-speed, 1)); }
+.fc-deco-root .fc-deco-flash   { animation-duration: calc(3.5s / var(--deco-speed, 1)); }
+.fc-deco-root .fc-deco-steps   { animation-duration: calc(6s / var(--deco-speed, 1)); }
+.fc-deco-root .fc-deco-breathe { animation-duration: calc(3s / var(--deco-speed, 1)); }
+.fc-deco-root .fc-deco-glyph   { animation-duration: calc(2.6s / var(--deco-speed, 1)); }
 
 /* ── ANNEAU D'AVATAR DU PROFIL DE SERVEUR (AvatarRing.tsx) ───────────── */
 .fc-ring { position: absolute; border-radius: 9999px; pointer-events: none; }
@@ -173,23 +178,151 @@
 }
 
 /* ── PSEUDO STYLÉ : effets animés (lib/nameStyle.ts, nameClass) ──────── */
+/*
+ * --fc-fx-k : multiplicateur de durée (vitesse 1-10 → 2,5 à 0,3) ; --fc-fx-i : intensité
+ * (0,2 à 2). Deux nombres écrits par nameCss à partir d'entiers bornés, rien d'autre.
+ * Lettre par lettre (vague, rebond, gelée, machine à écrire) : un <span class="fc-ch"> par
+ * caractère, décalé par animation-delay. Tout s'arrête avec « réduire les animations ».
+ */
 .fc-name-fx { position: relative; }
+.fc-name-fx > .fc-ch { position: relative; white-space: pre; }
 @keyframes fc-name-slide { from { background-position: 0% 0; } to { background-position: 300% 0; } }
 @keyframes fc-name-rise  { from { background-position: 0 100%; } to { background-position: 0 0; } }
-.fc-name-rainbow, .fc-name-holo { animation: fc-name-slide 6s linear infinite; }
-.fc-name-chrome { animation: fc-name-slide 4s ease-in-out infinite alternate; }
-.fc-name-fire   { animation: fc-name-rise 1.2s ease-in-out infinite alternate; }
+@keyframes fc-name-fall  { from { background-position: 0 0; } to { background-position: 0 150%; } }
+.fc-name-rainbow, .fc-name-holo { animation: fc-name-slide calc(6s * var(--fc-fx-k, 1)) linear infinite; }
+.fc-name-chrome { animation: fc-name-slide calc(4s * var(--fc-fx-k, 1)) ease-in-out infinite alternate; }
+.fc-name-fire   { animation: fc-name-rise calc(1.2s * var(--fc-fx-k, 1)) ease-in-out infinite alternate; }
+.fc-name-vaporwave { animation: fc-name-slide calc(10s * var(--fc-fx-k, 1)) linear infinite; }
+.fc-name-toxic  { animation: fc-name-slide calc(5s * var(--fc-fx-k, 1)) linear infinite; }
+.fc-name-matrix { animation: fc-name-fall calc(2.4s * var(--fc-fx-k, 1)) linear infinite; }
+.fc-name-gold   { animation: fc-name-shimmer calc(2.6s * var(--fc-fx-k, 1)) linear infinite; }
 @keyframes fc-name-neon {
   0%, 100% { opacity: 1; }
   4% { opacity: .7; } 6% { opacity: 1; } 52% { opacity: .85; } 54% { opacity: 1; }
 }
-.fc-name-neon { animation: fc-name-neon 4s linear infinite; }
+.fc-name-neon { animation: fc-name-neon calc(4s * var(--fc-fx-k, 1)) linear infinite; }
+/* Néon cassé : coupures franches et irrégulières. */
+@keyframes fc-name-flicker {
+  0%, 100% { opacity: 1; }
+  3% { opacity: .3; } 6% { opacity: 1; } 7% { opacity: .45; } 9% { opacity: 1; }
+  41% { opacity: .2; } 44% { opacity: 1; } 72% { opacity: .3; } 74% { opacity: 1; }
+}
+.fc-name-flicker { animation: fc-name-flicker calc(3s * var(--fc-fx-k, 1)) steps(1, end) infinite; }
 @keyframes fc-name-pulse { 0%, 100% { opacity: 1; filter: brightness(1); } 50% { opacity: .75; filter: brightness(1.35); } }
-.fc-name-pulse { animation: fc-name-pulse 2.2s ease-in-out infinite; }
+.fc-name-pulse { animation: fc-name-pulse calc(2.2s * var(--fc-fx-k, 1)) ease-in-out infinite; }
 /* Flottement et vague : `top` d'un élément en position relative (marche sur du texte en ligne). */
-@keyframes fc-name-float { 0%, 100% { top: 0; } 50% { top: -2px; } }
-.fc-name-float { animation: fc-name-float 2.4s ease-in-out infinite; }
-.fc-name-wave > span { position: relative; animation: fc-name-float 1.2s ease-in-out infinite; }
+@keyframes fc-name-float { 0%, 100% { top: 0; } 50% { top: calc(-2px * var(--fc-fx-i, 1)); } }
+.fc-name-float { animation: fc-name-float calc(2.4s * var(--fc-fx-k, 1)) ease-in-out infinite; }
+.fc-name-wave > .fc-ch { animation: fc-name-float calc(1.2s * var(--fc-fx-k, 1)) ease-in-out infinite; }
+/* Rebond : chaque lettre saute puis s'écrase un peu. */
+@keyframes fc-name-bounce {
+  0%, 60%, 100% { top: 0; }
+  20% { top: calc(-4px * var(--fc-fx-i, 1)); }
+  40% { top: calc(1px * var(--fc-fx-i, 1)); }
+}
+.fc-name-bounce > .fc-ch { animation: fc-name-bounce calc(1.4s * var(--fc-fx-k, 1)) ease-in-out infinite; }
+/* Gelée : chaque lettre s'étire et se tasse (inline-block pour la transformation). */
+@keyframes fc-name-jelly {
+  0%, 100% { transform: scale(1, 1); }
+  25% { transform: scale(calc(1 + .2 * var(--fc-fx-i, 1)), calc(1 - .15 * var(--fc-fx-i, 1))); }
+  50% { transform: scale(calc(1 - .1 * var(--fc-fx-i, 1)), calc(1 + .1 * var(--fc-fx-i, 1))); }
+  75% { transform: scale(calc(1 + .05 * var(--fc-fx-i, 1)), calc(1 - .05 * var(--fc-fx-i, 1))); }
+}
+.fc-name-jelly > .fc-ch { display: inline-block; animation: fc-name-jelly calc(1.6s * var(--fc-fx-k, 1)) ease-in-out infinite; }
+/* Machine à écrire : les lettres apparaissent une à une, curseur clignotant. */
+@keyframes fc-name-type { 0% { opacity: 0; } 6%, 80% { opacity: 1; } 90%, 100% { opacity: 0; } }
+@keyframes fc-name-caret { 50% { opacity: 0; } }
+.fc-name-typewriter > .fc-ch { animation: fc-name-type calc(5s * var(--fc-fx-k, 1)) steps(1, end) infinite backwards; }
+.fc-name-typewriter::after {
+  content: '▍';
+  margin-left: 1px;
+  -webkit-text-fill-color: currentColor;
+  animation: fc-name-caret calc(1s * var(--fc-fx-k, 1)) steps(1, end) infinite;
+}
+/* Cycle de teinte sur les couleurs choisies. */
+@keyframes fc-name-hue { from { filter: hue-rotate(0deg); } to { filter: hue-rotate(360deg); } }
+.fc-name-huecycle { animation: fc-name-hue calc(5s * var(--fc-fx-k, 1)) linear infinite; }
+/* Électrique : éclairs saccadés autour du texte, palette qui glisse. */
+@keyframes fc-name-electric {
+  0%, 100% { filter: drop-shadow(0 0 2px #7df9ff); }
+  10% { filter: drop-shadow(1px -1px 0 #fff) drop-shadow(0 0 6px #4dabff); }
+  13% { filter: drop-shadow(0 0 2px #7df9ff); }
+  50% { filter: drop-shadow(-1px 1px 0 #fff) drop-shadow(0 0 8px #7df9ff); }
+  53% { filter: drop-shadow(0 0 3px #4dabff); }
+  80% { filter: drop-shadow(1px 1px 0 #fff) drop-shadow(0 0 5px #7df9ff); }
+}
+.fc-name-electric {
+  animation: fc-name-electric calc(1.6s * var(--fc-fx-k, 1)) steps(1, end) infinite,
+             fc-name-slide calc(3s * var(--fc-fx-k, 1)) linear infinite;
+}
+/* Respiration : lente, opacité et léger flou. */
+@keyframes fc-name-breathe {
+  0%, 100% { opacity: 1; filter: blur(0); }
+  50% { opacity: .6; filter: blur(calc(.5px * var(--fc-fx-i, 1))); }
+}
+.fc-name-breathe { animation: fc-name-breathe calc(4.5s * var(--fc-fx-k, 1)) ease-in-out infinite; }
+/* Aurore : voile de couleurs qui ondule lentement. */
+@keyframes fc-name-aurora { from { background-position: 0% 50%; } to { background-position: 100% 50%; } }
+.fc-name-aurora { animation: fc-name-aurora calc(8s * var(--fc-fx-k, 1)) ease-in-out infinite alternate; }
+/* Tracé : le contour d'abord, puis le remplissage. */
+@keyframes fc-name-draw {
+  0%, 15% { -webkit-text-fill-color: transparent; }
+  55%, 100% { -webkit-text-fill-color: currentColor; }
+}
+.fc-name-draw { animation: fc-name-draw calc(3s * var(--fc-fx-k, 1)) ease-in-out infinite alternate; }
+/* Dégradé mouvant (aller-retour, teinte qui dérive) et dégradé « flow » (défilement continu). */
+@keyframes fc-name-shift {
+  from { background-position: 0% 50%; filter: hue-rotate(0deg); }
+  to { background-position: 100% 50%; filter: hue-rotate(40deg); }
+}
+.fc-name-gradshift { animation: fc-name-shift calc(3s * var(--fc-fx-k, 1)) ease-in-out infinite alternate; }
+@keyframes fc-name-flow { from { background-position: 0% 0; } to { background-position: 200% 0; } }
+.fc-name-flow { animation: fc-name-flow calc(4s * var(--fc-fx-k, 1)) linear infinite; }
+/* Secousse : courtes rafales, puis repos. */
+@keyframes fc-name-shake {
+  0%, 12%, 100% { left: 0; top: 0; }
+  2% { left: calc(-1px * var(--fc-fx-i, 1)); }
+  4% { left: calc(1px * var(--fc-fx-i, 1)); top: calc(-1px * var(--fc-fx-i, 1)); }
+  6% { left: calc(-1px * var(--fc-fx-i, 1)); top: 0; }
+  8% { left: calc(1px * var(--fc-fx-i, 1)); }
+  10% { left: 0; top: calc(1px * var(--fc-fx-i, 1)); }
+}
+.fc-name-shake { animation: fc-name-shake calc(2.5s * var(--fc-fx-k, 1)) linear infinite; }
+/* Apparition floue, puis net longtemps. */
+@keyframes fc-name-blurin {
+  0% { filter: blur(calc(4px * var(--fc-fx-i, 1))); opacity: 0; }
+  20%, 100% { filter: blur(0); opacity: 1; }
+}
+.fc-name-blurin { animation: fc-name-blurin calc(5s * var(--fc-fx-k, 1)) ease-out infinite; }
+/* Lignes de balayage qui descendent (écran cathodique). */
+@keyframes fc-name-scan { from { background-position: 0 0, 0 0; } to { background-position: 0 3px, 0 0; } }
+.fc-name-scanline { animation: fc-name-scan calc(.6s * var(--fc-fx-k, 1)) linear infinite; }
+/* Fumée : une ombre grise qui monte et se dissipe. */
+@keyframes fc-name-smoke {
+  0%, 100% { filter: drop-shadow(0 0 2px rgba(200, 200, 210, .6)); opacity: 1; }
+  50% { filter: drop-shadow(0 calc(-4px * var(--fc-fx-i, 1)) calc(6px * var(--fc-fx-i, 1)) rgba(200, 200, 210, .5)); opacity: .82; }
+}
+.fc-name-smoke { animation: fc-name-smoke calc(3.5s * var(--fc-fx-k, 1)) ease-in-out infinite; }
+/* Champ d'étoiles et galaxie : deux trames de points qui dérivent (pas entier = sans couture). */
+@keyframes fc-name-stars { from { background-position: 0 0, 3px 4px, 0 0; } to { background-position: 7px 7px, -8px 13px, 0 0; } }
+@keyframes fc-name-galaxy { from { background-position: 0 0, 3px 4px, 0% 0; } to { background-position: 7px 7px, -8px 13px, 300% 0; } }
+.fc-name-stars  { animation: fc-name-stars calc(4s * var(--fc-fx-k, 1)) linear infinite; }
+.fc-name-galaxy { animation: fc-name-galaxy calc(12s * var(--fc-fx-k, 1)) linear infinite; }
+/* Sucre d'orge : rayures qui défilent (période 12 px à 45° = 16,97 px). */
+@keyframes fc-name-candy { from { background-position: 0 0; } to { background-position: 16.97px 0; } }
+.fc-name-candy { animation: fc-name-candy calc(1s * var(--fc-fx-k, 1)) linear infinite; }
+/* Lave : bulles chaudes qui vont et viennent. */
+@keyframes fc-name-lava { from { background-position: 0% 0; } to { background-position: 100% 0; } }
+.fc-name-lava { animation: fc-name-lava calc(6s * var(--fc-fx-k, 1)) ease-in-out infinite alternate; }
+/* Fantôme : semi-transparent, flotte. */
+@keyframes fc-name-ghost { 0%, 100% { opacity: .55; top: 0; } 50% { opacity: .9; top: calc(-2px * var(--fc-fx-i, 1)); } }
+.fc-name-ghost { animation: fc-name-ghost calc(3.2s * var(--fc-fx-k, 1)) ease-in-out infinite; }
+/* Battement de cœur : double impulsion rose. */
+@keyframes fc-name-heartbeat {
+  0%, 28%, 70%, 100% { filter: brightness(1); }
+  14%, 42% { filter: brightness(calc(1 + .4 * var(--fc-fx-i, 1))) drop-shadow(0 0 4px #ff4d8d); }
+}
+.fc-name-heartbeat { animation: fc-name-heartbeat calc(1.4s * var(--fc-fx-k, 1)) ease-in-out infinite; }
 /* Glitch : deux copies décalées du même texte (attr(data-text), jamais du HTML). */
 .fc-name-glitch::before, .fc-name-glitch::after {
   content: attr(data-text);
@@ -200,8 +333,8 @@
   overflow: hidden;
   white-space: nowrap;
 }
-.fc-name-glitch::before { color: #ff2bd6; opacity: .7; animation: fc-name-glitch-a 2.5s steps(1, end) infinite; }
-.fc-name-glitch::after  { color: #00e5ff; opacity: .7; animation: fc-name-glitch-b 2.5s steps(1, end) infinite; }
+.fc-name-glitch::before { color: #ff2bd6; opacity: .7; animation: fc-name-glitch-a calc(2.5s * var(--fc-fx-k, 1)) steps(1, end) infinite; }
+.fc-name-glitch::after  { color: #00e5ff; opacity: .7; animation: fc-name-glitch-b calc(2.5s * var(--fc-fx-k, 1)) steps(1, end) infinite; }
 @keyframes fc-name-glitch-a {
   0%, 100% { clip-path: inset(0 0 100% 0); transform: none; }
   10% { clip-path: inset(10% 0 55% 0); transform: translate(-2px, 0); }
@@ -225,7 +358,7 @@
   -webkit-text-fill-color: #ffe680;
   -webkit-text-stroke: 0;
   text-shadow: 0 0 4px #ffe680;
-  animation: fc-deco-twinkle 1.8s ease-in-out infinite;
+  animation: fc-deco-twinkle calc(1.8s * var(--fc-fx-k, 1)) ease-in-out infinite;
 }
 
 /* ── MARQUES DE CLAN (ClanTag.tsx) ──────────────────────────────────── */
@@ -251,21 +384,397 @@
 }
 .fc-banner-img { position: relative; display: block; width: 100%; height: 100%; object-fit: contain; }
 
+/* ── DÉCORATIONS ANIMÉES (ProfileDecor.tsx, DecoOrnament.tsx) ─────────────
+ * Conteneur .fc-deco-root : variables posées par lib/profileDecor.ts (decoVars), toujours des
+ * nombres bornés ou une couleur « #rrggbb » calculée. --deco-speed divise les durées,
+ * --deco-turn (1 / -1) choisit le sens des rotations (keyframes fc-deco-spin). */
+.fc-deco-root {
+  position: absolute; inset: 0;
+  pointer-events: none;
+  opacity: var(--deco-opacity, 1);
+}
+.fc-deco-root.fc-deco-fx {
+  filter: drop-shadow(0 0 var(--deco-glow-r, 0px) var(--deco-glow-c, transparent))
+          hue-rotate(var(--deco-hue, 0deg)) brightness(var(--deco-bright, 1)) saturate(var(--deco-sat, 1));
+}
+.fc-deco-throb { animation: fc-deco-throb calc(2.4s / var(--deco-speed, 1)) ease-in-out infinite; }
+@keyframes fc-deco-throb {
+  0%, 100% { transform: scale(1); }
+  50%      { transform: scale(1.07); opacity: calc(var(--deco-opacity, 1) * .72); }
+}
+/* Animation coupée par le réglage « Animation ». */
+.fc-deco-still, .fc-deco-still * { animation: none !important; }
+
+/* Bras tournants : orbite, couronne de glyphes, flammes, arcs. */
+.fc-deco-spinner { position: absolute; border-radius: 9999px; pointer-events: none; }
+.fc-deco-arm { position: absolute; inset: 0; }
+.fc-deco-sat {
+  position: absolute; left: 50%; top: 0;
+  transform: translate(-50%, -50%);
+  line-height: 1; text-shadow: 0 0 4px currentColor;
+}
+.fc-deco-orbit  { animation: fc-deco-spin calc(4s / var(--deco-speed, 1)) linear infinite; }
+.fc-deco-wreath { animation: fc-deco-spin calc(18s / var(--deco-speed, 1)) linear infinite; }
+.fc-deco-wreath .fc-deco-sat { text-shadow: 0 0 3px currentColor; opacity: .95; }
+
+/* Aura pulsante et ondes. */
+.fc-deco-aura {
+  position: absolute; border-radius: 9999px;
+  animation: fc-deco-aura calc(2.6s / var(--deco-speed, 1)) ease-in-out infinite;
+}
+@keyframes fc-deco-aura {
+  0%, 100% { opacity: .55; transform: scale(.94); }
+  50%      { opacity: 1;   transform: scale(1.06); }
+}
+.fc-deco-ripple {
+  position: absolute; border-radius: 9999px;
+  border: 2px solid; opacity: .45;
+  animation: fc-deco-ripple calc(2.6s / var(--deco-speed, 1)) ease-out infinite;
+}
+@keyframes fc-deco-ripple {
+  from { opacity: .85; transform: scale(1); }
+  to   { opacity: 0;   transform: scale(1.5); }
+}
+
+/* Flammes : gouttes posées sur l'anneau, qui vacillent vers l'extérieur. */
+.fc-deco-flame {
+  position: absolute; left: 50%; top: 0;
+  transform-origin: 50% 100%;
+  transform: translateY(-78%);
+  border-radius: 50% 50% 45% 45% / 65% 65% 35% 35%;
+  animation: fc-deco-flame calc(.9s / var(--deco-speed, 1)) ease-in-out infinite alternate;
+}
+@keyframes fc-deco-flame {
+  from { transform: translateY(-78%) scale(.85, .7);  opacity: .7; }
+  to   { transform: translateY(-78%) scale(1.05, 1.25); opacity: 1; }
+}
+
+/* Arcs électriques (SVG). */
+.fc-deco-arcs { animation: fc-deco-spin calc(9s / var(--deco-speed, 1)) linear infinite; }
+.fc-deco-arcs > svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+.fc-deco-arc {
+  fill: none; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round;
+  animation: fc-deco-zap calc(1.4s / var(--deco-speed, 1)) steps(1, end) infinite;
+}
+@keyframes fc-deco-zap {
+  0%, 100% { opacity: 0; }
+  10% { opacity: 1; } 18% { opacity: .2; } 24% { opacity: .9; } 34% { opacity: 0; }
+}
+
+/* Particules autour de l'avatar : chute, montée, scintillement. */
+.fc-deco-p {
+  position: absolute;
+  display: flex; align-items: center; justify-content: center;
+  line-height: 1; opacity: .85;
+  text-shadow: 0 0 3px currentColor;
+  animation: fc-deco-twinkle calc(2.8s / var(--deco-speed, 1)) ease-in-out infinite;
+}
+.fc-deco-p-fall { animation-name: fc-deco-fall; }
+.fc-deco-p-rise { animation-name: fc-deco-rise; }
+@keyframes fc-deco-fall {
+  0%   { opacity: 0; transform: translateY(-70%) rotate(0); }
+  25%  { opacity: 1; }
+  100% { opacity: 0; transform: translateY(110%) rotate(140deg); }
+}
+@keyframes fc-deco-rise {
+  0%   { opacity: 0; transform: translateY(70%) scale(.7); }
+  30%  { opacity: 1; }
+  100% { opacity: 0; transform: translateY(-120%) scale(1.1); }
+}
+
+/* Accessoires SVG : repère de l'avatar 0-100, transformations dans ce repère. */
+.fc-orn { position: absolute; overflow: visible; pointer-events: none; }
+.fc-orn g, .fc-orn ellipse, .fc-orn circle { transform-box: fill-box; }
+.fc-orn-float { animation: fc-orn-float calc(3s / var(--deco-speed, 1)) ease-in-out infinite; }
+.fc-orn-sway  { transform-origin: 50% 100%; animation: fc-orn-sway calc(3.4s / var(--deco-speed, 1)) ease-in-out infinite; }
+.fc-orn-twitch { transform-origin: 50% 100%; animation: fc-orn-twitch calc(4s / var(--deco-speed, 1)) ease-in-out infinite; }
+.fc-orn-flap  { transform-origin: 100% 60%; animation: fc-orn-flap calc(1.8s / var(--deco-speed, 1)) ease-in-out infinite; }
+.fc-orn-beat  { transform-origin: 50% 50%; animation: fc-orn-beat calc(.9s / var(--deco-speed, 1)) ease-in-out infinite; }
+.fc-orn-shine { animation: fc-deco-twinkle calc(2.2s / var(--deco-speed, 1)) ease-in-out infinite; transform-origin: 50% 50%; }
+.fc-orn-late  { animation-delay: -.6s; }
+@keyframes fc-orn-float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-3px); } }
+@keyframes fc-orn-sway  { 0%, 100% { transform: rotate(-3deg); } 50% { transform: rotate(3deg); } }
+@keyframes fc-orn-twitch {
+  0%, 78%, 100% { transform: rotate(0); }
+  84% { transform: rotate(-12deg); }
+  90% { transform: rotate(5deg); }
+}
+@keyframes fc-orn-flap  { 0%, 100% { transform: scaleX(1) rotate(0); } 50% { transform: scaleX(.72) rotate(-7deg); } }
+@keyframes fc-orn-beat  { 0%, 100% { transform: scale(1); } 30% { transform: scale(1.035); } }
+
+/* ── ANNEAU DU PROFIL DE SERVEUR : nouveaux styles et réglages (AvatarRing.tsx) ── */
+.fc-ring.fc-ring-fx { filter: brightness(var(--ring-bright, 1)) drop-shadow(0 0 var(--ring-glow-r, 0px) var(--ring-glow-c, transparent)); }
+.fc-ring.fc-ring-spin, .fc-ring.fc-ring-gradient_spin, .fc-ring.fc-ring-dashed_spin, .fc-ring.fc-ring-comet {
+  animation: fc-deco-spin calc(4s / var(--ring-speed, 1)) linear infinite;
+}
+.fc-ring.fc-ring-gradient_spin { animation-duration: calc(2.6s / var(--ring-speed, 1)); }
+.fc-ring.fc-ring-comet { animation-duration: calc(1.8s / var(--ring-speed, 1)); }
+.fc-ring.fc-ring-pulse { animation: fc-deco-pulse calc(2.4s / var(--ring-speed, 1)) ease-in-out infinite; }
+.fc-ring.fc-ring-rainbow { animation: fc-deco-spin calc(6s / var(--ring-speed, 1)) linear infinite; }
+.fc-ring.fc-ring-neon_pulse { animation: fc-ring-neon calc(2s / var(--ring-speed, 1)) ease-in-out infinite; }
+.fc-ring.fc-ring-breathe { animation: fc-ring-breathe calc(3.2s / var(--ring-speed, 1)) ease-in-out infinite; }
+@keyframes fc-ring-neon {
+  0%, 100% { opacity: 1; }
+  45% { opacity: .55; } 50% { opacity: 1; } 55% { opacity: .7; }
+}
+@keyframes fc-ring-breathe {
+  0%, 100% { filter: brightness(var(--ring-bright, 1)) drop-shadow(0 0 calc(var(--ring-glow-r, 0px) * .3) var(--ring-glow-c, transparent)); }
+  50%      { filter: brightness(var(--ring-bright, 1)) drop-shadow(0 0 calc(var(--ring-glow-r, 0px) * 1.6) var(--ring-glow-c, transparent)); }
+}
+/* Tête de la comète : point lumineux au bout de la traînée. */
+.fc-ring-head {
+  position: absolute; left: 50%; top: 0;
+  border-radius: 9999px;
+  transform: translate(-50%, -50%);
+}
+
+/* ── EFFETS DE PROFIL : nouveaux mouvements et particules dessinées ───── */
+@keyframes fc-fx-swirl {
+  0%   { opacity: 0; transform: rotate(var(--fx-rot, 0deg)) translateX(var(--fx-dx, 80px)); }
+  15%  { opacity: 1; }
+  100% { opacity: 0; transform: rotate(calc(var(--fx-rot, 0deg) + 540deg)) translateX(calc(var(--fx-dx, 80px) * .1)); }
+}
+@keyframes fc-fx-float {
+  0%   { opacity: 0; transform: translate(0, 0); }
+  15%  { opacity: .95; }
+  25%  { transform: translate(calc(var(--fx-dx, 100px) * .5), -12px); }
+  50%  { transform: translate(var(--fx-dx, 100px), 0); }
+  75%  { transform: translate(calc(var(--fx-dx, 100px) * 1.5), -12px); }
+  85%  { opacity: .95; }
+  100% { opacity: 0; transform: translate(calc(var(--fx-dx, 100px) * 2), 0); }
+}
+@keyframes fc-fx-flap {
+  0%   { opacity: 0; transform: translate(0, 0) scaleY(1); }
+  10%  { opacity: 1; }
+  25%  { transform: translate(calc(var(--fx-dx, 100px) * .5), calc(var(--fx-dy, -80px) * .5)) scaleY(.35); }
+  50%  { transform: translate(var(--fx-dx, 100px), var(--fx-dy, -80px)) scaleY(1); }
+  75%  { transform: translate(calc(var(--fx-dx, 100px) * 1.5), calc(var(--fx-dy, -80px) * 1.5)) scaleY(.35); }
+  100% { opacity: 0; transform: translate(calc(var(--fx-dx, 100px) * 2), calc(var(--fx-dy, -80px) * 2)) scaleY(1); }
+}
+@keyframes fc-fx-smoke {
+  0%   { opacity: 0; transform: translate(0, 0) scale(.6); filter: blur(1px); }
+  20%  { opacity: .55; }
+  100% { opacity: 0; transform: translate(var(--fx-dx, 20px), -320px) scale(3); filter: blur(5px); }
+}
+.fc-fx > .fc-fx-shape { display: block; }
+.fc-fx-shape-ghost {
+  width: 1em; height: 1.2em;
+  border-radius: .5em .5em .18em .18em;
+  background: radial-gradient(circle at 32% 38%, #1a1a2e 0 .09em, transparent .1em),
+              radial-gradient(circle at 68% 38%, #1a1a2e 0 .09em, transparent .1em);
+  background-color: currentColor;
+  opacity: .9;
+}
+.fc-fx-shape-bat {
+  width: 1.4em; height: .7em;
+  background-color: currentColor;
+  clip-path: polygon(0 20%, 15% 0, 30% 30%, 42% 10%, 50% 30%, 58% 10%, 70% 30%, 85% 0, 100% 20%, 80% 60%, 65% 45%, 50% 100%, 35% 45%, 20% 60%);
+}
+.fc-fx-shape-pumpkin {
+  width: 1em; height: .85em;
+  border-radius: 45%;
+  background: repeating-linear-gradient(90deg, rgba(0, 0, 0, .18) 0 .06em, transparent .06em .25em);
+  background-color: currentColor;
+  box-shadow: inset 0 -.1em .2em rgba(0, 0, 0, .3);
+}
+
+/* ── EFFETS DE PROFIL : nouveaux calques ─────────────────────────────── */
+.fc-fx-ov-fog {
+  background:
+    radial-gradient(45% 35% at 20% 70%, rgba(255, 255, 255, .3), transparent 70%),
+    radial-gradient(50% 35% at 80% 55%, rgba(255, 255, 255, .26), transparent 70%),
+    radial-gradient(40% 30% at 50% 90%, rgba(255, 255, 255, .22), transparent 70%);
+  background-size: 200% 100%;
+  mix-blend-mode: normal;
+  animation: fc-fx-ov-fade 6s ease-in-out both, fc-fx-aurora-move 6s linear both;
+}
+.fc-fx-ov-sand {
+  background: linear-gradient(100deg, rgba(224, 195, 140, .1), rgba(224, 195, 140, .35) 50%, rgba(224, 195, 140, .1));
+  background-size: 200% 100%;
+  mix-blend-mode: normal;
+  animation: fc-fx-ov-fade 5s ease-in-out both, fc-fx-sweep 5s linear both;
+}
+.fc-fx-ov-blossom {
+  background:
+    radial-gradient(40% 35% at 0% 0%, rgba(255, 183, 197, .45), transparent 70%),
+    radial-gradient(40% 35% at 100% 0%, rgba(255, 143, 171, .35), transparent 70%);
+}
+.fc-fx-ov-dusk { background: linear-gradient(to bottom, rgba(20, 20, 70, .5), transparent 75%); mix-blend-mode: normal; }
+.fc-fx-ov-caustics {
+  background:
+    repeating-radial-gradient(circle at 30% 40%, rgba(180, 240, 255, .2) 0 5px, transparent 6px 22px),
+    repeating-radial-gradient(circle at 70% 60%, rgba(180, 240, 255, .16) 0 4px, transparent 5px 19px),
+    linear-gradient(to bottom, rgba(0, 150, 200, .25), rgba(0, 60, 120, .3));
+  animation: fc-fx-ov-fade 5.5s ease-in-out both, fc-fx-caustics 5.5s ease-in-out both;
+}
+@keyframes fc-fx-caustics { to { background-position: 40px 24px, -34px 30px, 0 0; } }
+.fc-fx-ov-lava {
+  background:
+    radial-gradient(22% 18% at 30% 70%, rgba(255, 109, 0, .55), transparent 70%),
+    radial-gradient(18% 15% at 70% 30%, rgba(255, 61, 0, .5), transparent 70%),
+    radial-gradient(25% 20% at 55% 90%, rgba(255, 171, 64, .45), transparent 70%),
+    linear-gradient(to bottom, rgba(120, 20, 80, .3), rgba(255, 80, 0, .25));
+  background-size: 100% 200%, 100% 200%, 100% 200%, 100% 100%;
+  animation: fc-fx-ov-fade 6s ease-in-out both, fc-fx-lava 6s ease-in-out both;
+}
+@keyframes fc-fx-lava { from { background-position: 0 100%, 0 0, 0 100%, 0 0; } to { background-position: 0 0, 0 100%, 0 20%, 0 0; } }
+.fc-fx-ov-heat {
+  background: linear-gradient(to top, rgba(255, 80, 0, .45), rgba(255, 160, 0, .15) 40%, transparent 65%);
+  animation: fc-fx-ov-fade 5s ease-in-out both, fc-deco-flicker 1.2s steps(1, end) 4;
+}
+.fc-fx-ov-static {
+  background: repeating-linear-gradient(0deg, rgba(255, 255, 255, .08) 0 1px, transparent 1px 3px),
+              repeating-linear-gradient(90deg, rgba(200, 200, 255, .05) 0 1px, transparent 1px 4px);
+  animation: fc-fx-ov-fade 4s ease-in-out both, fc-fx-jitter .2s steps(2, end) 20;
+}
+@keyframes fc-fx-jitter { 50% { transform: translate(1px, -1px); } }
+.fc-fx-ov-northern {
+  background:
+    repeating-linear-gradient(100deg, transparent 0 18px, rgba(0, 255, 163, .35) 30px, rgba(0, 180, 255, .25) 42px, rgba(138, 43, 226, .2) 52px, transparent 64px);
+  background-size: 220% 100%;
+  -webkit-mask-image: linear-gradient(to bottom, #000 0, #000 25%, transparent 70%);
+  mask-image: linear-gradient(to bottom, #000 0, #000 25%, transparent 70%);
+  animation: fc-fx-ov-fade 6s ease-in-out both, fc-fx-sweep 6s ease-in-out both;
+}
+.fc-fx-ov-galaxy {
+  inset: -40%;
+  background: conic-gradient(from 0deg, rgba(160, 68, 255, .4), transparent 25%, rgba(255, 110, 196, .32) 50%, transparent 75%, rgba(160, 68, 255, .4));
+  -webkit-mask-image: radial-gradient(circle, #000 0 20%, transparent 60%);
+  mask-image: radial-gradient(circle, #000 0 20%, transparent 60%);
+  animation: fc-fx-ov-fade 6s ease-in-out both, fc-deco-spin 9s linear both;
+}
+.fc-fx-ov-blackhole {
+  background: radial-gradient(circle at 50% 45%, #000 0 9%, rgba(255, 140, 40, .7) 11%, rgba(255, 100, 20, .25) 18%, transparent 36%);
+  mix-blend-mode: normal;
+  animation: fc-fx-ov-fade 5.5s ease-in-out both, fc-fx-throb 1.6s ease-in-out 3;
+}
+@keyframes fc-fx-throb { 50% { transform: scale(1.06); } }
+.fc-fx-ov-sunset {
+  background: linear-gradient(to top, rgba(255, 94, 58, .45), rgba(255, 149, 0, .25) 40%, rgba(120, 60, 180, .2) 75%, transparent);
+  mix-blend-mode: normal;
+}
+.fc-fx-ov-godrays {
+  inset: -20%;
+  background: repeating-linear-gradient(115deg, rgba(255, 240, 180, .22) 0 14px, transparent 14px 48px);
+  -webkit-mask-image: radial-gradient(120% 90% at 0% 0%, #000, transparent 75%);
+  mask-image: radial-gradient(120% 90% at 0% 0%, #000, transparent 75%);
+  animation: fc-fx-ov-fade 6s ease-in-out both, fc-fx-rays 6s ease-in-out both;
+}
+@keyframes fc-fx-rays { from { transform: translateX(-12px); } to { transform: translateX(12px); } }
+.fc-fx-ov-disco {
+  inset: -50%;
+  background: repeating-conic-gradient(rgba(255, 64, 129, .28) 0 20deg, transparent 20deg 40deg, rgba(0, 229, 255, .28) 40deg 60deg, transparent 60deg 80deg, rgba(255, 214, 0, .28) 80deg 100deg, transparent 100deg 120deg);
+  animation: fc-fx-ov-fade 5s ease-in-out both, fc-deco-spin 6s linear both;
+}
+.fc-fx-ov-spotlight {
+  background: radial-gradient(circle, rgba(255, 255, 220, .45) 0, transparent 60%) no-repeat;
+  background-size: 55% 75%;
+  animation: fc-fx-ov-fade 5s ease-in-out both, fc-fx-spot 5s ease-in-out both;
+}
+@keyframes fc-fx-spot { 0% { background-position: 0% 0%; } 50% { background-position: 100% 30%; } 100% { background-position: 30% 0%; } }
+.fc-fx-ov-heartbeat {
+  background: radial-gradient(circle, transparent 40%, rgba(255, 40, 80, .45) 100%);
+  mix-blend-mode: normal;
+  animation: fc-fx-ov-fade 5s ease-in-out both, fc-fx-beat 1s ease-in-out 5;
+}
+@keyframes fc-fx-beat { 0%, 40%, 100% { opacity: .4; } 15%, 30% { opacity: 1; } }
+.fc-fx-ov-globe {
+  background:
+    radial-gradient(25% 18% at 32% 26%, rgba(255, 255, 255, .35), transparent 70%),
+    radial-gradient(circle at 50% 50%, transparent 58%, rgba(200, 230, 255, .3) 70%, rgba(255, 255, 255, .5) 72%, transparent 76%);
+  mix-blend-mode: normal;
+}
+.fc-fx-ov-grid {
+  inset: auto -50% -10% -50%;
+  top: 42%;
+  background:
+    repeating-linear-gradient(to right, rgba(255, 43, 214, .55) 0 1px, transparent 1px 28px),
+    repeating-linear-gradient(to bottom, rgba(255, 43, 214, .55) 0 1px, transparent 1px 28px);
+  transform: perspective(160px) rotateX(58deg);
+  transform-origin: 50% 0;
+  -webkit-mask-image: linear-gradient(to bottom, transparent, #000 40%);
+  mask-image: linear-gradient(to bottom, transparent, #000 40%);
+  animation: fc-fx-ov-fade 5s ease-in-out both, fc-fx-grid-run 5s linear both;
+}
+@keyframes fc-fx-grid-run { from { background-position: 0 0, 0 0; } to { background-position: 0 0, 0 140px; } }
+.fc-fx-ov-retrosun {
+  background:
+    radial-gradient(circle at 50% 72%, rgba(255, 211, 25, .9) 0 16%, rgba(255, 41, 117, .85) 22%, transparent 22.5%);
+  -webkit-mask-image: linear-gradient(to bottom, #000 0 62%, transparent 62% 64%, #000 64% 67%, transparent 67% 70%, #000 70% 73%, transparent 73% 77%, #000 77%);
+  mask-image: linear-gradient(to bottom, #000 0 62%, transparent 62% 64%, #000 64% 67%, transparent 67% 70%, #000 70% 73%, transparent 73% 77%, #000 77%);
+  animation: fc-fx-ov-fade 5.5s ease-in-out both, fc-fx-sunrise 5.5s ease-out both;
+}
+@keyframes fc-fx-sunrise { from { transform: translateY(30px); } to { transform: translateY(0); } }
+.fc-fx-ov-vapor {
+  background: linear-gradient(to bottom, rgba(1, 205, 254, .22), rgba(185, 103, 255, .2) 50%, rgba(255, 113, 206, .3));
+  animation: fc-fx-ov-fade 5s ease-in-out both, fc-deco-hue 5s linear both;
+}
+.fc-fx-ov-scanlines {
+  background:
+    repeating-linear-gradient(to bottom, rgba(0, 0, 0, .3) 0 1px, transparent 1px 3px),
+    linear-gradient(rgba(0, 255, 120, .08), rgba(0, 255, 120, .08));
+  mix-blend-mode: normal;
+  animation: fc-fx-ov-fade 5s ease-in-out both, fc-fx-scan 5s linear both;
+}
+@keyframes fc-fx-scan { to { background-position: 0 60px, 0 0; } }
+.fc-fx-ov-radar {
+  inset: -40%;
+  background: conic-gradient(from 0deg, rgba(0, 255, 159, .45), transparent 22%);
+  -webkit-mask-image: radial-gradient(circle, #000 0 40%, transparent 55%);
+  mask-image: radial-gradient(circle, #000 0 40%, transparent 55%);
+  animation: fc-fx-ov-fade 5s ease-in-out both, fc-deco-spin 2.5s linear 2;
+}
+.fc-fx-ov-hologram {
+  background: repeating-linear-gradient(to bottom, rgba(0, 200, 255, .2) 0 2px, transparent 2px 5px);
+  animation: fc-fx-ov-fade 5s ease-in-out both, fc-deco-flicker 2.5s steps(1, end) 2;
+}
+.fc-fx-ov-vhs {
+  background: linear-gradient(transparent 0 30%, rgba(255, 0, 80, .22) 30% 33%, transparent 33% 70%, rgba(0, 229, 255, .22) 70% 72%, transparent 72%);
+  background-size: 100% 200%;
+  animation: fc-fx-ov-fade 4.5s ease-in-out both, fc-fx-vhs 1.5s steps(6, end) 3;
+}
+@keyframes fc-fx-vhs { from { background-position: 0 0; } to { background-position: 0 -200%; } }
+.fc-fx-ov-equalizer {
+  top: 55%;
+  background: repeating-linear-gradient(to right, rgba(0, 229, 255, .5) 0 10px, transparent 10px 16px);
+  transform-origin: 50% 100%;
+  animation: fc-fx-ov-fade 5s ease-in-out both, fc-fx-eq .5s steps(3, end) 10 alternate;
+}
+@keyframes fc-fx-eq { from { transform: scaleY(.3); } to { transform: scaleY(1); } }
+.fc-fx-ov-portal {
+  inset: -30%;
+  background: repeating-conic-gradient(from 0deg, rgba(124, 77, 255, .42) 0 15deg, transparent 15deg 30deg);
+  -webkit-mask-image: radial-gradient(circle, transparent 0 12%, #000 18% 34%, transparent 46%);
+  mask-image: radial-gradient(circle, transparent 0 12%, #000 18% 34%, transparent 46%);
+  animation: fc-fx-ov-fade 5s ease-in-out both, fc-deco-spin 4s linear both;
+}
+
+/* ── SÉLECTEURS : aperçus animés seulement au survol ou au focus ──────── */
+.fc-pick-still :is(*, *::before, *::after) { animation-play-state: paused !important; }
+.fc-pick-still:is(:hover, :focus-visible, :focus-within) :is(*, *::before, *::after) { animation-play-state: running !important; }
+@keyframes fc-swatch-hue { 50% { filter: hue-rotate(50deg) brightness(1.2); } }
+.fc-pick:is(:hover, :focus-visible) .fc-fx-ov.fc-fx-still { animation: fc-swatch-hue 2.4s ease-in-out infinite !important; }
+.fc-pick:is(:hover, :focus-visible) .fc-swatch-glyph { animation: fc-deco-twinkle 1.4s ease-in-out infinite; }
+
 /* ── SÉLECTEURS (ProfileCosmetics.tsx) : calque d'effet figé dans une vignette ── */
 .fc-fx-ov.fc-fx-still { animation: none !important; opacity: 1; }
 
 /* ── RÉDUIRE LES ANIMATIONS ──────────────────────────────────────────── */
+/* Pseudo : chaque effet est lisible à l'arrêt (état de base = texte visible et net). */
 @media (prefers-reduced-motion: reduce) {
   .fc-deco-spinrev, .fc-deco-hue, .fc-deco-flicker, .fc-deco-flash, .fc-deco-steps, .fc-deco-breathe,
   .fc-deco-glyph, .fc-deco-orbit, .fc-ring-spin, .fc-ring-pulse,
-  .fc-name-fx, .fc-name-wave > span { animation: none !important; }
+  .fc-name-fx, .fc-name-fx > .fc-ch, .fc-name-shimmer { animation: none !important; }
   .fc-name-fx::before, .fc-name-fx::after { animation: none !important; }
-  .fc-name-glitch::before, .fc-name-glitch::after { display: none; }
+  .fc-name-glitch::before, .fc-name-glitch::after, .fc-name-typewriter::after { display: none; }
+  .fc-deco-root, .fc-deco-root *, .fc-ring, .fc-ring * { animation: none !important; }
 }
+[data-reduce-motion="true"] :is(.fc-deco-root, .fc-deco-root *, .fc-ring, .fc-ring *) { animation: none !important; }
 [data-reduce-motion="true"] :is(.fc-deco-spin, .fc-deco-pulse, .fc-deco-spinrev, .fc-deco-hue, .fc-deco-flicker, .fc-deco-flash, .fc-deco-steps, .fc-deco-breathe,
   .fc-deco-glyph, .fc-deco-orbit, .fc-ring-spin, .fc-ring-pulse, .fc-name-fx, .fc-name-shimmer) { animation: none !important; }
 [data-reduce-motion="true"] .fc-name-fx::before,
 [data-reduce-motion="true"] .fc-name-fx::after,
-[data-reduce-motion="true"] .fc-name-wave > span { animation: none !important; }
+[data-reduce-motion="true"] .fc-name-fx > .fc-ch { animation: none !important; }
 [data-reduce-motion="true"] .fc-name-glitch::before,
-[data-reduce-motion="true"] .fc-name-glitch::after { display: none; }
+[data-reduce-motion="true"] .fc-name-glitch::after,
+[data-reduce-motion="true"] .fc-name-typewriter::after { display: none; }

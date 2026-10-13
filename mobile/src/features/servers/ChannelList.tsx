@@ -1,12 +1,11 @@
 import { Ionicons } from '@expo/vector-icons'
 import { useQuery } from '@tanstack/react-query'
 import { router } from 'expo-router'
-import { Image } from 'expo-image'
 import { useMemo, useState } from 'react'
 import { Alert, Pressable, RefreshControl, SectionList, StyleSheet, Text, View } from 'react-native'
 import { serversApi } from '@/api/servers'
 import { settingsApi } from '@/api/settings'
-import { categoryLookFor, categoryStyles } from '@/features/appearance/categoryLook'
+import { categoryArrow, categoryLookFor, categoryStyles, categoryTitle } from '@/features/appearance/categoryLook'
 import { themeStudioKey } from '@/features/appearance/sync'
 import { useAppearance } from '@/theme/prefs'
 import { Avatar } from '@/components/Avatar'
@@ -23,6 +22,10 @@ import { useVoice } from '@/stores/voice'
 import { useVoiceRooms, type VoiceRoomMember } from '@/stores/voiceRooms'
 import type { Category, Channel, Server } from '@/types/models'
 import { channelSections } from './channels'
+import { FullBanner } from '@/features/account/ProfileBanner'
+import { LookBackdrop } from './LookBackdrop'
+import { ServerIconView } from './ServerIconView'
+import { bannerBounds, bannerOverlay, cleanLook, hex, iconRadius } from './serverLook'
 import { CategoryMenu, ChannelMenu, ServerMenu, setChannelHidden, useServerPerms } from './menus'
 import { colors, font, radius, spacing } from '@/theme'
 import type { IconName } from '@/components/ui'
@@ -95,6 +98,7 @@ export function ChannelList({
   const studio = useQuery({ queryKey: themeStudioKey, queryFn: settingsApi.themeStudio, staleTime: 60_000 })
   const catLook = categoryLookFor(studio.data, server.id)
   const catStyle = categoryStyles(catLook)
+  const catArrow = (folded: boolean) => categoryArrow(catLook, folded)
   const [menu, setMenu] = useState(false)
   const [channelMenu, setChannelMenu] = useState<Channel | null>(null)
   const [categoryMenu, setCategoryMenu] = useState<Category | null>(null)
@@ -119,26 +123,41 @@ export function ChannelList({
   // Masqués pour moi seul (POST /channels/:id/hide) : réaffichables d'ici.
   const hidden = (channels.data ?? []).filter((c) => c.hidden && !c.archived)
 
-  // Avant tout return : un hook appelé après le chargement plantait l'app (« Rendered more hooks »).
-  const [bannerRatio, setBannerRatio] = useState(16 / 9)
+  // Apparence du serveur : bannière (hauteur, cadrage, voile), accent, forme de l'icône, fond.
+  const look = useMemo(() => cleanLook(server.look), [server.look])
 
   if (channels.isLoading) return <Loading />
   if (channels.error) return <ErrorState message={errorMessage(channels.error)} onRetry={() => void channels.refetch()} />
 
   const banner = resolveMediaUrl(server.banner)
+  const bounds = bannerBounds(look?.banner)
+  const veil = bannerOverlay(look?.banner, look?.accent)
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.bgAlt }}>
+      <LookBackdrop bg={look?.sidebar_bg} />
       <Pressable
         onPress={() => setMenu(true)}
         accessibilityRole="button"
         accessibilityLabel={t('channels.serverOptions', { name: server.name })}
-        style={({ pressed }) => [pressed && { opacity: 0.8 }]}
+        style={({ pressed }) => [pressed && { opacity: 0.8 }, !banner && look?.accent != null && { backgroundColor: hex(look.accent) }]}
       >
-        {/* Bannière entière à son format (le ratio vient de l'image elle-même) : jamais rognée. */}
-        {banner ? <Image source={{ uri: banner }} style={[styles.banner, { aspectRatio: bannerRatio }]} contentFit="cover" accessible={false} onLoad={(e) => e.source.width && e.source.height && setBannerRatio(e.source.width / e.source.height)} /> : null}
+        {/* Bannière entière (proportions de l'image, bornées), jamais rognée. */}
+        {banner ? (
+          <FullBanner uri={server.banner} minHeight={bounds.min} maxHeight={bounds.max} focus={look?.banner ? { x: look.banner.focus_x, y: look.banner.focus_y } : undefined}>
+            {veil ? (
+              <View
+                pointerEvents="none"
+                style={[
+                  { position: 'absolute', left: 0, right: 0, backgroundColor: veil.color, opacity: veil.opacity },
+                  veil.at === 'full' ? { top: 0, bottom: 0 } : veil.at === 'top' ? { top: 0, height: '40%' } : { bottom: 0, height: '40%' },
+                ]}
+              />
+            ) : null}
+          </FullBanner>
+        ) : null}
         <View style={styles.header}>
-          {banner ? null : <Avatar uri={server.icon} name={server.name} size={28} rounded={false} />}
+          {banner ? null : <ServerIconView uri={server.icon} name={server.name} size={28} radius={iconRadius(look?.icon_shape, 28)} />}
           <Text style={styles.serverName} numberOfLines={1}>
             {server.name}
           </Text>
@@ -181,8 +200,9 @@ export function ChannelList({
               onAccessibilityAction={(e) => e.nativeEvent.actionName === 'longpress' && setCategoryMenu(cat)}
               style={[styles.categoryRow, catStyle.row]}
             >
-              <Ionicons name={folded ? 'chevron-forward' : 'chevron-down'} size={12} color={colors.textMuted} />
-              <Text style={[styles.category, catStyle.text]}>{catLook.uppercase ? cat.name.toUpperCase() : cat.name}</Text>
+              <CategoryArrow name={catArrow(folded)} />
+              {catStyle.icon ? <Text style={[styles.category, catStyle.text, { backgroundColor: undefined, borderWidth: 0 }]} accessible={false}>{catStyle.icon} </Text> : null}
+              <Text style={[styles.category, catStyle.text]}>{categoryTitle(catLook, cat.name)}</Text>
             </Pressable>
           ) : (
             <View style={{ height: spacing.sm }} />
@@ -218,7 +238,7 @@ export function ChannelList({
                 </Text>
                 {item.has_voice_password ? <Ionicons name="lock-closed" size={12} color={colors.textFaint} /> : null}
                 {/* Discord : pastille rouge chiffrée pour les mentions, point pour le simple non-lu. */}
-                {mention ? <Badge count={mention} /> : unread ? <View style={styles.dot} /> : null}
+                {mention ? <Badge count={mention} /> : unread ? <View style={[styles.dot, look?.unread_color != null && { backgroundColor: hex(look.unread_color) }]} /> : null}
               </Pressable>
               {people.map((p) => (
                 <View key={p.userId} style={styles.participant} accessible accessibilityLabel={p.muted ? `${p.username}, ${t('channels.micOff')}` : p.username}>
@@ -256,8 +276,12 @@ export function ChannelList({
   )
 }
 
+/** Flèche de repli des catégories (style choisi sur le web ; null = aucune). */
+function CategoryArrow({ name }: { name: ReturnType<typeof categoryArrow> }) {
+  return name ? <Ionicons name={name} size={12} color={colors.textMuted} /> : null
+}
+
 const styles = StyleSheet.create({
-  banner: { width: '100%' },
   header: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.lg, minHeight: 52 },
   toolbar: {
     flexDirection: 'row',

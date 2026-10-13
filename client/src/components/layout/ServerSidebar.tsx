@@ -1,7 +1,10 @@
 import { useNavigate, useParams, useLocation } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Bookmark, Newspaper, MessageCircle, Plus, Compass, ChevronDown, FolderOpen, X, LayoutTemplate, Settings, LogOut, Copy, UserPlus, Trash2, BellOff, Bell, CheckCheck, Search as SearchIcon } from 'lucide-react'
-import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo, type CSSProperties } from 'react'
+import { accentVars, cleanAppearance, effectiveAppearance, iconRingCss, iconShape, isOptedOut } from '../../lib/serverAppearance'
+import { hex } from '../../lib/nameStyle'
+import { useLookOptOutTick } from '../../hooks/useServerAppearance'
 import DeleteServerModal from '../modals/DeleteServerModal'
 import api, { mediaUrl } from '../../api/client'
 import toast from 'react-hot-toast'
@@ -43,6 +46,8 @@ export default function ServerSidebar() {
   const isNews = pathname.startsWith('/news')
   const isNotif = pathname.startsWith('/notifications')
   const qc = useQueryClient()
+  // Re-rendu quand un membre refuse ou réaccepte l'apparence d'un serveur.
+  useLookOptOutTick()
   const serverCounts = useUnread(s => s.serverCounts)
   // Non-lus DM = total des counts par canal moins la part attribuée aux serveurs
   const dmUnread = useUnread(s => {
@@ -282,6 +287,9 @@ export default function ServerSidebar() {
     const muted = isServerMuted(s.id)
     const isActive = serverId === s.id
     const hasUnread = (serverCounts[s.id] ?? 0) > 0 && !isActive && !muted
+    // Apparence du serveur : forme et anneau de l'icône, couleur de la pilule des non-lus.
+    const look = effectiveAppearance(cleanAppearance(s.look), isOptedOut(s.id))
+    const shape = look?.icon_shape ? iconShape(look.icon_shape) : null
     return (
       <div className="relative w-full flex items-center justify-center" {...dndProps(target, 'server')}>
         {dropMark(target)}
@@ -291,7 +299,9 @@ export default function ServerSidebar() {
           className={`absolute left-0 w-1 rounded-r-full bg-white transition-all duration-200 ${
             isActive ? 'h-9' : hasUnread ? 'h-2.5' : 'h-0 opacity-0'
           }`}
+          style={look?.unread_color != null ? { backgroundColor: hex(look.unread_color) } : undefined}
         />
+        <span className="inline-flex" style={iconRingCss(look) as CSSProperties | undefined}>
         <button
           key={s.id}
           onClick={() => nav(`/servers/${s.id}`)}
@@ -316,15 +326,18 @@ export default function ServerSidebar() {
           onTouchMove={() => { if (serverLongPressRef.current) { clearTimeout(serverLongPressRef.current); serverLongPressRef.current = null } }}
           aria-current={isActive ? 'page' : undefined}
           aria-label={s.name}
-          className={`w-12 h-12 rounded-full flex items-center justify-center transition-all hover:rounded-2xl font-bold text-white select-none
-            ${isActive ? 'bg-fc-accent rounded-2xl' : 'bg-fc-channel hover:bg-fc-accent'}
+          className={`w-12 h-12 flex items-center justify-center transition-all font-bold text-white select-none overflow-hidden
+            ${shape ? shape.className : `rounded-full hover:rounded-2xl ${isActive ? 'rounded-2xl' : ''}`}
+            ${isActive ? 'bg-fc-accent' : 'bg-fc-channel hover:bg-fc-accent'}
             ${drag?.id === s.id ? 'opacity-40' : ''}`}
+          style={{ ...(shape?.style as CSSProperties | undefined), ...(accentVars(look) as CSSProperties | undefined) }}
           title={s.name}
         >
           {s.icon
-            ? <img src={mediaUrl(s.icon)} alt={s.name} loading="lazy" decoding="async" className="w-full h-full rounded-full object-cover" />
+            ? <img src={mediaUrl(s.icon)} alt={s.name} loading="lazy" decoding="async" className="w-full h-full object-cover" />
             : s.name.charAt(0).toUpperCase()}
         </button>
+        </span>
         {/* Non-lu = pilule blanche à gauche (ci-dessus) ; mentions = pastille rouge chiffrée */}
         {(serverMentionCounts[s.id] ?? 0) > 0 && (
           <span

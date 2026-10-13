@@ -1,12 +1,12 @@
-// Icône d'application personnalisable (Apparence). 50 icônes prédéfinies
-// (public/app-icons/N.png, scripts/gen-app-icons.py) ou une image importée.
+// Icône d'application personnalisable (Apparence). PRESET_COUNT icônes prédéfinies, coloris du logo 3D
+// (public/app-icons/N.png 128 px, familles dans appIconPresets.ts, scripts/gen-app-icons.py) ou une image importée.
 // Bureau : PNG envoyé à Rust (systeme::set_app_icon) qui le pose sur la fenêtre,
 // la barre des tâches et la zone de notification, et le réapplique au démarrage.
 // Web : favicon de l'onglet, choix gardé dans le navigateur.
 import { setFaviconOverride } from '../faviconAnimator'
 import { desktopInvoke, isDesktop } from './desktop'
 
-export const PRESET_COUNT = 50
+export const PRESET_COUNT = 156
 export const presetUrl = (n: number) => `/app-icons/${n}.png`
 export const IMPORT_MAX_BYTES = 2 * 1024 * 1024
 const ICON_SIZE = 256

@@ -432,6 +432,8 @@ pub async fn server_upload_candidates(db: &sqlx::PgPool, server_id: Uuid) -> Vec
            JOIN channels c ON c.id = m.channel_id WHERE c.server_id = $1
          UNION SELECT icon FROM servers WHERE id = $1 AND icon IS NOT NULL
          UNION SELECT banner FROM servers WHERE id = $1 AND banner IS NOT NULL
+         UNION SELECT look->'sidebar_bg'->>'image' FROM servers WHERE id = $1 AND look->'sidebar_bg'->>'image' IS NOT NULL
+         UNION SELECT look->'message_bg'->>'image' FROM servers WHERE id = $1 AND look->'message_bg'->>'image' IS NOT NULL
          UNION SELECT url FROM custom_emojis WHERE server_id = $1
          UNION SELECT url FROM server_stickers WHERE server_id = $1
          UNION SELECT file_url FROM soundboard WHERE server_id = $1",
@@ -465,7 +467,8 @@ pub async fn remove_unreferenced(state: &AppState, candidates: Vec<String>) {
         "SELECT u FROM unnest($1::text[]) AS u
          WHERE NOT EXISTS (SELECT 1 FROM attachments WHERE url = u)
            AND NOT EXISTS (SELECT 1 FROM users WHERE avatar = u OR banner = u)
-           AND NOT EXISTS (SELECT 1 FROM servers WHERE icon = u OR banner = u)
+           AND NOT EXISTS (SELECT 1 FROM servers WHERE icon = u OR banner = u
+                           OR look->'sidebar_bg'->>'image' = u OR look->'message_bg'->>'image' = u)
            AND NOT EXISTS (SELECT 1 FROM custom_emojis WHERE url = u)
            AND NOT EXISTS (SELECT 1 FROM server_stickers WHERE url = u)
            AND NOT EXISTS (SELECT 1 FROM soundboard WHERE file_url = u)",

@@ -4,28 +4,17 @@ import { StyledName, previewName } from '@/components/UserName'
 import { TextField } from '@/components/ui'
 import { THEME_SWATCHES } from '@/features/account/profileDecor'
 import { useT, type Key } from '@/i18n'
-import { NAME_EFFECTS, NAME_FONTS, parseHex, toHex, type NameStyle } from '@/lib/nameStyle'
+import { effectLabel, fontLabel } from './nameStyleLabels'
+import {
+  LEVEL_DEFAULT, LEVEL_MAX, NAME_COLORS_MAX, NAME_EFFECTS, NAME_FONTS, NAME_GRADIENTS, OUTLINE_STYLES, OUTLINE_WIDTH_MAX,
+  level, parseHex, toHex, type NameStyle,
+} from '@/lib/nameStyle'
 import { colors, font, radius, spacing } from '@/theme'
 
 /** Couleurs proposées pour le pseudo (en plus de la saisie hexadécimale). */
 const NAME_SWATCHES = [...THEME_SWATCHES.slice(0, 10), 0xffffff, 0xff00e5, 0x00f0ff, 0x7dffb0]
 
-const EFFECT_LABEL: Record<string, Key> = {
-  '': 'settings.nameStyle.none',
-  shimmer: 'settings.nameStyle.shimmer',
-  glow: 'settings.nameStyle.glow',
-  outline: 'settings.nameStyle.outline',
-}
-const FONT_LABEL: Record<string, Key> = {
-  '': 'settings.nameStyle.fontDefault',
-  serif: 'settings.nameStyle.serif',
-  mono: 'settings.nameStyle.mono',
-  rounded: 'settings.nameStyle.rounded',
-  heavy: 'settings.nameStyle.heavy',
-  cursive: 'settings.nameStyle.cursive',
-}
-
-/** Style du pseudo : défaut / uni / dégradé (2-3 couleurs), effet, police, aperçu en direct. */
+/** Style du pseudo : défaut / uni / dégradé (2 à 5 couleurs), effet et intensité, police, contour, aperçu en direct. */
 export function NameStyleEditor({ value, onChange, name, tag }: { value: NameStyle; onChange: (v: NameStyle) => void; name: string; tag?: string }) {
   const t = useT()
   const [slot, setSlot] = useState(0)
@@ -46,6 +35,8 @@ export function NameStyleEditor({ value, onChange, name, tag }: { value: NameSty
   )
 
   const hexOk = parseHex(hex) != null
+  const intensity = level(value.intensity ?? LEVEL_DEFAULT)
+  const width = Math.min(OUTLINE_WIDTH_MAX, Math.max(0, value.outline_width ?? 0))
 
   return (
     <View style={{ gap: spacing.md }}>
@@ -73,8 +64,8 @@ export function NameStyleEditor({ value, onChange, name, tag }: { value: NameSty
                 style={[styles.slot, { backgroundColor: toHex(c) }, slot === i && styles.swatchOn]}
               />
             ))}
-            {mode === 'gradient' && cs.length < 3 ? chip(t('settings.nameStyle.addColor'), false, () => setColors([...cs, 0xfaa61a]), 'add') : null}
-            {mode === 'gradient' && cs.length === 3 ? chip(t('settings.nameStyle.removeColor'), false, () => setColors(cs.filter((_, i) => i !== slot)), 'rm') : null}
+            {mode === 'gradient' && cs.length < NAME_COLORS_MAX ? chip(t('settings.nameStyle.addColor'), false, () => setColors([...cs, 0xfaa61a]), 'add') : null}
+            {mode === 'gradient' && cs.length > 2 ? chip(t('settings.nameStyle.removeColor'), false, () => setColors(cs.filter((_, i) => i !== slot)), 'rm') : null}
           </View>
           <View style={styles.wrap}>
             {NAME_SWATCHES.map((c) => (
@@ -109,11 +100,53 @@ export function NameStyleEditor({ value, onChange, name, tag }: { value: NameSty
         </>
       ) : null}
 
+      {mode === 'gradient' ? (
+        <>
+          <Text style={styles.label}>{t('settings.nameStyle.gradientType')}</Text>
+          <View style={styles.wrap}>
+            {NAME_GRADIENTS.map((g) => chip(t(`settings.nameStyle.gradient.${g || 'linear'}` as Key), (value.gradient ?? '') === g, () => set({ gradient: g }), g || 'linear'))}
+          </View>
+        </>
+      ) : null}
+
       <Text style={styles.label}>{t('settings.nameStyle.effect')}</Text>
-      <View style={styles.wrap}>{NAME_EFFECTS.map((e) => chip(t(EFFECT_LABEL[e]!), (value.effect ?? '') === e, () => set({ effect: e }), e || 'none'))}</View>
+      <View style={styles.wrap}>{NAME_EFFECTS.map((e) => chip(t(effectLabel(e)), (value.effect ?? '') === e, () => set({ effect: e }), e || 'none'))}</View>
+      {value.effect ? (
+        <View style={styles.wrap}>
+          <Text style={styles.hint}>{t('settings.nameStyle.intensity', { n: intensity })}</Text>
+          {chip(t('settings.nameStyle.less'), false, () => set({ intensity: Math.max(1, intensity - 1) }), 'less')}
+          {chip(t('settings.nameStyle.more'), false, () => set({ intensity: Math.min(LEVEL_MAX, intensity + 1) }), 'more')}
+        </View>
+      ) : null}
       <Text style={styles.label}>{t('settings.nameStyle.font')}</Text>
-      <View style={styles.wrap}>{NAME_FONTS.map((f) => chip(t(FONT_LABEL[f]!), (value.font ?? '') === f, () => set({ font: f }), f || 'none'))}</View>
-      <Text style={styles.hint}>{t('settings.nameStyle.hint')}</Text>
+      <View style={styles.wrap}>{NAME_FONTS.map((f) => chip(t(fontLabel(f)), (value.font ?? '') === f, () => set({ font: f }), f || 'none'))}</View>
+
+      <Text style={styles.label}>{t('settings.nameStyle.outline')}</Text>
+      <View style={styles.wrap}>
+        <Text style={styles.hint}>{width ? t('settings.nameStyle.outlineWidth', { n: width }) : t('settings.nameStyle.outlineNone')}</Text>
+        {chip('−', false, () => set({ outline_width: Math.max(0, width - 1) }), 'w-')}
+        {chip('+', false, () => set({ outline_width: Math.min(OUTLINE_WIDTH_MAX, width + 1), outline: value.outline ?? 0 }), 'w+')}
+      </View>
+      {width ? (
+        <>
+          <View style={styles.wrap}>
+            {OUTLINE_STYLES.map((o) => chip(t(`settings.nameStyle.outlineStyle.${o || 'solid'}` as Key), (value.outline_style ?? '') === o, () => set({ outline_style: o, outline2: o === 'double' ? value.outline2 ?? 0xffffff : undefined }), o || 'solid'))}
+          </View>
+          <View style={styles.wrap} accessibilityLabel={t('settings.nameStyle.outlineColor')}>
+            {[0x000000, 0xffffff, ...NAME_SWATCHES.slice(0, 8)].map((c) => (
+              <Pressable
+                key={c}
+                onPress={() => set({ outline: c })}
+                accessibilityRole="button"
+                accessibilityLabel={t('settings.cosmetics.colorA11y', { hex: toHex(c) })}
+                accessibilityState={{ selected: value.outline === c }}
+                style={[styles.swatch, { backgroundColor: toHex(c) }, value.outline === c && styles.swatchOn]}
+              />
+            ))}
+          </View>
+        </>
+      ) : null}
+      <Text style={styles.hint}>{t('settings.nameStyle.hint')} {t('settings.nameStyle.staticHint')}</Text>
     </View>
   )
 }

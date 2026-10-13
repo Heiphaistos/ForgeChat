@@ -11,8 +11,12 @@ import * as menus from './parts/menus.ts'
 import * as accountGuard from './parts/accountGuard.ts'
 import * as discordSync from './parts/discordSync.ts'
 import * as themesMore from './parts/themesMore.ts'
+import * as looksMore from './parts/looksMore.ts'
 import * as avSettings from './parts/avSettings.ts'
 import * as profileEditor from './parts/profileEditor.ts'
+import * as nameStyleMore from './parts/nameStyleMore.ts'
+import * as serverLook from './parts/serverLook.ts'
+import * as profileDecorMore from './parts/profileDecorMore.ts'
 import { profileEn } from './profileEn.ts'
 import { profileStyleEn } from './profileStyleEn.ts'
 import { socialEn } from './socialEn.ts'
@@ -39,8 +43,12 @@ export const en: Partial<Record<Key, string>> = {
   ...accountGuard.en,
   ...discordSync.en,
   ...themesMore.en,
+  ...looksMore.en,
   ...avSettings.en,
   ...profileEditor.en,
+  ...nameStyleMore.en,
+  ...serverLook.en,
+  ...profileDecorMore.en,
   // --- Connexion, inscription, mot de passe oublié ---
   'auth.email': 'Email',
   'auth.password': 'Password',

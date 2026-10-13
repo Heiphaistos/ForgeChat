@@ -11,9 +11,13 @@ export interface UpdateProfile {
   pronouns?: string
   /** "" = retirer ; -1 = couleur par défaut. */
   avatar_decoration?: string
+  /** {} = réglages par défaut (features/account/profileDecor::decoOptsPayload). */
+  avatar_decoration_opts?: Record<string, number | boolean | string>
   profile_color_primary?: number
   profile_color_accent?: number
   profile_effect?: string
+  /** 25-200 % ; 100 = normale. */
+  profile_effect_intensity?: number
   /** "" = retirer. */
   display_name?: string
   /** {} = style par défaut. */

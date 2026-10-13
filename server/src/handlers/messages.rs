@@ -50,7 +50,7 @@ pub async fn get_messages(
 
         let half = limit / 2;
         let before_rows = sqlx::query(
-            "SELECT m.*, u.username, u.discriminator, NULLIF(COALESCE(m.webhook_avatar_url, (SELECT sm.server_avatar FROM server_members sm JOIN channels c ON c.server_id = sm.server_id WHERE c.id = m.channel_id AND sm.user_id = m.user_id), u.avatar), '') AS avatar, CASE WHEN m.webhook_display_name IS NULL THEN u.avatar_decoration END AS avatar_decoration, u.is_bot, u.is_verified,
+            "SELECT m.*, u.username, u.discriminator, NULLIF(COALESCE(m.webhook_avatar_url, (SELECT sm.server_avatar FROM server_members sm JOIN channels c ON c.server_id = sm.server_id WHERE c.id = m.channel_id AND sm.user_id = m.user_id), u.avatar), '') AS avatar, CASE WHEN m.webhook_display_name IS NULL THEN u.avatar_decoration END AS avatar_decoration, CASE WHEN m.webhook_display_name IS NULL THEN u.avatar_decoration_opts END AS avatar_decoration_opts, u.is_bot, u.is_verified,
                     rm.content as reply_to_content, COALESCE(rm.webhook_display_name, ru.username) as reply_to_username,
                     rm.enc as reply_to_enc, rm.client_msg_id as reply_to_client_msg_id, rm.user_id as reply_to_author_id
              FROM messages m
@@ -65,7 +65,7 @@ pub async fn get_messages(
         .fetch_all(&state.db).await?;
 
         let after_rows = sqlx::query(
-            "SELECT m.*, u.username, u.discriminator, NULLIF(COALESCE(m.webhook_avatar_url, (SELECT sm.server_avatar FROM server_members sm JOIN channels c ON c.server_id = sm.server_id WHERE c.id = m.channel_id AND sm.user_id = m.user_id), u.avatar), '') AS avatar, CASE WHEN m.webhook_display_name IS NULL THEN u.avatar_decoration END AS avatar_decoration, u.is_bot, u.is_verified,
+            "SELECT m.*, u.username, u.discriminator, NULLIF(COALESCE(m.webhook_avatar_url, (SELECT sm.server_avatar FROM server_members sm JOIN channels c ON c.server_id = sm.server_id WHERE c.id = m.channel_id AND sm.user_id = m.user_id), u.avatar), '') AS avatar, CASE WHEN m.webhook_display_name IS NULL THEN u.avatar_decoration END AS avatar_decoration, CASE WHEN m.webhook_display_name IS NULL THEN u.avatar_decoration_opts END AS avatar_decoration_opts, u.is_bot, u.is_verified,
                     rm.content as reply_to_content, COALESCE(rm.webhook_display_name, ru.username) as reply_to_username,
                     rm.enc as reply_to_enc, rm.client_msg_id as reply_to_client_msg_id, rm.user_id as reply_to_author_id
              FROM messages m
@@ -94,7 +94,7 @@ pub async fn get_messages(
         let ts = cursor_ts.ok_or_else(|| AppError::NotFound("Curseur invalide".into()))?;
 
         sqlx::query(
-            "SELECT m.*, u.username, u.discriminator, NULLIF(COALESCE(m.webhook_avatar_url, (SELECT sm.server_avatar FROM server_members sm JOIN channels c ON c.server_id = sm.server_id WHERE c.id = m.channel_id AND sm.user_id = m.user_id), u.avatar), '') AS avatar, CASE WHEN m.webhook_display_name IS NULL THEN u.avatar_decoration END AS avatar_decoration, u.is_bot, u.is_verified,
+            "SELECT m.*, u.username, u.discriminator, NULLIF(COALESCE(m.webhook_avatar_url, (SELECT sm.server_avatar FROM server_members sm JOIN channels c ON c.server_id = sm.server_id WHERE c.id = m.channel_id AND sm.user_id = m.user_id), u.avatar), '') AS avatar, CASE WHEN m.webhook_display_name IS NULL THEN u.avatar_decoration END AS avatar_decoration, CASE WHEN m.webhook_display_name IS NULL THEN u.avatar_decoration_opts END AS avatar_decoration_opts, u.is_bot, u.is_verified,
                     rm.content as reply_to_content, COALESCE(rm.webhook_display_name, ru.username) as reply_to_username,
                     rm.enc as reply_to_enc, rm.client_msg_id as reply_to_client_msg_id, rm.user_id as reply_to_author_id
              FROM messages m
@@ -109,7 +109,7 @@ pub async fn get_messages(
         .fetch_all(&state.db).await?
     } else {
         sqlx::query(
-            "SELECT m.*, u.username, u.discriminator, NULLIF(COALESCE(m.webhook_avatar_url, (SELECT sm.server_avatar FROM server_members sm JOIN channels c ON c.server_id = sm.server_id WHERE c.id = m.channel_id AND sm.user_id = m.user_id), u.avatar), '') AS avatar, CASE WHEN m.webhook_display_name IS NULL THEN u.avatar_decoration END AS avatar_decoration, u.is_bot, u.is_verified,
+            "SELECT m.*, u.username, u.discriminator, NULLIF(COALESCE(m.webhook_avatar_url, (SELECT sm.server_avatar FROM server_members sm JOIN channels c ON c.server_id = sm.server_id WHERE c.id = m.channel_id AND sm.user_id = m.user_id), u.avatar), '') AS avatar, CASE WHEN m.webhook_display_name IS NULL THEN u.avatar_decoration END AS avatar_decoration, CASE WHEN m.webhook_display_name IS NULL THEN u.avatar_decoration_opts END AS avatar_decoration_opts, u.is_bot, u.is_verified,
                     rm.content as reply_to_content, COALESCE(rm.webhook_display_name, ru.username) as reply_to_username,
                     rm.enc as reply_to_enc, rm.client_msg_id as reply_to_client_msg_id, rm.user_id as reply_to_author_id
              FROM messages m
@@ -186,6 +186,7 @@ pub async fn get_messages(
             author_discriminator: row.get("discriminator"),
             author_avatar: row.get("avatar"),
             author_avatar_decoration: row.try_get("avatar_decoration").ok().flatten(),
+            author_avatar_decoration_opts: row.try_get("avatar_decoration_opts").ok().flatten(),
             author_is_bot: row.get("is_bot"),
             author_verified: row.try_get("is_verified").unwrap_or(false),
             attachments,
@@ -358,7 +359,7 @@ pub async fn send_message(
 
     let user = sqlx::query(
         // Avatar du profil de ce serveur s'il y en a un (075), sinon celui du compte.
-        "SELECT u.username, u.discriminator, u.is_bot, u.is_verified, u.avatar_decoration,
+        "SELECT u.username, u.discriminator, u.is_bot, u.is_verified, u.avatar_decoration, u.avatar_decoration_opts,
                 COALESCE((SELECT sm.server_avatar FROM server_members sm JOIN channels c ON c.server_id = sm.server_id
                           WHERE c.id = $2 AND sm.user_id = u.id), u.avatar) AS avatar
          FROM users u WHERE u.id=$1"
@@ -409,6 +410,7 @@ pub async fn send_message(
         author_discriminator: user.get("discriminator"),
         author_avatar: user.get("avatar"),
         author_avatar_decoration: user.try_get("avatar_decoration").ok().flatten(),
+        author_avatar_decoration_opts: user.try_get("avatar_decoration_opts").ok().flatten(),
         author_is_bot: user.try_get("is_bot").unwrap_or(false),
         author_verified: user.try_get("is_verified").unwrap_or(false),
         attachments: vec![],
@@ -800,7 +802,7 @@ pub async fn search_messages(
     let q_esc = q.to_lowercase().replace('\\', "\\\\").replace('%', "\\%").replace('_', "\\_");
     let pattern = format!("%{}%", q_esc);
     let rows = sqlx::query(
-        "SELECT m.*, u.username, u.discriminator, NULLIF(COALESCE(m.webhook_avatar_url, (SELECT sm.server_avatar FROM server_members sm JOIN channels c ON c.server_id = sm.server_id WHERE c.id = m.channel_id AND sm.user_id = m.user_id), u.avatar), '') AS avatar, CASE WHEN m.webhook_display_name IS NULL THEN u.avatar_decoration END AS avatar_decoration, u.is_bot, u.is_verified,
+        "SELECT m.*, u.username, u.discriminator, NULLIF(COALESCE(m.webhook_avatar_url, (SELECT sm.server_avatar FROM server_members sm JOIN channels c ON c.server_id = sm.server_id WHERE c.id = m.channel_id AND sm.user_id = m.user_id), u.avatar), '') AS avatar, CASE WHEN m.webhook_display_name IS NULL THEN u.avatar_decoration END AS avatar_decoration, CASE WHEN m.webhook_display_name IS NULL THEN u.avatar_decoration_opts END AS avatar_decoration_opts, u.is_bot, u.is_verified,
                 rm.content as reply_to_content, COALESCE(rm.webhook_display_name, ru.username) as reply_to_username,
                     rm.enc as reply_to_enc, rm.client_msg_id as reply_to_client_msg_id, rm.user_id as reply_to_author_id
          FROM messages m
@@ -834,6 +836,7 @@ pub async fn search_messages(
         author_discriminator: r.get("discriminator"),
         author_avatar: r.get("avatar"),
         author_avatar_decoration: r.try_get("avatar_decoration").ok().flatten(),
+        author_avatar_decoration_opts: r.try_get("avatar_decoration_opts").ok().flatten(),
         author_is_bot: r.try_get("is_bot").unwrap_or(false),
         author_verified: r.try_get("is_verified").unwrap_or(false),
         attachments: vec![],
@@ -1034,7 +1037,7 @@ pub async fn forward_message(
 
     let user = sqlx::query(
         // Avatar du profil de ce serveur s'il y en a un (075), sinon celui du compte.
-        "SELECT u.username, u.discriminator, u.is_bot, u.is_verified, u.avatar_decoration,
+        "SELECT u.username, u.discriminator, u.is_bot, u.is_verified, u.avatar_decoration, u.avatar_decoration_opts,
                 COALESCE((SELECT sm.server_avatar FROM server_members sm JOIN channels c ON c.server_id = sm.server_id
                           WHERE c.id = $2 AND sm.user_id = u.id), u.avatar) AS avatar
          FROM users u WHERE u.id=$1"
@@ -1062,6 +1065,7 @@ pub async fn forward_message(
         author_discriminator: user.get("discriminator"),
         author_avatar: user.get("avatar"),
         author_avatar_decoration: user.try_get("avatar_decoration").ok().flatten(),
+        author_avatar_decoration_opts: user.try_get("avatar_decoration_opts").ok().flatten(),
         author_is_bot: user.try_get("is_bot").unwrap_or(false),
         author_verified: user.try_get("is_verified").unwrap_or(false),
         attachments: vec![],

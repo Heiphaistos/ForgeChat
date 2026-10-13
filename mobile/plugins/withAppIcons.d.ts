@@ -1,7 +1,7 @@
 import type { AndroidConfig, ConfigPlugin } from '@expo/config-plugins'
 
 interface Background {
-  type: 'solid' | 'gradient' | 'circle'
+  type: 'solid' | 'gradient' | 'circle' | 'stripes'
   colors: string[]
   base?: string
 }

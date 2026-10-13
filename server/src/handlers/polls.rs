@@ -149,7 +149,7 @@ pub async fn create_poll(
 
     // Récupérer les infos du créateur pour le broadcast MESSAGE_CREATE
     let creator_row = sqlx::query(
-        "SELECT username, discriminator, avatar, avatar_decoration, is_bot FROM users WHERE id=$1"
+        "SELECT username, discriminator, avatar, avatar_decoration, avatar_decoration_opts, is_bot FROM users WHERE id=$1"
     )
     .bind(claims.sub)
     .fetch_one(&state.db)
@@ -173,6 +173,7 @@ pub async fn create_poll(
         author_discriminator: creator_row.get("discriminator"),
         author_avatar: creator_row.get("avatar"),
         author_avatar_decoration: creator_row.get("avatar_decoration"),
+        author_avatar_decoration_opts: creator_row.get("avatar_decoration_opts"),
         author_is_bot: creator_row.try_get("is_bot").unwrap_or(false),
         author_verified: false,
         attachments: vec![],

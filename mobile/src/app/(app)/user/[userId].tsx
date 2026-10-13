@@ -66,11 +66,11 @@ export default function UserScreen() {
   return (
     <ScrollView style={{ backgroundColor: colors.bg }} contentContainerStyle={{ padding: spacing.xl }} keyboardShouldPersistTaps="handled">
       <ProfileThemeCard primary={u.profile_color_primary} accent={u.profile_color_accent} style={themed ? styles.themed : null}>
-        <ProfileEffect id={u.profile_effect} />
+        <ProfileEffect id={u.profile_effect} intensity={u.profile_effect_intensity} />
         <ProfileBanner uri={shown.banner} name={u.username} />
         <View style={styles.header}>
           <AvatarRing ring={member?.server_avatar_ring} size={96}>
-            <Avatar uri={shown.avatar} name={u.username} size={96} userId={u.id} status={u.status} showStatus decoration={u.avatar_decoration} />
+            <Avatar uri={shown.avatar} name={u.username} size={96} userId={u.id} status={u.status} showStatus decoration={u.avatar_decoration} decorationOpts={u.avatar_decoration_opts} />
           </AvatarRing>
           <View style={styles.nameRow}>
             <StyledName

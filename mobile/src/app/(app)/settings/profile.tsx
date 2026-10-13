@@ -8,12 +8,13 @@ import { Button, Row, SwitchRow, TextField } from '@/components/ui'
 import { LIMITS } from '@/config/env'
 import { ProfileBanner } from '@/features/account/ProfileBanner'
 import { ProfileCosmeticsEditor, type Cosmetics } from '@/features/account/ProfileCosmeticsEditor'
+import { cleanDecoOpts, cleanIntensity, decoOptsPayload } from '@/features/account/profileDecor'
 import { NameStyleEditor } from '@/features/account/NameStyleEditor'
 import { PROFILE_IMAGE_MAX_BYTES, pickAnimatedImage } from '@/features/account/pickAnimated'
 import { ProfileLinksEditor } from '@/features/account/ProfileLinksEditor'
 import { profileLinkError, usernameError } from '@/features/account/rules'
 import { formatUntil } from '@/lib/format'
-import type { NameStyle } from '@/lib/nameStyle'
+import { cleanNameStyle, type NameStyle } from '@/lib/nameStyle'
 import { rememberUserStyle } from '@/stores/nameStyles'
 import { useSettings } from '@/stores/settings'
 import { useT } from '@/i18n'
@@ -55,9 +56,11 @@ export default function ProfileSettings() {
   const [pronouns, setPronouns] = useState(user?.pronouns ?? '')
   const [cosmetics, setCosmetics] = useState<Cosmetics>({
     decoration: user?.avatar_decoration ?? '',
+    opts: cleanDecoOpts(user?.avatar_decoration_opts),
     primary: user?.profile_color_primary ?? null,
     accent: user?.profile_color_accent ?? null,
     effect: user?.profile_effect ?? '',
+    intensity: cleanIntensity(user?.profile_effect_intensity),
   })
   const [errors, setErrors] = useState<{ username?: string }>({})
   const [saving, setSaving] = useState(false)
@@ -82,11 +85,13 @@ export default function ProfileSettings() {
         custom_status_clear_after: sendStatus ? (clearAfter ?? 0) : undefined,
         display_name: displayName.trim(),
         profile_tag: tag.trim(),
-        name_style: nameStyle.colors.length || nameStyle.effect || nameStyle.font ? { ...nameStyle, angle: nameStyle.angle ?? 90 } : {},
+        name_style: cleanNameStyle(nameStyle) ?? {},
         profile_links: links.map((l) => ({ label: l.label.trim(), url: l.url.trim() })),
         pronouns: pronouns.trim(),
         // "" et -1 = retirer.
         avatar_decoration: cosmetics.decoration,
+        avatar_decoration_opts: decoOptsPayload(cosmetics.opts),
+        profile_effect_intensity: cosmetics.intensity,
         profile_color_primary: cosmetics.primary ?? -1,
         profile_color_accent: cosmetics.accent ?? -1,
         profile_effect: cosmetics.effect,
@@ -123,9 +128,10 @@ export default function ProfileSettings() {
     if (!(await ensurePhotoAccess())) return
     const res = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'],
-      allowsEditing: true,
-      aspect: kind === 'avatar' ? [1, 1] : [16, 5],
-      quality: 0.8, // ré-encodage JPEG : retire les métadonnées EXIF (GPS…)
+      // Bannière gardée entière (aucun recadrage) : elle est affichée sans rognage partout.
+      allowsEditing: kind === 'avatar',
+      aspect: kind === 'avatar' ? [1, 1] : undefined,
+      quality: kind === 'avatar' ? 0.8 : 0.92, // ré-encodage JPEG : retire les métadonnées EXIF (GPS…)
     })
     if (res.canceled || !res.assets[0]) return
     const a = res.assets[0]

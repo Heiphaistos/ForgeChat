@@ -7,6 +7,7 @@ import { useAuth } from '../../store/auth'
 import { useVoice } from '../../store/voice'
 import { usePresence } from '../../store/presence'
 import api, { mediaUrl } from '../../api/client'
+import ProfileBanner from '../ui/ProfileBanner'
 import toast from 'react-hot-toast'
 import { useT } from '../../i18n'
 import MusicStatus from './MusicStatus'
@@ -103,11 +104,7 @@ function QuickStatusPopup({ onClose }: { onClose: () => void }) {
     >
       {/* Bannière + Avatar */}
       <div className="relative">
-        <div className="h-16 bg-gradient-to-br from-fc-accent/60 to-indigo-800/60 overflow-hidden">
-          {user?.banner && (
-            <img src={mediaUrl(user.banner)} alt="" className="w-full h-full object-cover" loading="lazy" decoding="async" />
-          )}
-        </div>
+        <ProfileBanner src={user?.banner} minHeight={56} maxHeight={150} emptyClassName="h-16 bg-gradient-to-br from-fc-accent/60 to-indigo-800/60" />
         <div className="absolute left-3 -bottom-5 flex items-end gap-2">
           <div className="w-12 h-12 rounded-full border-4 border-fc-sidebar bg-fc-accent flex items-center justify-center font-bold text-white text-base overflow-hidden flex-shrink-0">
             {user?.avatar

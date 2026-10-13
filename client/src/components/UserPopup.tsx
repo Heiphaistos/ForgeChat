@@ -10,6 +10,7 @@ import UserSocialInfo from './UserSocialInfo'
 import { AvatarDecoration, ProfileEffect, profileThemeBackground } from './ui/ProfileDecor'
 import { dateLocale, t as tr } from '../i18n'
 import AnimatedImg from './ui/AnimatedImg'
+import ProfileBanner from './ui/ProfileBanner'
 import UserName from './ui/UserName'
 import ProfileLinks from './ui/ProfileLinks'
 import { renderMarkdown } from '../utils/markdown'
@@ -143,19 +144,20 @@ export default function UserPopup({ userId, serverId, anchorX, anchorY, onClose 
         ? 'bg-fc-bg border-t border-fc-hover rounded-t-2xl shadow-2xl overflow-y-auto overscroll-contain pb-[max(env(safe-area-inset-bottom),0.5rem)] sheet-slide-up'
         : 'w-[340px] bg-fc-bg border border-fc-hover rounded-xl shadow-2xl overflow-y-auto'}
     >
-      {user && <ProfileEffect id={user.profile_effect} />}
+      {user && <ProfileEffect id={user.profile_effect} intensity={user.profile_effect_intensity} />}
       {/* Banner */}
-      <div className="h-28 relative" aria-hidden>
-        {banner
-          ? <AnimatedImg src={banner} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
-          : <div
-              className="w-full h-full"
-              style={{ background: theme ?? (user ? getUserGradient(user.username) : 'linear-gradient(135deg, #5865f2 0%, #9b59b6 100%)') }}
-            />
-        }
+      {/* Bannière entière (jamais rognée) ; l'avatar déborde dessous, hors de son cadre. */}
+      <div className="relative" aria-hidden>
+        <ProfileBanner
+          src={banner}
+          minHeight={80}
+          maxHeight={220}
+          emptyClassName="h-28"
+          emptyStyle={{ background: theme ?? (user ? getUserGradient(user.username) : 'linear-gradient(135deg, #5865f2 0%, #9b59b6 100%)') }}
+        />
         {/* Avatar */}
         <div className="absolute -bottom-12 left-4">
-          <AvatarDecoration id={user?.avatar_decoration} size={84}>
+          <AvatarDecoration id={user?.avatar_decoration} opts={user?.avatar_decoration_opts} size={84}>
           <div className="w-24 h-24 rounded-full border-[6px] border-fc-bg bg-fc-accent flex items-center justify-center font-bold text-3xl text-white overflow-hidden">
             {avatar
               ? <AnimatedImg src={avatar} alt={user?.username} loading="lazy" decoding="async" className="w-full h-full object-cover" />

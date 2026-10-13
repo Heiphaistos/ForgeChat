@@ -5,19 +5,41 @@
 
 use serde::{Deserialize, Serialize};
 
-/// Effets du pseudo (rendu web : lib/nameStyle.ts ; mobile : lib/nameStyle.ts).
+/// Effets du pseudo (rendu web : lib/nameStyle.ts + profileStyles.css ; mobile : lib/nameStyle.ts).
+/// Les trois listes (serveur, web, mobile) sont identiques : vérifié par
+/// client/scripts/nameStyle.test.mjs et mobile/__tests__/name-style.test.ts.
 pub const NAME_EFFECTS: &[&str] = &[
     "", "shimmer", "glow", "outline", "neon", "rainbow", "wave", "glitch", "shadow3d",
     "fire", "frost", "pulse", "holo", "chrome", "retro", "float", "sparkle",
+    "glow2", "flicker", "huecycle", "electric", "bounce", "typewriter", "breathe", "gold",
+    "aurora", "matrix", "draw", "longshadow", "vaporwave", "gradshift", "jelly", "shake",
+    "blurin", "scanline", "emboss", "letterpress", "comic", "stencil", "smoke", "stars",
+    "candy", "pixel", "galaxy", "lava", "toxic", "ghost", "heartbeat",
 ];
-/// Polices du pseudo : piles de polices système / embarquées, aucune police téléchargée.
+/// Polices du pseudo : piles de polices système, Inter / JetBrains Mono et six polices OFL
+/// embarquées (client/public/fonts) ; aucune police téléchargée ailleurs.
 pub const NAME_FONTS: &[&str] = &[
     "", "serif", "mono", "rounded", "heavy", "cursive", "slab", "condensed", "wide", "elegant",
     "typewriter", "gothic", "comic", "impact", "smallcaps", "light", "handwritten", "futuristic",
     "retro", "stencil", "code", "italic",
+    "arial", "times", "courier", "cambria", "calibri", "display", "inter", "interthin",
+    "jetbrains", "georgia", "palatino", "garamond", "baskerville", "bodoni", "optima", "futura",
+    "century", "verdana", "tahoma", "trebuchet", "gill", "helvetica", "avenir", "copperplate",
+    "papyrus", "marker", "chalk", "brush", "calligraphy", "console", "arialblack", "franklin",
+    "bookman", "segoe", "hoefler", "candara", "cascadia", "lucida", "caps", "spaced", "tight",
+    "serifcaps", "monocaps", "lower",
 ];
+/// Type de dégradé ("" = linéaire avec angle ; "flow" = linéaire animé).
+pub const NAME_GRADIENTS: &[&str] = &["", "radial", "conic", "flow"];
+/// Style du contour ("" = trait simple).
+pub const OUTLINE_STYLES: &[&str] = &["", "double", "glow"];
+/// Couleurs d'un pseudo : 1 = unie, 2 à NAME_COLORS_MAX = dégradé.
+pub const NAME_COLORS_MAX: usize = 5;
 /// Épaisseur maximale du contour du pseudo (px).
-pub const OUTLINE_WIDTH_MAX: u8 = 4;
+pub const OUTLINE_WIDTH_MAX: u8 = 6;
+/// Intensité et vitesse de l'effet : 1 à LEVEL_MAX, LEVEL_DEFAULT par défaut.
+pub const LEVEL_MAX: u8 = 10;
+pub const LEVEL_DEFAULT: u8 = 5;
 /// Habillage d'une marque de clan (étiquette perso ou tag de serveur).
 pub const TAG_BADGES: &[&str] = &["", "solid", "soft", "outline", "gradient", "glass", "pill", "neon", "plain"];
 /// Icônes de marque : identifiants traduits en caractères par le client, jamais du texte libre.
@@ -25,9 +47,23 @@ pub const TAG_ICONS: &[&str] = &[
     "", "star", "crown", "shield", "flame", "bolt", "heart", "skull", "leaf", "diamond",
     "moon", "sword", "gem", "paw", "music", "gamepad",
 ];
-/// Anneau d'avatar du profil de serveur.
-pub const RING_STYLES: &[&str] = &["solid", "dashed", "dotted", "double", "glow", "spin", "pulse"];
+/// Anneau d'avatar du profil de serveur (rendu web : components/ui/AvatarRing.tsx ;
+/// mobile : components/AvatarRing.tsx, même liste).
+pub const RING_STYLES: &[&str] = &[
+    "solid", "dashed", "dotted", "double", "glow", "spin", "pulse",
+    "gradient_spin", "rainbow", "dashed_spin", "neon_pulse", "comet", "segmented", "breathe",
+];
 pub const RING_WIDTH_MAX: u8 = 8;
+/// Sens de rotation (anneau et décoration d'avatar).
+pub const DIRECTIONS: &[&str] = &["cw", "ccw"];
+/// Bornes des réglages en % (ou en degrés pour la teinte), partagées par l'anneau et la décoration.
+pub const SPEED_RANGE: std::ops::RangeInclusive<u16> = 25..=400;
+pub const BRIGHTNESS_RANGE: std::ops::RangeInclusive<u16> = 50..=200;
+pub const SATURATION_RANGE: std::ops::RangeInclusive<u16> = 0..=200;
+pub const GLOW_RANGE: std::ops::RangeInclusive<u16> = 0..=300;
+pub const OPACITY_RANGE: std::ops::RangeInclusive<u16> = 20..=100;
+pub const HUE_RANGE: std::ops::RangeInclusive<u16> = 0..=360;
+pub const SCALE_RANGE: std::ops::RangeInclusive<u16> = 80..=130;
 pub const DISPLAY_NAME_MAX: usize = 32;
 pub const TAG_MAX: usize = 16;
 pub const LINKS_MAX: usize = 5;
@@ -40,6 +76,39 @@ const COLOR_MAX: u32 = 0xFF_FFFF;
 
 fn is_zero(v: &u8) -> bool {
     *v == 0
+}
+
+fn default_level() -> u8 {
+    LEVEL_DEFAULT
+}
+
+fn is_default_level(v: &u8) -> bool {
+    *v == LEVEL_DEFAULT
+}
+
+fn hundred() -> u16 {
+    100
+}
+fn is_hundred(v: &u16) -> bool {
+    *v == 100
+}
+fn is_zero16(v: &u16) -> bool {
+    *v == 0
+}
+fn yes() -> bool {
+    true
+}
+fn is_true(v: &bool) -> bool {
+    *v
+}
+fn is_false(v: &bool) -> bool {
+    !*v
+}
+fn cw() -> String {
+    "cw".into()
+}
+fn is_cw(v: &String) -> bool {
+    v == "cw"
 }
 
 /// Style d'une marque de clan : couleur (étiquette perso seulement ; un tag de serveur
@@ -98,13 +167,22 @@ pub fn parse_tag_style(v: &serde_json::Value) -> Result<Option<serde_json::Value
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct NameStyle {
-    /// 0 couleur = couleur par défaut, 1 = unie, 2-3 = dégradé.
+    /// 0 couleur = couleur par défaut, 1 = unie, 2 à NAME_COLORS_MAX = dégradé.
     #[serde(default)]
     pub colors: Vec<u32>,
     #[serde(default = "default_angle")]
     pub angle: u16,
+    /// Type de dégradé (NAME_GRADIENTS), seulement avec 2 couleurs ou plus.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub gradient: String,
     #[serde(default)]
     pub effect: String,
+    /// Intensité de l'effet (1-10, 5 = normal) ; remise à 5 sans effet.
+    #[serde(default = "default_level", skip_serializing_if = "is_default_level")]
+    pub intensity: u8,
+    /// Vitesse de l'animation (1-10, 5 = normal) ; remise à 5 sans effet.
+    #[serde(default = "default_level", skip_serializing_if = "is_default_level")]
+    pub speed: u8,
     #[serde(default)]
     pub font: String,
     /// Couleur du contour (0xRRGGBB) ; sans épaisseur, pas de contour.
@@ -113,6 +191,12 @@ pub struct NameStyle {
     /// Épaisseur du contour en px (0 = aucun, OUTLINE_WIDTH_MAX au plus).
     #[serde(default, skip_serializing_if = "is_zero")]
     pub outline_width: u8,
+    /// Style du contour (OUTLINE_STYLES) : simple, double ou lumineux.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub outline_style: String,
+    /// Couleur du trait extérieur du contour double (blanc par défaut).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub outline2: Option<u32>,
     /// Style de l'étiquette perso affichée à côté du pseudo.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tag: Option<TagStyle>,
@@ -135,8 +219,8 @@ pub fn parse_name_style(v: &serde_json::Value) -> Result<Option<serde_json::Valu
         return Ok(None);
     }
     let mut s: NameStyle = serde_json::from_value(v.clone()).map_err(|_| "Style du pseudo invalide")?;
-    if s.colors.len() > 3 || s.colors.iter().any(|&c| c > COLOR_MAX) {
-        return Err("Style du pseudo : 3 couleurs 0xRRGGBB au plus");
+    if s.colors.len() > NAME_COLORS_MAX || s.colors.iter().any(|&c| c > COLOR_MAX) {
+        return Err("Style du pseudo : 5 couleurs 0xRRGGBB au plus");
     }
     if s.angle > 360 {
         return Err("Style du pseudo : angle 0-360");
@@ -144,14 +228,40 @@ pub fn parse_name_style(v: &serde_json::Value) -> Result<Option<serde_json::Valu
     if !NAME_EFFECTS.contains(&s.effect.as_str()) || !NAME_FONTS.contains(&s.font.as_str()) {
         return Err("Style du pseudo : effet ou police inconnus");
     }
-    if s.outline_width > OUTLINE_WIDTH_MAX || s.outline.is_some_and(|c| c > COLOR_MAX) {
-        return Err("Style du pseudo : contour 0xRRGGBB, épaisseur 0-4");
+    if !NAME_GRADIENTS.contains(&s.gradient.as_str()) {
+        return Err("Style du pseudo : type de dégradé inconnu");
     }
-    // Contour normalisé : pas d'épaisseur → pas de couleur ; épaisseur sans couleur → noir.
+    if !(1..=LEVEL_MAX).contains(&s.intensity) || !(1..=LEVEL_MAX).contains(&s.speed) {
+        return Err("Style du pseudo : intensité et vitesse 1-10");
+    }
+    if s.outline_width > OUTLINE_WIDTH_MAX
+        || s.outline.is_some_and(|c| c > COLOR_MAX)
+        || s.outline2.is_some_and(|c| c > COLOR_MAX)
+        || !OUTLINE_STYLES.contains(&s.outline_style.as_str())
+    {
+        return Err("Style du pseudo : contour 0xRRGGBB, épaisseur 0-6, style connu");
+    }
+    // Dégradé : seulement avec plusieurs couleurs. Intensité et vitesse : seulement avec un effet.
+    if s.colors.len() < 2 {
+        s.gradient.clear();
+    }
+    if s.effect.is_empty() {
+        s.intensity = LEVEL_DEFAULT;
+        s.speed = LEVEL_DEFAULT;
+    }
+    // Contour normalisé : pas d'épaisseur → rien ; épaisseur sans couleur → noir ; seconde
+    // couleur seulement pour le contour double (blanc par défaut).
     if s.outline_width == 0 {
         s.outline = None;
-    } else if s.outline.is_none() {
-        s.outline = Some(0);
+        s.outline_style.clear();
+        s.outline2 = None;
+    } else {
+        s.outline.get_or_insert(0);
+        if s.outline_style == "double" {
+            s.outline2.get_or_insert(0xFF_FFFF);
+        } else {
+            s.outline2 = None;
+        }
     }
     if let Some(tag) = &s.tag {
         tag.check()?;
@@ -176,10 +286,105 @@ pub struct AvatarRing {
     pub width: u8,
     #[serde(default)]
     pub style: String,
+    /// Vitesse des animations en % (SPEED_RANGE).
+    #[serde(default = "hundred", skip_serializing_if = "is_hundred")]
+    pub speed: u16,
+    /// "cw" (horaire) ou "ccw".
+    #[serde(default = "cw", skip_serializing_if = "is_cw")]
+    pub direction: String,
+    /// Luminosité en % (BRIGHTNESS_RANGE).
+    #[serde(default = "hundred", skip_serializing_if = "is_hundred")]
+    pub brightness: u16,
+    /// Intensité de la lueur en % (GLOW_RANGE).
+    #[serde(default = "hundred", skip_serializing_if = "is_hundred")]
+    pub glow: u16,
 }
 
 fn default_ring_width() -> u8 {
     3
+}
+
+/// Réglages de la décoration d'avatar (`users.avatar_decoration_opts`). Seulement des
+/// nombres bornés, des booléens et un sens connu : le client en tire des variables CSS
+/// numériques (jamais une chaîne de l'utilisateur dans le CSS). Les valeurs par défaut ne
+/// sont pas stockées ; tout par défaut → NULL.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct DecorationOpts {
+    #[serde(default = "yes", skip_serializing_if = "is_true")]
+    pub animate: bool,
+    #[serde(default = "cw", skip_serializing_if = "is_cw")]
+    pub direction: String,
+    #[serde(default = "hundred", skip_serializing_if = "is_hundred")]
+    pub speed: u16,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub pulse: bool,
+    #[serde(default = "hundred", skip_serializing_if = "is_hundred")]
+    pub brightness: u16,
+    #[serde(default = "hundred", skip_serializing_if = "is_hundred")]
+    pub saturation: u16,
+    #[serde(default = "hundred", skip_serializing_if = "is_hundred")]
+    pub glow: u16,
+    #[serde(default = "hundred", skip_serializing_if = "is_hundred")]
+    pub opacity: u16,
+    /// Décalage de teinte en degrés.
+    #[serde(default, skip_serializing_if = "is_zero16")]
+    pub hue: u16,
+    /// Taille de la décoration en %.
+    #[serde(default = "hundred", skip_serializing_if = "is_hundred")]
+    pub scale: u16,
+    /// Couleur de teinte 0xRRGGBB (mélangée aux couleurs de la décoration).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tint: Option<u32>,
+}
+
+impl Default for DecorationOpts {
+    fn default() -> Self {
+        Self {
+            animate: true, direction: cw(), speed: 100, pulse: false, brightness: 100,
+            saturation: 100, glow: 100, opacity: 100, hue: 0, scale: 100, tint: None,
+        }
+    }
+}
+
+/// Taille maximale du JSON stocké (même borne que la contrainte de la migration 134).
+pub const DECORATION_OPTS_MAX_BYTES: usize = 512;
+
+/// `null`, `{}` ou réglages par défaut → None ; sinon les réglages normalisés à stocker.
+/// Refuse tout champ inconnu, toute valeur hors bornes, non entière ou d'un autre type.
+pub fn parse_decoration_opts(v: &serde_json::Value) -> Result<Option<serde_json::Value>, &'static str> {
+    if v.is_null() {
+        return Ok(None);
+    }
+    let o: DecorationOpts = serde_json::from_value(v.clone()).map_err(|_| "Réglages de décoration invalides")?;
+    if !DIRECTIONS.contains(&o.direction.as_str()) {
+        return Err("Décoration : sens cw ou ccw");
+    }
+    let bounds = [
+        (o.speed, &SPEED_RANGE, "Décoration : vitesse 25-400 %"),
+        (o.brightness, &BRIGHTNESS_RANGE, "Décoration : luminosité 50-200 %"),
+        (o.saturation, &SATURATION_RANGE, "Décoration : saturation 0-200 %"),
+        (o.glow, &GLOW_RANGE, "Décoration : halo 0-300 %"),
+        (o.opacity, &OPACITY_RANGE, "Décoration : opacité 20-100 %"),
+        (o.hue, &HUE_RANGE, "Décoration : teinte 0-360°"),
+        (o.scale, &SCALE_RANGE, "Décoration : taille 80-130 %"),
+    ];
+    for (v, range, err) in bounds {
+        if !range.contains(&v) {
+            return Err(err);
+        }
+    }
+    if o.tint.is_some_and(|c| c > COLOR_MAX) {
+        return Err("Décoration : couleur 0xRRGGBB");
+    }
+    if o == DecorationOpts::default() {
+        return Ok(None);
+    }
+    let out = serde_json::to_value(o).map_err(|_| "Réglages de décoration invalides")?;
+    if out.to_string().len() > DECORATION_OPTS_MAX_BYTES {
+        return Err("Réglages de décoration trop longs");
+    }
+    Ok(Some(out))
 }
 
 /// `null`, `{}` ou aucune couleur → None (pas d'anneau) ; sinon l'anneau normalisé.
@@ -199,6 +404,18 @@ pub fn parse_avatar_ring(v: &serde_json::Value) -> Result<Option<serde_json::Val
     }
     if !RING_STYLES.contains(&r.style.as_str()) {
         return Err("Anneau d'avatar : style inconnu");
+    }
+    if !DIRECTIONS.contains(&r.direction.as_str()) {
+        return Err("Anneau d'avatar : sens cw ou ccw");
+    }
+    if !SPEED_RANGE.contains(&r.speed) {
+        return Err("Anneau d'avatar : vitesse 25-400 %");
+    }
+    if !BRIGHTNESS_RANGE.contains(&r.brightness) {
+        return Err("Anneau d'avatar : luminosité 50-200 %");
+    }
+    if !GLOW_RANGE.contains(&r.glow) {
+        return Err("Anneau d'avatar : lueur 0-300 %");
     }
     if r.colors.is_empty() {
         return Ok(None);
@@ -293,7 +510,8 @@ mod tests {
     #[test]
     fn style_refuse_css_et_bornes() {
         assert!(parse_name_style(&json!({ "colors": [0x1000000] })).is_err());
-        assert!(parse_name_style(&json!({ "colors": [1, 2, 3, 4] })).is_err());
+        assert!(parse_name_style(&json!({ "colors": [1, 2, 3, 4, 5, 6] })).is_err());
+        assert!(parse_name_style(&json!({ "colors": [1, 2, 3, 4, 5] })).is_ok());
         assert!(parse_name_style(&json!({ "colors": ["red"] })).is_err());
         assert!(parse_name_style(&json!({ "colors": [-1] })).is_err());
         assert!(parse_name_style(&json!({ "angle": 400 })).is_err());
@@ -311,7 +529,8 @@ mod tests {
         // Épaisseur sans couleur : contour noir ; couleur sans épaisseur : retirée.
         assert_eq!(parse_name_style(&json!({ "outline_width": 1 })).unwrap().unwrap()["outline"], 0);
         assert_eq!(parse_name_style(&json!({ "outline": 0xff0000 })).unwrap(), None);
-        assert!(parse_name_style(&json!({ "outline_width": 5 })).is_err());
+        assert!(parse_name_style(&json!({ "outline_width": 7 })).is_err());
+        assert_eq!(parse_name_style(&json!({ "outline_width": 6 })).unwrap().unwrap()["outline_width"], 6);
         assert!(parse_name_style(&json!({ "outline_width": -1 })).is_err());
         assert!(parse_name_style(&json!({ "outline": "red", "outline_width": 1 })).is_err());
         assert!(parse_name_style(&json!({ "outline": 0x1000000, "outline_width": 1 })).is_err());
@@ -324,7 +543,64 @@ mod tests {
         assert!(parse_name_style(&json!({ "tag": { "color2": 0x1000000 } })).is_err());
         for e in NAME_EFFECTS { assert!(parse_name_style(&json!({ "effect": e })).is_ok()); }
         for f in NAME_FONTS { assert!(parse_name_style(&json!({ "font": f })).is_ok()); }
-        assert!(NAME_EFFECTS.len() > 12 && NAME_FONTS.len() > 15);
+        assert!(NAME_EFFECTS.len() > 40 && NAME_FONTS.len() > 60);
+        // Identifiants uniques et sûrs (minuscules ASCII), même règle que les clients.
+        for list in [NAME_EFFECTS, NAME_FONTS, NAME_GRADIENTS, OUTLINE_STYLES] {
+            let mut seen = std::collections::HashSet::new();
+            for id in list {
+                assert!(seen.insert(*id), "doublon {id}");
+                assert!(id.bytes().all(|b| b.is_ascii_lowercase() || b.is_ascii_digit()), "{id}");
+            }
+        }
+    }
+
+    #[test]
+    fn style_degrade_intensite_vitesse() {
+        let s = parse_name_style(&json!({ "colors": [1, 2, 3, 4, 5], "gradient": "conic", "effect": "aurora", "intensity": 9, "speed": 2 })).unwrap().unwrap();
+        assert_eq!(s["gradient"], "conic");
+        assert_eq!(s["intensity"], 9);
+        assert_eq!(s["speed"], 2);
+        for g in NAME_GRADIENTS { assert!(parse_name_style(&json!({ "colors": [1, 2], "gradient": g })).is_ok()); }
+        // Valeurs par défaut non stockées ; dégradé sans 2 couleurs et réglages sans effet retirés.
+        let d = parse_name_style(&json!({ "colors": [1, 2], "gradient": "", "effect": "glow", "intensity": 5, "speed": 5 })).unwrap().unwrap();
+        assert!(d.get("gradient").is_none() && d.get("intensity").is_none() && d.get("speed").is_none());
+        let one = parse_name_style(&json!({ "colors": [1], "gradient": "radial", "intensity": 8, "speed": 1 })).unwrap().unwrap();
+        assert!(one.get("gradient").is_none() && one.get("intensity").is_none() && one.get("speed").is_none());
+        assert!(parse_name_style(&json!({ "colors": [1, 2], "gradient": "repeating-linear-gradient(red)" })).is_err());
+        assert!(parse_name_style(&json!({ "colors": [1, 2], "gradient": "linear" })).is_err());
+        for bad in [json!(0), json!(11), json!(-1), json!(5.5), json!("5"), json!(300)] {
+            assert!(parse_name_style(&json!({ "effect": "glow", "intensity": bad })).is_err(), "{bad}");
+            assert!(parse_name_style(&json!({ "effect": "glow", "speed": bad })).is_err(), "{bad}");
+        }
+    }
+
+    #[test]
+    fn style_contour_double_et_lumineux() {
+        let d = parse_name_style(&json!({ "outline_width": 3, "outline": 0xff0000, "outline_style": "double" })).unwrap().unwrap();
+        assert_eq!(d["outline_style"], "double");
+        assert_eq!(d["outline2"], 0xffffff);
+        let d2 = parse_name_style(&json!({ "outline_width": 2, "outline_style": "double", "outline2": 0x00ff00 })).unwrap().unwrap();
+        assert_eq!((d2["outline"].as_u64(), d2["outline2"].as_u64()), (Some(0), Some(0x00ff00)));
+        // Seconde couleur ignorée hors contour double ; tout retiré sans épaisseur.
+        let g = parse_name_style(&json!({ "outline_width": 2, "outline_style": "glow", "outline2": 0x00ff00 })).unwrap().unwrap();
+        assert!(g.get("outline2").is_none());
+        assert_eq!(parse_name_style(&json!({ "outline_style": "double", "outline2": 1 })).unwrap(), None);
+        assert!(parse_name_style(&json!({ "outline_width": 1, "outline_style": "dashed" })).is_err());
+        assert!(parse_name_style(&json!({ "outline_width": 1, "outline_style": "double", "outline2": 0x1000000 })).is_err());
+        assert!(parse_name_style(&json!({ "outline_width": 1, "outline2": "white" })).is_err());
+    }
+
+    #[test]
+    fn style_le_plus_long_tient_dans_la_contrainte_de_la_base() {
+        // server_members_name_style_size (migrations 129/131) : 1024 octets au plus.
+        let longest = |l: &[&str]| l.iter().max_by_key(|s| s.len()).unwrap().to_string();
+        let s = parse_name_style(&json!({
+            "colors": vec![0xffffff; NAME_COLORS_MAX], "angle": 360, "gradient": longest(NAME_GRADIENTS),
+            "effect": longest(NAME_EFFECTS), "intensity": 10, "speed": 10, "font": longest(NAME_FONTS),
+            "outline": 0xffffff, "outline_width": OUTLINE_WIDTH_MAX, "outline_style": "double", "outline2": 0xffffff,
+            "tag": { "color": 0xffffff, "color2": 0xffffff, "font": longest(NAME_FONTS), "badge": longest(TAG_BADGES), "icon": longest(TAG_ICONS) },
+        })).unwrap().unwrap();
+        assert!(s.to_string().len() < 512, "{}", s.to_string().len());
     }
 
     #[test]
@@ -350,6 +626,66 @@ mod tests {
         assert!(parse_avatar_ring(&json!({ "colors": [0x1000000] })).is_err());
         assert!(parse_avatar_ring(&json!({ "colors": [1], "style": "solid;background:url(x)" })).is_err());
         assert!(parse_avatar_ring(&json!({ "colors": [1], "css": "x" })).is_err());
+    }
+
+    #[test]
+    fn anneau_styles_et_reglages() {
+        for s in RING_STYLES {
+            assert_eq!(parse_avatar_ring(&json!({ "colors": [1], "style": s })).unwrap().unwrap()["style"], *s);
+        }
+        let r = parse_avatar_ring(&json!({ "colors": [1, 2], "style": "comet", "speed": 250, "direction": "ccw", "brightness": 150, "glow": 0 })).unwrap().unwrap();
+        assert_eq!((r["speed"].as_u64(), r["direction"].as_str(), r["brightness"].as_u64(), r["glow"].as_u64()), (Some(250), Some("ccw"), Some(150), Some(0)));
+        // Valeurs par défaut non stockées.
+        let d = parse_avatar_ring(&json!({ "colors": [1], "speed": 100, "direction": "cw", "brightness": 100, "glow": 100 })).unwrap().unwrap();
+        assert!(d.get("speed").is_none() && d.get("direction").is_none() && d.get("brightness").is_none() && d.get("glow").is_none());
+        for bad in [
+            json!({ "colors": [1], "speed": 24 }), json!({ "colors": [1], "speed": 401 }),
+            json!({ "colors": [1], "speed": 1.5 }), json!({ "colors": [1], "speed": "fast" }),
+            json!({ "colors": [1], "direction": "left" }), json!({ "colors": [1], "direction": "" }),
+            json!({ "colors": [1], "brightness": 49 }), json!({ "colors": [1], "brightness": 201 }),
+            json!({ "colors": [1], "glow": 301 }), json!({ "colors": [1], "glow": -1 }),
+            json!({ "colors": [1], "style": "gradient-spin" }),
+        ] {
+            assert!(parse_avatar_ring(&bad).is_err(), "{bad}");
+        }
+        // Pire cas sous la contrainte server_members_ring_size (256 octets).
+        let max = parse_avatar_ring(&json!({ "colors": [0xffffff, 0xffffff, 0xffffff], "width": 8, "style": "gradient_spin", "speed": 400, "direction": "ccw", "brightness": 200, "glow": 300 })).unwrap().unwrap();
+        assert!(max.to_string().len() <= 256, "{}", max.to_string().len());
+    }
+
+    #[test]
+    fn reglages_de_decoration() {
+        assert_eq!(parse_decoration_opts(&json!(null)).unwrap(), None);
+        assert_eq!(parse_decoration_opts(&json!({})).unwrap(), None);
+        // Tout par défaut, même écrit en entier : rien à stocker.
+        let defaults = json!({ "animate": true, "direction": "cw", "speed": 100, "pulse": false, "brightness": 100, "saturation": 100, "glow": 100, "opacity": 100, "hue": 0, "scale": 100 });
+        assert_eq!(parse_decoration_opts(&defaults).unwrap(), None);
+        let o = parse_decoration_opts(&json!({ "animate": false, "direction": "ccw", "speed": 400, "pulse": true, "brightness": 50, "saturation": 0, "glow": 300, "opacity": 20, "hue": 360, "scale": 130, "tint": 0xff00ff })).unwrap().unwrap();
+        assert_eq!(o["animate"], false);
+        assert_eq!(o["direction"], "ccw");
+        assert_eq!(o["tint"], 0xff00ff);
+        assert!(o.to_string().len() <= DECORATION_OPTS_MAX_BYTES);
+        // Seuls les champs modifiés sont gardés.
+        assert_eq!(parse_decoration_opts(&json!({ "hue": 90, "speed": 100 })).unwrap().unwrap(), json!({ "hue": 90 }));
+        assert_eq!(parse_decoration_opts(&json!({ "scale": 80 })).unwrap().unwrap(), json!({ "scale": 80 }));
+    }
+
+    #[test]
+    fn reglages_de_decoration_refuses() {
+        for bad in [
+            json!({ "speed": 24 }), json!({ "speed": 401 }), json!({ "speed": 1.5 }), json!({ "speed": -10 }),
+            json!({ "brightness": 49 }), json!({ "brightness": 201 }),
+            json!({ "saturation": 201 }), json!({ "glow": 301 }),
+            json!({ "opacity": 19 }), json!({ "opacity": 101 }),
+            json!({ "hue": 361 }), json!({ "scale": 79 }), json!({ "scale": 131 }),
+            json!({ "tint": 0x1000000 }), json!({ "tint": "#ff0000" }), json!({ "tint": -1 }),
+            json!({ "direction": "left" }), json!({ "direction": "cw;color:red" }),
+            json!({ "animate": "yes" }), json!({ "pulse": 1 }),
+            json!({ "css": "color:red" }), json!({ "speed": 100, "extra": 1 }),
+            json!("hue-rotate(90deg)"), json!([1, 2]), json!(42),
+        ] {
+            assert!(parse_decoration_opts(&bad).is_err(), "{bad}");
+        }
     }
 
     #[test]

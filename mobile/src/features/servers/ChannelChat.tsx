@@ -19,6 +19,8 @@ import { NsfwGate } from './NsfwGate'
 import { OnboardingGate } from './Onboarding'
 import { PERM } from './perms'
 import { VerificationGate } from './VerificationGate'
+import { LookBackdrop } from './LookBackdrop'
+import { cleanLook } from './serverLook'
 
 /**
  * Conversation d'un salon texte / annonces : partagée par l'écran /channel/[serverId]/[channelId]
@@ -94,6 +96,9 @@ export function ChannelBody({
   }, [serverId, channelId])
   // Nom du salon pour le filtre dans: de la recherche locale.
   useEffect(() => rememberConvName(channelId, name, serverId), [channelId, name, serverId])
+  // Fond de la zone des messages choisi dans l'apparence du serveur (même requête que menus.tsx).
+  const detail = useQuery({ queryKey: qk.server(serverId), queryFn: () => serversApi.detail(serverId), staleTime: 60_000 })
+  const messageBg = cleanLook(detail.data?.server.look)?.message_bg
   return (
     <VerificationGate serverId={serverId}>
       <OnboardingGate serverId={serverId}>
@@ -102,6 +107,7 @@ export function ChannelBody({
             publishable={publishable}
             autoThreads={autoThreads}
             conversation={{ kind: 'channel', serverId, channelId }}
+            backdrop={messageBg ? <LookBackdrop bg={messageBg} /> : undefined}
             placeholder={t('conv.channelPlaceholder', { name })}
             header={
               <View style={{ padding: 16 }}>
