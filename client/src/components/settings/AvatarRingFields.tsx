@@ -4,7 +4,7 @@ import { Field, Toggle } from './shared'
 import { useT, type Key } from '../../i18n'
 import { clampInt, colorFromInput, hex } from '../../lib/nameStyle'
 import AvatarRing, { RING_WIDTH_MAX, type AvatarRingData, type RingStyle } from '../ui/AvatarRing'
-import { COLOR_PRESETS } from './NameStyleFields'
+import { COLOR_PRESETS } from '../../lib/namePresets'
 
 /** Traits statiques ; « spin » et « pulse » sont des animations d'un anneau plein. */
 const TRAITS: RingStyle[] = ['solid', 'dashed', 'dotted', 'double', 'glow']

@@ -404,7 +404,7 @@ a.text-fc-accent { color: rgb(var(--fc-link-rgb)); text-decoration: underline; t
   from { background-position: 0 0, 125% 0; }
   to   { background-position: 0 0, -25% 0; }
 }
-.fc-name-shimmer { animation: fc-name-shimmer 3.2s linear infinite; }
+.fc-name-shimmer { animation: fc-name-shimmer calc(3.2s * var(--fc-fx-k, 1)) linear infinite; }
 @media (prefers-reduced-motion: reduce) { .fc-name-shimmer { animation: none; } }
 [data-reduce-motion="true"] .fc-name-shimmer { animation: none; }
 

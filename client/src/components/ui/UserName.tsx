@@ -1,6 +1,6 @@
 import type { CSSProperties, ReactNode } from 'react'
 import { useLook } from '../../store/nameStyles'
-import { DEFAULT_BG, cleanStyle, nameClass, nameCss, pickNameStyle, shownName, waveColors } from '../../lib/nameStyle'
+import { DEFAULT_BG, cleanStyle, letterDelay, nameClass, nameCss, perLetter, pickNameStyle, shownName, waveColors } from '../../lib/nameStyle'
 import { useUxPrefs } from '../../lib/uxPrefs'
 import ClanTag from './ClanTag'
 
@@ -63,7 +63,7 @@ export default function UserName({ userId, name, nickname, roleStyle, roleOverri
   const shown = shownName(name, look?.display_name, nickname)
   // Extras : nom d'utilisateur à côté du pseudo affiché (en-têtes de message et profils).
   const withUsername = useUxPrefs(s => s.showUsername) && withTag && shown !== name
-  const wave = personal?.effect === 'wave'
+  const letters = perLetter(personal)
   return (
     <>
       <span
@@ -73,9 +73,9 @@ export default function UserName({ userId, name, nickname, roleStyle, roleOverri
         // Glitch : copies décalées via attr(data-text) (texte seul, jamais du HTML).
         data-text={personal?.effect === 'glitch' ? shown : undefined}
       >
-        {wave
+        {letters
           ? waveColors(shown, useRole ? null : personal, bg).map((c, i) => (
-              <span key={i} style={{ color: c.color, animationDelay: `${(i * 0.08).toFixed(2)}s` }}>{c.ch}</span>
+              <span key={i} className="fc-ch" style={{ color: c.color, animationDelay: letterDelay(i) }}>{c.ch}</span>
             ))
           : shown}
         {children}

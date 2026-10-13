@@ -34,10 +34,10 @@ export const fr = {
   'profileId.effect.sparkle': 'Étincelle',
 
   // Style du pseudo (champs partagés compte / serveur)
-  'pedit.name.effectHint': "Certains effets imposent leur palette (arc-en-ciel, feu, givre, holo, chrome). Les animations sont figées si « Réduire les animations » est activé.",
+  'pedit.name.effectHint': "Certains effets imposent leur palette (arc-en-ciel, feu, givre, holo, chrome, or, aurore, matrice, galaxie…). Intensité et vitesse se règlent sous la grille. Les animations sont figées si « Réduire les animations » est activé.",
   'pedit.name.sample': 'Aa',
   'pedit.name.outline': 'Contour du pseudo',
-  'pedit.name.outlineHint': 'Trait autour des lettres, de 0 (aucun) à 4 px.',
+  'pedit.name.outlineHint': 'Trait autour des lettres, de 0 (aucun) à 6 px : simple, double (2ᵉ couleur à l’extérieur) ou lumineux.',
   'pedit.name.outlineColor': 'Couleur du contour',
   'pedit.name.outlineWidth': 'Épaisseur : {n} px',
   'pedit.name.outlineNone': 'Aucun contour',
@@ -150,10 +150,10 @@ export const en: Partial<Record<keyof typeof fr, string>> = {
   'profileId.effect.float': 'Float',
   'profileId.effect.sparkle': 'Sparkle',
 
-  'pedit.name.effectHint': 'Some effects use their own palette (rainbow, fire, frost, holo, chrome). Animations stop when "Reduce motion" is on.',
+  'pedit.name.effectHint': 'Some effects use their own palette (rainbow, fire, frost, holo, chrome, gold, aurora, matrix, galaxy…). Intensity and speed are set below the grid. Animations stop when "Reduce motion" is on.',
   'pedit.name.sample': 'Aa',
   'pedit.name.outline': 'Name outline',
-  'pedit.name.outlineHint': 'Stroke around the letters, from 0 (none) to 4 px.',
+  'pedit.name.outlineHint': 'Stroke around the letters, from 0 (none) to 6 px: single, double (second color outside) or glowing.',
   'pedit.name.outlineColor': 'Outline colour',
   'pedit.name.outlineWidth': 'Width: {n} px',
   'pedit.name.outlineNone': 'No outline',
