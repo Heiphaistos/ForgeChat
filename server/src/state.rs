@@ -109,6 +109,9 @@ pub struct AppState {
     pub push: Option<Arc<crate::push::PushConfig>>,
     /// Push mobile (Expo). `None` = PUSH_ENABLED absent ou faux.
     pub mobile_push: Option<Arc<crate::mobile_push::MobilePushConfig>>,
+    /// Synchronisations Discord simultanées dans ce processus (planificateur et
+    /// « Synchroniser maintenant » confondus) : handlers/discord_import/sync.rs.
+    pub discord_sync_slots: Arc<tokio::sync::Semaphore>,
 }
 
 impl AppState {
@@ -151,6 +154,7 @@ impl AppState {
             livekit: crate::livekit::LiveKitConfig::from_env(),
             push: crate::push::PushConfig::from_env(),
             mobile_push: crate::mobile_push::MobilePushConfig::from_env(),
+            discord_sync_slots: Arc::new(tokio::sync::Semaphore::new(crate::handlers::discord_import::sync::MAX_CONCURRENT_SYNCS)),
         };
         if state.push.is_none() {
             tracing::info!("VAPID_* absents ou invalides : notifications Web Push désactivées");

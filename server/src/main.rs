@@ -241,7 +241,9 @@ async fn main() -> anyhow::Result<()> {
     });
 
     // Synchronisation Discord -> ForgeChat : passages échus (24 ou 48 h) toutes les 10 minutes,
-    // un verrou Redis par serveur (handlers/discord_import/sync.rs).
+    // un verrou Redis par serveur (handlers/discord_import/sync.rs). `run_due` lance au plus
+    // autant de passages que de créneaux libres (AppState::discord_sync_slots), les serveurs
+    // synchronisés le moins récemment d'abord, sans attendre leur fin.
     let discord_sync_state = state.clone();
     tokio::spawn(async move {
         let mut interval = tokio::time::interval(Duration::from_secs(600));

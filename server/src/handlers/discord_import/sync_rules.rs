@@ -122,6 +122,102 @@ pub fn validate_excluded(rules: &[String]) -> Result<Vec<String>, &'static str> 
     Ok(out)
 }
 
+/// Taille maximale de `last_error` en octets (contrainte de la migration 131).
+pub const MAX_ERROR_BYTES: usize = 1000;
+
+/// Coupe `s` à `max` octets au plus, sur une frontière de caractère.
+pub fn truncate_bytes(s: &str, max: usize) -> String {
+    if s.len() <= max {
+        return s.to_string();
+    }
+    let mut end = max;
+    while !s.is_char_boundary(end) {
+        end -= 1;
+    }
+    s[..end].to_string()
+}
+
+// ─── Changement de serveur Discord ou de jeton ──────────────────────────────
+
+/// Refus d'une modification de configuration.
+#[derive(Debug, PartialEq, Eq)]
+pub enum ConfigRefusal {
+    /// Jeton ou serveur Discord modifié par un autre compte que le propriétaire (403).
+    OwnerOnly,
+    /// Nouveau serveur Discord (ou première configuration) sans nouveau jeton (400) :
+    /// le jeton enregistré ne doit jamais être redirigé vers un autre serveur.
+    TokenRequired,
+}
+
+impl ConfigRefusal {
+    pub fn message(&self) -> &'static str {
+        match self {
+            Self::OwnerOnly => "Seul le propriétaire du serveur peut changer le serveur Discord lié ou le jeton du bot.",
+            Self::TokenRequired => {
+                "Changement de serveur Discord : saisissez à nouveau le jeton du bot dans la même demande (le jeton enregistré n'est jamais réutilisé pour un autre serveur)."
+            }
+        }
+    }
+}
+
+/// `stored_guild` : serveur Discord enregistré (`None` : aucune configuration).
+/// Les administrateurs (MANAGE_SERVER) ne règlent que l'activation, l'intervalle et les
+/// exclusions ; le serveur lié et le jeton appartiennent au propriétaire.
+pub fn check_config_change(stored_guild: Option<&str>, new_guild: &str, new_token: bool, is_owner: bool) -> Result<(), ConfigRefusal> {
+    let guild_changed = stored_guild != Some(new_guild);
+    if (guild_changed || new_token) && !is_owner {
+        return Err(ConfigRefusal::OwnerOnly);
+    }
+    if guild_changed && !new_token {
+        return Err(ConfigRefusal::TokenRequired);
+    }
+    Ok(())
+}
+
+// ─── Budgets d'un passage ───────────────────────────────────────────────────
+
+/// Messages importés au plus par passage et par serveur.
+pub const MAX_MESSAGES_PER_PASS: u64 = 20_000;
+/// Messages importés au plus par jour et par serveur.
+pub const MAX_MESSAGES_PER_DAY: u64 = 60_000;
+/// Octets de pièces jointes téléchargés au plus par passage et par serveur.
+pub const MAX_BYTES_PER_PASS: u64 = 1 << 30;
+/// Octets de pièces jointes téléchargés au plus par jour et par serveur.
+pub const MAX_BYTES_PER_DAY: u64 = 4 << 30;
+
+/// Reste à consommer pendant un passage : le plus petit des plafonds par passage, par
+/// jour (déjà entamés : `*_today`) et, pour les octets, du quota de stockage du propriétaire.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Budget {
+    pub bytes_left: u64,
+    pub messages_left: u64,
+}
+
+impl Budget {
+    pub fn new(bytes_today: u64, messages_today: u64, owner_quota_left: u64) -> Self {
+        Self {
+            bytes_left: MAX_BYTES_PER_PASS.min(MAX_BYTES_PER_DAY.saturating_sub(bytes_today)).min(owner_quota_left),
+            messages_left: MAX_MESSAGES_PER_PASS.min(MAX_MESSAGES_PER_DAY.saturating_sub(messages_today)),
+        }
+    }
+
+    /// Réserve `n` octets ; `false` (rien de décompté) si le reste ne suffit pas.
+    pub fn charge_bytes(&mut self, n: u64) -> bool {
+        if n > self.bytes_left {
+            return false;
+        }
+        self.bytes_left -= n;
+        true
+    }
+
+    /// Prend jusqu'à `wanted` messages ; rend le nombre accordé.
+    pub fn take_messages(&mut self, wanted: usize) -> usize {
+        let n = (wanted as u64).min(self.messages_left);
+        self.messages_left -= n;
+        n as usize
+    }
+}
+
 // ─── Curseurs ───────────────────────────────────────────────────────────────
 
 pub fn snowflake(id: &str) -> u64 {
@@ -255,5 +351,63 @@ mod tests {
         // Page vide : curseur inchangé.
         let s = page_step(7, Vec::<u64>::new(), |m| *m);
         assert_eq!(s, PageStep { fresh: vec![], cursor: 7, more: false });
+    }
+
+    #[test]
+    fn guild_change_needs_owner_and_fresh_token() {
+        let g = "123456789012345678";
+        let other = "876543210987654321";
+        // Réglages courants par un administrateur : permis.
+        assert_eq!(check_config_change(Some(g), g, false, false), Ok(()));
+        assert_eq!(check_config_change(Some(g), g, false, true), Ok(()));
+        // Nouveau jeton : propriétaire seulement.
+        assert_eq!(check_config_change(Some(g), g, true, false), Err(ConfigRefusal::OwnerOnly));
+        assert_eq!(check_config_change(Some(g), g, true, true), Ok(()));
+        // Autre serveur Discord : propriétaire ET nouveau jeton.
+        assert_eq!(check_config_change(Some(g), other, false, false), Err(ConfigRefusal::OwnerOnly));
+        assert_eq!(check_config_change(Some(g), other, false, true), Err(ConfigRefusal::TokenRequired));
+        assert_eq!(check_config_change(Some(g), other, true, true), Ok(()));
+        // Première configuration : idem.
+        assert_eq!(check_config_change(None, g, false, true), Err(ConfigRefusal::TokenRequired));
+        assert_eq!(check_config_change(None, g, true, false), Err(ConfigRefusal::OwnerOnly));
+        assert_eq!(check_config_change(None, g, true, true), Ok(()));
+    }
+
+    #[test]
+    fn budget_takes_the_smallest_limit() {
+        let b = Budget::new(0, 0, u64::MAX);
+        assert_eq!(b, Budget { bytes_left: MAX_BYTES_PER_PASS, messages_left: MAX_MESSAGES_PER_PASS });
+        // Plafond du jour presque atteint.
+        let b = Budget::new(MAX_BYTES_PER_DAY - 10, MAX_MESSAGES_PER_DAY - 3, u64::MAX);
+        assert_eq!(b, Budget { bytes_left: 10, messages_left: 3 });
+        // Jour dépassé (compteurs d'autres passages) : rien, sans débordement.
+        let b = Budget::new(u64::MAX, u64::MAX, u64::MAX);
+        assert_eq!(b, Budget { bytes_left: 0, messages_left: 0 });
+        // Quota du propriétaire plus petit que tout le reste.
+        assert_eq!(Budget::new(0, 0, 5).bytes_left, 5);
+    }
+
+    #[test]
+    fn error_truncated_in_bytes() {
+        assert_eq!(truncate_bytes("abc", 10), "abc");
+        let e = "é".repeat(600); // 1200 octets
+        let t = truncate_bytes(&e, MAX_ERROR_BYTES);
+        assert_eq!(t.len(), 1000);
+        assert_eq!(truncate_bytes("aé", 2), "a", "jamais au milieu d'un caractère");
+    }
+
+    #[test]
+    fn budget_accounting() {
+        let mut b = Budget { bytes_left: 100, messages_left: 150 };
+        assert!(b.charge_bytes(60));
+        assert!(!b.charge_bytes(41), "dépasse : refusé sans rien décompter");
+        assert_eq!(b.bytes_left, 40);
+        assert!(b.charge_bytes(40));
+        assert!(!b.charge_bytes(1));
+        assert!(b.charge_bytes(0));
+        assert_eq!(b.take_messages(100), 100);
+        assert_eq!(b.take_messages(100), 50);
+        assert_eq!(b.take_messages(100), 0);
+        assert_eq!(b.messages_left, 0);
     }
 }

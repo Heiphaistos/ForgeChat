@@ -9,7 +9,13 @@
 //! insérés en clair au nom d'auteurs « webhook » (pseudo et avatar Discord), même
 //! dans un salon chiffré de bout en bout.
 //!
-//! Plusieurs instances : un verrou Redis (SET NX EX) par serveur.
+//! Plusieurs instances : un verrou Redis (SET NX EX) par serveur ; un passage dont le
+//! verrou a expiré ou a été repris s'arrête.
+//!
+//! Garde-fous : seul le propriétaire choisit le serveur Discord et le jeton ; budgets de
+//! messages et d'octets par passage et par jour, pièces jointes imputées au quota de
+//! stockage du propriétaire ; synchronisations simultanées bornées (sémaphore de
+//! `AppState`) ; limites de débit Redis sur les routes ; disjoncteur global (discord_api).
 
 use std::{
     collections::{HashMap, HashSet},
@@ -25,11 +31,11 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 use uuid::Uuid;
 
-use super::discord_api::{ApiError, DChannel, DMessage, DOverwrite, Discord};
+use super::discord_api::{ApiError, Busy, DChannel, DMessage, DOverwrite, Discord, Mode};
 use super::format::{
     build_content, channel_kind, clean_filename, convert_permissions, is_system, safe_ext, truncate, MessageData, Names,
 };
-use super::sync_rules::{self as rules, fold_name, snowflake};
+use super::sync_rules::{self as rules, fold_name, snowflake, Budget};
 use super::UserError;
 use crate::{
     error::{AppError, Result},
@@ -40,8 +46,16 @@ use crate::{
 };
 
 const TOKEN_INFO: &str = "forgechat discord sync token v1";
-/// Verrou d'une synchronisation en cours (renouvelé à chaque salon).
+/// Verrou d'une synchronisation en cours (renouvelé à chaque page de messages).
 const LOCK_TTL_SECS: u64 = 3600;
+/// Synchronisations simultanées par processus (`AppState::discord_sync_slots`).
+pub const MAX_CONCURRENT_SYNCS: usize = 3;
+/// Créneaux que le planificateur laisse libres pour « Synchroniser maintenant ».
+const SLOTS_KEPT_FOR_MANUAL: usize = 1;
+/// Routes qui appellent Discord : appels par minute, par compte et par serveur.
+const ROUTE_LIMIT_PER_MIN: i64 = 5;
+/// « Synchroniser maintenant » : lancements par compte (tous serveurs) par heure.
+const MANUAL_PER_USER_PER_HOUR: i64 = 6;
 /// Pages de 100 messages lues par salon et par passage ; la suite au passage suivant.
 const MAX_PAGES_PER_CHANNEL: usize = 20;
 /// Durée maximale d'un passage ; la suite est reprise 15 min plus tard.
@@ -84,14 +98,52 @@ async fn try_lock(state: &AppState, server_id: Uuid) -> Option<String> {
     ok.map(|_| token)
 }
 
-/// Prolonge le verrou s'il est toujours à nous.
-async fn renew_lock(state: &AppState, server_id: Uuid, token: &str) {
+/// Prolonge le verrou s'il est toujours à nous. `false` : verrou expiré, repris par un
+/// autre passage, ou Redis injoignable (propriété invérifiable) : le passage s'arrête.
+async fn renew_lock(state: &AppState, server_id: Uuid, token: &str) -> bool {
     let script = redis::Script::new(
         "if redis.call('GET', KEYS[1]) == ARGV[1] then return redis.call('EXPIRE', KEYS[1], ARGV[2]) else return 0 end",
     );
     let mut redis = state.redis.lock().await;
-    let _: std::result::Result<i64, _> =
+    let r: std::result::Result<i64, _> =
         script.key(lock_key(server_id)).arg(token).arg(LOCK_TTL_SECS).invoke_async(&mut *redis).await;
+    matches!(r, Ok(1))
+}
+
+/// Erreur rendue quand le verrou n'est plus à nous.
+fn lock_lost() -> anyhow::Error {
+    user_err("Verrou de synchronisation perdu : passage interrompu, il reprendra plus tard.")
+}
+
+// ─── Limites de débit et compteurs du jour ──────────────────────────────────
+
+/// Limite par compte et par serveur d'une route qui appelle Discord (Redis, 429).
+async fn route_limit(state: &AppState, route: &str, user: Uuid, server_id: Uuid) -> Result<()> {
+    use crate::handlers::auth_v2::hit;
+    hit(state, &format!("discord_sync_rl:{route}:u:{user}"), ROUTE_LIMIT_PER_MIN, 60).await?;
+    hit(state, &format!("discord_sync_rl:{route}:s:{server_id}"), ROUTE_LIMIT_PER_MIN, 60).await
+}
+
+fn day_key(server_id: Uuid, what: &str) -> String {
+    format!("discord_sync:day:{}:{server_id}:{what}", Utc::now().format("%Y%m%d"))
+}
+
+async fn day_used(state: &AppState, server_id: Uuid, what: &str) -> u64 {
+    use redis::AsyncCommands;
+    let mut redis = state.redis.lock().await;
+    let n: Option<i64> = redis.get(day_key(server_id, what)).await.ok().flatten();
+    n.unwrap_or(0).max(0) as u64
+}
+
+async fn day_add(state: &AppState, server_id: Uuid, what: &str, n: u64) {
+    use redis::AsyncCommands;
+    if n == 0 {
+        return;
+    }
+    let key = day_key(server_id, what);
+    let mut redis = state.redis.lock().await;
+    let _: std::result::Result<i64, _> = redis.incr(&key, n as i64).await;
+    let _: std::result::Result<(), _> = redis.expire(&key, 2 * 86_400).await;
 }
 
 async fn unlock(state: &AppState, server_id: Uuid, token: &str) {
@@ -109,13 +161,21 @@ async fn is_running(state: &AppState, server_id: Uuid) -> bool {
 
 // ─── Planificateur ──────────────────────────────────────────────────────────
 
-/// Tâche de fond (main.rs, toutes les 10 minutes) : lance les synchronisations échues.
+/// Tâche de fond (main.rs, toutes les 10 minutes) : lance les synchronisations échues,
+/// la plus anciennement synchronisée d'abord (un serveur en retard, reprogrammé 15 min
+/// plus tard, passe après ceux qui attendent depuis plus longtemps), chacune dans un
+/// créneau du sémaphore partagé avec « Synchroniser maintenant ».
 pub async fn run_due(state: &AppState) {
+    let free = state.discord_sync_slots.available_permits().saturating_sub(SLOTS_KEPT_FOR_MANUAL);
+    if free == 0 {
+        return;
+    }
     let due: Vec<Uuid> = match sqlx::query_scalar(
         "SELECT server_id FROM discord_sync_configs
          WHERE enabled AND bot_token_enc IS NOT NULL AND (next_sync_at IS NULL OR next_sync_at <= NOW())
-         ORDER BY next_sync_at NULLS FIRST LIMIT 5",
+         ORDER BY last_sync_at ASC NULLS FIRST, next_sync_at ASC NULLS FIRST LIMIT $1",
     )
+    .bind(free as i64)
     .fetch_all(&state.db)
     .await
     {
@@ -126,11 +186,20 @@ pub async fn run_due(state: &AppState) {
         }
     };
     for sid in due {
-        sync_server(state, sid).await;
+        if state.discord_sync_slots.available_permits() <= SLOTS_KEPT_FOR_MANUAL {
+            break;
+        }
+        let Ok(permit) = state.discord_sync_slots.clone().try_acquire_owned() else { break };
+        let st = state.clone();
+        tokio::spawn(async move {
+            sync_server(&st, sid).await;
+            drop(permit);
+        });
     }
 }
 
 /// Synchronise un serveur si personne d'autre ne le fait ; enregistre le résultat.
+/// L'appelant détient un créneau de `AppState::discord_sync_slots`.
 pub async fn sync_server(state: &AppState, server_id: Uuid) {
     let Some(lock) = try_lock(state, server_id).await else {
         tracing::debug!("Synchro Discord {server_id} : déjà en cours ailleurs");
@@ -155,10 +224,13 @@ pub async fn sync_server(state: &AppState, server_id: Uuid) {
             let msg = e
                 .downcast_ref::<UserError>()
                 .map(|u| u.0.clone())
+                .or_else(|| e.downcast_ref::<Busy>().map(|b| b.0.clone()))
                 .unwrap_or_else(|| "Erreur interne pendant la synchronisation ; nouvel essai plus tard.".into());
             ("error", Some(msg), 0, Some(6 * 60))
         }
     };
+    // 1000 octets au plus (contrainte de la migration 131).
+    let error = error.map(|e| rules::truncate_bytes(&e, rules::MAX_ERROR_BYTES));
     // Prochain passage : l'intervalle choisi, plus tôt s'il reste du retard, 6 h après une erreur.
     let res = sqlx::query(
         "UPDATE discord_sync_configs SET last_sync_at=NOW(), last_status=$2, last_error=$3, last_imported=$4,
@@ -189,6 +261,14 @@ struct Report {
     warnings: Vec<String>,
 }
 
+impl Report {
+    fn warn_once(&mut self, w: &str) {
+        if !self.warnings.iter().any(|x| x == w) {
+            self.warnings.push(w.to_string());
+        }
+    }
+}
+
 struct Ctx<'a> {
     state: &'a AppState,
     server_id: Uuid,
@@ -198,7 +278,12 @@ struct Ctx<'a> {
     names: Names,
     report: Report,
     deadline: Instant,
+    budget: Budget,
+    /// Messages encore permis aujourd'hui après ce passage (relance rapide si > 0).
+    day_messages_left: u64,
 }
+
+const QUOTA_NOTE: &str = "quota de stockage atteint : pièces jointes non archivées";
 
 /// Familles de salons compatibles pour rattacher un salon Discord à un salon existant.
 fn family(kind: &str) -> u8 {
@@ -217,6 +302,19 @@ fn same_name(a: &str, b: &str) -> bool {
         a.trim().to_lowercase() == b.trim().to_lowercase()
     } else {
         fa == fb
+    }
+}
+
+/// Format réel d'un émoji téléchargé (PNG, GIF, WebP ou JPEG, lu dans les octets par
+/// `image_probe`) : extension et type MIME, `None` pour tout le reste.
+fn emoji_format(bytes: &[u8]) -> Option<(&'static str, &'static str)> {
+    let (probe, _) = crate::handlers::image_probe::probe(bytes).ok()?;
+    match probe.ext {
+        "png" => Some(("png", "image/png")),
+        "gif" => Some(("gif", "image/gif")),
+        "webp" => Some(("webp", "image/webp")),
+        "jpg" => Some(("jpg", "image/jpeg")),
+        _ => None,
     }
 }
 
@@ -240,19 +338,37 @@ async fn run(state: &AppState, server_id: Uuid, lock: &str) -> anyhow::Result<Re
         .and_then(|t| open_token(server_id, t))
         .ok_or_else(|| user_err("Jeton du bot Discord absent ou illisible : saisissez-le à nouveau."))?;
 
+    // Pièces jointes imputées au quota de stockage du propriétaire (uploads.rs).
+    let owner_used: i64 =
+        sqlx::query_scalar("SELECT COALESCE(SUM(size), 0)::BIGINT FROM attachments WHERE uploader_id = $1")
+            .bind(owner)
+            .fetch_one(&state.db)
+            .await?;
+    let quota_left = state.config.upload_quota_bytes.saturating_sub(owner_used.max(0) as u64);
+    let messages_today = day_used(state, server_id, "messages").await;
+    let budget = Budget::new(day_used(state, server_id, "bytes").await, messages_today, quota_left);
+
     let mut cx = Ctx {
         state,
         server_id,
         owner,
         lock,
-        api: Discord::new(&token)?,
+        api: Discord::new(&token, state.redis.clone(), Mode::Background)?,
         names: Names::default(),
         report: Report::default(),
         deadline: Instant::now() + RUN_BUDGET,
+        day_messages_left: rules::MAX_MESSAGES_PER_DAY.saturating_sub(messages_today).saturating_sub(budget.messages_left),
+        budget,
     };
+    if cx.budget.bytes_left == 0 {
+        cx.report.warn_once(QUOTA_NOTE);
+    }
     cx.api.guild(&guild).await?;
     let channels = cx.api.channels(&guild).await?;
     let roles = cx.api.roles(&guild).await?;
+    if !renew_lock(state, server_id, lock).await {
+        return Err(lock_lost());
+    }
     for r in &roles {
         cx.names.roles.insert(r.id.clone(), r.name.clone());
     }
@@ -393,6 +509,9 @@ async fn run(state: &AppState, server_id: Uuid, lock: &str) -> anyhow::Result<Re
     }
 
     if sync_emojis && Instant::now() < cx.deadline {
+        if !renew_lock(state, server_id, lock).await {
+            return Err(lock_lost());
+        }
         cx.sync_emojis(&guild, &map).await?;
     }
     Ok(cx.report)
@@ -501,6 +620,16 @@ impl Ctx<'_> {
         Ok(id)
     }
 
+    /// Plafond de messages du passage (relance 15 min plus tard) ou du jour (relance
+    /// à l'intervalle normal) atteint.
+    fn out_of_messages(&mut self) {
+        if self.day_messages_left > 0 {
+            self.report.backlog = true;
+        } else {
+            self.report.warn_once("plafond quotidien de messages atteint : la suite au prochain passage");
+        }
+    }
+
     async fn sync_channel(&mut self, ch: &DChannel, fc_id: Uuid, mut cursor: u64) -> anyhow::Result<()> {
         let label = ch.name.clone().unwrap_or_default();
         for page_no in 0..MAX_PAGES_PER_CHANNEL {
@@ -508,7 +637,13 @@ impl Ctx<'_> {
                 self.report.backlog = true;
                 return Ok(());
             }
-            renew_lock(self.state, self.server_id, self.lock).await;
+            if self.budget.messages_left == 0 {
+                self.out_of_messages();
+                return Ok(());
+            }
+            if !renew_lock(self.state, self.server_id, self.lock).await {
+                return Err(lock_lost());
+            }
             let page = match self.api.messages_after(&ch.id, cursor).await {
                 Ok(p) => p,
                 Err(ApiError::NoAccess) => {
@@ -517,12 +652,32 @@ impl Ctx<'_> {
                 }
                 Err(ApiError::Fatal(e)) => return Err(e),
             };
-            let step = rules::page_step(cursor, page, |m: &DMessage| snowflake(&m.id));
+            let mut step = rules::page_step(cursor, page, |m: &DMessage| snowflake(&m.id));
             if step.cursor == cursor {
                 return Ok(());
             }
+            // Plafond de messages : on garde les plus anciens, le curseur s'arrête au
+            // dernier gardé, la suite au passage suivant.
+            let granted = self.budget.take_messages(step.fresh.len());
+            if granted < step.fresh.len() {
+                step.fresh.truncate(granted);
+                match step.fresh.last() {
+                    Some(m) => step.cursor = snowflake(&m.id),
+                    None => {
+                        self.out_of_messages();
+                        return Ok(());
+                    }
+                }
+                step.more = true;
+            }
+            let taken = step.fresh.len() as u64;
             self.store_messages(&ch.id, fc_id, step.fresh, step.cursor).await?;
+            day_add(self.state, self.server_id, "messages", taken).await;
             cursor = step.cursor;
+            if self.budget.messages_left == 0 && step.more {
+                self.out_of_messages();
+                return Ok(());
+            }
             if !step.more {
                 return Ok(());
             }
@@ -569,9 +724,10 @@ impl Ctx<'_> {
             pinned: bool,
             reply_to: Option<Uuid>,
             atts: Vec<(String, String, i64, String)>,
+            files: Vec<std::path::PathBuf>,
         }
         let mut rows: Vec<Row> = Vec::new();
-        let mut written: Vec<std::path::PathBuf> = Vec::new();
+        let mut day_bytes = 0u64;
         let upload_dir = std::path::PathBuf::from(&self.state.config.upload_dir);
         for m in msgs.into_iter().filter(|m| !already.contains(&m.id)) {
             for u in m.mentions.iter().chain(std::iter::once(&m.author)) {
@@ -599,16 +755,27 @@ impl Ctx<'_> {
             }
             let mut extra = Vec::new();
             let mut atts = Vec::new();
+            let mut files = Vec::new();
             for a in &m.attachments {
                 let filename = clean_filename(&a.filename);
-                let bytes = if a.size <= ATTACHMENT_MAX { self.api.download(&a.url, ATTACHMENT_MAX).await } else { None };
+                // Budget d'octets (passage, jour, quota du propriétaire) : épuisé, le texte
+                // du message est gardé avec une note, comme pour un fichier absent de l'archive.
+                if a.size > self.budget.bytes_left {
+                    self.report.warn_once(QUOTA_NOTE);
+                    extra.push(format!("📎 {filename} (non archivé : quota de stockage atteint)"));
+                    continue;
+                }
+                let max = ATTACHMENT_MAX.min(self.budget.bytes_left);
+                let bytes = if a.size <= max { self.api.download(&a.url, max).await } else { None };
+                let bytes = bytes.filter(|b| self.budget.charge_bytes(b.len() as u64));
                 let stored = match bytes {
                     Some(b) => {
+                        day_bytes += b.len() as u64;
                         let file = format!("{}.{}", Uuid::new_v4(), safe_ext(&filename));
                         let dest = upload_dir.join(&file);
                         match tokio::fs::write(&dest, &b).await {
                             Ok(()) => {
-                                written.push(dest);
+                                files.push(dest);
                                 Some((file, b.len() as i64))
                             }
                             Err(e) => {
@@ -650,80 +817,121 @@ impl Ctx<'_> {
                 pinned: data.pinned.unwrap_or(false),
                 reply_to,
                 atts,
+                files,
             });
         }
 
-        let res: anyhow::Result<()> = async {
+        let res: anyhow::Result<HashSet<String>> = async {
             let mut tx = db.begin().await?;
+            let mut claimed: HashSet<String> = HashSet::new();
             if !rows.is_empty() {
-                sqlx::query(
-                    "INSERT INTO messages (id, channel_id, user_id, content, type, reply_to, pinned, edited_at, created_at, webhook_display_name, webhook_avatar_url)
-                     SELECT t.id, $2, $3, t.content, 'webhook', t.reply_to, t.pinned, t.edited_at, t.created_at, t.author, t.avatar
-                     FROM UNNEST($1::uuid[], $4::text[], $5::uuid[], $6::bool[], $7::timestamptz[], $8::timestamptz[], $9::text[], $10::text[])
-                          AS t(id, content, reply_to, pinned, edited_at, created_at, author, avatar)",
-                )
-                .bind(rows.iter().map(|r| r.id).collect::<Vec<_>>())
-                .bind(channel_id)
-                .bind(self.owner)
-                .bind(rows.iter().map(|r| r.content.clone()).collect::<Vec<_>>())
-                .bind(rows.iter().map(|r| r.reply_to).collect::<Vec<_>>())
-                .bind(rows.iter().map(|r| r.pinned).collect::<Vec<_>>())
-                .bind(rows.iter().map(|r| r.edited_at).collect::<Vec<_>>())
-                .bind(rows.iter().map(|r| r.created_at).collect::<Vec<_>>())
-                .bind(rows.iter().map(|r| r.author.clone()).collect::<Vec<_>>())
-                .bind(rows.iter().map(|r| r.avatar.clone()).collect::<Vec<_>>())
-                .execute(&mut *tx)
-                .await?;
-
-                let atts: Vec<(Uuid, DateTime<Utc>, &(String, String, i64, String))> =
-                    rows.iter().flat_map(|r| r.atts.iter().map(move |a| (r.id, r.created_at, a))).collect();
-                if !atts.is_empty() {
-                    sqlx::query(
-                        "INSERT INTO attachments (message_id, filename, content_type, size, url, created_at)
-                         SELECT * FROM UNNEST($1::uuid[], $2::text[], $3::text[], $4::bigint[], $5::text[], $6::timestamptz[])",
-                    )
-                    .bind(atts.iter().map(|a| a.0).collect::<Vec<_>>())
-                    .bind(atts.iter().map(|a| a.2 .0.clone()).collect::<Vec<_>>())
-                    .bind(atts.iter().map(|a| a.2 .1.clone()).collect::<Vec<_>>())
-                    .bind(atts.iter().map(|a| a.2 .2).collect::<Vec<_>>())
-                    .bind(atts.iter().map(|a| a.2 .3.clone()).collect::<Vec<_>>())
-                    .bind(atts.iter().map(|a| a.1).collect::<Vec<_>>())
-                    .execute(&mut *tx)
-                    .await?;
-                }
-                let pins: Vec<&Row> = rows.iter().filter(|r| r.pinned).collect();
-                if !pins.is_empty() {
-                    sqlx::query(
-                        "INSERT INTO pinned_messages (channel_id, message_id, pinned_by, pinned_at)
-                         SELECT $1, t.id, $2, t.at FROM UNNEST($3::uuid[], $4::timestamptz[]) AS t(id, at)
-                         ON CONFLICT DO NOTHING",
-                    )
-                    .bind(channel_id)
-                    .bind(self.owner)
-                    .bind(pins.iter().map(|r| r.id).collect::<Vec<_>>())
-                    .bind(pins.iter().map(|r| r.created_at).collect::<Vec<_>>())
-                    .execute(&mut *tx)
-                    .await?;
-                }
-                sqlx::query(
+                // Réservation des correspondances d'abord : seul le passage qui crée la ligne
+                // insère le message. Un passage concurrent (verrou perdu) attend notre
+                // validation sur le conflit, puis n'obtient rien : jamais de double import.
+                claimed = sqlx::query_scalar::<_, String>(
                     "INSERT INTO discord_sync_map (server_id, kind, discord_id, forgechat_id)
                      SELECT $1, 'message', t.d, t.f FROM UNNEST($2::text[], $3::uuid[]) AS t(d, f)
-                     ON CONFLICT DO NOTHING",
+                     ON CONFLICT DO NOTHING RETURNING discord_id",
                 )
                 .bind(self.server_id)
                 .bind(rows.iter().map(|r| r.discord_id.clone()).collect::<Vec<_>>())
                 .bind(rows.iter().map(|r| r.id).collect::<Vec<_>>())
-                .execute(&mut *tx)
-                .await?;
-                sqlx::query("UPDATE channels SET last_message_id=$2 WHERE id=$1")
+                .fetch_all(&mut *tx)
+                .await?
+                .into_iter()
+                .collect();
+
+                // Messages déjà importés ailleurs : une réponse est rattachée à la copie existante.
+                let lost: Vec<String> =
+                    rows.iter().filter(|r| !claimed.contains(&r.discord_id)).map(|r| r.discord_id.clone()).collect();
+                let mut remap: HashMap<Uuid, Option<Uuid>> = HashMap::new();
+                if !lost.is_empty() {
+                    let existing: HashMap<String, Uuid> = sqlx::query_as::<_, (String, Uuid)>(
+                        "SELECT discord_id, forgechat_id FROM discord_sync_map
+                         WHERE server_id=$1 AND kind='message' AND discord_id = ANY($2)",
+                    )
+                    .bind(self.server_id)
+                    .bind(&lost)
+                    .fetch_all(&mut *tx)
+                    .await?
+                    .into_iter()
+                    .collect();
+                    for r in rows.iter().filter(|r| !claimed.contains(&r.discord_id)) {
+                        remap.insert(r.id, existing.get(&r.discord_id).copied());
+                    }
+                }
+                let keep: Vec<&Row> = rows.iter().filter(|r| claimed.contains(&r.discord_id)).collect();
+                if !keep.is_empty() {
+                    sqlx::query(
+                        "INSERT INTO messages (id, channel_id, user_id, content, type, reply_to, pinned, edited_at, created_at, webhook_display_name, webhook_avatar_url)
+                         SELECT t.id, $2, $3, t.content, 'webhook', t.reply_to, t.pinned, t.edited_at, t.created_at, t.author, t.avatar
+                         FROM UNNEST($1::uuid[], $4::text[], $5::uuid[], $6::bool[], $7::timestamptz[], $8::timestamptz[], $9::text[], $10::text[])
+                              AS t(id, content, reply_to, pinned, edited_at, created_at, author, avatar)",
+                    )
+                    .bind(keep.iter().map(|r| r.id).collect::<Vec<_>>())
                     .bind(channel_id)
-                    .bind(rows.last().map(|r| r.id))
+                    .bind(self.owner)
+                    .bind(keep.iter().map(|r| r.content.clone()).collect::<Vec<_>>())
+                    .bind(
+                        keep.iter()
+                            .map(|r| r.reply_to.and_then(|p| match remap.get(&p) { Some(x) => *x, None => Some(p) }))
+                            .collect::<Vec<_>>(),
+                    )
+                    .bind(keep.iter().map(|r| r.pinned).collect::<Vec<_>>())
+                    .bind(keep.iter().map(|r| r.edited_at).collect::<Vec<_>>())
+                    .bind(keep.iter().map(|r| r.created_at).collect::<Vec<_>>())
+                    .bind(keep.iter().map(|r| r.author.clone()).collect::<Vec<_>>())
+                    .bind(keep.iter().map(|r| r.avatar.clone()).collect::<Vec<_>>())
                     .execute(&mut *tx)
                     .await?;
+
+                    // Pièces jointes imputées au quota de stockage du propriétaire.
+                    let atts: Vec<(Uuid, DateTime<Utc>, &(String, String, i64, String))> =
+                        keep.iter().flat_map(|r| r.atts.iter().map(move |a| (r.id, r.created_at, a))).collect();
+                    if !atts.is_empty() {
+                        sqlx::query(
+                            "INSERT INTO attachments (message_id, filename, content_type, size, url, created_at, uploader_id)
+                             SELECT t.m, t.f, t.c, t.s, t.u, t.at, $7
+                             FROM UNNEST($1::uuid[], $2::text[], $3::text[], $4::bigint[], $5::text[], $6::timestamptz[])
+                                  AS t(m, f, c, s, u, at)",
+                        )
+                        .bind(atts.iter().map(|a| a.0).collect::<Vec<_>>())
+                        .bind(atts.iter().map(|a| a.2 .0.clone()).collect::<Vec<_>>())
+                        .bind(atts.iter().map(|a| a.2 .1.clone()).collect::<Vec<_>>())
+                        .bind(atts.iter().map(|a| a.2 .2).collect::<Vec<_>>())
+                        .bind(atts.iter().map(|a| a.2 .3.clone()).collect::<Vec<_>>())
+                        .bind(atts.iter().map(|a| a.1).collect::<Vec<_>>())
+                        .bind(self.owner)
+                        .execute(&mut *tx)
+                        .await?;
+                    }
+                    let pins: Vec<&&Row> = keep.iter().filter(|r| r.pinned).collect();
+                    if !pins.is_empty() {
+                        sqlx::query(
+                            "INSERT INTO pinned_messages (channel_id, message_id, pinned_by, pinned_at)
+                             SELECT $1, t.id, $2, t.at FROM UNNEST($3::uuid[], $4::timestamptz[]) AS t(id, at)
+                             ON CONFLICT DO NOTHING",
+                        )
+                        .bind(channel_id)
+                        .bind(self.owner)
+                        .bind(pins.iter().map(|r| r.id).collect::<Vec<_>>())
+                        .bind(pins.iter().map(|r| r.created_at).collect::<Vec<_>>())
+                        .execute(&mut *tx)
+                        .await?;
+                    }
+                    sqlx::query("UPDATE channels SET last_message_id=$2 WHERE id=$1")
+                        .bind(channel_id)
+                        .bind(keep.last().map(|r| r.id))
+                        .execute(&mut *tx)
+                        .await?;
+                }
             }
+            // Le curseur n'avance jamais en arrière (passage concurrent plus en avance).
             sqlx::query(
                 "INSERT INTO discord_sync_cursors (server_id, discord_channel_id, last_message_id) VALUES ($1, $2, $3)
-                 ON CONFLICT (server_id, discord_channel_id) DO UPDATE SET last_message_id = EXCLUDED.last_message_id, updated_at = NOW()",
+                 ON CONFLICT (server_id, discord_channel_id) DO UPDATE SET last_message_id = EXCLUDED.last_message_id, updated_at = NOW()
+                 WHERE discord_sync_cursors.last_message_id !~ '^[0-9]{1,21}$'
+                    OR discord_sync_cursors.last_message_id::numeric < EXCLUDED.last_message_id::numeric",
             )
             .bind(self.server_id)
             .bind(discord_channel)
@@ -731,16 +939,24 @@ impl Ctx<'_> {
             .execute(&mut *tx)
             .await?;
             tx.commit().await?;
-            Ok(())
+            Ok(claimed)
         }
         .await;
-        if let Err(e) = res {
-            for p in written {
-                let _ = tokio::fs::remove_file(p).await;
+        day_add(self.state, self.server_id, "bytes", day_bytes).await;
+        let claimed = match res {
+            Ok(c) => c,
+            Err(e) => {
+                for p in rows.iter().flat_map(|r| &r.files) {
+                    let _ = tokio::fs::remove_file(p).await;
+                }
+                return Err(e);
             }
-            return Err(e);
+        };
+        // Fichiers des messages importés entre-temps par un autre passage : inutiles.
+        for p in rows.iter().filter(|r| !claimed.contains(&r.discord_id)).flat_map(|r| &r.files) {
+            let _ = tokio::fs::remove_file(p).await;
         }
-        self.report.messages += rows.len() as u32;
+        self.report.messages += claimed.len() as u32;
         Ok(())
     }
 
@@ -779,10 +995,19 @@ impl Ctx<'_> {
                 Some(id) => id,
                 None => {
                     let animated = e.animated.unwrap_or(false);
-                    let (ext, mime, max) = if animated { ("gif", "image/gif", 512 * 1024) } else { ("png", "image/png", 256 * 1024) };
+                    let (ext, max) = if animated { ("gif", 512 * 1024) } else { ("png", 256 * 1024) };
                     let Some(bytes) = self.api.download(&format!("https://cdn.discordapp.com/emojis/{did}.{ext}"), max).await else {
                         continue;
                     };
+                    // Comme un envoi d'émoji (emojis.rs) : format lu dans les octets, puis antivirus.
+                    let Some((ext, mime)) = emoji_format(&bytes) else {
+                        self.report.warn_once("émoji ignoré : format d'image non reconnu");
+                        continue;
+                    };
+                    if crate::antivirus::check(&bytes).await.is_err() {
+                        self.report.warn_once("émoji ignoré : refusé par l'antivirus");
+                        continue;
+                    }
                     let filename = format!("emoji_{}.{}", Uuid::new_v4(), ext);
                     tokio::fs::create_dir_all(&emoji_dir).await?;
                     tokio::fs::write(emoji_dir.join(&filename), &bytes).await?;
@@ -904,6 +1129,10 @@ fn bad(m: &str) -> AppError {
 
 /// Erreur Discord rendue à l'utilisateur (jeton refusé, bot absent du serveur…).
 fn discord_err(e: anyhow::Error) -> AppError {
+    if let Some(b) = e.downcast_ref::<Busy>() {
+        // Limite de débit de Discord ou disjoncteur : 503, jamais d'attente dans la requête.
+        return AppError::Unavailable(b.0.clone());
+    }
     match e.downcast_ref::<UserError>() {
         Some(u) => AppError::BadRequest(u.0.clone()),
         None => {
@@ -951,6 +1180,7 @@ pub async fn put_config(
     Json(body): Json<PutConfig>,
 ) -> Result<Json<Value>> {
     require_permission(&state, claims.sub, server_id, P::MANAGE_SERVER).await?;
+    route_limit(&state, "put", claims.sub, server_id).await?;
     let guild = rules::validate_guild_id(&body.guild_id).map_err(bad)?;
     let interval = rules::validate_interval(body.interval_hours).map_err(bad)?;
     let excluded = rules::validate_excluded(&body.excluded_categories).map_err(bad)?;
@@ -958,14 +1188,30 @@ pub async fn put_config(
         Some(t) => Some(rules::normalize_token(t).map_err(bad)?),
         None => None,
     };
+
+    // Le jeton enregistré n'est jamais redirigé vers un autre serveur Discord, et seul le
+    // propriétaire change le serveur lié ou le jeton.
+    let stored_guild: Option<String> = sqlx::query_scalar("SELECT guild_id FROM discord_sync_configs WHERE server_id=$1")
+        .bind(server_id)
+        .fetch_optional(&state.db)
+        .await?;
+    let owner: Uuid = sqlx::query_scalar("SELECT owner_id FROM servers WHERE id=$1")
+        .bind(server_id)
+        .fetch_optional(&state.db)
+        .await?
+        .ok_or_else(|| AppError::NotFound("Serveur introuvable".into()))?;
+    rules::check_config_change(stored_guild.as_deref(), &guild, new_token.is_some(), owner == claims.sub).map_err(|r| match r {
+        rules::ConfigRefusal::OwnerOnly => AppError::ForbiddenMsg(r.message().into()),
+        rules::ConfigRefusal::TokenRequired => bad(r.message()),
+    })?;
     let previous = stored_token(&state, server_id).await?;
 
-    // Jeton ou serveur Discord modifié : vérifié auprès de Discord avant d'être enregistré.
+    // Nouveau jeton (donc éventuellement nouveau serveur) : vérifié auprès de Discord avant
+    // d'être enregistré. Sans nouveau jeton, le serveur est forcément inchangé.
     let token = new_token.clone().or_else(|| previous.as_ref().map(|p| p.1.clone()));
-    let changed = new_token.is_some() || previous.as_ref().map(|p| p.0 != guild).unwrap_or(true);
     let mut guild_name = None;
-    if let (Some(t), true) = (&token, changed) {
-        let api = Discord::new(t).map_err(AppError::Internal)?;
+    if let Some(t) = &new_token {
+        let api = Discord::new(t, state.redis.clone(), Mode::Request).map_err(AppError::Internal)?;
         guild_name = Some(api.guild(&guild).await.map_err(discord_err)?.name);
     }
     if body.enabled && token.is_none() {
@@ -1012,6 +1258,15 @@ pub async fn delete_config(
     Path(server_id): Path<Uuid>,
 ) -> Result<Json<Value>> {
     require_permission(&state, claims.sub, server_id, P::MANAGE_SERVER).await?;
+    // Effacer le jeton revient à le changer : propriétaire seulement (un administrateur
+    // peut toujours désactiver la synchronisation).
+    let owner: Option<Uuid> = sqlx::query_scalar("SELECT owner_id FROM servers WHERE id=$1")
+        .bind(server_id)
+        .fetch_optional(&state.db)
+        .await?;
+    if owner != Some(claims.sub) {
+        return Err(AppError::ForbiddenMsg(rules::ConfigRefusal::OwnerOnly.message().into()));
+    }
     sqlx::query("DELETE FROM discord_sync_configs WHERE server_id=$1").bind(server_id).execute(&state.db).await?;
     Ok(Json(json!({ "ok": true })))
 }
@@ -1023,12 +1278,19 @@ pub async fn run_now(
     Path(server_id): Path<Uuid>,
 ) -> Result<Json<Value>> {
     require_permission(&state, claims.sub, server_id, P::MANAGE_SERVER).await?;
+    route_limit(&state, "run", claims.sub, server_id).await?;
+    crate::handlers::auth_v2::hit(&state, &format!("discord_sync_rl:run_hour:u:{}", claims.sub), MANUAL_PER_USER_PER_HOUR, 3600)
+        .await?;
     if stored_token(&state, server_id).await?.is_none() {
         return Err(bad("Enregistrez d'abord l'identifiant du serveur Discord et le jeton du bot."));
     }
     if is_running(&state, server_id).await {
         return Err(AppError::Conflict("Une synchronisation est déjà en cours.".into()));
     }
+    // Créneau global (partagé avec le planificateur), pris avant le délai de 5 minutes.
+    let permit = state.discord_sync_slots.clone().try_acquire_owned().map_err(|_| {
+        AppError::Unavailable("Trop de synchronisations Discord en cours : réessayez dans quelques minutes.".into())
+    })?;
     let fresh: bool = {
         let mut redis = state.redis.lock().await;
         redis::cmd("SET")
@@ -1047,7 +1309,10 @@ pub async fn run_now(
         return Err(AppError::TooManyRequestsMsg("Synchronisation déjà lancée il y a moins de 5 minutes.".into()));
     }
     let st = state.clone();
-    tokio::spawn(async move { sync_server(&st, server_id).await });
+    tokio::spawn(async move {
+        sync_server(&st, server_id).await;
+        drop(permit);
+    });
     Ok(Json(json!({ "started": true })))
 }
 
@@ -1059,6 +1324,8 @@ pub async fn list_categories(
     Path(server_id): Path<Uuid>,
 ) -> Result<Json<Value>> {
     require_permission(&state, claims.sub, server_id, P::MANAGE_SERVER).await?;
+    route_limit(&state, "categories", claims.sub, server_id).await?;
+    // Toujours le serveur Discord ENREGISTRÉ avec le jeton enregistré (rien de la requête).
     let (guild, token) = stored_token(&state, server_id)
         .await?
         .ok_or_else(|| bad("Enregistrez d'abord l'identifiant du serveur Discord et le jeton du bot."))?;
@@ -1066,7 +1333,7 @@ pub async fn list_categories(
         .bind(server_id)
         .fetch_one(&state.db)
         .await?;
-    let api = Discord::new(&token).map_err(AppError::Internal)?;
+    let api = Discord::new(&token, state.redis.clone(), Mode::Request).map_err(AppError::Internal)?;
     let mut cats: Vec<DChannel> = api.channels(&guild).await.map_err(discord_err)?.into_iter().filter(|c| c.r#type == 4).collect();
     cats.sort_by_key(|c| (c.position, snowflake(&c.id)));
     let list: Vec<Value> = cats
