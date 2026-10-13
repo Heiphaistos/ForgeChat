@@ -23,7 +23,6 @@
         "decorations": true,
         "transparent": false,
         "center": true,
-        "userAgent": "ForgeChat/3.27.0 (Desktop)",
         "label": "main",
         "dragDropEnabled": false,
         "create": false
@@ -46,7 +45,7 @@
       }
     },
     "shell": {
-      "open": "^((https://[A-Za-z0-9-]+(\\.[A-Za-z0-9-]+)*(:\\d+)?([/?#][^\\s]*)?)|(ghosthanddesk://(share|connect)\\?[^\\s]+))$"
+      "open": "^https://[A-Za-z0-9-]+(\\.[A-Za-z0-9-]+)*(:\\d+)?([/?#][^\\s]*)?$"
     }
   },
   "bundle": {

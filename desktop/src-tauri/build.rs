@@ -16,8 +16,7 @@ fn verifier_version_unique() {
 
     let conf = std::fs::read_to_string("tauri.conf.json")
         .expect("tauri.conf.json illisible depuis build.rs");
-    let conf: serde_json::Value =
-        serde_json::from_str(&conf).expect("tauri.conf.json mal forme");
+    let conf: serde_json::Value = serde_json::from_str(&conf).expect("tauri.conf.json mal forme");
 
     let Some(version_conf) = conf.get("version").and_then(|v| v.as_str()) else {
         // Champ absent : Tauri retombe sur Cargo.toml, il n'y a rien a comparer.

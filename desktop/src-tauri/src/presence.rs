@@ -20,8 +20,15 @@ const LAUNCHER_DIRS: &[&str] = &[
 
 /// Sous-dossiers des lanceurs qui ne sont pas des jeux.
 const NOT_GAMES: &[&str] = &[
-    "steamworks shared", "steamvr", "steam controller configs", "launcher", "directxredist",
-    "riot client", "epic online services", "battle.net", "battle.net launcher",
+    "steamworks shared",
+    "steamvr",
+    "steam controller configs",
+    "launcher",
+    "directxredist",
+    "riot client",
+    "epic online services",
+    "battle.net",
+    "battle.net launcher",
 ];
 
 /// Exécutables connus hors lanceur : (nom de fichier sans extension, en minuscules ; nom affiché).
@@ -53,7 +60,10 @@ pub fn game_from_path(path: &str) -> Option<String> {
             let rest = &norm[start..];
             let name = rest.split('/').next().unwrap_or("").trim();
             // Le fichier lui-même juste sous le dossier du lanceur n'est pas un dossier de jeu.
-            if name.is_empty() || !rest.contains('/') || NOT_GAMES.contains(&name.to_lowercase().as_str()) {
+            if name.is_empty()
+                || !rest.contains('/')
+                || NOT_GAMES.contains(&name.to_lowercase().as_str())
+            {
                 continue;
             }
             return Some(name.chars().take(64).collect());
@@ -61,14 +71,20 @@ pub fn game_from_path(path: &str) -> Option<String> {
     }
     let file = lower.rsplit('/').next().unwrap_or("");
     let stem = file.strip_suffix(".exe").unwrap_or(file);
-    KNOWN_EXES.iter().find(|(exe, _)| *exe == stem).map(|(_, n)| (*n).to_string())
+    KNOWN_EXES
+        .iter()
+        .find(|(exe, _)| *exe == stem)
+        .map(|(_, n)| (*n).to_string())
 }
 
 /// Jeu en cours d'exécution (le premier trouvé), sinon None.
 /// Commande asynchrone : une commande synchrone tourne sur le thread de l'interface.
 #[tauri::command]
 pub async fn current_game() -> Option<String> {
-    tauri::async_runtime::spawn_blocking(current_game_sync).await.ok().flatten()
+    tauri::async_runtime::spawn_blocking(current_game_sync)
+        .await
+        .ok()
+        .flatten()
 }
 
 fn current_game_sync() -> Option<String> {
@@ -91,9 +107,19 @@ mod tests {
     #[test]
     fn detecte_les_jeux() {
         assert_eq!(game_from_path(r"C:\Program Files (x86)\Steam\steamapps\common\Counter-Strike Global Offensive\game\bin\win64\cs2.exe").as_deref(), Some("Counter-Strike Global Offensive"));
-        assert_eq!(game_from_path("/home/evan/.local/share/Steam/steamapps/common/Hades/Hades.exe").as_deref(), Some("Hades"));
-        assert_eq!(game_from_path(r"D:\Epic Games\Fortnite\FortniteGame\Binaries\Win64\x.exe").as_deref(), Some("Fortnite"));
-        assert_eq!(game_from_path(r"D:\Jeux\ForgeMT2\metin2client.exe").as_deref(), Some("Metin2"));
+        assert_eq!(
+            game_from_path("/home/evan/.local/share/Steam/steamapps/common/Hades/Hades.exe")
+                .as_deref(),
+            Some("Hades")
+        );
+        assert_eq!(
+            game_from_path(r"D:\Epic Games\Fortnite\FortniteGame\Binaries\Win64\x.exe").as_deref(),
+            Some("Fortnite")
+        );
+        assert_eq!(
+            game_from_path(r"D:\Jeux\ForgeMT2\metin2client.exe").as_deref(),
+            Some("Metin2")
+        );
     }
 
     #[test]
@@ -103,9 +129,20 @@ mod tests {
 
     #[test]
     fn ignore_les_lanceurs_et_le_reste() {
-        assert_eq!(game_from_path(r"C:\Program Files (x86)\Steam\steam.exe"), None);
-        assert_eq!(game_from_path(r"C:\Program Files (x86)\Steam\steamapps\common\Steamworks Shared\x.exe"), None);
-        assert_eq!(game_from_path(r"C:\Riot Games\Riot Client\RiotClientServices.exe"), None);
+        assert_eq!(
+            game_from_path(r"C:\Program Files (x86)\Steam\steam.exe"),
+            None
+        );
+        assert_eq!(
+            game_from_path(
+                r"C:\Program Files (x86)\Steam\steamapps\common\Steamworks Shared\x.exe"
+            ),
+            None
+        );
+        assert_eq!(
+            game_from_path(r"C:\Riot Games\Riot Client\RiotClientServices.exe"),
+            None
+        );
         assert_eq!(game_from_path(r"C:\Windows\explorer.exe"), None);
     }
 }

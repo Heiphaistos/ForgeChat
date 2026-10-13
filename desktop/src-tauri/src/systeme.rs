@@ -1,7 +1,6 @@
 //! Réglages « Système » de l'application de bureau : démarrage avec l'ordinateur,
 //! bouton fermer, accélération matérielle, téléchargements (boîte « Enregistrer
-//! sous »), icône d'application personnalisée, détection d'un logiciel de stream
-//! et de GhostHandDesk (support à distance).
+//! sous »), icône d'application personnalisée, détection d'un logiciel de stream.
 //!
 //! Tout tient dans un petit fichier JSON du dossier de configuration de l'appli,
 //! lu AVANT la création de la WebView (l'accélération matérielle se règle par
@@ -85,7 +84,9 @@ pub fn config() -> Config {
 }
 
 fn modifier(f: impl FnOnce(&mut Config)) -> Result<Config, String> {
-    let mut cfg = etat().lock().map_err(|_| "réglages verrouillés".to_string())?;
+    let mut cfg = etat()
+        .lock()
+        .map_err(|_| "réglages verrouillés".to_string())?;
     f(&mut cfg);
     let dir = dossier().ok_or("dossier de configuration introuvable")?;
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
@@ -125,10 +126,18 @@ pub struct Patch {
 #[tauri::command]
 pub async fn system_set(patch: Patch) -> Result<Config, String> {
     modifier(|c| {
-        if let Some(v) = patch.close_to_tray { c.close_to_tray = v }
-        if let Some(v) = patch.start_minimized { c.start_minimized = v }
-        if let Some(v) = patch.hardware_acceleration { c.hardware_acceleration = v }
-        if let Some(v) = patch.ask_save { c.ask_save = v }
+        if let Some(v) = patch.close_to_tray {
+            c.close_to_tray = v
+        }
+        if let Some(v) = patch.start_minimized {
+            c.start_minimized = v
+        }
+        if let Some(v) = patch.hardware_acceleration {
+            c.hardware_acceleration = v
+        }
+        if let Some(v) = patch.ask_save {
+            c.ask_save = v
+        }
     })
 }
 
@@ -178,14 +187,24 @@ fn nom_sur(nom: &str) -> String {
     let base = nom.rsplit(['/', '\\']).next().unwrap_or("");
     let propre: String = base
         .chars()
-        .map(|c| if c.is_control() || "<>:\"|?*".contains(c) { '_' } else { c })
+        .map(|c| {
+            if c.is_control() || "<>:\"|?*".contains(c) {
+                '_'
+            } else {
+                c
+            }
+        })
         .take(150)
         .collect();
     let propre = propre.trim().trim_matches('.').trim().to_string();
     let souche = propre.split('.').next().unwrap_or("").to_ascii_uppercase();
     let reserve = ["CON", "PRN", "AUX", "NUL"].contains(&souche.as_str())
         || ((souche.starts_with("COM") || souche.starts_with("LPT")) && souche.len() == 4);
-    if propre.is_empty() || reserve { format!("fichier-{propre}") } else { propre }
+    if propre.is_empty() || reserve {
+        format!("fichier-{propre}")
+    } else {
+        propre
+    }
 }
 
 /// `nom.ext` existe déjà → `nom (1).ext`, `nom (2).ext`…
@@ -206,12 +225,78 @@ fn chemin_libre(dir: &Path, nom: &str) -> PathBuf {
 
 /// Extensions qui s'exécutent ou s'interprètent à l'ouverture (Windows, macOS, Linux).
 const EXTENSIONS_EXECUTABLES: &[&str] = &[
-    "exe", "com", "scr", "pif", "bat", "cmd", "msi", "msix", "msp", "appx", "appxbundle", "ps1", "psm1",
-    "vbs", "vbe", "js", "jse", "wsf", "wsh", "hta", "cpl", "lnk", "url", "reg", "inf", "scf", "jar",
-    "dll", "sys", "iso", "img", "vhd", "vhdx", "chm", "xll", "app", "command", "pkg", "dmg", "sh",
-    "run", "appimage", "deb", "rpm", "desktop", "py", "pl", "bash", "zsh", "fish", "flatpak", "flatpakref",
+    "exe",
+    "com",
+    "scr",
+    "pif",
+    "bat",
+    "cmd",
+    "msi",
+    "msix",
+    "msp",
+    "appx",
+    "appxbundle",
+    "ps1",
+    "psm1",
+    "vbs",
+    "vbe",
+    "js",
+    "jse",
+    "wsf",
+    "wsh",
+    "hta",
+    "cpl",
+    "lnk",
+    "url",
+    "reg",
+    "inf",
+    "scf",
+    "jar",
+    "dll",
+    "sys",
+    "iso",
+    "img",
+    "vhd",
+    "vhdx",
+    "chm",
+    "xll",
+    "app",
+    "command",
+    "pkg",
+    "dmg",
+    "sh",
+    "run",
+    "appimage",
+    "deb",
+    "rpm",
+    "desktop",
+    "py",
+    "pl",
+    "bash",
+    "zsh",
+    "fish",
+    "flatpak",
+    "flatpakref",
     "snap",
+    // Audit D5 : consoles MMC, déploiements ClickOnce, raccourcis shell et pages
+    // actives (script exécuté hors de l'appli, à l'ouverture dans le navigateur).
+    "msc",
+    "appref-ms",
+    "application",
+    "settingcontent-ms",
+    "library-ms",
+    "search-ms",
+    "website",
+    "xbap",
+    "html",
+    "htm",
+    "xhtml",
+    "svg",
 ];
+
+/// Audit D5 : au-delà, ce n'est pas une pièce jointe ForgeChat (500 Mo par défaut côté
+/// serveur) : rien n'est écrit sur le disque.
+const SAVE_MAX_OCTETS: usize = 1024 * 1024 * 1024;
 
 fn extension_executable(nom: &str) -> bool {
     // Paquet pacman (Arch, Omarchy) : double extension `.pkg.tar.zst`, `.pkg.tar.xz`…
@@ -253,10 +338,16 @@ fn marquer_provenance(chemin: &Path) {
 /// Enregistre les octets reçus (corps brut de l'invocation, nom dans `x-file-name`).
 /// Renvoie le chemin écrit, ou None si l'utilisateur a annulé la boîte.
 #[tauri::command]
-pub async fn save_file(app: AppHandle, request: tauri::ipc::Request<'_>) -> Result<Option<String>, String> {
+pub async fn save_file(
+    app: AppHandle,
+    request: tauri::ipc::Request<'_>,
+) -> Result<Option<String>, String> {
     let InvokeBody::Raw(octets) = request.body() else {
         return Err("corps binaire attendu".into());
     };
+    if octets.len() > SAVE_MAX_OCTETS {
+        return Err("fichier trop volumineux (1 Go au plus)".into());
+    }
     let nom = request
         .headers()
         .get("x-file-name")
@@ -269,30 +360,33 @@ pub async fn save_file(app: AppHandle, request: tauri::ipc::Request<'_>) -> Resu
     let dir_defaut = cfg.download_dir.map(PathBuf::from).filter(|d| d.is_dir());
     let fenetre = app.get_webview_window("main");
 
-    let chemin = tauri::async_runtime::spawn_blocking(move || -> Result<Option<PathBuf>, String> {
-        let chemin = match dir_defaut {
-            // Un exécutable n'est jamais déposé sans que l'utilisateur choisisse où.
-            Some(dir) if !cfg.ask_save && !extension_executable(&nom) => chemin_libre(&dir, &nom),
-            dir => {
-                let mut boite = app.dialog().file().set_file_name(&nom);
-                if let Some(d) = dir {
-                    boite = boite.set_directory(d);
+    let chemin =
+        tauri::async_runtime::spawn_blocking(move || -> Result<Option<PathBuf>, String> {
+            let chemin = match dir_defaut {
+                // Un exécutable n'est jamais déposé sans que l'utilisateur choisisse où.
+                Some(dir) if !cfg.ask_save && !extension_executable(&nom) => {
+                    chemin_libre(&dir, &nom)
                 }
-                if let Some(w) = &fenetre {
-                    boite = boite.set_parent(w);
+                dir => {
+                    let mut boite = app.dialog().file().set_file_name(&nom);
+                    if let Some(d) = dir {
+                        boite = boite.set_directory(d);
+                    }
+                    if let Some(w) = &fenetre {
+                        boite = boite.set_parent(w);
+                    }
+                    match boite.blocking_save_file() {
+                        Some(p) => p.into_path().map_err(|e| e.to_string())?,
+                        None => return Ok(None),
+                    }
                 }
-                match boite.blocking_save_file() {
-                    Some(p) => p.into_path().map_err(|e| e.to_string())?,
-                    None => return Ok(None),
-                }
-            }
-        };
-        std::fs::write(&chemin, &octets).map_err(|e| format!("{}: {e}", chemin.display()))?;
-        marquer_provenance(&chemin);
-        Ok(Some(chemin))
-    })
-    .await
-    .map_err(|e| e.to_string())??;
+            };
+            std::fs::write(&chemin, &octets).map_err(|e| format!("{}: {e}", chemin.display()))?;
+            marquer_provenance(&chemin);
+            Ok(Some(chemin))
+        })
+        .await
+        .map_err(|e| e.to_string())??;
 
     Ok(chemin.map(|p| {
         if let Ok(mut s) = saved().lock() {
@@ -318,7 +412,11 @@ pub async fn reveal_saved(path: String) -> Result<(), String> {
             .map_err(|e| e.to_string())?;
     }
     #[cfg(target_os = "macos")]
-    std::process::Command::new("open").arg("-R").arg(&p).spawn().map_err(|e| e.to_string())?;
+    std::process::Command::new("open")
+        .arg("-R")
+        .arg(&p)
+        .spawn()
+        .map_err(|e| e.to_string())?;
     #[cfg(all(unix, not(target_os = "macos")))]
     std::process::Command::new("xdg-open")
         .arg(p.parent().unwrap_or(Path::new("/")))
@@ -342,7 +440,11 @@ pub async fn pick_download_dir(app: AppHandle) -> Result<Option<String>, String>
     .await
     .map_err(|e| e.to_string())?;
     let Some(dir) = choix else { return Ok(None) };
-    let dir = dir.into_path().map_err(|e| e.to_string())?.display().to_string();
+    let dir = dir
+        .into_path()
+        .map_err(|e| e.to_string())?
+        .display()
+        .to_string();
     modifier(|c| c.download_dir = Some(dir.clone()))?;
     Ok(Some(dir))
 }
@@ -369,10 +471,14 @@ fn decoder_icone(octets: &[u8]) -> Result<Image<'static>, String> {
     if octets.len() > ICONE_MAX_OCTETS || !octets.starts_with(b"\x89PNG\r\n\x1a\n") {
         return Err("PNG de 1 Mo au plus attendu".into());
     }
-    let img = Image::from_bytes(octets).map_err(|e| e.to_string())?.to_owned();
+    let img = Image::from_bytes(octets)
+        .map_err(|e| e.to_string())?
+        .to_owned();
     let (w, h) = (img.width(), img.height());
     if w != h || !(16..=ICONE_MAX_COTE).contains(&w) {
-        return Err(format!("icône carrée de 16 à {ICONE_MAX_COTE} px attendue ({w}x{h})"));
+        return Err(format!(
+            "icône carrée de 16 à {ICONE_MAX_COTE} px attendue ({w}x{h})"
+        ));
     }
     Ok(img)
 }
@@ -395,7 +501,7 @@ mod grande_icone {
     /// RGBA carré → HICON 32 bits (alpha conservé), 0 en cas d'échec.
     fn creer(rgba: &[u8], cote: u32) -> usize {
         let mut bgra = rgba.to_vec();
-        for px in bgra.chunks_exact_mut(4) {
+        for px in bgra.as_chunks_mut::<4>().0 {
             px.swap(0, 2);
         }
         // Masque ET monochrome (lignes alignées sur 16 bits), tout à 0 : l'alpha fait la transparence.
@@ -484,7 +590,11 @@ pub async fn set_app_icon(app: AppHandle, request: tauri::ipc::Request<'_>) -> R
         .headers()
         .get("x-icon-id")
         .and_then(|v| v.to_str().ok())
-        .filter(|v| !v.is_empty() && v.len() <= 32 && v.chars().all(|c| c.is_ascii_alphanumeric() || c == ':'))
+        .filter(|v| {
+            !v.is_empty()
+                && v.len() <= 32
+                && v.chars().all(|c| c.is_ascii_alphanumeric() || c == ':')
+        })
         .map(str::to_string);
     let dir = dossier().ok_or("dossier de configuration introuvable")?;
     let img = if octets.is_empty() || id.is_none() {
@@ -499,15 +609,28 @@ pub async fn set_app_icon(app: AppHandle, request: tauri::ipc::Request<'_>) -> R
         Some(img)
     };
     let handle = app.clone();
-    app.run_on_main_thread(move || appliquer_icone(&handle, img)).map_err(|e| e.to_string())
+    app.run_on_main_thread(move || appliquer_icone(&handle, img))
+        .map_err(|e| e.to_string())
 }
 
 // ── Logiciel de stream ──────────────────────────────────────────────────────
 
 /// Exécutables de logiciels de diffusion (nom sans extension, en minuscules).
 const STREAMING_EXES: &[&str] = &[
-    "obs64", "obs32", "obs", "obs-studio", "streamlabs obs", "streamlabs desktop", "streamlabs",
-    "xsplit.core", "xsplitbroadcaster", "xsplit", "twitchstudio", "prismlivestudio", "vmix64", "vmix",
+    "obs64",
+    "obs32",
+    "obs",
+    "obs-studio",
+    "streamlabs obs",
+    "streamlabs desktop",
+    "streamlabs",
+    "xsplit.core",
+    "xsplitbroadcaster",
+    "xsplit",
+    "twitchstudio",
+    "prismlivestudio",
+    "vmix64",
+    "vmix",
 ];
 
 fn est_logiciel_de_stream(nom: &str) -> bool {
@@ -524,65 +647,12 @@ pub async fn streaming_software_running() -> bool {
         let kind = ProcessRefreshKind::nothing();
         let mut sys = System::new_with_specifics(RefreshKind::nothing().with_processes(kind));
         sys.refresh_processes_specifics(ProcessesToUpdate::All, true, kind);
-        sys.processes().values().any(|p| est_logiciel_de_stream(&p.name().to_string_lossy()))
+        sys.processes()
+            .values()
+            .any(|p| est_logiciel_de_stream(&p.name().to_string_lossy()))
     })
     .await
     .unwrap_or(false)
-}
-
-/// GhostHandDesk installé (support à distance) : son lien `ghosthanddesk://`, inscrit par
-/// l'appli à chaque lancement (HKCU), pointe vers un exécutable présent. Sans lui,
-/// l'ouverture du lien échoue sans rien montrer : le front propose alors le téléchargement.
-/// Hors Windows, GhostHandDesk n'existe pas.
-#[tauri::command]
-pub async fn ghd_installed() -> bool {
-    #[cfg(windows)]
-    {
-        lire_hkcu_defaut(r"Software\Classes\ghosthanddesk\shell\open\command")
-            .and_then(|c| exe_de_commande(&c))
-            .is_some_and(|exe| Path::new(&exe).is_file())
-    }
-    #[cfg(not(windows))]
-    {
-        false
-    }
-}
-
-/// Valeur par défaut (REG_SZ) d'une clé de HKEY_CURRENT_USER.
-#[cfg(windows)]
-fn lire_hkcu_defaut(sous_cle: &str) -> Option<String> {
-    use windows_sys::Win32::System::Registry::{RegGetValueW, HKEY_CURRENT_USER, RRF_RT_REG_SZ};
-    let cle: Vec<u16> = sous_cle.encode_utf16().chain(Some(0)).collect();
-    let mut buf = [0u16; 2048];
-    let mut taille = (buf.len() * 2) as u32;
-    // SAFETY : clé terminée par NUL ; tampon et taille (en octets) cohérents ; nom NULL = valeur par défaut.
-    let statut = unsafe {
-        RegGetValueW(
-            HKEY_CURRENT_USER,
-            cle.as_ptr(),
-            std::ptr::null(),
-            RRF_RT_REG_SZ,
-            std::ptr::null_mut(),
-            buf.as_mut_ptr().cast(),
-            &mut taille,
-        )
-    };
-    if statut != 0 {
-        return None;
-    }
-    let n = (taille as usize / 2).saturating_sub(1);
-    Some(String::from_utf16_lossy(&buf[..n]))
-}
-
-/// Exécutable d'une commande `shell\open\command` : `"C:\…\ghd.exe" "%1"` → `C:\…\ghd.exe`.
-#[cfg_attr(not(windows), allow(dead_code))]
-fn exe_de_commande(commande: &str) -> Option<String> {
-    let commande = commande.trim();
-    let exe = match commande.strip_prefix('"') {
-        Some(reste) => reste.split('"').next()?,
-        None => commande.split_whitespace().next()?,
-    };
-    (!exe.is_empty()).then(|| exe.to_string())
 }
 
 #[cfg(test)]
@@ -590,26 +660,36 @@ mod tests {
 
     #[test]
     fn executables_reconnus() {
-        for n in ["setup.EXE", "facture.pdf.lnk", "a.ps1", "x.AppImage", "photo.scr", "maj-1.0-1-x86_64.pkg.tar.zst", "a.PKG.TAR.XZ", "x.flatpakref"] {
+        for n in [
+            "setup.EXE",
+            "facture.pdf.lnk",
+            "a.ps1",
+            "x.AppImage",
+            "photo.scr",
+            "maj-1.0-1-x86_64.pkg.tar.zst",
+            "a.PKG.TAR.XZ",
+            "x.flatpakref",
+            "a.msc",
+            "b.appref-ms",
+            "c.SettingContent-ms",
+            "page.HTML",
+            "logo.svg",
+        ] {
             assert!(super::extension_executable(n), "{n}");
         }
-        for n in ["photo.png", "doc.pdf", "notes.txt", "sans-extension", "archive.zip", "sauvegarde.tar.zst"] {
+        for n in [
+            "photo.png",
+            "doc.pdf",
+            "notes.txt",
+            "sans-extension",
+            "archive.zip",
+            "sauvegarde.tar.zst",
+        ] {
             assert!(!super::extension_executable(n), "{n}");
         }
     }
 
     use super::*;
-
-    #[test]
-    fn exe_du_lien_ghosthanddesk() {
-        assert_eq!(
-            exe_de_commande(r#""C:\Users\a b\GhostHandDesk.exe" "%1""#).as_deref(),
-            Some(r"C:\Users\a b\GhostHandDesk.exe")
-        );
-        assert_eq!(exe_de_commande(r"C:\ghd.exe %1").as_deref(), Some(r"C:\ghd.exe"));
-        assert_eq!(exe_de_commande(r#""" "%1""#), None);
-        assert_eq!(exe_de_commande("  "), None);
-    }
 
     #[test]
     fn decode_les_noms() {

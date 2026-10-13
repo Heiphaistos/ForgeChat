@@ -92,45 +92,79 @@ fn paquet() -> String {
 /// et avant `compat::preparer` (qui repose le marqueur de lancement).
 #[cfg(target_os = "linux")]
 pub fn signaler_lancement_precedent() {
-    let Some(dir) = crate::compat::dossier_donnees() else { return };
+    let Some(dir) = crate::compat::dossier_donnees() else {
+        return;
+    };
     let journal = dir.join("forgechat.log");
     let echec = crate::compat::lancement_precedent_echoue();
-    let Some(texte) = lire_fin(&journal) else { return };
+    let Some(texte) = lire_fin(&journal) else {
+        return;
+    };
     // Conservé à côté, et jamais renvoyé deux fois (un lancement depuis un
     // terminal ne réécrit pas le journal).
     let _ = std::fs::rename(&journal, dir.join("forgechat-precedent.log"));
-    let erreurs = ["Processus d'affichage WebKit arrêté", "Chargement échoué", "EGL", "panicked"]
-        .iter()
-        .any(|m| texte.contains(m))
-        || texte.lines().any(|l| l.contains("CONSOLE") && l.contains("ERROR"));
+    let erreurs = [
+        "Processus d'affichage WebKit arrêté",
+        "Chargement échoué",
+        "EGL",
+        "panicked",
+    ]
+    .iter()
+    .any(|m| texte.contains(m))
+        || texte
+            .lines()
+            .any(|l| l.contains("CONSOLE") && l.contains("ERROR"));
     if !echec && !erreurs {
         return;
     }
     let (kind, quoi) = if echec {
         ("startup_failure", "Lancement précédent sans premier rendu")
     } else {
-        ("desktop_log", "Erreurs dans le journal du lancement précédent")
+        (
+            "desktop_log",
+            "Erreurs dans le journal du lancement précédent",
+        )
     };
     let session = std::env::var("XDG_SESSION_TYPE").unwrap_or_else(|_| "?".into());
-    let message = format!("{quoi} — {} ; session {session} ; paquet {}", distribution(), paquet());
+    let message = format!(
+        "{quoi} — {} ; session {session} ; paquet {}",
+        distribution(),
+        paquet()
+    );
     envoyer("linux", kind, message, texte);
 }
 
 #[cfg(windows)]
 fn fichier_panique() -> Option<std::path::PathBuf> {
-    std::env::var_os("LOCALAPPDATA")
-        .map(|d| std::path::PathBuf::from(d).join("org.heiphaistos.forgechat").join("panique.log"))
+    std::env::var_os("LOCALAPPDATA").map(|d| {
+        std::path::PathBuf::from(d)
+            .join("org.heiphaistos.forgechat")
+            .join("panique.log")
+    })
 }
 
 /// Envoie la panique du lancement précédent, puis écrit les suivantes dans un
 /// fichier (sans console, une panique Windows ne laisse aucune trace).
 #[cfg(windows)]
 pub fn surveiller_paniques() {
-    let Some(fichier) = fichier_panique() else { return };
+    let Some(fichier) = fichier_panique() else {
+        return;
+    };
     if let Some(texte) = lire_fin(&fichier) {
         let _ = std::fs::remove_file(&fichier);
-        let premiere = texte.lines().next().unwrap_or("").chars().take(300).collect::<String>();
-        envoyer("windows", "desktop_log", format!("Plantage de l'application : {premiere}"), texte);
+        let premiere = texte
+            .lines()
+            .next()
+            .unwrap_or("")
+            .chars()
+            .take(300)
+            .collect::<String>();
+        envoyer(
+            "windows",
+            "desktop_log",
+            format!("Plantage de l'application : {premiere}"),
+            texte,
+        );
     }
     let defaut = std::panic::take_hook();
     std::panic::set_hook(Box::new(move |info| {
@@ -153,7 +187,8 @@ pub fn read_desktop_log() -> Option<String> {
     #[cfg(target_os = "linux")]
     {
         let dir = crate::compat::dossier_donnees()?;
-        lire_fin(&dir.join("forgechat.log")).or_else(|| lire_fin(&dir.join("forgechat-precedent.log")))
+        lire_fin(&dir.join("forgechat.log"))
+            .or_else(|| lire_fin(&dir.join("forgechat-precedent.log")))
     }
     #[cfg(not(target_os = "linux"))]
     {

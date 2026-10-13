@@ -28,7 +28,10 @@ struct Mem {
     refresh: Option<String>,
 }
 
-static MEM: Mutex<Mem> = Mutex::new(Mem { access: None, refresh: None });
+static MEM: Mutex<Mem> = Mutex::new(Mem {
+    access: None,
+    refresh: None,
+});
 /// Un seul rafraîchissement à la fois : la rotation consomme le jeton côté serveur.
 static REFRESH_LOCK: AsyncMutex<()> = AsyncMutex::const_new(());
 
@@ -42,7 +45,8 @@ fn valid_token(t: &str) -> bool {
 
 /// Nom d'entrée d'un compte mis de côté ; l'id vient du JS, il est donc filtré.
 fn account_key(id: &str) -> Result<String, String> {
-    if id.is_empty() || id.len() > 64 || !id.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-') {
+    if id.is_empty() || id.len() > 64 || !id.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-')
+    {
         return Err("INVALID_ACCOUNT".into());
     }
     Ok(format!("refresh:{id}"))
@@ -70,19 +74,21 @@ async fn kr_get(user: String) -> Option<String> {
 }
 
 async fn kr_set(user: String, secret: String) -> Result<(), String> {
-    blocking(move || match entry(&user).and_then(|e| e.set_password(&secret)) {
-        Ok(()) => {
-            // Le trousseau répond de nouveau : plus de copie de repli.
-            if let Some(f) = session_file::machine() {
-                let _ = f.del(&user);
+    blocking(
+        move || match entry(&user).and_then(|e| e.set_password(&secret)) {
+            Ok(()) => {
+                // Le trousseau répond de nouveau : plus de copie de repli.
+                if let Some(f) = session_file::machine() {
+                    let _ = f.del(&user);
+                }
+                Ok(())
             }
-            Ok(())
-        }
-        Err(e) => match session_file::machine() {
-            Some(f) => f.set(&user, &secret),
-            None => Err(e.to_string()),
+            Err(e) => match session_file::machine() {
+                Some(f) => f.set(&user, &secret),
+                None => Err(e.to_string()),
+            },
         },
-    })
+    )
     .await?
 }
 
@@ -133,7 +139,8 @@ async fn post_refresh(token: &str) -> Result<(String, String), u16> {
         .user_agent(concat!("ForgeChat-Desktop/", env!("CARGO_PKG_VERSION")))
         .build()
         .map_err(|_| 0u16)?;
-    let body = serde_json::to_vec(&serde_json::json!({ "refresh_token": token })).map_err(|_| 0u16)?;
+    let body =
+        serde_json::to_vec(&serde_json::json!({ "refresh_token": token })).map_err(|_| 0u16)?;
     let res = client
         .post(REFRESH_URL)
         .header("content-type", "application/json")
@@ -197,7 +204,10 @@ pub async fn session_refresh() -> Result<String, u16> {
 /// Déconnexion : oublie la session active (les comptes mis de côté restent).
 #[tauri::command]
 pub async fn session_clear() -> Result<(), String> {
-    *mem() = Mem { access: None, refresh: None };
+    *mem() = Mem {
+        access: None,
+        refresh: None,
+    };
     kr_del(ACTIVE.into()).await
 }
 
@@ -217,7 +227,9 @@ pub async fn session_switch(id: String, current: Option<String>) -> Result<Strin
     let current_key = current.as_deref().map(account_key).transpose()?;
     let _guard = REFRESH_LOCK.lock().await;
     let target = kr_get(key.clone()).await.ok_or("UNKNOWN_ACCOUNT")?;
-    let (access, refresh) = post_refresh(&target).await.map_err(|s| format!("HTTP {s}"))?;
+    let (access, refresh) = post_refresh(&target)
+        .await
+        .map_err(|s| format!("HTTP {s}"))?;
     if let (Some(ck), Some(r)) = (current_key, active_refresh().await) {
         kr_set(ck, r).await?;
     }
@@ -261,7 +273,10 @@ mod tests {
             Some(("a.b.c".into(), "r1".into()))
         );
         assert_eq!(parse_tokens(br#"{"access_token":"a"}"#), None);
-        assert_eq!(parse_tokens(br#"{"access_token":"a","refresh_token":""}"#), None);
+        assert_eq!(
+            parse_tokens(br#"{"access_token":"a","refresh_token":""}"#),
+            None
+        );
         assert_eq!(parse_tokens(b"<html>"), None);
     }
 

@@ -22,7 +22,9 @@ use livekit::webrtc::desktop_capturer::{
     CaptureError, DesktopCaptureSourceType, DesktopCapturer, DesktopCapturerOptions, DesktopFrame,
 };
 use livekit::webrtc::native::yuv_helper;
-use livekit::webrtc::prelude::{I420Buffer, VideoBuffer, VideoFrame, VideoResolution, VideoRotation};
+use livekit::webrtc::prelude::{
+    I420Buffer, VideoBuffer, VideoFrame, VideoResolution, VideoRotation,
+};
 use livekit::webrtc::video_source::native::NativeVideoSource;
 
 /// Largeur maximale des images servies à la vue web : au-delà, l'encodage JPEG
@@ -39,7 +41,14 @@ fn clamp(v: i32) -> u8 {
 
 /// I420 (BT.601, plage limitée) vers RGB24.
 pub fn i420_to_rgb(
-    y: &[u8], sy: usize, u: &[u8], su: usize, v: &[u8], sv: usize, w: usize, h: usize,
+    y: &[u8],
+    sy: usize,
+    u: &[u8],
+    su: usize,
+    v: &[u8],
+    sv: usize,
+    w: usize,
+    h: usize,
 ) -> Vec<u8> {
     i420_to_rgb_step(y, sy, u, su, v, sv, w, h, 1)
 }
@@ -48,7 +57,15 @@ pub fn i420_to_rgb(
 /// d'échelle gratuite pour les aperçus (sortie `w/step` x `h/step`).
 #[allow(clippy::too_many_arguments)]
 fn i420_to_rgb_step(
-    y: &[u8], sy: usize, u: &[u8], su: usize, v: &[u8], sv: usize, w: usize, h: usize, step: usize,
+    y: &[u8],
+    sy: usize,
+    u: &[u8],
+    su: usize,
+    v: &[u8],
+    sv: usize,
+    w: usize,
+    h: usize,
+    step: usize,
 ) -> Vec<u8> {
     let (ow, oh) = (w / step, h / step);
     let mut out = vec![0u8; ow * oh * 3];
@@ -82,7 +99,8 @@ pub fn rgb_to_i420(rgb: &[u8], w: u32, h: u32) -> I420Buffer {
             if row % 2 == 0 && col % 2 == 0 {
                 let o = (row / 2) * su as usize + col / 2;
                 u[o] = clamp(((-38 * r - 74 * g + 112 * b + 128) >> 8) + 128);
-                v[(row / 2) * sv as usize + col / 2] = clamp(((112 * r - 94 * g - 18 * b + 128) >> 8) + 128);
+                v[(row / 2) * sv as usize + col / 2] =
+                    clamp(((112 * r - 94 * g - 18 * b + 128) >> 8) + 128);
             }
         }
     }
@@ -125,7 +143,17 @@ pub fn i420_to_jpeg_max(buf: &I420Buffer, max_width: u32) -> Option<Vec<u8>> {
     let step = w.div_ceil(max_width).max(1) as usize;
     let (sy, su, sv) = buf.strides();
     let (y, u, v) = buf.data();
-    let rgb = i420_to_rgb_step(y, sy as usize, u, su as usize, v, sv as usize, w as usize, h as usize, step);
+    let rgb = i420_to_rgb_step(
+        y,
+        sy as usize,
+        u,
+        su as usize,
+        v,
+        sv as usize,
+        w as usize,
+        h as usize,
+        step,
+    );
     encode_jpeg(&rgb, w / step as u32, h / step as u32)
 }
 
@@ -187,12 +215,16 @@ impl VideoServer {
             frames: Arc::new(Frames::default()),
         });
         let s = server.clone();
-        thread::Builder::new().name("fc-mjpeg".into()).spawn(move || {
-            for stream in listener.incoming().flatten() {
-                let s = s.clone();
-                let _ = thread::Builder::new().name("fc-mjpeg-client".into()).spawn(move || s.serve(stream));
-            }
-        })?;
+        thread::Builder::new()
+            .name("fc-mjpeg".into())
+            .spawn(move || {
+                for stream in listener.incoming().flatten() {
+                    let s = s.clone();
+                    let _ = thread::Builder::new()
+                        .name("fc-mjpeg-client".into())
+                        .spawn(move || s.serve(stream));
+                }
+            })?;
         Ok(server)
     }
 
@@ -202,14 +234,18 @@ impl VideoServer {
     }
 
     pub fn publish(&self, key: &str, jpeg: Vec<u8>) {
-        let mut map = self.frames.latest.lock().unwrap();
+        let mut map = self.frames.latest.lock().unwrap_or_else(|e| e.into_inner());
         let seq = map.get(key).map(|(s, _)| s + 1).unwrap_or(1);
         map.insert(key.to_string(), (seq, Arc::new(jpeg)));
         self.frames.changed.notify_all();
     }
 
     pub fn remove(&self, key: &str) {
-        self.frames.latest.lock().unwrap().remove(key);
+        self.frames
+            .latest
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .remove(key);
         self.frames.changed.notify_all();
     }
 
@@ -243,23 +279,34 @@ impl VideoServer {
 
     /// Pousse chaque nouvelle image du flux `key` en message binaire.
     fn stream_ws(&self, stream: TcpStream, key: &str) {
-        let Ok(mut ws) = tungstenite::accept(stream) else { return };
+        let Ok(mut ws) = tungstenite::accept(stream) else {
+            return;
+        };
         let mut last_seq = 0u64;
         // La vue ouvre le canal dès l'annonce de la piste, souvent AVANT la première
         // image : on l'attend (30 s) au lieu de fermer aussitôt (caméra jamais affichée).
         let deadline = std::time::Instant::now() + Duration::from_secs(30);
         loop {
             let frame = {
-                let mut map = self.frames.latest.lock().unwrap();
+                let mut map = self.frames.latest.lock().unwrap_or_else(|e| e.into_inner());
                 loop {
                     match map.get(key) {
                         None if last_seq == 0 && std::time::Instant::now() < deadline => {
-                            map = self.frames.changed.wait_timeout(map, Duration::from_millis(500)).unwrap().0;
+                            map = self
+                                .frames
+                                .changed
+                                .wait_timeout(map, Duration::from_millis(500))
+                                .unwrap_or_else(|e| e.into_inner())
+                                .0;
                         }
                         None => break None, // flux terminé
                         Some((seq, data)) if *seq != last_seq => break Some((*seq, data.clone())),
                         Some(_) => {
-                            let (m, timeout) = self.frames.changed.wait_timeout(map, Duration::from_secs(10)).unwrap();
+                            let (m, timeout) = self
+                                .frames
+                                .changed
+                                .wait_timeout(map, Duration::from_secs(10))
+                                .unwrap_or_else(|e| e.into_inner());
                             map = m;
                             if timeout.timed_out() && !map.contains_key(key) {
                                 break None;
@@ -273,7 +320,10 @@ impl VideoServer {
                 return;
             };
             last_seq = seq;
-            if ws.send(tungstenite::Message::Binary(data.as_ref().clone().into())).is_err() {
+            if ws
+                .send(tungstenite::Message::Binary(data.as_ref().clone().into()))
+                .is_err()
+            {
                 return;
             }
         }
@@ -301,7 +351,10 @@ impl VideoServer {
     }
 
     fn reply(&self, mut stream: TcpStream, status: &str) {
-        let _ = stream.write_all(format!("HTTP/1.1 {status}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n").as_bytes());
+        let _ = stream.write_all(
+            format!("HTTP/1.1 {status}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
+                .as_bytes(),
+        );
     }
 }
 
@@ -325,7 +378,7 @@ impl Drop for Capture {
 type SourceSlot = Arc<Mutex<Option<NativeVideoSource>>>;
 
 fn push(slot: &SourceSlot, frame: &VideoFrame<I420Buffer>) {
-    if let Some(src) = slot.lock().unwrap().as_ref() {
+    if let Some(src) = slot.lock().unwrap_or_else(|e| e.into_inner()).as_ref() {
         src.capture_frame(frame);
     }
 }
@@ -337,7 +390,9 @@ fn frame_of(buffer: I420Buffer) -> VideoFrame<I420Buffer> {
 /// Démarre la capture puis crée la source à la résolution réelle du périphérique.
 fn start<F>(name: &str, screencast: bool, body: F) -> Result<(Capture, NativeVideoSource), String>
 where
-    F: FnOnce(Arc<AtomicBool>, SourceSlot, mpsc::Sender<Result<(u32, u32), String>>) + Send + 'static,
+    F: FnOnce(Arc<AtomicBool>, SourceSlot, mpsc::Sender<Result<(u32, u32), String>>)
+        + Send
+        + 'static,
 {
     let stop = Arc::new(AtomicBool::new(false));
     let slot: SourceSlot = Arc::new(Mutex::new(None));
@@ -347,11 +402,20 @@ where
         .name(name.into())
         .spawn(move || body(s, sl, tx))
         .map_err(|e| e.to_string())?;
-    let mut capture = Capture { stop, handle: Some(handle) };
+    let mut capture = Capture {
+        stop,
+        handle: Some(handle),
+    };
     match rx.recv_timeout(Duration::from_secs(60)) {
         Ok(Ok((w, h))) => {
-            let source = NativeVideoSource::new(VideoResolution { width: w, height: h }, screencast);
-            *slot.lock().unwrap() = Some(source.clone());
+            let source = NativeVideoSource::new(
+                VideoResolution {
+                    width: w,
+                    height: h,
+                },
+                screencast,
+            );
+            *slot.lock().unwrap_or_else(|e| e.into_inner()) = Some(source.clone());
             Ok((capture, source))
         }
         Ok(Err(e)) => Err(e),
@@ -365,23 +429,36 @@ where
 
 /// Webcam V4L2 : MJPEG (décodé par zune-jpeg) ou YUYV. `preview` reçoit
 /// l'aperçu local en JPEG pour la tuile « Vous ».
-pub fn start_camera(preview: Arc<VideoServer>, preview_key: String) -> Result<(Capture, NativeVideoSource), String> {
+pub fn start_camera(
+    preview: Arc<VideoServer>,
+    preview_key: String,
+) -> Result<(Capture, NativeVideoSource), String> {
     use nokhwa::pixel_format::RgbFormat;
-    use nokhwa::utils::{CameraFormat, CameraIndex, FrameFormat, RequestedFormat, RequestedFormatType, Resolution};
+    use nokhwa::utils::{
+        CameraFormat, CameraIndex, FrameFormat, RequestedFormat, RequestedFormatType, Resolution,
+    };
 
     start("fc-camera", false, move |stop, slot, ready| {
         let wanted = CameraFormat::new(Resolution::new(1280, 720), FrameFormat::MJPEG, 30);
         let fmt = RequestedFormat::new::<RgbFormat>(RequestedFormatType::Closest(wanted));
-        let mut cam = match nokhwa::Camera::new(CameraIndex::Index(0), fmt).and_then(|mut c| c.open_stream().map(|_| c)) {
+        let mut cam = match nokhwa::Camera::new(CameraIndex::Index(0), fmt)
+            .and_then(|mut c| c.open_stream().map(|_| c))
+        {
             Ok(c) => c,
-            Err(e) => { let _ = ready.send(Err(format!("caméra indisponible : {e}"))); return; }
+            Err(e) => {
+                let _ = ready.send(Err(format!("caméra indisponible : {e}")));
+                return;
+            }
         };
         let res = cam.resolution();
         let (w, h) = (res.width() & !1, res.height() & !1);
         let _ = ready.send(Ok((w, h)));
         let mut last_preview = Instant::now() - Duration::from_secs(1);
         while !stop.load(Ordering::Relaxed) {
-            let Ok(frame) = cam.frame() else { thread::sleep(Duration::from_millis(20)); continue };
+            let Ok(frame) = cam.frame() else {
+                thread::sleep(Duration::from_millis(20));
+                continue;
+            };
             let raw = frame.buffer();
             let show = last_preview.elapsed() >= Duration::from_millis(66);
             match frame.source_frame_format() {
@@ -389,12 +466,17 @@ pub fn start_camera(preview: Arc<VideoServer>, preview_key: String) -> Result<(C
                     let mut dec = zune_jpeg::JpegDecoder::new(std::io::Cursor::new(raw));
                     let Ok(rgb) = dec.decode() else { continue };
                     push(&slot, &frame_of(rgb_to_i420(&rgb, w, h)));
-                    if show { preview.publish(&preview_key, raw.to_vec()); last_preview = Instant::now(); }
+                    if show {
+                        preview.publish(&preview_key, raw.to_vec());
+                        last_preview = Instant::now();
+                    }
                 }
                 FrameFormat::YUYV => {
                     let frame = frame_of(yuyv_to_i420(raw, w, h));
                     if show {
-                        if let Some(j) = i420_to_jpeg_max(&frame.buffer, 640) { preview.publish(&preview_key, j); }
+                        if let Some(j) = i420_to_jpeg_max(&frame.buffer, 640) {
+                            preview.publish(&preview_key, j);
+                        }
                         last_preview = Instant::now();
                     }
                     push(&slot, &frame);
@@ -428,15 +510,21 @@ pub fn start_screen(
                 // Sélecteur annulé avant la première image : on le dit tout de
                 // suite au lieu d'attendre les 60 s du démarrage.
                 Err(CaptureError::Permanent) => {
-                    if let Some(tx) = ready_cb.lock().unwrap().take() { let _ = tx.send(Err("partage d'écran annulé".into())); }
+                    if let Some(tx) = ready_cb.lock().unwrap_or_else(|e| e.into_inner()).take() {
+                        let _ = tx.send(Err("partage d'écran annulé".into()));
+                    }
                     ended_cb.store(true, Ordering::Relaxed);
                     return;
                 }
                 Err(CaptureError::Temporary) => return,
             };
             let (w, h) = (frame.width() & !1, frame.height() & !1);
-            if w <= 0 || h <= 0 { return; }
-            if let Some(tx) = ready_cb.lock().unwrap().take() { let _ = tx.send(Ok((w as u32, h as u32))); }
+            if w <= 0 || h <= 0 {
+                return;
+            }
+            if let Some(tx) = ready_cb.lock().unwrap_or_else(|e| e.into_inner()).take() {
+                let _ = tx.send(Ok((w as u32, h as u32)));
+            }
             if out.buffer.width() as i32 != w || out.buffer.height() as i32 != h {
                 out.buffer = I420Buffer::new(w as u32, h as u32);
             }
@@ -447,13 +535,17 @@ pub fn start_screen(
             // Aperçu local réduit, 5 images/s : juste de quoi savoir ce qu'on partage.
             if last_preview.elapsed() >= Duration::from_millis(200) {
                 last_preview = Instant::now();
-                if let Some(j) = i420_to_jpeg_max(&out.buffer, 640) { pv.publish(&pk, j); }
+                if let Some(j) = i420_to_jpeg_max(&out.buffer, 640) {
+                    pv.publish(&pk, j);
+                }
             }
         };
         let options = DesktopCapturerOptions::new(DesktopCaptureSourceType::Generic);
         let Some(mut capturer) = DesktopCapturer::new(options) else {
             eprintln!("[ForgeChat] capture d'écran indisponible");
-            if let Some(tx) = ready.lock().unwrap().take() { let _ = tx.send(Err("capture d'écran indisponible".into())); }
+            if let Some(tx) = ready.lock().unwrap_or_else(|e| e.into_inner()).take() {
+                let _ = tx.send(Err("capture d'écran indisponible".into()));
+            }
             return;
         };
         let source = capturer.get_source_list().first().cloned();
@@ -475,14 +567,23 @@ mod tests {
 
     #[test]
     fn un_aller_retour_rgb_i420_rgb_garde_les_couleurs() {
-        for (r, g, b) in [(255u8, 0u8, 0u8), (0, 255, 0), (0, 0, 255), (128, 128, 128), (250, 200, 30)] {
+        for (r, g, b) in [
+            (255u8, 0u8, 0u8),
+            (0, 255, 0),
+            (0, 0, 255),
+            (128, 128, 128),
+            (250, 200, 30),
+        ] {
             let rgb: Vec<u8> = (0..16 * 16).flat_map(|_| [r, g, b]).collect();
             let buf = rgb_to_i420(&rgb, 16, 16);
             let (sy, su, sv) = buf.strides();
             let (y, u, v) = buf.data();
             let back = i420_to_rgb(y, sy as usize, u, su as usize, v, sv as usize, 16, 16);
             for (a, b) in rgb.iter().zip(back.iter()) {
-                assert!((*a as i32 - *b as i32).abs() <= 8, "{a} -> {b} pour {r},{g},{b}");
+                assert!(
+                    (*a as i32 - *b as i32).abs() <= 8,
+                    "{a} -> {b} pour {r},{g},{b}"
+                );
             }
         }
     }
@@ -496,7 +597,10 @@ mod tests {
         let info = dec.info().unwrap();
         assert_eq!((info.width, info.height), (1280, 720));
         let (r, g, b) = (pixels[0] as i32, pixels[1] as i32, pixels[2] as i32);
-        assert!((r - 30).abs() < 16 && (g - 144).abs() < 16 && (b - 255).abs() < 16, "{r},{g},{b}");
+        assert!(
+            (r - 30).abs() < 16 && (g - 144).abs() < 16 && (b - 255).abs() < 16,
+            "{r},{g},{b}"
+        );
     }
 
     #[test]

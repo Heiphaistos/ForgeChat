@@ -75,7 +75,9 @@ pub fn permissions_appli_seulement(app: &tauri::AppHandle) {
     };
     use webview2_com::{take_pwstr, PermissionRequestedEventHandler};
 
-    let Some(fenetre) = app.get_webview_window("main") else { return };
+    let Some(fenetre) = app.get_webview_window("main") else {
+        return;
+    };
     let pose = fenetre.with_webview(|vue| unsafe {
         let Ok(coeur) = vue.controller().CoreWebView2() else {
             eprintln!("[ForgeChat] CoreWebView2 indisponible : permissions média non filtrées");
@@ -147,7 +149,9 @@ mod tests {
     #[test]
     fn origine_de_l_appli_seulement() {
         assert!(origine_appli(&u("http://tauri.localhost/")));
-        assert!(!origine_appli(&u("https://www.youtube-nocookie.com/embed/x")));
+        assert!(!origine_appli(&u(
+            "https://www.youtube-nocookie.com/embed/x"
+        )));
         assert!(!origine_appli(&u("https://evil.example/")));
         assert!(!origine_appli(&u("http://tauri.localhost@evil.example/")));
     }
