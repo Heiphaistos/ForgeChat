@@ -96,7 +96,7 @@ pub struct UpdateInfo {
     pub notes: String,
     pub pub_date: String,
     /// Cible retenue : `windows-x86_64`, `windows-portable`, `linux-x86_64`,
-    /// `linux-rpm`, `linux-arch`, `linux-portable`, `macos`. Affiché dans l'UI pour que l'utilisateur sache quel
+    /// `linux-rpm`, `linux-arch`, `linux-flatpak`, `linux-portable`, `macos`. Affiché dans l'UI pour que l'utilisateur sache quel
     /// chemin va être pris.
     pub target: String,
     /// Vrai quand la mise à jour remplace l'exécutable sur place (pas
@@ -165,11 +165,19 @@ fn installee_par(gestionnaire: &str, option: &str) -> bool {
         .unwrap_or(false)
 }
 
+/// Copie lancée par Flatpak (bac à sable, `/app` en lecture seule) : `/.flatpak-info` n'existe que là.
+fn en_flatpak() -> bool {
+    cfg!(target_os = "linux") && Path::new("/.flatpak-info").exists()
+}
+
 /// Cible du manifeste correspondant à cette copie.
 fn cible() -> &'static str {
     // macOS : un seul format, le paquet `.app` remplacé sur place (archive `.app.tar.gz`).
     if cfg!(target_os = "macos") {
         return "macos";
+    }
+    if en_flatpak() {
+        return "linux-flatpak";
     }
     let installee = est_installee();
     if cfg!(windows) {
@@ -639,6 +647,21 @@ fn dossier_prive() -> Result<PathBuf, String> {
     Ok(dossier)
 }
 
+/// Cache de l'appli Flatpak (`~/.var/app/<id>/cache` vu de l'hôte), où l'utilisateur prend le paquet
+/// à installer. Privé à son compte : nom fixe (celui que l'interface affiche), ancienne copie remplacée.
+fn dossier_flatpak() -> Result<PathBuf, String> {
+    let dossier = std::env::var_os("XDG_CACHE_HOME")
+        .map(PathBuf::from)
+        .ok_or_else(|| "dossier de cache Flatpak introuvable".to_string())?;
+    std::fs::create_dir_all(&dossier).map_err(|e| format!("dossier de mise à jour impossible à créer : {e}"))?;
+    for entree in std::fs::read_dir(&dossier).into_iter().flatten().flatten() {
+        if entree.file_name().to_string_lossy().ends_with(".flatpak") {
+            let _ = std::fs::remove_file(entree.path());
+        }
+    }
+    Ok(dossier)
+}
+
 /// Écrit l'artefact vérifié dans le dossier temporaire et le lance.
 fn lancer_installeur(octets: &[u8], info: &UpdateInfo) -> Result<(), String> {
     let nom = info
@@ -653,7 +676,7 @@ fn lancer_installeur(octets: &[u8], info: &UpdateInfo) -> Result<(), String> {
         return Err("nom d'artefact refusé".into());
     }
 
-    let chemin = dossier_prive()?.join(nom);
+    let chemin = if en_flatpak() { dossier_flatpak()? } else { dossier_prive()? }.join(nom);
     {
         // create_new : jamais un fichier préparé d'avance par un autre compte.
         use std::io::Write;
@@ -687,6 +710,11 @@ fn lancer_installeur(octets: &[u8], info: &UpdateInfo) -> Result<(), String> {
 
     #[cfg(not(windows))]
     {
+        // Flatpak : l'appli ne peut pas se réinstaller depuis son bac à sable. Le paquet vérifié reste
+        // dans son cache, que l'utilisateur voit (~/.var/app/<id>/cache) ; l'interface lui donne la commande.
+        if en_flatpak() {
+            return Ok(());
+        }
         // Un `.deb` ne s'installe pas sans les droits root : on ne peut pas le
         // faire à la place de l'utilisateur sans lui demander son mot de passe.
         // On lui remet le paquet vérifié, ouvert dans son installeur graphique.
@@ -995,6 +1023,7 @@ mod tests {
         );
         assert!(nom_artefact(&format!("{b}ForgeChat-v3.25.0-amd64.deb"), "3.25.0").is_ok());
         assert!(nom_artefact(&format!("{b}ForgeChat-v3.25.0-x86_64.pkg.tar.zst"), "3.25.0").is_ok());
+        assert!(nom_artefact(&format!("{b}ForgeChat-v3.25.0-x86_64.flatpak"), "3.25.0").is_ok());
         for url in [
             "https://evil.example/desktop/ForgeChat-Setup-v3.25.0.exe".to_string(),
             "http://forgechat.heiphaistos.org/desktop/ForgeChat-Setup-v3.25.0.exe".to_string(),
@@ -1029,7 +1058,7 @@ mod tests {
     fn la_cible_est_une_des_quatre_publiees() {
         assert!(matches!(
             cible(),
-            "windows-x86_64" | "windows-portable" | "linux-x86_64" | "linux-rpm" | "linux-arch" | "linux-portable" | "macos"
+            "windows-x86_64" | "windows-portable" | "linux-x86_64" | "linux-rpm" | "linux-arch" | "linux-flatpak" | "linux-portable" | "macos"
         ));
     }
 

@@ -191,6 +191,7 @@ function Linux() {
   const deb = r?.platforms['linux-x86_64']
   const rpm = r?.platforms['linux-rpm']
   const arch = r?.platforms['linux-arch']
+  const flatpak = r?.platforms['linux-flatpak']
   const app = r?.platforms['linux-portable']
   const nom = (a?: Artefact) => (a ? a.url.split('/').pop() : '…')
   return (
@@ -199,6 +200,7 @@ function Linux() {
         <Bouton a={deb} titre=".deb" sous="Ubuntu, Debian, Mint" primaire />
         <Bouton a={rpm} titre=".rpm" sous="Fedora, openSUSE" />
         <Bouton a={arch} titre=".pkg.tar.zst" sous="Arch, Omarchy, Manjaro" />
+        <Bouton a={flatpak} titre="Flatpak" sous="toutes distributions" />
         <Bouton a={app} titre="AppImage" sous="toutes distributions" />
       </EnTete>
       <div className="site-wrap">
@@ -214,6 +216,10 @@ function Linux() {
           <Etape titre="Arch, Omarchy, Manjaro, EndeavourOS (.pkg.tar.zst)">
             <Copier texte={`sudo pacman -U ./${nom(arch)}`} />
           </Etape>
+          <Etape titre="N'importe quelle distribution (Flatpak)">
+            <p>Flatpak installe aussi le socle GNOME depuis Flathub au premier passage :</p>
+            <Copier texte={`flatpak install --user ./${nom(flatpak)}`} />
+          </Etape>
           <Etape titre="N'importe quelle distribution (AppImage)">
             <p>Rendez le fichier exécutable puis lancez-le :</p>
             <Copier texte={`chmod +x ${nom(app)} && ./${nom(app)}`} />
@@ -223,7 +229,7 @@ function Linux() {
           </Etape>
         </Etapes>
         <MisesAJour>
-          <p>L'AppImage se remplace elle-même. Avec le .deb, le .rpm ou le paquet Arch, ForgeChat télécharge et vérifie le nouveau paquet puis l'ouvre dans votre installeur : il ne reste qu'à valider avec votre mot de passe.</p>
+          <p>L'AppImage se remplace elle-même. Avec le .deb, le .rpm ou le paquet Arch, ForgeChat télécharge et vérifie le nouveau paquet puis l'ouvre dans votre installeur : il ne reste qu'à valider avec votre mot de passe. Le Flatpak télécharge et vérifie le nouveau paquet, puis vous donne la commande qui l'installe.</p>
         </MisesAJour>
       </div>
     </>

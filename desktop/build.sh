@@ -123,6 +123,13 @@ if command -v makepkg >/dev/null && [ -f "$OUT/ForgeChat-v$VERSION-amd64.deb" ];
     echo "[OK] .pkg.tar.zst : dist-desktop/ForgeChat-v$VERSION-x86_64.pkg.tar.zst"
 fi
 
+# Flatpak (toutes distributions) : meme binaire que le .deb, runtime GNOME. Seulement si l'outillage est la.
+if command -v flatpak >/dev/null && { command -v flatpak-builder >/dev/null || flatpak info org.flatpak.Builder >/dev/null 2>&1; } \
+    && [ -f "$OUT/ForgeChat-v$VERSION-amd64.deb" ]; then
+    bash "$SCRIPT_DIR/flatpak/paquet.sh" "$OUT/ForgeChat-v$VERSION-amd64.deb" "$OUT/ForgeChat-v$VERSION-x86_64.flatpak"
+    echo "[OK] .flatpak   : dist-desktop/ForgeChat-v$VERSION-x86_64.flatpak"
+fi
+
 echo
 echo "============================================"
 echo "  Build termine ! Dossier : dist-desktop/"

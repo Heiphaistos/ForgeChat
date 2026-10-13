@@ -92,18 +92,28 @@ pub fn preparer() -> bool {
         let _ = std::fs::write(d.join(EN_COURS), "");
     }
     if on {
-        for (k, v) in [
-            ("GDK_BACKEND", "x11"),
-            ("LIBGL_ALWAYS_SOFTWARE", "1"),
-            ("__NV_DISABLE_EXPLICIT_SYNC", "1"),
-        ] {
+        let x11 = std::env::var_os("DISPLAY").is_some_and(|d| !d.is_empty());
+        for (k, v) in variables_compat(x11) {
             if std::env::var_os(k).is_none() {
                 std::env::set_var(k, v);
             }
         }
-        eprintln!("[ForgeChat] Mode compatibilité actif (X11 + rendu logiciel).");
+        eprintln!(
+            "[ForgeChat] Mode compatibilité actif ({}rendu logiciel).",
+            if x11 { "X11 + " } else { "" }
+        );
     }
     on
+}
+
+/// Variables du mode compatibilité. X11 seulement si un affichage X existe : sans lui (Wayland sans
+/// XWayland, Flatpak sous Wayland), GTK ne démarre pas et le mode, retenu, bloquerait chaque lancement.
+fn variables_compat(x11: bool) -> Vec<(&'static str, &'static str)> {
+    let mut v = vec![("LIBGL_ALWAYS_SOFTWARE", "1"), ("__NV_DISABLE_EXPLICIT_SYNC", "1")];
+    if x11 {
+        v.insert(0, ("GDK_BACKEND", "x11"));
+    }
+    v
 }
 
 /// Le client a affiché son premier écran : ce lancement a réussi.
@@ -172,4 +182,17 @@ pub fn journal_si_pas_de_terminal() {
         libc::dup2(f.as_raw_fd(), 2);
     }
     eprintln!("[ForgeChat] {} — journal de démarrage", env!("CARGO_PKG_VERSION"));
+}
+
+#[cfg(test)]
+mod tests {
+    use super::variables_compat;
+
+    #[test]
+    fn x11_force_seulement_avec_un_affichage_x() {
+        assert!(variables_compat(true).contains(&("GDK_BACKEND", "x11")));
+        let sans_x = variables_compat(false);
+        assert!(!sans_x.iter().any(|(k, _)| *k == "GDK_BACKEND"));
+        assert!(sans_x.contains(&("LIBGL_ALWAYS_SOFTWARE", "1")));
+    }
 }
