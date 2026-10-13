@@ -18,6 +18,7 @@ import AppIconPicker from './appearance/AppIconPicker'
 const AVATAR_SHAPES: { id: string; label: Key }[] = [
   { id: 'round', label: 'settings.appearance.round' },
   { id: 'rounded', label: 'settings.appearance.rounded' },
+  { id: 'squircle', label: 'looksMore.avatar.squircle' },
   { id: 'square', label: 'settings.appearance.square' },
 ]
 

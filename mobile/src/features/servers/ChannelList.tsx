@@ -6,7 +6,7 @@ import { useMemo, useState } from 'react'
 import { Alert, Pressable, RefreshControl, SectionList, StyleSheet, Text, View } from 'react-native'
 import { serversApi } from '@/api/servers'
 import { settingsApi } from '@/api/settings'
-import { categoryLookFor, categoryStyles } from '@/features/appearance/categoryLook'
+import { categoryArrow, categoryLookFor, categoryStyles, categoryTitle } from '@/features/appearance/categoryLook'
 import { themeStudioKey } from '@/features/appearance/sync'
 import { useAppearance } from '@/theme/prefs'
 import { Avatar } from '@/components/Avatar'
@@ -95,6 +95,7 @@ export function ChannelList({
   const studio = useQuery({ queryKey: themeStudioKey, queryFn: settingsApi.themeStudio, staleTime: 60_000 })
   const catLook = categoryLookFor(studio.data, server.id)
   const catStyle = categoryStyles(catLook)
+  const catArrow = (folded: boolean) => categoryArrow(catLook, folded)
   const [menu, setMenu] = useState(false)
   const [channelMenu, setChannelMenu] = useState<Channel | null>(null)
   const [categoryMenu, setCategoryMenu] = useState<Category | null>(null)
@@ -181,8 +182,9 @@ export function ChannelList({
               onAccessibilityAction={(e) => e.nativeEvent.actionName === 'longpress' && setCategoryMenu(cat)}
               style={[styles.categoryRow, catStyle.row]}
             >
-              <Ionicons name={folded ? 'chevron-forward' : 'chevron-down'} size={12} color={colors.textMuted} />
-              <Text style={[styles.category, catStyle.text]}>{catLook.uppercase ? cat.name.toUpperCase() : cat.name}</Text>
+              <CategoryArrow name={catArrow(folded)} />
+              {catStyle.icon ? <Text style={[styles.category, catStyle.text, { backgroundColor: undefined, borderWidth: 0 }]} accessible={false}>{catStyle.icon} </Text> : null}
+              <Text style={[styles.category, catStyle.text]}>{categoryTitle(catLook, cat.name)}</Text>
             </Pressable>
           ) : (
             <View style={{ height: spacing.sm }} />
@@ -254,6 +256,11 @@ export function ChannelList({
       />
     </View>
   )
+}
+
+/** Flèche de repli des catégories (style choisi sur le web ; null = aucune). */
+function CategoryArrow({ name }: { name: ReturnType<typeof categoryArrow> }) {
+  return name ? <Ionicons name={name} size={12} color={colors.textMuted} /> : null
 }
 
 const styles = StyleSheet.create({

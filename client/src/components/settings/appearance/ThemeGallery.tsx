@@ -17,6 +17,8 @@ type SchemeFilter = 'any' | 'dark' | 'light'
 const HUE_BUCKETS = Array.from({ length: 12 }, (_, i) => i * 30)
 /** Vignettes affichées d'un coup (plus de 1 200 thèmes : affichage par pages). */
 const PAGE = 48
+/** Nombre de thèmes de chaque collection (affiché sur l'onglet). */
+const GROUP_COUNTS = PRESETS.reduce<Record<string, number>>((acc, p) => { acc[p.group] = (acc[p.group] ?? 0) + 1; return acc }, {})
 
 const inBucket = (hue: number, bucket: number) => Math.abs(((((hue - bucket) % 360) + 540) % 360) - 180) <= 15
 /** Recherche insensible à la casse et aux accents (« eme » trouve « Émeraude »). */
@@ -75,6 +77,15 @@ export default function ThemeGallery({ onEdit }: { onEdit: (t: CustomTheme) => v
     })
   }, [tab, query, searching, hue, scheme])
 
+  const filtered = hue !== null || scheme !== 'any'
+  /** Thèmes de l'onglet (ou de la recherche) que les filtres de couleur ou de luminosité masquent. */
+  const hiddenByFilters = useMemo(() => {
+    if (!filtered || (tab === 'custom' && !searching)) return 0
+    const q = fold(query.trim())
+    const all = PRESETS.filter(p => (searching ? fold(`${p.label.fr} ${p.label.en} ${p.id}`).includes(q) : p.group === tab)).length
+    return all - shown.length
+  }, [filtered, tab, searching, query, shown.length])
+
   const full = customs.length >= MAX_CUSTOM_THEMES
   const create = (spec: ThemeSpec, name: string) => {
     if (full) { toast.error(t('themes.tooMany', { n: MAX_CUSTOM_THEMES })); return null }
@@ -124,7 +135,8 @@ export default function ThemeGallery({ onEdit }: { onEdit: (t: CustomTheme) => v
           {TABS.map(id => (
             <button key={id} role="tab" aria-selected={!searching && tab === id} onClick={() => { setTab(id); setQuery(''); resetPage() }}
               className={`px-3 py-1 rounded-md text-xs font-medium transition ${!searching && tab === id ? 'bg-fc-accent text-white' : 'text-fc-muted hover:text-white'}`}>
-              {t(`themes.tab.${id}` as Key)}{id === 'custom' && customs.length ? ` (${customs.length})` : ''}
+              {t(`themes.tab.${id}` as Key)}
+              <span className="ml-1 opacity-70 tabular-nums">{id === 'custom' ? customs.length || '' : GROUP_COUNTS[id]}</span>
             </button>
           ))}
         </div>
@@ -184,7 +196,20 @@ export default function ThemeGallery({ onEdit }: { onEdit: (t: CustomTheme) => v
             ))}
           </div>
         </div>
-        {listed && <p className="text-xs text-fc-muted" aria-live="polite">{t('themes.count', { n: shown.length })}</p>}
+        {listed && (
+          <div className="flex flex-wrap items-center gap-2 text-xs text-fc-muted" aria-live="polite">
+            <span>{t('themes.count', { n: shown.length })}</span>
+            {/* Filtres de couleur ou de luminosité gardés d'un onglet à l'autre : le dire, et pouvoir les retirer. */}
+            {filtered && hiddenByFilters > 0 && (
+              <>
+                <span>{t('looksMore.gallery.hidden', { n: hiddenByFilters })}</span>
+                <button onClick={() => { setHue(null); setScheme('any'); resetPage() }} className="underline hover:text-fc-text">
+                  {t('looksMore.gallery.clearFilters')}
+                </button>
+              </>
+            )}
+          </div>
+        )}
       </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
@@ -205,9 +230,14 @@ export default function ThemeGallery({ onEdit }: { onEdit: (t: CustomTheme) => v
         ))}
       </div>
       {shown.length > limit && (
-        <button onClick={() => setLimit(l => l + PAGE * 2)} className="w-full py-2 rounded-lg text-sm border border-fc-hover text-fc-text hover:bg-fc-hover">
-          {t('themes.showMore', { n: shown.length - limit })}
-        </button>
+        <div className="flex gap-2">
+          <button onClick={() => setLimit(l => l + PAGE * 2)} className="flex-1 py-2 rounded-lg text-sm border border-fc-hover text-fc-text hover:bg-fc-hover">
+            {t('themes.showMore', { n: shown.length - limit })}
+          </button>
+          <button onClick={() => setLimit(shown.length)} className="px-4 py-2 rounded-lg text-sm border border-fc-hover text-fc-text hover:bg-fc-hover">
+            {t('looksMore.gallery.showAll', { n: shown.length })}
+          </button>
+        </div>
       )}
       {listed && !shown.length && <p className="text-sm text-fc-muted">{t('themes.noMatch')}</p>}
       {!listed && !customs.length && <p className="text-sm text-fc-muted">{t('themes.noCustom')}</p>}

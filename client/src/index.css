@@ -428,8 +428,8 @@ a.text-fc-accent { color: rgb(var(--fc-link-rgb)); text-decoration: underline; t
 /* Verre dépoli : flou derrière les couches flottantes d'un thème translucide. */
 html[data-fc-glass] :is([class~="fixed"]:not(nav), [class~="absolute"], [role="dialog"], [role="menu"], [role="listbox"]):is([class~="bg-fc-bg"], [class~="bg-fc-sidebar"], [class~="bg-fc-channel"], [class~="bg-fc-chat"], [class~="bg-fc-input"]),
 html[data-fc-glass] :is([class~="fixed"]:not(nav), [role="dialog"], [role="alertdialog"]) > :is([class~="bg-fc-bg"], [class~="bg-fc-sidebar"], [class~="bg-fc-channel"], [class~="bg-fc-chat"]) {
-  -webkit-backdrop-filter: blur(var(--fc-glass-blur)) saturate(1.3);
-  backdrop-filter: blur(var(--fc-glass-blur)) saturate(1.3);
+  -webkit-backdrop-filter: blur(calc(var(--fc-glass-blur) * var(--fc-glass-k, 1))) saturate(1.3);
+  backdrop-filter: blur(calc(var(--fc-glass-blur) * var(--fc-glass-k, 1))) saturate(1.3);
 }
 
 /* Bordures fines (AMOLED) : le relief passe par le trait, jamais par un fond gris. */
@@ -480,40 +480,135 @@ html[data-fc-composer="attached"] .fc-composer-box {
 }
 
 /* ── CATÉGORIES DES SALONS (Apparence → Disposition, ou propre à un serveur) ──────────────
-   .fc-cat = en-tête de catégorie, .fc-cat-label = son titre. Couleur : --fc-cat-rgb, sinon
-   l'accent du thème. Le fond garde la couleur du panneau (en-têtes collants) : les teintes se
-   posent en background-image par-dessus. */
-html:not([data-fc-cat-upper]) .fc-cat-label { text-transform: none; letter-spacing: normal; }
-html[data-fc-cat]:not([data-fc-cat="auto"]):not([data-fc-cat="outline"]) .fc-cat { outline: none !important; }
-html[data-fc-cat="outline"] .fc-cat {
+   .fc-cat = en-tête de catégorie (attributs data-shape/font/weight/align/upper posés par React :
+   barre des salons et aperçus de l'éditeur), .fc-cat-main = flèche + icône + titre, .fc-cat-label = titre.
+   Couleur : --fc-cat-rgb, sinon l'accent du thème ; seconde couleur : --fc-cat2-rgb, sinon les
+   liens ; --fc-cat-ink = noir ou blanc lisible sur la couleur pleine. Toutes ces valeurs viennent de
+   serverLook.ts (identifiants de liste, #rrggbb convertis en nombres, nombres bornés). Le fond garde
+   la couleur du panneau (en-têtes collants) : les teintes se posent en background-image par-dessus. */
+.fc-cat {
+  --c: var(--fc-cat-rgb, var(--fc-accent-rgb));
+  --c2: var(--fc-cat2-rgb, var(--fc-link-rgb));
+  --ink: var(--fc-cat-ink, 255 255 255);
+}
+.fc-cat[data-shape] .fc-cat-label { font-size: var(--fc-cat-size, 12px); letter-spacing: var(--fc-cat-ls, 0.025em); }
+.fc-cat[data-upper="false"] .fc-cat-label { text-transform: none; }
+.fc-cat[data-font="sans"] .fc-cat-label { font-family: Inter, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; }
+.fc-cat[data-font="serif"] .fc-cat-label { font-family: Georgia, 'Times New Roman', Cambria, serif; }
+.fc-cat[data-font="mono"] .fc-cat-label { font-family: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace; }
+.fc-cat[data-font="rounded"] .fc-cat-label { font-family: ui-rounded, 'SF Pro Rounded', 'Nunito', 'Varela Round', sans-serif; }
+.fc-cat[data-font="condensed"] .fc-cat-label { font-family: 'Arial Narrow', 'Roboto Condensed', 'Helvetica Neue', sans-serif; font-stretch: condensed; }
+.fc-cat[data-font="display"] .fc-cat-label { font-family: Impact, 'Haettenschweiler', 'Arial Black', sans-serif; }
+.fc-cat[data-font="hand"] .fc-cat-label { font-family: 'Segoe Print', 'Bradley Hand', 'Comic Sans MS', cursive; }
+.fc-cat[data-weight="regular"] .fc-cat-label { font-weight: 400; }
+.fc-cat[data-weight="bold"] .fc-cat-label { font-weight: 700; }
+.fc-cat[data-weight="black"] .fc-cat-label { font-weight: 900; }
+.fc-cat[data-align="center"] .fc-cat-main { flex: 1; justify-content: center; }
+.fc-cat[data-align="right"] .fc-cat-main { flex: 1; justify-content: flex-end; }
+.fc-cat-icon { font-size: calc(var(--fc-cat-size, 12px) * 1.05); line-height: 1; }
+
+.fc-cat[data-shape]:not([data-shape="auto"]):not([data-shape="outline"]) { outline: none !important; }
+.fc-cat[data-shape="outline"] {
   outline: 1px solid rgb(var(--fc-cat-rgb, var(--fc-border-rgb))) !important;
   outline-offset: -1px;
   border-radius: calc(6px * var(--fc-radius, 1));
 }
-html[data-fc-cat="pill"] .fc-cat {
+.fc-cat[data-shape="pill"] {
   border-radius: 9999px;
   margin-bottom: 2px;
-  background-image: linear-gradient(rgb(var(--fc-cat-rgb, var(--fc-accent-rgb)) / 0.16), rgb(var(--fc-cat-rgb, var(--fc-accent-rgb)) / 0.16));
+  background-image: linear-gradient(rgb(var(--c) / 0.16), rgb(var(--c) / 0.16));
 }
-html[data-fc-cat="pill"] .fc-cat:hover { background-image: linear-gradient(rgb(var(--fc-cat-rgb, var(--fc-accent-rgb)) / 0.28), rgb(var(--fc-cat-rgb, var(--fc-accent-rgb)) / 0.28)); }
-html[data-fc-cat="pill"] .fc-cat-label,
-html[data-fc-cat="bar"] .fc-cat-label,
-html[data-fc-cat="underline"] .fc-cat-label { color: rgb(var(--fc-cat-rgb, var(--fc-accent-rgb))); }
-html[data-fc-cat="card"] .fc-cat {
+.fc-cat[data-shape="pill"]:hover { background-image: linear-gradient(rgb(var(--c) / 0.28), rgb(var(--c) / 0.28)); }
+.fc-cat:is([data-shape="pill"], [data-shape="bar"], [data-shape="underline"], [data-shape="boxed"], [data-shape="neon"],
+  [data-shape="smallcaps"], [data-shape="chip"], [data-shape="terminal"], [data-shape="glow"], [data-shape="double"],
+  [data-shape="dashed"], [data-shape="fade"], [data-shape="overline"], [data-shape="arrow"], [data-shape="slant"],
+  [data-shape="stamp"]) .fc-cat-label { color: rgb(var(--c)); }
+.fc-cat:is([data-shape="card"], [data-shape="bracket"], [data-shape="shadow"], [data-shape="stripes"], [data-shape="tab"],
+  [data-shape="highlight"], [data-shape="glass"], [data-shape="dot"]) .fc-cat-label { color: rgb(var(--fc-text-rgb)); }
+.fc-cat[data-shape="card"] {
   border-radius: calc(8px * var(--fc-radius, 1));
   margin-bottom: 3px;
   background-image: linear-gradient(rgb(var(--fc-hover-rgb)), rgb(var(--fc-hover-rgb)));
   box-shadow: 0 1px 3px rgb(0 0 0 / 0.35), inset 0 0 0 1px rgb(var(--fc-cat-rgb, var(--fc-border-rgb)) / 0.6);
 }
-html[data-fc-cat="card"] .fc-cat-label { color: rgb(var(--fc-text-rgb)); }
-html[data-fc-cat="bar"] .fc-cat {
-  border-left: 3px solid rgb(var(--fc-cat-rgb, var(--fc-accent-rgb)));
+.fc-cat[data-shape="bar"] {
+  border-left: 3px solid rgb(var(--c));
   border-radius: 0 calc(6px * var(--fc-radius, 1)) calc(6px * var(--fc-radius, 1)) 0;
-  background-image: linear-gradient(90deg, rgb(var(--fc-cat-rgb, var(--fc-accent-rgb)) / 0.18), transparent 85%);
+  background-image: linear-gradient(90deg, rgb(var(--c) / 0.18), transparent 85%);
 }
-html[data-fc-cat="underline"] .fc-cat {
-  border-radius: 0;
-  box-shadow: inset 0 -1px 0 rgb(var(--fc-cat-rgb, var(--fc-accent-rgb)) / 0.7);
+.fc-cat[data-shape="underline"] { border-radius: 0; box-shadow: inset 0 -1px 0 rgb(var(--c) / 0.7); }
+/* Texte en dégradé (couleur → seconde couleur). */
+.fc-cat[data-shape="gradient"] .fc-cat-label {
+  background-image: linear-gradient(90deg, rgb(var(--c)), rgb(var(--c2)));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.fc-cat[data-shape="boxed"] { border: 2px solid rgb(var(--c)); border-radius: calc(4px * var(--fc-radius, 1)); margin-bottom: 3px; }
+.fc-cat[data-shape="bracket"] .fc-cat-label::before { content: '[ '; color: rgb(var(--c)); }
+.fc-cat[data-shape="bracket"] .fc-cat-label::after { content: ' ]'; color: rgb(var(--c)); }
+.fc-cat[data-shape="neon"] .fc-cat-label { text-shadow: 0 0 4px rgb(var(--c)), 0 0 10px rgb(var(--c) / 0.6); }
+.fc-cat[data-shape="smallcaps"] .fc-cat-label { font-variant: small-caps; text-transform: lowercase; letter-spacing: calc(var(--fc-cat-ls, 0.03em) + 0.05em); }
+.fc-cat[data-shape="divider"] .fc-cat-main { flex: 1; }
+.fc-cat[data-shape="divider"] .fc-cat-main::after { content: ''; flex: 1; height: 1px; margin-left: 0.5rem; background: rgb(var(--c) / 0.5); }
+.fc-cat[data-shape="divider"] .fc-cat-label { color: rgb(var(--c)); }
+/* Bandeaux pleins : encre noire ou blanche selon la couleur. */
+.fc-cat:is([data-shape="ribbon"], [data-shape="banner"]) { background-image: linear-gradient(90deg, rgb(var(--c)), rgb(var(--c) / 0.85)); margin-bottom: 3px; }
+.fc-cat:is([data-shape="ribbon"], [data-shape="banner"]) :is(.fc-cat-label, svg, button) { color: rgb(var(--ink)); }
+.fc-cat[data-shape="ribbon"] { clip-path: polygon(0 0, 100% 0, calc(100% - 10px) 50%, 100% 100%, 0 100%); padding-right: 16px; }
+.fc-cat[data-shape="banner"] { background-image: linear-gradient(90deg, rgb(var(--c)), rgb(var(--c2))); border-radius: calc(4px * var(--fc-radius, 1)); }
+.fc-cat[data-shape="tag"] .fc-cat-label { background: rgb(var(--c)); color: rgb(var(--ink)); padding: 1px 8px; border-radius: calc(4px * var(--fc-radius, 1)); }
+.fc-cat[data-shape="chip"] .fc-cat-label { background: rgb(var(--c) / 0.15); box-shadow: inset 0 0 0 1px rgb(var(--c) / 0.5); padding: 1px 9px; border-radius: 9999px; }
+.fc-cat[data-shape="outlined"] .fc-cat-label { color: rgb(var(--fc-channel-rgb)); -webkit-text-stroke: 0.7px rgb(var(--c)); font-weight: 900; }
+.fc-cat[data-shape="shadow"] .fc-cat-label { text-shadow: 1px 1px 0 rgb(var(--c)), 2px 2px 0 rgb(var(--c) / 0.4); }
+.fc-cat[data-shape="dot"] .fc-cat-label::before {
+  content: ''; display: inline-block; width: 6px; height: 6px; margin-right: 6px; vertical-align: middle;
+  border-radius: 9999px; background: rgb(var(--c));
+}
+.fc-cat[data-shape="terminal"] { background-image: linear-gradient(rgb(0 0 0 / 0.28), rgb(0 0 0 / 0.28)); border-radius: calc(3px * var(--fc-radius, 1)); }
+.fc-cat[data-shape="terminal"] .fc-cat-label { font-family: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace; text-transform: lowercase; }
+.fc-cat[data-shape="terminal"] .fc-cat-label::before { content: '> '; }
+.fc-cat[data-shape="terminal"] .fc-cat-label::after { content: '_'; animation: fc-cat-blink 1.1s steps(1) infinite; }
+@keyframes fc-cat-blink { 50% { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .fc-cat[data-shape="terminal"] .fc-cat-label::after { animation: none; } }
+[data-reduce-motion="true"] .fc-cat[data-shape="terminal"] .fc-cat-label::after { animation: none; }
+.fc-cat[data-shape="chiseled"] {
+  border-radius: calc(4px * var(--fc-radius, 1));
+  background-image: linear-gradient(rgb(255 255 255 / 0.05), rgb(0 0 0 / 0.14));
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.08), inset 0 -1px 0 rgb(0 0 0 / 0.4);
+}
+.fc-cat[data-shape="chiseled"] .fc-cat-label { text-shadow: 0 1px 0 rgb(255 255 255 / 0.12), 0 -1px 0 rgb(0 0 0 / 0.6); }
+.fc-cat[data-shape="glass"] {
+  border-radius: calc(10px * var(--fc-radius, 1));
+  background-image: linear-gradient(rgb(255 255 255 / 0.09), rgb(255 255 255 / 0.03)), linear-gradient(90deg, rgb(var(--c) / 0.12), transparent);
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.12);
+}
+.fc-cat[data-shape="glow"] { border-radius: calc(6px * var(--fc-radius, 1)); box-shadow: 0 0 10px rgb(var(--c) / 0.45), inset 0 0 0 1px rgb(var(--c) / 0.6); margin: 2px 0 4px; }
+.fc-cat[data-shape="double"] { border-bottom: 3px double rgb(var(--c)); }
+.fc-cat[data-shape="dashed"] { outline: 1px dashed rgb(var(--c)) !important; outline-offset: -1px; border-radius: calc(6px * var(--fc-radius, 1)); }
+.fc-cat[data-shape="stripes"] {
+  border-radius: calc(6px * var(--fc-radius, 1));
+  background-image: repeating-linear-gradient(135deg, rgb(var(--c) / 0.2) 0 6px, transparent 6px 12px);
+}
+.fc-cat[data-shape="tab"] {
+  border-radius: calc(8px * var(--fc-radius, 1)) calc(8px * var(--fc-radius, 1)) 0 0;
+  background-image: linear-gradient(rgb(var(--c) / 0.22), rgb(var(--c) / 0.22));
+  border-bottom: 2px solid rgb(var(--c));
+}
+.fc-cat[data-shape="fade"] { background-image: linear-gradient(90deg, transparent, rgb(var(--c) / 0.28), transparent); }
+.fc-cat[data-shape="overline"] { box-shadow: inset 0 2px 0 rgb(var(--c)); border-radius: 0; }
+.fc-cat[data-shape="highlight"] .fc-cat-label { background-image: linear-gradient(transparent 55%, rgb(var(--c) / 0.45) 55%); padding: 0 2px; }
+.fc-cat[data-shape="arrow"] {
+  background-image: linear-gradient(rgb(var(--c) / 0.2), rgb(var(--c) / 0.2));
+  clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 50%, calc(100% - 10px) 100%, 0 100%);
+  padding-right: 16px;
+}
+.fc-cat[data-shape="slant"] {
+  background-image: linear-gradient(105deg, transparent 8px, rgb(var(--c) / 0.24) 8px, rgb(var(--c) / 0.24) calc(100% - 8px), transparent calc(100% - 8px));
+}
+.fc-cat[data-shape="stamp"] .fc-cat-label {
+  display: inline-block; padding: 0 6px; transform: rotate(-2deg);
+  border: 1.5px solid rgb(var(--c)); border-radius: calc(3px * var(--fc-radius, 1));
 }
 
 /* ── EFFETS DU THÈME ET STYLE DES MESSAGES (Apparence) ───────────────────────────────────── */
@@ -550,7 +645,7 @@ html[data-fc-bubbles="bubbles"] [data-msg-row] .fc-msg-body {
 }
 /* Colonne de lecture centrée. */
 html[data-fc-chat-width="centered"] [data-msg-row] {
-  max-width: 980px;
+  max-width: var(--fc-chat-max, 980px);
   margin-left: auto;
   margin-right: auto;
 }
@@ -558,3 +653,101 @@ html[data-fc-chat-width="centered"] [data-msg-row] {
 html[data-fc-scrollbars="thin"] ::-webkit-scrollbar { width: 3px; height: 3px; }
 html[data-fc-scrollbars="hidden"] ::-webkit-scrollbar { display: none; }
 html[data-fc-scrollbars="hidden"] * { scrollbar-width: none; }
+
+/* ── DISPOSITION AVANCÉE (Apparence → Disposition, applyTheme.ts : applyLayoutToDom) ─────────
+   Attributs data-fc-* = identifiants de listes ; variables = nombres bornés. */
+@media (min-width: 768px) {
+  /* Barre latérale à droite : la discussion passe à gauche, la poignée suit. */
+  html[data-fc-sidebar-side="right"] .fc-nav { order: 3; }
+  html[data-fc-sidebar-side="right"] .fc-nav-handle { order: 2; }
+  /* Rail des serveurs au bord extérieur (par défaut) ou contre la discussion. */
+  html[data-fc-sidebar-side="right"]:not([data-fc-rail-side="inner"]) .fc-nav-row,
+  html[data-fc-sidebar-side="left"][data-fc-rail-side="inner"] .fc-nav-row { flex-direction: row-reverse; }
+  /* Rail compact : icônes réduites. */
+  html[data-fc-rail-size="compact"] .fc-server-rail { zoom: 0.8; }
+}
+@media (min-width: 1024px) {
+  html[data-fc-members-vis="hidden"] .fc-member-list { display: none !important; }
+}
+
+/* Densité de la liste des salons (l'emporte sur la densité des messages, qui vise aussi .group). */
+html[data-fc-ch-density="compact"] .fc-ch { padding-top: 1px !important; padding-bottom: 1px !important; min-height: 26px; }
+html[data-fc-ch-density="cozy"] .fc-ch { padding-top: 9px !important; padding-bottom: 9px !important; }
+
+/* Barre de saisie : pilule et minimale. */
+html[data-fc-composer="pill"] .fc-composer-box { border-radius: 9999px; padding-left: 0.5rem; padding-right: 0.5rem; }
+html[data-fc-composer="minimal"] .fc-composer-box {
+  background: transparent;
+  border-radius: 0;
+  box-shadow: inset 0 -1px 0 rgb(var(--fc-border-rgb));
+}
+
+/* Discussion : texte, interligne, espace entre groupes, largeur de la colonne centrée. */
+html .fc-msg-body { font-size: calc(0.875rem * var(--fc-chat-scale, 1)); line-height: var(--fc-chat-lh, 1.625); }
+html .fc-msg-name { font-size: calc(0.875rem * var(--fc-chat-scale, 1)); }
+html .fc-msg-start { margin-top: var(--fc-msg-gap, 0px); }
+
+/* Avatars : taille. */
+html[data-fc-avatar-size="small"] .fc-avatar-col { width: 24px; }
+html[data-fc-avatar-size="small"] .fc-avatar { width: 24px; height: 24px; font-size: 11px; }
+html[data-fc-avatar-size="large"] .fc-avatar-col { width: 52px; }
+html[data-fc-avatar-size="large"] .fc-avatar { width: 52px; height: 52px; font-size: 18px; }
+/* Forme des avatars (réglage du compte avatar_shape). */
+html[data-avatar-shape="rounded"] .fc-avatar { border-radius: 28%; }
+html[data-avatar-shape="squircle"] .fc-avatar { border-radius: 38% / 38%; }
+html[data-avatar-shape="square"] .fc-avatar { border-radius: 4px; }
+
+/* Heure : avant le nom, ou alignée à droite. */
+html[data-fc-ts-pos="before"] .fc-msg-head .fc-msg-ts { order: -1; }
+html[data-fc-ts-pos="right"] .fc-msg-head .fc-msg-ts { order: 9; margin-left: auto; }
+
+/* Mode IRC : pas d'avatar, nom et texte sur la même ligne. */
+html[data-fc-chat-mode="irc"] .fc-avatar-col { display: none; }
+html[data-fc-chat-mode="irc"] .fc-msg-content { display: flex; flex-wrap: wrap; align-items: baseline; column-gap: 0.5rem; }
+html[data-fc-chat-mode="irc"] .fc-msg-content > * { flex-basis: 100%; }
+html[data-fc-chat-mode="irc"] .fc-msg-content > .fc-msg-head { flex: 0 0 auto; margin-bottom: 0; }
+html[data-fc-chat-mode="irc"] .fc-msg-content > .fc-msg-body { flex: 1 1 12rem; min-width: 0; }
+html[data-fc-chat-mode="irc"] .fc-msg-head .fc-msg-ts { order: -1; }
+html[data-fc-chat-mode="irc"] .fc-msg-name::after { content: ' :'; color: rgb(var(--fc-muted-rgb)); }
+html[data-fc-chat-mode="irc"] .fc-msg-start { margin-top: calc(var(--fc-msg-gap, 0px) / 2); }
+
+/* Emojis personnalisés et aperçus d'images. */
+html[data-fc-emoji="small"] .fc-emoji { width: 16px; height: 16px; }
+html[data-fc-emoji="large"] .fc-emoji { width: 28px; height: 28px; }
+html[data-fc-emoji="huge"] .fc-emoji { width: 40px; height: 40px; }
+html[data-fc-img="small"] .fc-att-img { max-height: 160px; max-width: min(100%, 240px); }
+@media (min-width: 640px) {
+  html[data-fc-img="large"] .fc-att-img { max-height: 480px; max-width: min(100%, 640px); }
+}
+
+/* Arrondis : carrés, doux ou très ronds (au-dessus du facteur du thème). */
+html[data-fc-corners="sharp"] { --fc-radius: 0 !important; }
+html[data-fc-corners="sharp"] :is(.rounded, .rounded-md, .rounded-lg, .rounded-xl, .rounded-2xl, .fc-input, .btn-primary, .btn-secondary) { border-radius: 0 !important; }
+html[data-fc-corners="soft"] { --fc-radius: 1.25 !important; }
+html[data-fc-corners="soft"] :is(.rounded-md, .rounded-lg) { border-radius: 0.6rem; }
+html[data-fc-corners="round"] { --fc-radius: 2 !important; }
+html[data-fc-corners="round"] :is(.rounded, .rounded-md) { border-radius: 0.6rem; }
+html[data-fc-corners="round"] :is(.rounded-lg, .rounded-xl, .fc-input, .btn-primary, .btn-secondary) { border-radius: 1rem; }
+
+/* En-tête des salons. */
+html[data-fc-header="transparent"] .fc-chat-header { background: transparent !important; border-color: transparent !important; box-shadow: none !important; }
+html[data-fc-header="accent"] .fc-chat-header {
+  border-bottom: 2px solid rgb(var(--fc-accent-rgb)) !important;
+  background-image: linear-gradient(90deg, rgb(var(--fc-accent-rgb) / 0.14), transparent 70%);
+}
+html[data-fc-header="compact"] .fc-chat-header { min-height: 36px !important; padding-top: 0.25rem; padding-bottom: 0.25rem; }
+html[data-fc-header="floating"] .fc-chat-header {
+  margin: 0.5rem 0.5rem 0;
+  border: 1px solid rgb(var(--fc-border-rgb)) !important;
+  border-radius: calc(12px * var(--fc-radius, 1));
+  box-shadow: 0 6px 20px rgb(0 0 0 / 0.25);
+}
+
+/* Transparence réduite : panneaux opaques, pas de flou. */
+html[data-fc-solid] { --fc-surface-a: 1 !important; --fc-float-a: 1 !important; --fc-glass-blur: 0px !important; }
+html[data-fc-solid] #fc-backdrop { display: none; }
+
+/* Mouvement réduit : pas de transition pour le rail replié. */
+@media (prefers-reduced-motion: reduce) {
+  html[data-fc-rail="hover"] .fc-server-rail { transition: none; }
+}

@@ -10,6 +10,7 @@ import * as menus from './parts/menus.ts'
 import * as accountGuard from './parts/accountGuard.ts'
 import * as discordSync from './parts/discordSync.ts'
 import * as themesMore from './parts/themesMore.ts'
+import * as looksMore from './parts/looksMore.ts'
 import * as avSettings from './parts/avSettings.ts'
 import * as profileEditor from './parts/profileEditor.ts'
 import { profileFr } from './profileFr.ts'
@@ -38,6 +39,7 @@ export const fr = {
   ...accountGuard.fr,
   ...discordSync.fr,
   ...themesMore.fr,
+  ...looksMore.fr,
   ...avSettings.fr,
   ...profileEditor.fr,
   // --- Connexion, inscription, mot de passe oublié ---

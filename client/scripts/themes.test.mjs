@@ -44,6 +44,24 @@ test('catalogue étendu : au moins 20 fois les 59 thèmes d\'origine, familles �
   assert.equal(familyTheme('pp', 200, 'Papier perso').name, 'Papier perso')
 })
 
+test('Classiques : plus de 125 palettes connues et maison, toutes différentes, sombres et claires', () => {
+  const classic = PRESETS.filter(p => p.group === 'classic')
+  assert.ok(classic.length >= 125, `${classic.length} classiques`)
+  assert.ok(classic.filter(p => p.spec.scheme === 'light').length >= 30, 'thèmes clairs')
+  // Visiblement différents : jamais deux fois le même couple fond + accent.
+  const pairs = new Set(classic.map(p => `${p.spec.colors.bg}/${p.spec.colors.accent}`))
+  assert.equal(pairs.size, classic.length)
+  for (const id of [
+    'catppuccin-latte', 'catppuccin-frappe', 'catppuccin-macchiato', 'catppuccin-mocha', 'gruvbox-light', 'solarized-light',
+    'tokyonight-storm', 'tokyonight-day', 'rosepine-dawn', 'ayu-mirage', 'github-dimmed', 'nightowl', 'synthwave84',
+    'poimandres', 'noctis-lux', 'iceberg', 'tomorrow-night', 'zenburn', 'sonokai-shusia', 'edge-light', 'oled-black',
+    'sepia', 'max-white', 'forge-ember', 'blueprint',
+  ]) assert.equal(findTheme(id) && PRESETS.find(p => p.id === id).group, 'classic', id)
+  assert.equal(findTheme('github-dark-hc').outline, true)
+  assert.equal(findTheme('blueprint').pattern, 'grid')
+  assert.equal(findTheme('synthwave84').accent2, '#36f9f6')
+})
+
 test('teintes : hsl et toHsl réciproques', () => {
   assert.equal(hsl(0, 100, 50), '#ff0000')
   assert.equal(hsl(120, 100, 25), '#008000')

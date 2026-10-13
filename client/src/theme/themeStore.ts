@@ -117,12 +117,18 @@ export function resolveTheme(s: Pick<ThemeState, 'activeId' | 'customs' | 'accen
   return withAccent(findTheme(id) ?? DEFAULT_SPEC, s.accent)
 }
 
+/** Style de catégorie affiché : celui du serveur ouvert s'il en a un, sinon le style général. */
+export function effectiveCategory(s: Pick<ThemeState, 'servers' | 'serverId' | 'category'>): CategoryStyle {
+  return (s.serverId && s.servers[s.serverId]?.category) || s.category
+}
+
 function render() {
   const s = useThemeStore.getState()
   const id = serverThemeId(s) ?? s.activeId
   // Thème affiché : saturation appliquée (puis contraste revérifié).
-  applyThemeToDom(findTheme(id, s.customs) ? id : DEFAULT_THEME_ID, tuneTheme(resolveTheme(s)))
-  applyCategoryToDom((s.serverId && s.servers[s.serverId]?.category) || s.category)
+  const shown = tuneTheme(resolveTheme(s))
+  applyThemeToDom(findTheme(id, s.customs) ? id : DEFAULT_THEME_ID, shown)
+  applyCategoryToDom(effectiveCategory(s), shown.colors.accent)
 }
 
 const initial = readLocal()
@@ -184,7 +190,8 @@ export const useThemeStore = create<ThemeState>()((set, get) => ({
   setServerLook: (serverId, look) => {
     const servers = { ...get().servers }
     const key = serverId.toLowerCase()
-    if (look && (look.theme || look.category)) servers[key] = look
+    const clean: ServerLook | null = look && { ...look, category: look.category ? sanitizeCategory(look.category) : undefined }
+    if (clean && (clean.theme || clean.category)) servers[key] = clean
     else delete servers[key]
     set({ servers })
     persistStudio()

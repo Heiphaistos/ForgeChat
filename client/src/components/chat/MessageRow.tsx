@@ -167,7 +167,7 @@ function MessageRow({
       <div
         id={`msg-${msg.id}`}
         data-msg-row={msg.id}
-        className={`group flex items-start gap-3 px-2 rounded relative transition-colors duration-300
+        className={`group flex items-start gap-3 px-2 rounded relative transition-colors duration-300${isGrouped ? '' : ' fc-msg-start'}
           ${compact ? 'py-0.5' : 'py-1'}
           ${isEditing ? 'bg-fc-hover/50' : isHighlighted ? 'bg-fc-accent/20' : msg.expires_at ? 'bg-red-500/5 border-l-2 border-red-500/30 hover:bg-red-500/8' : 'hover:bg-fc-hover/30'}`}
         onDoubleClick={e => { e.stopPropagation(); onDoubleClick(msg.id, e.clientX, e.clientY) }}
@@ -178,7 +178,7 @@ function MessageRow({
       >
         {/* Avatar */}
         {!ultraCompact && (
-          <div className={`flex-shrink-0 mt-0.5 ${compact ? 'w-7' : 'w-8 md:w-10'}`}>
+          <div className={`fc-avatar-col flex-shrink-0 mt-0.5 ${compact ? 'w-7' : 'w-8 md:w-10'}`}>
             {isGrouped && showTimestamps !== 'never' && (
               <span className="opacity-0 group-hover:opacity-100 transition text-[9px] text-fc-muted font-mono select-none flex items-center justify-center h-full">
                 <time dateTime={msg.created_at} title={formatTs(msg.created_at)}>{formatShortTs(msg.created_at)}</time>
@@ -188,7 +188,7 @@ function MessageRow({
               <AvatarDecoration id={msg.author_avatar_decoration} size={compact ? 28 : 40}>
               <AvatarRing ring={roleDecor?.ring} size={compact ? 28 : 40}>
               <button
-                className={`rounded-full bg-fc-accent flex items-center justify-center font-bold text-sm text-white overflow-hidden hover:opacity-80 transition ${compact ? 'w-7 h-7' : 'w-8 h-8 md:w-10 md:h-10'}`}
+                className={`fc-avatar rounded-full bg-fc-accent flex items-center justify-center font-bold text-sm text-white overflow-hidden hover:opacity-80 transition ${compact ? 'w-7 h-7' : 'w-8 h-8 md:w-10 md:h-10'}`}
                 onClick={e => onOpenUserPopup(e, msg.author_id)}
                 onContextMenu={e => onAvatarContextMenu(e, msg)}
                 title={t('msg.profileOf', { name: msg.author_username })}
@@ -204,11 +204,11 @@ function MessageRow({
         )}
 
         {/* Contenu */}
-        <div className="flex-1 min-w-0">
+        <div className="fc-msg-content flex-1 min-w-0">
           {!isGrouped && !ultraCompact && (
-            <div className="flex items-baseline gap-2 mb-0.5">
+            <div className="fc-msg-head flex items-baseline gap-2 mb-0.5">
               <button
-                className="font-semibold text-white text-sm hover:underline cursor-pointer"
+                className="fc-msg-name font-semibold text-white text-sm hover:underline cursor-pointer"
                 onClick={e => onOpenUserPopup(e, msg.author_id)}
                 onContextMenu={e => onAvatarContextMenu(e, msg)}
               >
@@ -228,7 +228,7 @@ function MessageRow({
                 </span>
               )}
               {showTimestamps !== 'never' && (
-                <time dateTime={msg.created_at} className={`text-fc-muted ${compact ? 'text-[9px]' : 'text-xs'} ${showTimestamps === 'hover' ? 'opacity-0 group-hover:opacity-100 transition' : ''}`}>{formatTs(msg.created_at)}</time>
+                <time dateTime={msg.created_at} className={`fc-msg-ts text-fc-muted ${compact ? 'text-[9px]' : 'text-xs'} ${showTimestamps === 'hover' ? 'opacity-0 group-hover:opacity-100 transition' : ''}`}>{formatTs(msg.created_at)}</time>
               )}
               {msg.expires_at && <EphemeralBadge expiresAt={msg.expires_at} />}
               {!msg.expires_at && msg.expire_on_read && <AfterReadBadge />}
@@ -362,7 +362,7 @@ function MessageRow({
                         alt={att.filename}
                         loading="lazy"
                         decoding="async"
-                        className="max-w-full sm:max-w-sm max-h-72 rounded object-cover cursor-zoom-in hover:opacity-90 transition shadow"
+                        className="fc-att-img max-w-full sm:max-w-sm max-h-72 rounded object-cover cursor-zoom-in hover:opacity-90 transition shadow"
                         style={{ opacity: 0, transition: 'opacity 0.25s ease, filter 0.2s ease', filter: shouldBlurMedia ? 'blur(32px)' : undefined }}
                         onLoad={e => { e.currentTarget.style.opacity = '1' }}
                         onClick={() => {
