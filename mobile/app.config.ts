@@ -74,7 +74,7 @@ if ((PUBLIC_ENV !== undefined && PUBLIC_ENV !== APP_ENV) || (APP_ENV === 'produc
 // APK DEV et bêta : HTTPS imposé par distributedServerConfig. (Le client revérifie au runtime : src/config/env.ts.)
 const LAN_CLEARTEXT_HOST = APP_ENV === 'lan' ? withLanCleartext.lanCleartextHost(API_URL) : null
 
-// Icônes (scripts/generate-icons.mjs, logo officiel du web) : variante orange « DEV » pour tout ce
+// Icônes (../scripts/gen-brand-icons.py, logo 3D officiel) : variante orange « DEV » pour tout ce
 // qui n'est pas la version publique, pour ne jamais confondre les apps sur un téléphone.
 const ASSETS = APP_ENV === 'production' ? './assets' : './assets/dev'
 

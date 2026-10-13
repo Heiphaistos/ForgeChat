@@ -8,11 +8,12 @@ import { parsePrefs } from '@/theme/prefs'
 const root = join(__dirname, '..')
 
 describe('identifiants des icônes de l’app', () => {
-  it('mêmes identifiants que le web (preset:1 à preset:50), le reste est refusé', () => {
+  it('mêmes identifiants que le web (preset:1 à preset:N), le reste est refusé', () => {
+    expect(APP_ICON_COUNT).toBeGreaterThanOrEqual(150)
     expect(APP_ICON_NUMBERS).toHaveLength(APP_ICON_COUNT)
     expect(isAppIconId('preset:1')).toBe(true)
-    expect(isAppIconId('preset:50')).toBe(true)
-    for (const bad of ['preset:0', 'preset:51', 'preset:07', 'preset:1x', 'custom', '', null, 3]) expect(isAppIconId(bad)).toBe(false)
+    expect(isAppIconId(`preset:${APP_ICON_COUNT}`)).toBe(true)
+    for (const bad of ['preset:0', `preset:${APP_ICON_COUNT + 1}`, 'preset:1000', 'preset:07', 'preset:1x', 'custom', '', null, 3]) expect(isAppIconId(bad)).toBe(false)
     expect(presetNumber('preset:12')).toBe(12)
   })
 
@@ -20,16 +21,17 @@ describe('identifiants des icônes de l’app', () => {
     expect(nativeIconName(null)).toBeNull()
     expect(nativeIconName(presetId(7))).toBe('Preset7')
     expect(iconIdFromNative('Preset7')).toBe('preset:7')
-    for (const n of [null, undefined, '', 'Preset0', 'Preset99', 'AppIcon', 4]) expect(iconIdFromNative(n)).toBeNull()
+    expect(iconIdFromNative(`Preset${APP_ICON_COUNT}`)).toBe(`preset:${APP_ICON_COUNT}`)
+    for (const n of [null, undefined, '', 'Preset0', `Preset${APP_ICON_COUNT + 1}`, 'Preset1000', 'AppIcon', 4]) expect(iconIdFromNative(n)).toBeNull()
   })
 
   it('choix retenu dans les préférences d’apparence, invalide → icône d’origine', () => {
     expect(parsePrefs(JSON.stringify({ appIcon: 'preset:3' })).appIcon).toBe('preset:3')
-    expect(parsePrefs(JSON.stringify({ appIcon: 'preset:99' })).appIcon).toBeNull()
+    expect(parsePrefs(JSON.stringify({ appIcon: 'preset:999' })).appIcon).toBeNull()
     expect(parsePrefs(null).appIcon).toBeNull()
   })
 
-  it('autant de variantes que le web, chacune avec ses sources 1024 px et sa vignette', () => {
+  it('autant de variantes que le web, chacune avec ses sources et sa vignette', () => {
     const web = readFileSync(join(root, '..', 'client', 'src', 'lib', 'appIcon.ts'), 'utf8')
     expect(web).toContain(`PRESET_COUNT = ${APP_ICON_COUNT}`)
     const variants = withAppIcons.readVariants()
@@ -38,7 +40,8 @@ describe('identifiants des icônes de l’app', () => {
     for (const n of APP_ICON_NUMBERS) {
       for (const f of [`preset-${n}.png`, `preset-${n}-foreground.png`, `preview/preset-${n}.png`]) {
         const png = readFileSync(join(root, 'assets', 'app-icons', f))
-        const size = f.startsWith('preview') ? 144 : 1024
+        // Plus grandes tailles finales : iOS 180 / Android 192 px, avant-plan adaptatif 108 dp × 4.
+        const size = f.startsWith('preview') ? 144 : f.endsWith('foreground.png') ? 432 : 192
         expect([png.readUInt32BE(16), png.readUInt32BE(20)]).toEqual([size, size])
       }
       expect(PRESET_PREVIEWS[n]).toBeDefined()
@@ -90,12 +93,16 @@ describe('config plugin des icônes alternatives', () => {
     expect(again['activity-alias']).toHaveLength(2)
   })
 
-  it('Android : fonds en couleur, dégradé ou disque', () => {
+  it('Android : fonds en couleur, dégradé, bandes ou disque', () => {
     expect(withAppIcons.backgroundDrawable({ type: 'solid', colors: ['#5865F2'] })).toContain('<solid android:color="#5865F2" />')
     expect(withAppIcons.backgroundDrawable({ type: 'gradient', colors: ['#5865F2', '#7C3AED'] })).toContain('android:angle="315"')
     const circle = withAppIcons.backgroundDrawable({ type: 'circle', colors: ['#5865F2', '#7C3AED'], base: '#1e1f22' })
     expect(circle).toContain('android:shape="oval"')
     expect(circle).toContain('#1e1f22')
+    expect(withAppIcons.backgroundDrawable({ type: 'gradient', colors: ['#111111', '#222222', '#333333'] })).toContain('android:centerColor="#222222"')
+    const flag = withAppIcons.backgroundDrawable({ type: 'stripes', colors: ['#FF0000', '#00FF00', '#0000FF'] })
+    expect(flag).toContain('<item android:top="0dp"><shape><solid android:color="#FF0000" />')
+    expect(flag).toContain('<item android:top="72dp"><shape><solid android:color="#0000FF" />')
     expect(withAppIcons.adaptiveIconXml('Preset1')).toContain('@mipmap/app_icon_preset1_foreground')
   })
 

@@ -1,8 +1,8 @@
 /*
  * Favicon animé — cycle la source du <link rel="icon"> plutôt que de compter sur un
  * ICO/APNG animé natif (support navigateur trop inégal, cf. Chrome qui ignore
- * l'animation d'un .ico multi-frame). Frames pré-rendues depuis Logo3D
- * (public/favicon-frames/, générées hors-ligne via Playwright+Pillow).
+ * l'animation d'un .ico multi-frame). Frames pré-rendues du logo 3D (étincelle qui pulse,
+ * reflet qui balaie la bulle : public/favicon-frames/, scripts/gen-brand-icons.py).
  * Coupe l'intervalle en onglet masqué -- pas une concession d'accessibilité,
  * juste éviter de mettre à jour un favicon que personne ne regarde.
  */
@@ -22,8 +22,11 @@ function applyFrame() {
   frameIndex = (frameIndex + 1) % FRAME_COUNT
 }
 
+// Mouvement réduit demandé par le système : favicon fixe (icons/icon-192.png).
+const reducedMotion = () => typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches
+
 function start() {
-  if (timer || override) return
+  if (timer || override || reducedMotion()) return
   timer = setInterval(applyFrame, FRAME_INTERVAL_MS)
 }
 

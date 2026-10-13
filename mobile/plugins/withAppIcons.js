@@ -5,8 +5,9 @@ const { AndroidConfig, IOSConfig, withAndroidManifest, withDangerousMod, withInf
 
 /**
  * Icônes d'application alternatives (Réglages → Apparence → Icône de l'app ; modules/app-icon).
- * Les 50 variantes du web et du bureau, générées par scripts/generate-app-icons.py dans
- * assets/app-icons/ (sources 1024 px + variants.json) ; les tailles finales sont tirées ici.
+ * Les variantes du web et du bureau (coloris du logo 3D), générées par scripts/generate-app-icons.py
+ * dans assets/app-icons/ (sources à la plus grande taille finale : 192 px pour l'icône pleine, 432 px
+ * pour l'avant-plan adaptatif, + variants.json) ; les tailles finales sont tirées ici.
  *
  * Android : une <activity-alias> par variante (désactivée), qui cible MainActivity et porte son
  * icône. MainActivity reste l'entrée du lanceur avec l'icône d'origine. Choisir une variante active
@@ -21,7 +22,7 @@ const { AndroidConfig, IOSConfig, withAndroidManifest, withDangerousMod, withInf
 const ASSETS = 'assets/app-icons'
 const VARIANTS_FILE = require.resolve('../assets/app-icons/variants.json')
 
-/** @typedef {{ type: 'solid' | 'gradient' | 'circle', colors: string[], base?: string }} Background */
+/** @typedef {{ type: 'solid' | 'gradient' | 'circle' | 'stripes', colors: string[], base?: string }} Background */
 /** @typedef {{ id: string, name: string, background: Background }} Variant */
 
 /** @returns {Variant[]} */
@@ -29,7 +30,7 @@ function readVariants(file = VARIANTS_FILE) {
   /** @type {Variant[]} */
   const variants = JSON.parse(fs.readFileSync(file, 'utf8'))
   for (const v of variants) {
-    if (!/^Preset[1-9][0-9]?$/.test(v.name)) throw new Error(`withAppIcons : nom d'icône invalide « ${v.name} »`)
+    if (!/^Preset[1-9][0-9]{0,2}$/.test(v.name)) throw new Error(`withAppIcons : nom d'icône invalide « ${v.name} »`)
     if (!v.background.colors.every((c) => /^#[0-9a-fA-F]{6}$/.test(c))) throw new Error(`withAppIcons : couleur invalide (${v.name})`)
   }
   return variants
@@ -84,16 +85,24 @@ function applyAndroidManifest(manifest, variants) {
 }
 
 /**
- * Fond de l'icône adaptative : couleur unie, dégradé diagonal ou disque sur le gris de l'app.
+ * Fond de l'icône adaptative : couleur unie, dégradé diagonal (2 ou 3 couleurs), bandes
+ * horizontales (drapeaux) ou disque sur le gris de l'app.
  * @param {Background} bg
  */
 function backgroundDrawable(bg) {
   const ns = 'xmlns:android="http://schemas.android.com/apk/res/android"'
-  const [from, to] = bg.colors
+  const [from, mid, to] = bg.colors.length > 2 ? bg.colors : [bg.colors[0], undefined, bg.colors[1]]
   // angle 315 : du coin haut gauche au coin bas droit, comme les PNG (et le bureau).
-  const gradient = `<gradient android:angle="315" android:startColor="${from}" android:endColor="${to}" />`
+  const center = mid ? ` android:centerColor="${mid}"` : ''
+  const gradient = `<gradient android:angle="315" android:startColor="${from}"${center} android:endColor="${to}" />`
   if (bg.type === 'solid') return `<shape ${ns}>\n  <solid android:color="${from}" />\n</shape>\n`
   if (bg.type === 'gradient') return `<shape ${ns}>\n  ${gradient}\n</shape>\n`
+  if (bg.type === 'stripes') {
+    // Couche de 108 dp découpée en bandes égales, chacune posée sur les suivantes.
+    const n = bg.colors.length
+    const items = bg.colors.map((c, i) => `  <item android:top="${Math.round((108 * i) / n)}dp"><shape><solid android:color="${c}" /></shape></item>`)
+    return [`<layer-list ${ns}>`, ...items, '</layer-list>', ''].join('\n')
+  }
   // Disque de 80 dp sur la couche de 108 dp : il dépasse juste la zone visible d'un masque rond.
   return [
     `<layer-list ${ns}>`,
