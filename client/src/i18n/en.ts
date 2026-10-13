@@ -22,6 +22,7 @@ import * as auditUi from './parts/auditUi.ts'
 import * as auditChat from './parts/auditChat.ts'
 import * as siteAdmin from './parts/siteAdmin.ts'
 import * as discordFeatures from './parts/discordFeatures.ts'
+import * as auditRest from './parts/auditRest.ts'
 import { profileEn } from './profileEn.ts'
 import { profileStyleEn } from './profileStyleEn.ts'
 import { ringEn } from './ringEn.ts'
@@ -61,6 +62,7 @@ export const en: Partial<Record<Key, string>> = {
   ...auditChat.en,
   ...siteAdmin.en,
   ...discordFeatures.en,
+  ...auditRest.en,
   // --- Connexion, inscription, mot de passe oublié ---
   'auth.email': 'Email',
   'auth.password': 'Password',

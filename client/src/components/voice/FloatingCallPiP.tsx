@@ -4,6 +4,7 @@ import { useRef, useState } from 'react'
 import { Mic, MicOff, Video, VideoOff, PhoneOff, Maximize2, PictureInPicture2, MonitorOff } from 'lucide-react'
 import { useVoice } from '../../store/voice'
 import { useCallStore } from '../../store/call'
+import { useT } from '../../i18n'
 
 /**
  * Mini-fenêtre vidéo flottante façon Discord : visible quand un appel vidéo (salon
@@ -16,6 +17,7 @@ import { useCallStore } from '../../store/call'
 export default function FloatingCallPiP() {
   const location = useLocation()
   const nav = useNavigate()
+  const t = useT()
 
   // ── Salon vocal serveur ──────────────────────────────────────────────────
   const voiceJoined = useVoice(s => s.joined)
@@ -59,7 +61,7 @@ export default function FloatingCallPiP() {
       <Widget
         stream={stream}
         url={stream ? null : dmRemoteUrl ?? dmLocalUrl}
-        label="Appel vidéo"
+        label={t('pip.videoCall')}
         onExpand={() => nav(`/dms/${dmId}`)}
         micMuted={dmMicMuted}
         onToggleMic={toggleDmMic}
@@ -86,7 +88,7 @@ export default function FloatingCallPiP() {
       <Widget
         stream={stream}
         url={url}
-        label={voiceChannelName ?? 'Salon vocal'}
+        label={voiceChannelName ?? t('pip.voiceChannel')}
         onExpand={() => { if (voiceServerId && voiceChannelId) nav(`/servers/${voiceServerId}/channels/${voiceChannelId}`) }}
         micMuted={voiceMuted}
         onToggleMic={toggleVoiceMute}
@@ -115,6 +117,7 @@ function Widget({
   onHangup: () => void
   onStopShare?: () => void
 }) {
+  const t = useT()
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const [pipError, setPipError] = useState(false)
 
@@ -128,13 +131,15 @@ function Widget({
       if (document.pictureInPictureElement) await document.exitPictureInPicture()
       else await el.requestPictureInPicture()
       setPipError(false)
-    } catch {
+    } catch (err) {
+      console.warn('[FloatingCallPiP] Picture-in-Picture refusé', err)
       setPipError(true)
     }
   }
 
   return (
-    <div className="fixed bottom-4 right-4 z-[150] w-56 rounded-xl overflow-hidden shadow-2xl ring-1 ring-white/10 bg-black select-none">
+    <section aria-label={t('pip.region', { label })} className="fixed bottom-4 right-4 z-[150] w-56 rounded-xl overflow-hidden shadow-2xl ring-1 ring-white/10 bg-black select-none">
+      {/* Clic sur la vidéo = raccourci souris ; l'équivalent clavier et lecteur d'écran est le bouton « Agrandir » ci-dessous. */}
       <div className="relative aspect-video bg-gray-900 cursor-pointer" onClick={onExpand}>
         {stream ? (
           <video
@@ -152,18 +157,20 @@ function Widget({
         <div className="absolute top-1.5 right-1.5 flex items-center gap-1">
           {stream && 'requestPictureInPicture' in HTMLVideoElement.prototype && (
             <button
+              type="button"
               onClick={e => { e.stopPropagation(); void togglePip() }}
-              aria-label="Détacher la vignette (Picture-in-Picture)"
-              title={pipError ? 'Picture-in-Picture refusé par le navigateur' : 'Garder la vignette visible hors de ForgeChat'}
+              aria-label={t('pip.detach')}
+              title={pipError ? t('pip.detachDenied') : t('pip.detachHint')}
               className="p-1 rounded bg-black/50 hover:bg-black/70 text-white"
             >
               <PictureInPicture2 size={12} />
             </button>
           )}
           <button
+            type="button"
             onClick={e => { e.stopPropagation(); onExpand() }}
-            aria-label="Agrandir l'appel"
-            title="Agrandir l'appel"
+            aria-label={t('pip.expand')}
+            title={t('pip.expand')}
             className="p-1 rounded bg-black/50 hover:bg-black/70 text-white"
           >
             <Maximize2 size={12} />
@@ -175,40 +182,44 @@ function Widget({
       </div>
       <div className="flex items-center justify-center gap-1 px-2 py-1.5 bg-fc-sidebar">
         <button
+          type="button"
           onClick={onToggleMic}
-          aria-label={micMuted ? 'Activer le micro' : 'Couper le micro'}
-          title={micMuted ? 'Activer le micro' : 'Couper le micro'}
+          aria-label={micMuted ? t('pip.micOn') : t('pip.micOff')}
+          title={micMuted ? t('pip.micOn') : t('pip.micOff')}
           className={`p-2 rounded transition ${micMuted ? 'text-red-400 bg-red-500/20' : 'text-white hover:bg-white/10'}`}
         >
           {micMuted ? <MicOff size={14} /> : <Mic size={14} />}
         </button>
         <button
+          type="button"
           onClick={onToggleVideo}
-          aria-label={videoEnabled ? 'Désactiver la caméra' : 'Activer la caméra'}
-          title={videoEnabled ? 'Désactiver la caméra' : 'Activer la caméra'}
+          aria-label={videoEnabled ? t('pip.camOff') : t('pip.camOn')}
+          title={videoEnabled ? t('pip.camOff') : t('pip.camOn')}
           className={`p-2 rounded transition ${videoEnabled ? 'text-white hover:bg-white/10' : 'text-white/50 hover:bg-white/10'}`}
         >
           {videoEnabled ? <Video size={14} /> : <VideoOff size={14} />}
         </button>
         {onStopShare && (
           <button
+            type="button"
             onClick={onStopShare}
-            aria-label="Arrêter le partage d'écran"
-            title="Arrêter le partage d'écran"
+            aria-label={t('pip.stopShare')}
+            title={t('pip.stopShare')}
             className="p-2 rounded text-green-400 hover:bg-green-500/20"
           >
             <MonitorOff size={14} />
           </button>
         )}
         <button
+          type="button"
           onClick={onHangup}
-          aria-label="Quitter l'appel"
-          title="Quitter l'appel"
+          aria-label={t('pip.hangup')}
+          title={t('pip.hangup')}
           className="p-2 rounded text-red-400 hover:bg-red-500/20"
         >
           <PhoneOff size={14} />
         </button>
       </div>
-    </div>
+    </section>
   )
 }

@@ -81,14 +81,14 @@ export default function RegisterPage() {
 
         {mode === 'closed' && (
           <p role="alert" className="mb-4 rounded bg-red-500/10 border border-red-500/40 text-red-300 text-sm px-3 py-2">
-            Les inscriptions sont fermées pour le moment.
+            {t('reg.closed')}
           </p>
         )}
 
         <form onSubmit={submit} className="space-y-4">
           {mode === 'invite' && (
             <div>
-              <label className="block text-xs font-semibold text-fc-muted uppercase mb-1">Code d’invitation</label>
+              <label className="block text-xs font-semibold text-fc-muted uppercase mb-1">{t('reg.inviteLabel')}</label>
               <input
                 value={inviteCode}
                 onChange={e => setInviteCode(e.target.value)}
@@ -101,7 +101,7 @@ export default function RegisterPage() {
                 placeholder="XXXX-XXXX-XXXX-XXXX-XXXX"
                 className="w-full px-3 py-2 bg-fc-input rounded text-white text-base font-mono tracking-widest outline-none focus:ring-2 focus:ring-fc-accent"
               />
-              <p className="text-xs text-fc-muted mt-1">ForgeChat est un cercle privé : demande ton code à la personne qui t’invite.</p>
+              <p className="text-xs text-fc-muted mt-1">{t('reg.inviteHint')}</p>
             </div>
           )}
           <div>
