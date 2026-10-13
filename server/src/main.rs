@@ -59,6 +59,10 @@ async fn main() -> anyhow::Result<()> {
         push::print_new_vapid_keys();
         return Ok(());
     }
+    // `forgechat sweep-orphan-uploads` : liste (lecture seule) des fichiers orphelins, voir upload_sweep.rs.
+    if std::env::args().nth(1).as_deref() == Some("sweep-orphan-uploads") {
+        return handlers::upload_sweep::run_cli().await;
+    }
     tracing_subscriber::registry()
         .with(tracing_subscriber::EnvFilter::new(
             std::env::var("RUST_LOG").unwrap_or_else(|_| "forgechat=debug,tower_http=info".into()),

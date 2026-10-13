@@ -105,7 +105,11 @@ async fn write_field(
             return Err(AppError::Internal(e.into()));
         }
     }
-    file.flush().await.map_err(|e| AppError::Internal(e.into()))?;
+    if let Err(e) = file.flush().await {
+        drop(file);
+        let _ = tokio::fs::remove_file(path).await;
+        return Err(AppError::Internal(e.into()));
+    }
     Ok(total)
 }
 
@@ -297,9 +301,11 @@ pub async fn store_attachments(
             let name = encrypted_blob_name(&original_name)
                 .ok_or_else(|| AppError::BadRequest(crate::handlers::e2e_conv::PLAINTEXT_REFUSED.into()))?;
             let filename = format!("{}.enc", Uuid::new_v4());
-            let size = budget.save(state, field, &upload_dir.join(&filename)).await?;
+            let path = upload_dir.join(&filename);
+            let size = budget.save(state, field, &path).await?;
             let url = format!("/uploads/{filename}");
-            uploaded.push(insert_attachment(state, owner, &name, "application/octet-stream", size, &url, expires_at, user_id).await?);
+            let row = insert_attachment(state, owner, &name, "application/octet-stream", size, &url, expires_at, user_id).await;
+            uploaded.push(unlink_on_err(&path, row).await?);
             continue;
         }
 
@@ -330,13 +336,26 @@ pub async fn store_attachments(
             .replace(['/', '\\', '\0', ':', '*', '?', '"', '<', '>', '|'], "_");
 
         let filename = format!("{}.{}", Uuid::new_v4(), ext);
-        let size = budget.save(state, field, &upload_dir.join(&filename)).await?;
+        let path = upload_dir.join(&filename);
+        let size = budget.save(state, field, &path).await?;
 
         let url = format!("/uploads/{}", filename);
-        uploaded.push(insert_attachment(state, owner, &safe_name, &content_type, size, &url, expires_at, user_id).await?);
+        let row = insert_attachment(state, owner, &safe_name, &content_type, size, &url, expires_at, user_id).await;
+        uploaded.push(unlink_on_err(&path, row).await?);
     }
 
     Ok(uploaded)
+}
+
+/// Ligne `attachments` refusée (base indisponible, message supprimé entre-temps) : le fichier
+/// déjà écrit est effacé, sinon il resterait orphelin sur le disque (S6).
+async fn unlink_on_err<T>(path: &std::path::Path, res: Result<T>) -> Result<T> {
+    if res.is_err() {
+        if let Err(e) = tokio::fs::remove_file(path).await {
+            tracing::warn!("Fichier {} non supprimé après échec d'insertion : {e}", path.display());
+        }
+    }
+    res
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -546,13 +565,15 @@ pub async fn forum_upload(
             let name = encrypted_blob_name(&original_name)
                 .ok_or_else(|| AppError::BadRequest(crate::handlers::e2e_conv::PLAINTEXT_REFUSED.into()))?;
             let filename = format!("{}.enc", Uuid::new_v4());
-            let size = budget.save(&state, field, &upload_dir.join(&filename)).await?;
+            let path = upload_dir.join(&filename);
+            let size = budget.save(&state, field, &path).await?;
             let url = format!("/uploads/{filename}");
-            sqlx::query(
+            let row = sqlx::query(
                 "INSERT INTO attachments (filename, content_type, size, url, uploader_id, channel_id) VALUES ($1, 'application/octet-stream', $2, $3, $4, $5)"
             )
             .bind(&name).bind(size).bind(&url).bind(claims.sub).bind(channel_id)
-            .execute(&state.db).await?;
+            .execute(&state.db).await.map_err(AppError::from);
+            unlink_on_err(&path, row).await?;
             return Ok(Json(serde_json::json!({ "url": url, "signed_url": crate::upload_sign::sign_url(&url) })));
         }
 
@@ -563,11 +584,12 @@ pub async fn forum_upload(
         }
 
         let filename = format!("{}.{}", Uuid::new_v4(), ext);
-        let size = budget.save(&state, field, &upload_dir.join(&filename)).await?;
+        let path = upload_dir.join(&filename);
+        let size = budget.save(&state, field, &path).await?;
         let url = format!("/uploads/{}", filename);
         // Ligne sans message propriétaire, seulement pour compter le fichier dans le quota
         // (l'URL est collée dans le contenu du post).
-        sqlx::query(
+        let row = sqlx::query(
             "INSERT INTO attachments (filename, content_type, size, url, uploader_id, channel_id) VALUES ($1, $2, $3, $4, $5, $6)"
         )
         .bind(filename.as_str())
@@ -577,7 +599,9 @@ pub async fn forum_upload(
         .bind(claims.sub)
         .bind(channel_id)
         .execute(&state.db)
-        .await?;
+        .await
+        .map_err(AppError::from);
+        unlink_on_err(&path, row).await?;
 
         return Ok(Json(serde_json::json!({ "url": url, "signed_url": crate::upload_sign::sign_url(&url) })));
     }

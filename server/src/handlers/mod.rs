@@ -31,6 +31,7 @@ pub mod roles;
 pub mod invites;
 pub mod uploads;
 pub mod upload_gc;
+pub mod upload_sweep;
 pub mod websocket;
 pub mod watch;
 pub mod presence;
