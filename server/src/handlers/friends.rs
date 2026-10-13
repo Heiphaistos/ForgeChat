@@ -769,6 +769,11 @@ pub async fn send_dm(
             let _: () = redis.expire(&key, 3).await.unwrap_or(());
         }
         if count > 5 {
+            // Clé sans TTL (expire raté au 1er incr) : sinon blocage 429 définitif.
+            let ttl: i64 = redis.ttl(&key).await.unwrap_or(0);
+            if ttl == -1 {
+                let _: () = redis.expire(&key, 3).await.unwrap_or(());
+            }
             return Err(AppError::TooManyRequests);
         }
     }

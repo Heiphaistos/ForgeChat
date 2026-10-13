@@ -351,6 +351,7 @@ async fn open_session(state: &AppState, user_id: Uuid, headers: &HeaderMap) -> R
     .bind(&device)
     .fetch_one(&state.db)
     .await
+    .map_err(|e| tracing::warn!(error = %e, %user_id, "user_sessions insert failed: token issued without sid"))
     .ok();
     let access_token = create_token(user_id, sid, &state.config.jwt_secret, &state.config.jwt_issuer)
         .map_err(AppError::Internal)?;
