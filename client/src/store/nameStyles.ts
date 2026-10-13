@@ -29,9 +29,9 @@ export const useNameStyles = create<LookState>(set => ({
     const u = user as Record<string, unknown>
     const look: UserLook = {
       username: typeof u.username === 'string' ? u.username : undefined,
-      display_name: (u.display_name as string | null | undefined) ?? null,
+      display_name: typeof u.display_name === 'string' ? u.display_name : null,
       name_style: cleanStyle(u.name_style),
-      profile_tag: (u.profile_tag as string | null | undefined) ?? null,
+      profile_tag: typeof u.profile_tag === 'string' ? u.profile_tag : null,
     }
     set(s => ({ looks: { ...s.looks, [id]: look } }))
   },

@@ -5,6 +5,7 @@ import NativeVideo from './NativeVideo'
 import { useT } from '../../i18n'
 import AnimatedImg from '../ui/AnimatedImg'
 import UserName from '../ui/UserName'
+import { useAvPrefs } from '../../lib/avPrefs'
 
 // ─── Peer Tile ─────────────────────────────────────────────────────────────────
 export function PeerTile({
@@ -26,6 +27,11 @@ export function PeerTile({
   const t = useT()
   const hasStream = !!stream && stream.getVideoTracks().some(t => t.readyState === 'live')
   const hasVideo = peer.videoEnabled && (hasStream || !!videoUrl)
+  // Ma caméra en miroir (Réglages > Vidéo) : seulement à l'affichage, jamais dans le flux envoyé.
+  const mirror = useAvPrefs(s => s.camMirror) && isLocal
+  const videoStyle: React.CSSProperties | undefined = (blurEnabled && isLocal) || mirror
+    ? { ...(blurEnabled && isLocal ? { filter: 'blur(8px)' } : {}), ...(mirror ? { transform: 'scaleX(-1)' } : {}) }
+    : undefined
 
   // Ref callback plutôt qu'useEffect([stream]) : quand la vidéo arrive en cours d'appel
   // (caméra/partage d'écran), la référence du stream ne change pas — un effet ne se
@@ -49,12 +55,12 @@ export function PeerTile({
       ${isLocal ? 'ring-fc-accent/50' : ''}`}>
       {hasVideo && !hasStream && videoUrl ? (
         <NativeVideo url={videoUrl} fit="cover" className="w-full h-full"
-          style={blurEnabled && isLocal ? { filter: 'blur(8px)' } : undefined} />
+          style={videoStyle} />
       ) : hasVideo ? (
         <video ref={attachStream} autoPlay playsInline
           muted={isLocal ? muted : true}
           className="w-full h-full object-cover"
-          style={blurEnabled && isLocal ? { filter: 'blur(8px)' } : undefined} />
+          style={videoStyle} />
       ) : (
         <div className="flex flex-col items-center gap-2">
           {peer.avatar

@@ -20,6 +20,7 @@ import { guardArgon, markMigrated, markUserMigrated } from '../e2e/authGuard'
 
 const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
 
+
 interface User {
   id: string
   username: string
@@ -33,6 +34,8 @@ interface User {
   custom_status_emoji?: string | null
   custom_status_expires_at?: string | null
   display_name?: string | null
+  /** Style du pseudo du compte (validé par le serveur, relu par lib/nameStyle::cleanStyle). */
+  name_style?: unknown
   /** Activité (jeu détecté, musique saisie à la main…). */
   activity_type?: string | null
   activity_name?: string | null
@@ -117,7 +120,7 @@ export const useAuth = create<AuthState>()(
       // recevoir les notifications push de ce compte.
       await disableWebPush((await listAccounts()).length > 0)
       await api.post('/auth/logout', {}).catch(() => {})
-      if (isTauri) await clearLocalSession()
+      if (isTauri) await clearLocalSession(true)
       const uid = useAuth.getState().user?.id
       await clearAccountKey(uid)
       if (uid) await forgetOfflineData(uid)

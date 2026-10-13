@@ -435,6 +435,7 @@ pub fn run() {
         .plugin(tauri_plugin_window_state::Builder::new().build())
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
+            compat::seconde_instance();
             // Focaliser la fenêtre existante si une 2e instance est lancée
             if let Some(window) = app.get_webview_window("main") {
                 let _ = window.show();
@@ -467,6 +468,7 @@ pub fn run() {
             native_voice::nv_set_mic,
             native_voice::nv_set_deafen,
             native_voice::nv_set_peer_audio,
+            native_voice::nv_set_audio_processing,
             native_voice::nv_set_camera,
             native_voice::nv_set_screen,
             native_voice::nv_popout,
@@ -480,6 +482,7 @@ pub fn run() {
             session::session_switch,
             session::session_forget,
             session::session_import_account,
+            session::session_storage_status,
             systeme::system_get,
             systeme::system_set,
             systeme::system_set_autostart,

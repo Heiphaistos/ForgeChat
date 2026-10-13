@@ -69,6 +69,20 @@ pub async fn nv_set_deafen(deafened: bool) -> Result<(), String> {
     { let _ = deafened; Err(ABSENT.into()) }
 }
 
+/// Annulation d'écho, réduction de bruit et gain automatique du micro natif.
+#[tauri::command]
+pub async fn nv_set_audio_processing(aec: bool, ns: bool, agc: bool) -> Result<(), String> {
+    #[cfg(target_os = "linux")]
+    {
+        imp::set_audio_processing(aec, ns, agc).await
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = (aec, ns, agc);
+        Err(ABSENT.into())
+    }
+}
+
 #[tauri::command]
 pub async fn nv_set_peer_audio(identity: String, enabled: bool) -> Result<(), String> {
     #[cfg(target_os = "linux")]

@@ -64,7 +64,7 @@ jobs:
         options: >-
           --health-cmd "pg_isready -U forgechat" --health-interval 5s --health-timeout 5s --health-retries 10
       redis:
-        image: redis:7@sha256:4fa24486b8bcca8eec45ee0eb166edc674795e53a2b53d1a9ef263eecebaac85 # redis:7
+        image: redis:8-alpine@sha256:3811787313eba226a2ef38658c6ccb91cd5e110edc89c37767de373120a0e5a0 # redis:8-alpine, même image que la production
         ports: ['6379:6379']
     env:
       DATABASE_URL: postgres://forgechat:ci@127.0.0.1:5432/forgechat

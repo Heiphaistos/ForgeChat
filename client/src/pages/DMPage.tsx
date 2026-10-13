@@ -37,6 +37,7 @@ import { filesExtra, prepareFiles, type PreparedFiles } from '../e2e/files'
 import { isQueued } from '../lib/offline'
 import { RemoteSupportButton, useSupportSender } from '../components/chat/RemoteSupport'
 import type { SupportPayload } from '../lib/remoteSupport'
+import { useAvPrefs } from '../lib/avPrefs'
 
 const STATUS_LABEL: Record<string, Key> = {
   online: 'presence.online',
@@ -155,6 +156,8 @@ export default function DMPage() {
     pendingAccept, setPendingAccept, e2ee: callE2ee, e2eeOutdated,
   } = useCallStore()
   const isThisCallActive = callState !== 'idle' && activeCallDmId === dmId
+  // Ma caméra en miroir (Réglages > Vidéo), à l'affichage seulement.
+  const mirrorStyle = useAvPrefs(s => s.camMirror) ? { transform: 'scaleX(-1)' } : undefined
   const callBusyElsewhere = callState !== 'idle' && activeCallDmId !== dmId
 
   // ── Messages épinglés du DM ─────────────────────────────────────────────────
@@ -525,8 +528,8 @@ export default function DMPage() {
                 ? <NativeVideo url={remoteVideoUrl} fit="contain" className="w-full h-56" />
                 : <video ref={remoteVideoRef} autoPlay playsInline muted className="w-full max-h-56 object-contain" />}
               {localVideoUrl
-                ? <NativeVideo url={localVideoUrl} fit="cover" className="absolute bottom-2 right-2 w-24 h-16 rounded-lg border border-white/20" />
-                : <video ref={localVideoRef} autoPlay playsInline muted className="absolute bottom-2 right-2 w-24 h-16 object-cover rounded-lg border border-white/20" />}
+                ? <NativeVideo url={localVideoUrl} fit="cover" className="absolute bottom-2 right-2 w-24 h-16 rounded-lg border border-white/20" style={mirrorStyle} />
+                : <video ref={localVideoRef} autoPlay playsInline muted className="absolute bottom-2 right-2 w-24 h-16 object-cover rounded-lg border border-white/20" style={mirrorStyle} />}
               {callState === 'connected' && (remoteStream || remoteVideoUrl) && (
                 <span
                   className="absolute top-2 left-2 px-2 py-0.5 rounded-full bg-black/60 text-white text-xs font-medium tabular-nums select-none"

@@ -11,7 +11,7 @@ import {
 const PLATEFORMES: { id: Plateforme; nom: string; icone: ReactNode; resume: string }[] = [
   { id: 'windows', nom: 'Windows', icone: <Monitor size={22} />, resume: 'Windows 10 et 11 · installeur ou portable' },
   { id: 'macos', nom: 'macOS', icone: <Apple size={22} />, resume: 'macOS 11 et plus · Apple Silicon et Intel' },
-  { id: 'linux', nom: 'Linux', icone: <Terminal size={22} />, resume: '.deb, .rpm ou AppImage' },
+  { id: 'linux', nom: 'Linux', icone: <Terminal size={22} />, resume: '.deb, .rpm, Arch / Omarchy ou AppImage' },
   { id: 'android', nom: 'Android', icone: <Smartphone size={22} />, resume: 'Android 7 et plus · APK signé' },
   { id: 'iphone', nom: 'iPhone et iPad', icone: <Apple size={22} />, resume: 'Web app ou app native, sans App Store' },
   { id: 'web', nom: 'Navigateur', icone: <Globe size={22} />, resume: 'Rien à installer' },
@@ -190,6 +190,7 @@ function Linux() {
   const r = useDesktopRelease()
   const deb = r?.platforms['linux-x86_64']
   const rpm = r?.platforms['linux-rpm']
+  const arch = r?.platforms['linux-arch']
   const app = r?.platforms['linux-portable']
   const nom = (a?: Artefact) => (a ? a.url.split('/').pop() : '…')
   return (
@@ -197,6 +198,7 @@ function Linux() {
       <EnTete titre="Linux" os="linux" release={r}>
         <Bouton a={deb} titre=".deb" sous="Ubuntu, Debian, Mint" primaire />
         <Bouton a={rpm} titre=".rpm" sous="Fedora, openSUSE" />
+        <Bouton a={arch} titre=".pkg.tar.zst" sous="Arch, Omarchy, Manjaro" />
         <Bouton a={app} titre="AppImage" sous="toutes distributions" />
       </EnTete>
       <div className="site-wrap">
@@ -209,6 +211,9 @@ function Linux() {
           <Etape titre="Fedora, openSUSE (.rpm)">
             <Copier texte={`sudo dnf install ./${nom(rpm)}`} />
           </Etape>
+          <Etape titre="Arch, Omarchy, Manjaro, EndeavourOS (.pkg.tar.zst)">
+            <Copier texte={`sudo pacman -U ./${nom(arch)}`} />
+          </Etape>
           <Etape titre="N'importe quelle distribution (AppImage)">
             <p>Rendez le fichier exécutable puis lancez-le :</p>
             <Copier texte={`chmod +x ${nom(app)} && ./${nom(app)}`} />
@@ -218,7 +223,7 @@ function Linux() {
           </Etape>
         </Etapes>
         <MisesAJour>
-          <p>L'AppImage se remplace elle-même. Avec le .deb ou le .rpm, ForgeChat télécharge et vérifie le nouveau paquet puis l'ouvre dans votre installeur : il ne reste qu'à valider avec votre mot de passe.</p>
+          <p>L'AppImage se remplace elle-même. Avec le .deb, le .rpm ou le paquet Arch, ForgeChat télécharge et vérifie le nouveau paquet puis l'ouvre dans votre installeur : il ne reste qu'à valider avec votre mot de passe.</p>
         </MisesAJour>
       </div>
     </>

@@ -6,7 +6,11 @@ import { useCallStore } from '../../store/call'
 import { useClipsSetting } from '../../lib/clipBuffer'
 import { useT, intlLocale } from '../../i18n'
 import toast from 'react-hot-toast'
-import { backgroundImage, clearBackgroundImage, saveBackgroundImage } from '../../utils/backgroundBlur'
+import { backgroundImage, clearBackgroundImage, maybeBlur, saveBackgroundImage } from '../../utils/backgroundBlur'
+import { useAvPrefs, camConstraintsFromPrefs } from '../../lib/avPrefs'
+import {
+  CameraDisplaySettings, BackgroundOptions, ImageAdjustSettings, EncodingSettings, VideoResetButton, reapplyCamera,
+} from './AvVideoSettings'
 
 export default function VideoSection() {
   const t = useT()
@@ -23,6 +27,11 @@ export default function VideoSection() {
   const applyQualityPrefs = useVoice(s => s.applyQualityPrefs)
   const [camHeight, setCamHeight] = useState(() => localStorage.getItem('fc_cam_height') ?? '720')
   const [camBitrate, setCamBitrate] = useState(() => localStorage.getItem('fc_cam_bitrate') ?? '1200000')
+  const [camFps, setCamFps] = useState(() => localStorage.getItem('fc_cam_fps') ?? '30')
+  const mirror = useAvPrefs(s => s.camMirror)
+  // Décor et réglages d'image : l'aperçu est refait pour les montrer tels qu'envoyés.
+  const look = useAvPrefs(s => `${s.camBgMode}|${s.camBgColor}|${s.camBlurStrength}|${s.camBrightness}|${s.camContrast}|${s.camSaturation}`)
+  const previewOn = useRef(false)
   const [screenHeight, setScreenHeight] = useState(() => localStorage.getItem('fc_screen_height') ?? '1080')
   const [screenFps, setScreenFps] = useState(() => localStorage.getItem('fc_screen_fps') ?? '30')
   const [screenBitrate, setScreenBitrate] = useState(() => localStorage.getItem('fc_screen_bitrate') ?? '4000000')
@@ -74,15 +83,15 @@ export default function VideoSection() {
 
   const startPreview = async () => {
     try {
+      // Mêmes contraintes et traitements que la caméra envoyée (fond virtuel, image).
       const constraints: MediaStreamConstraints = {
-        video: {
-          width: { ideal: 1280 },
-          height: { ideal: 720 },
-          ...(selectedCamera ? { deviceId: { exact: selectedCamera } } : {}),
-        },
+        video: { ...camConstraintsFromPrefs(), ...(selectedCamera ? { deviceId: { exact: selectedCamera } } : {}) },
       }
-      const stream = await navigator.mediaDevices.getUserMedia(constraints)
+      const raw = await navigator.mediaDevices.getUserMedia(constraints)
+      const cam = raw.getVideoTracks()[0]
+      const stream = cam ? new MediaStream([await maybeBlur(cam)]) : raw
       streamRef.current = stream
+      previewOn.current = true
       // L'élément <video> n'existe pas encore au premier clic : il n'est monté
       // qu'une fois previewActive à true. Assigner srcObject avant, c'était
       // assigner à null — caméra allumée, cadre noir.
@@ -97,6 +106,7 @@ export default function VideoSection() {
   const stopPreview = () => {
     streamRef.current?.getTracks().forEach(tr => tr.stop())
     streamRef.current = null
+    previewOn.current = false
     if (videoRef.current) videoRef.current.srcObject = null
     setPreviewActive(false)
   }
@@ -109,6 +119,13 @@ export default function VideoSection() {
   }, [previewActive])
 
   useEffect(() => () => stopPreview(), [])
+
+  useEffect(() => {
+    if (!previewOn.current) return
+    const id = setTimeout(() => { stopPreview(); void startPreview() }, 400)
+    return () => clearTimeout(id)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [look, camBlur, bgImage])
 
   const handleCameraChange = (id: string) => {
     setSelectedCamera(id)
@@ -199,6 +216,7 @@ export default function VideoSection() {
               playsInline
               muted
               className="w-full h-full object-cover"
+              style={mirror ? { transform: 'scaleX(-1)' } : undefined}
             />
           ) : (
             <div className="flex flex-col items-center justify-center h-full gap-2 text-fc-muted">
@@ -208,6 +226,8 @@ export default function VideoSection() {
           )}
         </div>
       </div>
+
+      <CameraDisplaySettings />
 
       {/* Qualité d'émission — aucune de ces valeurs n'était réglable, et aucun
           plafond de débit n'était appliqué aux senders (mesh N-à-N sans limite). */}
@@ -228,6 +248,13 @@ export default function VideoSection() {
             <option value="4000000">4 Mb/s</option>
             <option value="6000000">6 Mb/s</option>
           </select>
+          <select value={camFps} onChange={e => savePref('fc_cam_fps', e.target.value, setCamFps)}
+            className="bg-fc-channel border border-fc-hover rounded-lg px-3 py-2 text-sm text-white" aria-label={t('av.video.fps')}>
+            <option value="15">{fps(15)}</option>
+            <option value="24">{fps(24)}</option>
+            <option value="30">{`${fps(30)} (${rec})`}</option>
+            <option value="60">{fps(60)}</option>
+          </select>
         </div>
         <p className="text-xs text-fc-muted mt-1">
           {t('settings.video.camQualityHint')}
@@ -236,7 +263,7 @@ export default function VideoSection() {
 
       <Field label={t('settings.video.background')}>
         <label className="flex items-center gap-2 text-sm text-white cursor-pointer">
-          <input type="checkbox" checked={camBlur === 'true'} onChange={e => savePref('fc_cam_blur', String(e.target.checked), setCamBlur)} className="accent-fc-accent" />
+          <input type="checkbox" checked={camBlur === 'true'} onChange={e => { savePref('fc_cam_blur', String(e.target.checked), setCamBlur); reapplyCamera() }} className="accent-fc-accent" />
           {t('settings.video.blur')}
         </label>
         <p className="text-xs text-fc-muted mt-1">{t('settings.video.blurHint')}</p>
@@ -246,16 +273,21 @@ export default function VideoSection() {
             {t('voiceLot.bg.pick')}
             <input type="file" accept="image/*" className="hidden" onChange={e => {
               const f = e.target.files?.[0]
-              if (f) void saveBackgroundImage(f).then(setBgImage).catch(() => toast.error(t('voiceLot.bg.error')))
+              if (f) void saveBackgroundImage(f).then(url => { setBgImage(url); if (camBlur === 'true') reapplyCamera() }).catch(() => toast.error(t('voiceLot.bg.error')))
             }} />
           </label>
           {bgImage && (
-            <button onClick={() => { clearBackgroundImage(); setBgImage(null) }}
+            <button onClick={() => { clearBackgroundImage(); setBgImage(null); if (camBlur === 'true') reapplyCamera() }}
               className="text-xs px-2 py-1 rounded bg-fc-hover hover:bg-fc-red text-white">{t('voiceLot.bg.remove')}</button>
           )}
         </div>
         <p className="text-xs text-fc-muted mt-1">{t('voiceLot.bg.hint')}</p>
+        <BackgroundOptions enabled={camBlur === 'true'} hasImage={!!bgImage} />
       </Field>
+
+      <ImageAdjustSettings />
+
+      <EncodingSettings />
 
       <Field label={t('settings.video.screenQuality')}>
         <div className="grid grid-cols-2 gap-2">
@@ -305,6 +337,10 @@ export default function VideoSection() {
         </label>
         <p className="text-xs text-fc-muted mt-1">{t('settings.video.clipsHint')}</p>
       </Field>
+
+      <div className="flex justify-end">
+        <VideoResetButton />
+      </div>
     </div>
   )
 }

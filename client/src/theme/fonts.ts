@@ -14,6 +14,22 @@ export const FONTS = [
   { id: 'tahoma', label: 'Tahoma', stack: 'Tahoma, Geneva, sans-serif' },
   { id: 'georgia', label: 'Georgia', stack: 'Georgia, "Times New Roman", serif' },
   { id: 'consolas', label: 'Consolas', stack: 'Consolas, "Courier New", monospace' },
+  // Polices du système (aucun téléchargement) : la suivante de la pile prend le relais si absente.
+  { id: 'rounded', label: 'fonts.rounded', stack: 'ui-rounded, "SF Pro Rounded", "Nunito", "Varela Round", "Segoe UI", sans-serif' },
+  { id: 'serif', label: 'fonts.serif', stack: 'ui-serif, "New York", Cambria, "Times New Roman", serif' },
+  { id: 'segoe', label: 'Segoe UI', stack: '"Segoe UI", "Segoe UI Variable", Tahoma, sans-serif' },
+  { id: 'helvetica', label: 'Helvetica', stack: '"Helvetica Neue", Helvetica, Arial, sans-serif' },
+  { id: 'calibri', label: 'Calibri', stack: 'Calibri, Carlito, "Segoe UI", sans-serif' },
+  { id: 'candara', label: 'Candara', stack: 'Candara, Calibri, "Segoe UI", sans-serif' },
+  { id: 'gill', label: 'Gill Sans', stack: '"Gill Sans", "Gill Sans MT", Calibri, sans-serif' },
+  { id: 'lucida', label: 'Lucida Grande', stack: '"Lucida Grande", "Lucida Sans Unicode", "Lucida Sans", sans-serif' },
+  { id: 'cambria', label: 'Cambria', stack: 'Cambria, Caladea, Georgia, serif' },
+  { id: 'palatino', label: 'Palatino', stack: '"Palatino Linotype", Palatino, "Book Antiqua", serif' },
+  { id: 'garamond', label: 'Garamond', stack: 'Garamond, "EB Garamond", "Times New Roman", serif' },
+  { id: 'courier', label: 'Courier New', stack: '"Courier New", Courier, monospace' },
+  { id: 'cascadia', label: 'Cascadia Code', stack: '"Cascadia Code", "Cascadia Mono", Consolas, monospace' },
+  { id: 'comic', label: 'Comic Sans MS', stack: '"Comic Sans MS", "Comic Neue", "Chalkboard SE", cursive' },
+  { id: 'dyslexic', label: 'fonts.dyslexic', stack: '"OpenDyslexic", "Lexend", Verdana, sans-serif' },
 ] as const
 
 /**

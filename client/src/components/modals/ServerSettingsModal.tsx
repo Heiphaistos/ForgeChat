@@ -18,6 +18,7 @@ import WebhooksTab from './WebhooksTab'
 import AuditLogTab from './AuditLogTab'
 import AutoModTab from './AutoModTab'
 import FeedsTab from './FeedsTab'
+import DiscordSyncTab from './DiscordSyncTab'
 import StatsTab from './StatsTab'
 import OnboardingTab from './OnboardingTab'
 import ServerEventsPage from '../../pages/ServerEventsPage'
@@ -66,7 +67,7 @@ interface Props {
   initialTab?: ServerSettingsTab
 }
 
-export type ServerSettingsTab = 'general' | 'profile' | 'e2e' | 'roles' | 'members' | 'bans' | 'tags' | 'emojis' | 'bots' | 'webhooks' | 'audit' | 'automod' | 'feeds' | 'stats' | 'events' | 'onboarding' | 'community'
+export type ServerSettingsTab = 'general' | 'profile' | 'e2e' | 'roles' | 'members' | 'bans' | 'tags' | 'emojis' | 'bots' | 'webhooks' | 'audit' | 'automod' | 'feeds' | 'discordSync' | 'stats' | 'events' | 'onboarding' | 'community'
 
 function BoostSection({ server }: { server: any }) {
   // Boost gratuit (un par membre et par serveur) : même appel que le bouton de la barre des salons.
@@ -131,7 +132,9 @@ export default function ServerSettingsModal({ server, onClose, isAdmin = false, 
   const t = useT()
   useEscapeKey(onClose)
   // Liste des bans : bannir définitivement OU temporairement.
-  const canSeeBans = useServerPerms(server.id).has(PERM.BAN_MEMBERS | PERM.BAN_TEMP)
+  const perms = useServerPerms(server.id)
+  const canSeeBans = perms.has(PERM.BAN_MEMBERS | PERM.BAN_TEMP)
+  const canManageServer = perms.has(PERM.MANAGE_SERVER)
   const [tab, setTab] = useState<Tab>(initialTab)
   const [mobileShowContent, setMobileShowContent] = useState(initialTab !== 'general')
   const [name, setName] = useState(server.name)
@@ -334,6 +337,7 @@ export default function ServerSettingsModal({ server, onClose, isAdmin = false, 
         { id: 'bots', icon: Bot },
         ...(isAdmin ? [{ id: 'webhooks' as Tab, icon: Link }] : []),
         { id: 'feeds', icon: Rss },
+        ...(isAdmin || estProprietaire || canManageServer ? [{ id: 'discordSync' as Tab, icon: RefreshCw }] : []),
         ...(estProprietaire ? [{ id: 'onboarding' as Tab, icon: Sparkles }] : []),
         ...(isAdmin ? [{ id: 'community' as Tab, icon: Trophy }] : []),
       ],
@@ -876,6 +880,7 @@ export default function ServerSettingsModal({ server, onClose, isAdmin = false, 
             {tab === 'tags'    && <TagsTab serverId={server.id} />}
             {tab === 'webhooks' && <WebhooksTab server={server} channels={channels} />}
             {tab === 'feeds'   && <FeedsTab serverId={server.id} channels={channels} />}
+            {tab === 'discordSync' && <DiscordSyncTab serverId={server.id} />}
             {tab === 'audit'   && <AuditLogTab server={server} />}
             {tab === 'automod' && <AutoModTab server={server} channels={channels} />}
           </div>

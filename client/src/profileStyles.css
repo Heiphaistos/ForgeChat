@@ -1,0 +1,271 @@
+/*
+ * Personnalisation du profil, suite (components/ui/ProfileDecor.tsx, AvatarRing.tsx,
+ * ClanTag.tsx, lib/nameStyle.ts). Tout est en CSS : aucune image ni police téléchargée.
+ * Toutes les animations s'arrêtent avec « réduire les animations » (système ou réglage).
+ */
+
+/* ── DÉCORATIONS D'AVATAR ─────────────────────────────────────────────── */
+.fc-deco-layer { position: absolute; inset: 0; border-radius: 9999px; }
+.fc-deco-dual { border: 1.5px solid; opacity: .85; }
+.fc-deco-glyph {
+  position: absolute;
+  display: flex; align-items: center; justify-content: center;
+  line-height: 1; pointer-events: none;
+  text-shadow: 0 0 4px currentColor;
+  animation: fc-deco-twinkle 2.6s ease-in-out infinite;
+}
+.fc-deco-orbit { animation: fc-deco-spin 4s linear infinite; }
+.fc-deco-orbit > span {
+  position: absolute; left: 50%; top: 0;
+  transform: translate(-50%, -50%);
+  line-height: 1; text-shadow: 0 0 5px currentColor;
+}
+@keyframes fc-deco-twinkle {
+  0%, 100% { opacity: .55; transform: scale(.85); }
+  50%      { opacity: 1;   transform: scale(1.1); }
+}
+@keyframes fc-deco-hue { to { filter: hue-rotate(360deg); } }
+@keyframes fc-deco-flicker {
+  0%, 100% { opacity: 1; }
+  8% { opacity: .55; } 12% { opacity: 1; } 47% { opacity: .9; } 50% { opacity: .4; } 53% { opacity: 1; } 78% { opacity: .75; }
+}
+@keyframes fc-deco-flash {
+  0%, 86%, 100% { opacity: .75; filter: brightness(1); }
+  88% { opacity: 1; filter: brightness(2.2); }
+  90% { opacity: .5; }
+  92% { opacity: 1; filter: brightness(1.8); }
+}
+@keyframes fc-deco-breathe {
+  0%, 100% { opacity: 1; filter: saturate(1); }
+  50%      { opacity: .7; filter: saturate(1.6); }
+}
+.fc-deco-spinrev { animation: fc-deco-spin 7s linear infinite reverse; }
+.fc-deco-hue     { animation: fc-deco-hue 5s linear infinite; }
+.fc-deco-flicker { animation: fc-deco-flicker 3s steps(1, end) infinite; }
+.fc-deco-flash   { animation: fc-deco-flash 3.5s linear infinite; }
+.fc-deco-steps   { animation: fc-deco-spin 6s steps(12) infinite; }
+.fc-deco-breathe { animation: fc-deco-breathe 3s ease-in-out infinite; }
+
+/* ── ANNEAU D'AVATAR DU PROFIL DE SERVEUR (AvatarRing.tsx) ───────────── */
+.fc-ring { position: absolute; border-radius: 9999px; pointer-events: none; }
+.fc-ring-spin  { animation: fc-deco-spin 4s linear infinite; }
+.fc-ring-pulse { animation: fc-deco-pulse 2.4s ease-in-out infinite; }
+
+/* ── EFFETS DE PROFIL : nouveaux mouvements ──────────────────────────── */
+@keyframes fc-fx-sway {
+  0%   { opacity: 0; transform: translate(0, -10%) rotate(0); }
+  15%  { opacity: 1; }
+  35%  { transform: translate(calc(var(--fx-dx, 30px) * .6), 140px) rotate(90deg); }
+  65%  { transform: translate(calc(var(--fx-dx, 30px) * -.4), 280px) rotate(200deg); }
+  100% { opacity: 0; transform: translate(var(--fx-dx, 30px), 420px) rotate(320deg); }
+}
+@keyframes fc-fx-rain {
+  0%   { opacity: 0; transform: translateY(0); }
+  10%  { opacity: .9; }
+  100% { opacity: 0; transform: translateY(440px); }
+}
+@keyframes fc-fx-burst {
+  0%   { opacity: 0; transform: translate(0, 0) scale(.3); }
+  15%  { opacity: 1; }
+  100% { opacity: 0; transform: translate(var(--fx-dx, 0), var(--fx-dy, 0)) scale(1.1); }
+}
+@keyframes fc-fx-confetti {
+  0%   { opacity: 0; transform: translate(0, 0) rotate3d(1, 1, 0, 0deg); }
+  10%  { opacity: 1; }
+  100% { opacity: 0; transform: translate(var(--fx-dx, 20px), 430px) rotate3d(1, 1, 0, 900deg); }
+}
+@keyframes fc-fx-drift {
+  0%, 100% { opacity: 0; transform: translate(0, 0) scale(.6); }
+  30%, 70% { opacity: 1; }
+  50%      { transform: translate(var(--fx-dx, 20px), var(--fx-dy, -20px)) scale(1); }
+}
+@keyframes fc-fx-diagonal {
+  0%   { opacity: 0; transform: translate(0, 0); }
+  12%  { opacity: 1; }
+  100% { opacity: 0; transform: translate(-320px, 420px); }
+}
+
+/* Calques (une seule lecture à l'ouverture, puis fondu). */
+.fc-fx-ov {
+  position: absolute; inset: 0;
+  animation: fc-fx-ov-fade 5s ease-in-out both;
+  mix-blend-mode: screen;
+}
+@keyframes fc-fx-ov-fade { 0% { opacity: 0; } 15%, 70% { opacity: 1; } 100% { opacity: 0; } }
+.fc-fx-ov-aurora {
+  background:
+    radial-gradient(60% 40% at 20% 10%, rgba(0, 255, 163, .45), transparent 70%),
+    radial-gradient(50% 35% at 70% 0%, rgba(0, 180, 255, .4), transparent 70%),
+    radial-gradient(50% 40% at 50% 20%, rgba(138, 43, 226, .35), transparent 70%);
+  background-size: 200% 100%;
+  animation: fc-fx-ov-fade 6s ease-in-out both, fc-fx-aurora-move 6s ease-in-out both;
+}
+@keyframes fc-fx-aurora-move { from { background-position: 0 0; } to { background-position: 100% 0; } }
+.fc-fx-ov-flash { background: rgba(220, 235, 255, .7); animation: fc-fx-flash 3s linear both; }
+@keyframes fc-fx-flash {
+  0%, 20%, 26%, 60%, 64%, 100% { opacity: 0; }
+  22%, 24% { opacity: .9; }
+  62% { opacity: .6; }
+}
+.fc-fx-ov-sunrays {
+  inset: -50%;
+  background: repeating-conic-gradient(from 0deg at 50% 50%, rgba(255, 214, 102, .28) 0deg 8deg, transparent 8deg 20deg);
+  animation: fc-fx-ov-fade 5s ease-in-out both, fc-deco-spin 12s linear both;
+}
+.fc-fx-ov-glitch {
+  background:
+    linear-gradient(transparent 0 20%, rgba(255, 0, 80, .35) 20% 23%, transparent 23% 55%, rgba(0, 240, 255, .35) 55% 57%, transparent 57%);
+  animation: fc-fx-glitch 1.8s steps(1, end) 2 both;
+}
+@keyframes fc-fx-glitch {
+  0%   { opacity: 1; transform: translateX(0); }
+  15%  { transform: translate(-6px, 30px); }
+  30%  { transform: translate(4px, -40px); opacity: .6; }
+  45%  { transform: translate(-2px, 80px); }
+  60%  { transform: translate(6px, 10px); opacity: 1; }
+  80%  { transform: translate(0, 120px); }
+  100% { opacity: 0; }
+}
+.fc-fx-ov-rainbow {
+  background: linear-gradient(110deg, transparent 30%, rgba(255, 59, 48, .25), rgba(255, 204, 0, .25), rgba(52, 199, 89, .25), rgba(0, 122, 255, .25), rgba(175, 82, 222, .25), transparent 70%);
+  background-size: 250% 100%;
+  animation: fc-fx-ov-fade 4.5s ease-in-out both, fc-fx-sweep 4.5s ease-in-out both;
+}
+@keyframes fc-fx-sweep { from { background-position: 100% 0; } to { background-position: 0 0; } }
+.fc-fx-ov-mist {
+  background:
+    radial-gradient(40% 30% at 20% 70%, rgba(255, 255, 255, .22), transparent 70%),
+    radial-gradient(45% 30% at 80% 60%, rgba(255, 255, 255, .18), transparent 70%);
+  background-size: 200% 100%;
+  mix-blend-mode: normal;
+  animation: fc-fx-ov-fade 6s ease-in-out both, fc-fx-aurora-move 6s linear both;
+}
+.fc-fx-ov-synthwave {
+  background:
+    linear-gradient(to top, rgba(255, 43, 214, .35), transparent 45%),
+    repeating-linear-gradient(to top, rgba(0, 229, 255, .35) 0 2px, transparent 2px 18px);
+  background-size: 100% 100%, 100% 36px;
+  animation: fc-fx-ov-fade 5s ease-in-out both, fc-fx-grid 5s linear both;
+}
+@keyframes fc-fx-grid { from { background-position: 0 0, 0 0; } to { background-position: 0 0, 0 -180px; } }
+.fc-fx-ov-plasma {
+  background:
+    radial-gradient(35% 35% at 30% 30%, rgba(247, 37, 133, .45), transparent 70%),
+    radial-gradient(35% 35% at 70% 60%, rgba(76, 201, 240, .45), transparent 70%),
+    radial-gradient(30% 30% at 50% 80%, rgba(114, 9, 183, .45), transparent 70%);
+  animation: fc-fx-ov-fade 5s ease-in-out both, fc-deco-hue 5s linear both;
+}
+.fc-fx-ov-ocean {
+  background: repeating-linear-gradient(170deg, rgba(0, 198, 255, .18) 0 14px, rgba(0, 114, 255, .1) 14px 30px);
+  background-size: 100% 200%;
+  animation: fc-fx-ov-fade 5s ease-in-out both, fc-fx-ocean 5s linear both;
+}
+@keyframes fc-fx-ocean { from { background-position: 0 0; } to { background-position: 0 -120px; } }
+.fc-fx-ov-nebula {
+  background:
+    radial-gradient(50% 40% at 30% 30%, rgba(160, 68, 255, .35), transparent 70%),
+    radial-gradient(45% 40% at 75% 55%, rgba(255, 110, 196, .25), transparent 70%);
+}
+.fc-fx-ov-moon {
+  background: radial-gradient(18% 18% at 82% 14%, rgba(226, 235, 240, .55), transparent 70%),
+              linear-gradient(to bottom, rgba(40, 60, 120, .3), transparent 60%);
+  mix-blend-mode: normal;
+}
+
+/* ── PSEUDO STYLÉ : effets animés (lib/nameStyle.ts, nameClass) ──────── */
+.fc-name-fx { position: relative; }
+@keyframes fc-name-slide { from { background-position: 0% 0; } to { background-position: 300% 0; } }
+@keyframes fc-name-rise  { from { background-position: 0 100%; } to { background-position: 0 0; } }
+.fc-name-rainbow, .fc-name-holo { animation: fc-name-slide 6s linear infinite; }
+.fc-name-chrome { animation: fc-name-slide 4s ease-in-out infinite alternate; }
+.fc-name-fire   { animation: fc-name-rise 1.2s ease-in-out infinite alternate; }
+@keyframes fc-name-neon {
+  0%, 100% { opacity: 1; }
+  4% { opacity: .7; } 6% { opacity: 1; } 52% { opacity: .85; } 54% { opacity: 1; }
+}
+.fc-name-neon { animation: fc-name-neon 4s linear infinite; }
+@keyframes fc-name-pulse { 0%, 100% { opacity: 1; filter: brightness(1); } 50% { opacity: .75; filter: brightness(1.35); } }
+.fc-name-pulse { animation: fc-name-pulse 2.2s ease-in-out infinite; }
+/* Flottement et vague : `top` d'un élément en position relative (marche sur du texte en ligne). */
+@keyframes fc-name-float { 0%, 100% { top: 0; } 50% { top: -2px; } }
+.fc-name-float { animation: fc-name-float 2.4s ease-in-out infinite; }
+.fc-name-wave > span { position: relative; animation: fc-name-float 1.2s ease-in-out infinite; }
+/* Glitch : deux copies décalées du même texte (attr(data-text), jamais du HTML). */
+.fc-name-glitch::before, .fc-name-glitch::after {
+  content: attr(data-text);
+  position: absolute; left: 0; top: 0;
+  pointer-events: none;
+  -webkit-text-fill-color: currentColor;
+  background: none;
+  overflow: hidden;
+  white-space: nowrap;
+}
+.fc-name-glitch::before { color: #ff2bd6; opacity: .7; animation: fc-name-glitch-a 2.5s steps(1, end) infinite; }
+.fc-name-glitch::after  { color: #00e5ff; opacity: .7; animation: fc-name-glitch-b 2.5s steps(1, end) infinite; }
+@keyframes fc-name-glitch-a {
+  0%, 100% { clip-path: inset(0 0 100% 0); transform: none; }
+  10% { clip-path: inset(10% 0 55% 0); transform: translate(-2px, 0); }
+  14% { clip-path: inset(0 0 100% 0); }
+  60% { clip-path: inset(60% 0 10% 0); transform: translate(2px, 0); }
+  64% { clip-path: inset(0 0 100% 0); }
+}
+@keyframes fc-name-glitch-b {
+  0%, 100% { clip-path: inset(0 0 100% 0); transform: none; }
+  12% { clip-path: inset(50% 0 20% 0); transform: translate(2px, 0); }
+  16% { clip-path: inset(0 0 100% 0); }
+  62% { clip-path: inset(15% 0 60% 0); transform: translate(-2px, 0); }
+  66% { clip-path: inset(0 0 100% 0); }
+}
+/* Étincelle : un glyphe qui scintille au bout du pseudo. */
+.fc-name-sparkle::after {
+  content: '✦';
+  position: absolute; right: -.7em; top: -.45em;
+  font-size: .6em;
+  color: #ffe680;
+  -webkit-text-fill-color: #ffe680;
+  -webkit-text-stroke: 0;
+  text-shadow: 0 0 4px #ffe680;
+  animation: fc-deco-twinkle 1.8s ease-in-out infinite;
+}
+
+/* ── MARQUES DE CLAN (ClanTag.tsx) ──────────────────────────────────── */
+.fc-clan {
+  display: inline-flex; align-items: center; gap: 2px;
+  padding: 0 4px;
+  border-radius: 4px;
+  font-size: 10px; font-weight: 700; line-height: 16px;
+  white-space: nowrap; vertical-align: middle;
+  letter-spacing: .02em;
+}
+.fc-clan-pill { border-radius: 9999px; padding: 0 6px; }
+.fc-clan-glass { backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
+
+/* ── BANNIÈRE DE PROFIL ENTIÈRE (ProfileBanner.tsx) ──────────────────── */
+.fc-banner { position: relative; overflow: hidden; }
+.fc-banner-fill {
+  position: absolute; inset: -12px;
+  width: calc(100% + 24px); height: calc(100% + 24px);
+  object-fit: cover;
+  filter: blur(14px) brightness(.7);
+  transform: scale(1.05);
+}
+.fc-banner-img { position: relative; display: block; width: 100%; height: 100%; object-fit: contain; }
+
+/* ── SÉLECTEURS (ProfileCosmetics.tsx) : calque d'effet figé dans une vignette ── */
+.fc-fx-ov.fc-fx-still { animation: none !important; opacity: 1; }
+
+/* ── RÉDUIRE LES ANIMATIONS ──────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  .fc-deco-spinrev, .fc-deco-hue, .fc-deco-flicker, .fc-deco-flash, .fc-deco-steps, .fc-deco-breathe,
+  .fc-deco-glyph, .fc-deco-orbit, .fc-ring-spin, .fc-ring-pulse,
+  .fc-name-fx, .fc-name-wave > span { animation: none !important; }
+  .fc-name-fx::before, .fc-name-fx::after { animation: none !important; }
+  .fc-name-glitch::before, .fc-name-glitch::after { display: none; }
+}
+[data-reduce-motion="true"] :is(.fc-deco-spin, .fc-deco-pulse, .fc-deco-spinrev, .fc-deco-hue, .fc-deco-flicker, .fc-deco-flash, .fc-deco-steps, .fc-deco-breathe,
+  .fc-deco-glyph, .fc-deco-orbit, .fc-ring-spin, .fc-ring-pulse, .fc-name-fx, .fc-name-shimmer) { animation: none !important; }
+[data-reduce-motion="true"] .fc-name-fx::before,
+[data-reduce-motion="true"] .fc-name-fx::after,
+[data-reduce-motion="true"] .fc-name-wave > span { animation: none !important; }
+[data-reduce-motion="true"] .fc-name-glitch::before,
+[data-reduce-motion="true"] .fc-name-glitch::after { display: none; }

@@ -1,6 +1,6 @@
 [package]
 name = "forgechat-desktop"
-version = "3.61.0"
+version = "3.62.0"
 edition = "2021"
 
 [lib]
@@ -26,7 +26,7 @@ tauri-plugin-deep-link = "2"
 # Push-to-talk global, actif fenetre non focalisee (correctif A9)
 tauri-plugin-global-shortcut = "2"
 # Boite native « Enregistrer sous » / choix de dossier (appelee cote Rust seulement).
-tauri-plugin-dialog = "~2.7" # 2.8 exige tauri 2.12 (garder tauri 2.11 du depot)
+tauri-plugin-dialog = "~2.8" # 2.8 exige tauri 2.12 (aligne sur @tauri-apps/api et @tauri-apps/cli 2.12)
 # Lancer ForgeChat au demarrage de l'ordinateur (reglages Systeme).
 tauri-plugin-autostart = "2"
 serde = { version = "1", features = ["derive"] }
@@ -55,9 +55,9 @@ windows-sys = { version = "0.59", features = [
     # donc pas etre demarre par Command::spawn (ERROR_ELEVATION_REQUIRED).
     "Win32_UI_Shell",
 ] }
-# Gestionnaire PermissionRequested de WebView2 (garde_web.rs) : memes versions que wry 0.55.
-webview2-com = "0.38"
-windows-core = "0.61"
+# Gestionnaire PermissionRequested de WebView2 (garde_web.rs) : memes versions que wry 0.57.
+webview2-com = "0.39"
+windows-core = "0.62"
 
 # Handler de permission média WebKitGTK (correctif S3). Version epinglee sur
 # celle que wry 0.55 utilise : `PlatformWebview::inner()` rend un
@@ -70,7 +70,7 @@ libc = "0.2"
 # Vocal natif : WebKitGTK des distributions n'a pas WebRTC (RTCPeerConnection
 # absent, mesuré sur 2.50.4). Le média passe par le SDK Rust de LiveKit, qui
 # embarque son propre WebRTC, et par le module audio natif (PulseAudio/ALSA).
-livekit = { version = "=0.9.1", features = ["rustls-tls-webpki-roots"] }
+livekit = { version = "=0.9.4", features = ["rustls-tls-webpki-roots"] }
 jpeg-encoder = "0.7"
 futures = "0.3"
 tokio = { version = "1", features = ["sync"] }

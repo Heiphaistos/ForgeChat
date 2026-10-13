@@ -10,12 +10,15 @@ import ReminderModal from './ReminderModal'
 import PollDisplay from './PollDisplay'
 import LinkPreview from './LinkPreview'
 import LocationCard from './LocationCard'
+import EncryptedPoll from './EncryptedPoll'
+import { KEYCAPS, pollOf } from '../../lib/encPoll'
 import { geoOf } from '../../lib/geo'
 import { parseStickerMessage } from './StickerPicker'
 import { gifMessage, GifMessage } from './gif-utils'
 import { handleMarkdownShortcut, stripMarkdown } from '../../utils/mdShortcuts'
 import { REACTION_PICKER_EMOJIS, formatBytes, extractFirstUrl, EphemeralBadge, AfterReadBadge } from './messageListShared'
 import { AvatarDecoration } from '../ui/ProfileDecor'
+import AvatarRing from '../ui/AvatarRing'
 import AnimatedImg from '../ui/AnimatedImg'
 import UserName from '../ui/UserName'
 import { dateLocale, useT } from '../../i18n'
@@ -183,6 +186,7 @@ function MessageRow({
             )}
             {!isGrouped && (
               <AvatarDecoration id={msg.author_avatar_decoration} size={compact ? 28 : 40}>
+              <AvatarRing ring={roleDecor?.ring} size={compact ? 28 : 40}>
               <button
                 className={`rounded-full bg-fc-accent flex items-center justify-center font-bold text-sm text-white overflow-hidden hover:opacity-80 transition ${compact ? 'w-7 h-7' : 'w-8 h-8 md:w-10 md:h-10'}`}
                 onClick={e => onOpenUserPopup(e, msg.author_id)}
@@ -193,6 +197,7 @@ function MessageRow({
                   ? <AnimatedImg src={msg.author_avatar} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" onError={e => { e.currentTarget.style.display = 'none' }} />
                   : msg.author_username.charAt(0).toUpperCase()}
               </button>
+              </AvatarRing>
               </AvatarDecoration>
             )}
           </div>
@@ -207,7 +212,7 @@ function MessageRow({
                 onClick={e => onOpenUserPopup(e, msg.author_id)}
                 onContextMenu={e => onAvatarContextMenu(e, msg)}
               >
-                <UserName userId={msg.author_id} name={msg.author_username} roleStyle={roleDecor?.style} roleOverrides={roleDecor?.overridesName} withTag />
+                <UserName userId={msg.author_id} name={msg.author_username} roleStyle={roleDecor?.style} roleOverrides={roleDecor?.overridesName} serverStyle={roleDecor?.nameStyle} clanTags={roleDecor?.tags} withTag />
               </button>
               <RoleIcon icon={roleDecor?.icon} title={roleDecor?.iconTitle} />
               {msg.author_verified && (
@@ -291,7 +296,7 @@ function MessageRow({
                   )
                 }
                 return (
-                  <div className={`text-fc-text text-sm break-words leading-relaxed ${msg.logged_deleted ? 'opacity-60 line-through' : ''}`}>
+                  <div className={`fc-msg-body text-fc-text text-sm break-words leading-relaxed ${msg.logged_deleted ? 'opacity-60 line-through' : ''}`}>
                     {/* Journal local (Extras) : anciennes versions, jamais envoyées ni gardées */}
                     {msg.logged_edits?.map((old: string, i: number) => (
                       <div key={i} className="text-fc-muted opacity-70 no-underline" title={t('ux.logger.oldVersion')}>{old}</div>
@@ -437,6 +442,9 @@ function MessageRow({
               {/* Support à distance (MP) : carte du contenu chiffré `rs` */}
               {!serverId && msg.e2e_body?.rs != null && <RemoteSupportCard msg={msg} isOwn={isOwn} />}
 
+              {/* Sondage chiffré (amélioration n° 35) */}
+              {(() => { const p = msg.enc ? pollOf(msg.e2e_body) : null; return p ? <EncryptedPoll poll={p} reactions={msg.reactions} onToggle={e => onToggleReaction(msg.id, e)} /> : null })()}
+
               {/* Position partagée (chiffrée, amélioration n° 34) */}
               {(() => { const g = msg.enc ? geoOf(msg.e2e_body) : null; return g ? <LocationCard g={g} /> : null })()}
 
@@ -451,7 +459,7 @@ function MessageRow({
               {/* Réactions */}
               {showReactions && msg.reactions?.length > 0 && (
                 <div className="flex flex-wrap gap-1 mt-1.5">
-                  {msg.reactions?.map((r: any) => {
+                  {msg.reactions?.filter((r: any) => !(msg.enc && pollOf(msg.e2e_body) && (KEYCAPS as readonly string[]).includes(r.emoji))).map((r: any) => {
                     const isSuper = !!r.is_super
                     const isPopping = !isSuper && poppingEmoji === r.emoji
                     const isBumped = !isSuper && bumpedEmojis.includes(r.emoji)

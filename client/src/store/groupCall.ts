@@ -10,6 +10,9 @@ import { useCallStore, callAudioConstraints, callVideoConstraints } from './call
 import { useVoice } from './voice'
 import { hasUxPref, useUxPrefs } from './uxPrefs'
 import { routeAudio, dropPlayback } from '../lib/voicePlayback'
+import { processCallMicStream } from '../lib/audio'
+import { camPublishOptions, useAvPrefs } from '../lib/avPrefs'
+import { maybeBlur } from '../utils/backgroundBlur'
 import { clampVolumePct } from '../lib/voiceMix'
 import { webrtcMissing } from '../lib/webrtcSupport'
 import { t } from '../i18n'
@@ -175,7 +178,7 @@ async function _connect(lk: { url: string; token: string; e2ee?: boolean }, set:
   const cam = local?.getVideoTracks()[0]
   try {
     if (mic) await room.localParticipant.publishTrack(mic, { source: Track.Source.Microphone, forceStereo: false })
-    if (cam) await room.localParticipant.publishTrack(cam, { source: Track.Source.Camera, simulcast: true })
+    if (cam) await room.localParticipant.publishTrack(cam, { source: Track.Source.Camera, ...camPublishOptions(get().e2ee) })
   } catch (e) {
     console.warn('[group-call] publication', e)
   }
@@ -189,6 +192,10 @@ useVoice.subscribe((s, prev) => {
 })
 // « Rendre muet » pour moi seulement (menu utilisateur).
 useUxPrefs.subscribe(() => _audioEls.forEach((a, sid) => _play(sid, a)))
+// Volume général et sortie mono (Réglages > Voix).
+useAvPrefs.subscribe((s, prev) => {
+  if (s.outputVolume !== prev.outputVolume || s.monoOutput !== prev.monoOutput) _audioEls.forEach((a, sid) => _play(sid, a))
+})
 
 export const useGroupCall = create<GroupCallStore>((set, get) => ({
   groupId: null,
@@ -248,10 +255,14 @@ export const useGroupCall = create<GroupCallStore>((set, get) => ({
     try {
       // Micro et caméra choisis dans Réglages (ils étaient ignorés), repli sur
       // les périphériques par défaut si celui mémorisé est débranché.
-      const stream = await navigator.mediaDevices.getUserMedia({
+      const raw = await navigator.mediaDevices.getUserMedia({
         audio: callAudioConstraints(),
         video: type === 'video' ? callVideoConstraints() : false,
       }).catch(() => navigator.mediaDevices.getUserMedia({ audio: true, video: type === 'video' }))
+      // Volume d'entrée et seuil du micro, fond virtuel et réglages d'image de la caméra.
+      const withMic = await processCallMicStream(raw)
+      const cam = withMic.getVideoTracks()[0]
+      const stream = cam ? new MediaStream([...withMic.getAudioTracks(), await maybeBlur(cam)]) : withMic
       if (get().groupId !== groupId) { stream.getTracks().forEach(t => t.stop()); return }
       set({ localStream: stream })
       useWs.getState().send({ type: 'GROUP_CALL_JOIN', group_id: groupId, call_type: type, ...e2eeClaim() })
@@ -287,9 +298,10 @@ export const useGroupCall = create<GroupCallStore>((set, get) => ({
     }
     try {
       const vs = await navigator.mediaDevices.getUserMedia({ video: callVideoConstraints() })
-      const vt = vs.getVideoTracks()[0]
-      if (!vt) return
-      if (_room?.state === 'connected') await _room.localParticipant.publishTrack(vt, { source: Track.Source.Camera, simulcast: true })
+      const rawCam = vs.getVideoTracks()[0]
+      if (!rawCam) return
+      const vt = await maybeBlur(rawCam)
+      if (_room?.state === 'connected') await _room.localParticipant.publishTrack(vt, { source: Track.Source.Camera, ...camPublishOptions(get().e2ee) })
       set({ camOff: false, localStream: new MediaStream([...localStream.getAudioTracks(), vt]) })
     } catch {
       toast.error("Impossible d'accéder à la caméra.")

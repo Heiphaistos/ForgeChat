@@ -58,14 +58,50 @@ export async function resumeSession(wait = pause): Promise<boolean> {
   }
 }
 
-/** Efface la session locale (déconnexion) en gardant les autres comptes mis de côté. */
-export async function clearLocalSession() {
+/** Ce qui appartient à la session (jetons d'anciennes versions, brouillons de messages). */
+const SESSION_KEYS = ['access_token', 'refresh_token', 'fc-drafts']
+
+/**
+ * Préférences de l'appareil gardées après une déconnexion volontaire : réglages matériels et
+ * d'affichage, rien qui décrive l'utilisateur (ni recherches, ni salons, ni contacts, ni photo).
+ */
+const DEVICE_KEYS = new Set([
+  TAURI_KEY, 'fc_lang', 'fc_device_id', 'fc_zoom', 'fc_density', 'fc_sidebar_width', 'fc_split_ratio',
+  'fc_theme', 'fc_theme_studio', 'fc_app_icon', 'fc_app_icon_data', 'fc_drag_drop', 'fc.animateAvatars',
+  'fc_thumb_size', 'fc_onboarding_done',
+  'fc_audio_input', 'fc_audio_output', 'fc_video_input', 'fc_input_volume', 'fc_output_volume',
+  'fc_auto_gain', 'fc_echo_cancellation', 'fc_noise_engine', 'fc_noise_suppression', 'fc_vad_mode',
+  'fc_vad_threshold', 'fc_ptt_mode', 'fc_ptt_release_ms', 'fc_mono_output', 'fc_duck_streams',
+  'fc_spatial_audio', 'fc_sfx_volume', 'forgechat_soundboard_volume', 'audio_notif_enabled', 'fc.joinSound',
+  'fc_watch_audio', 'fc_screen_audio', 'fc_auto_watch',
+  'fc_cam_height', 'fc_cam_fps', 'fc_cam_bitrate', 'fc_cam_blur', 'fc_cam_blur_strength', 'fc_cam_bg_mode',
+  'fc_cam_bg_color', 'fc_cam_brightness', 'fc_cam_contrast', 'fc_cam_saturation', 'fc_cam_mirror',
+  'fc_cam_simulcast', 'fc_cam_always_preview', 'fc_video_codec',
+  'fc_screen_height', 'fc_screen_fps', 'fc_screen_bitrate', 'fc_screen_hint',
+])
+
+/**
+ * Efface la session locale.
+ * - Session expirée ou refusée (`full` faux) : seuls les jetons et brouillons partent ; préférences,
+ *   dernier e-mail et réglages restent (tout effacer faisait tout reperdre à chaque expiration).
+ * - Déconnexion volontaire (`full` vrai) : tout ce qui décrit l'utilisateur part (historique de
+ *   recherche, réponses rapides, salons récents, empreinte du code de verrouillage, photo de fond…) ;
+ *   seules les préférences de l'appareil (DEVICE_KEYS) et les comptes mis de côté restent.
+ */
+export async function clearLocalSession(full = false) {
   access = null
-  const alt = localStorage.getItem(TAURI_KEY)
-  localStorage.clear()
-  if (alt) localStorage.setItem(TAURI_KEY, alt)
+  try {
+    if (full) {
+      for (const k of Object.keys(localStorage)) if (!DEVICE_KEYS.has(k)) localStorage.removeItem(k)
+    } else {
+      for (const k of SESSION_KEYS) localStorage.removeItem(k)
+    }
+  } catch { /* stockage indisponible */ }
   await invokeSession('session_clear').catch(e => console.warn('[session] trousseau', e))
 }
+
+/** Où la session est gardée : `os`, `file` (repli chiffré Linux) ou `memory`. */
+export const sessionStorageStatus = () => invokeSession<string>('session_storage_status').catch(() => 'memory')
 
 /**
  * Anciennes versions : jetons en clair dans localStorage. Rangés une fois au trousseau, puis

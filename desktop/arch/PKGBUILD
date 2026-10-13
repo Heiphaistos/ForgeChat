@@ -1,0 +1,34 @@
+# Paquet Arch / Omarchy : reprend tel quel le contenu du .deb (meme binaire,
+# memes raccourcis, meme doc). Construit par arch/paquet.sh, pas a la main.
+pkgname=forgechat-desktop
+pkgver="${FORGECHAT_VERSION:?FORGECHAT_VERSION manquant}"
+pkgrel=1
+pkgdesc="Client de chat communautaire auto-hébergé"
+arch=('x86_64')
+url="https://forgechat.heiphaistos.org"
+license=('MIT')
+depends=(
+    'webkit2gtk-4.1'
+    'gtk3'
+    'libayatana-appindicator'
+    'libpulse'
+    'alsa-lib'
+    'libpipewire'
+    'hicolor-icon-theme'
+)
+optdepends=(
+    'libva: décodage vidéo matériel des appels'
+    'xdg-desktop-portal-hyprland: partage d’écran sous Hyprland (Omarchy)'
+    'xdg-desktop-portal-gtk: partage d’écran sous les autres bureaux'
+    'gnome-keyring: jetons de session dans le Secret Service'
+)
+# Binaire deja optimise par cargo : rien a retirer, pas de paquet -debug.
+options=('!strip' '!debug')
+source=("forgechat.deb")
+# shortcut: le .deb vient du build qui precede dans la meme execution ;
+# l'integrite du .pkg.tar.zst publie est garantie par SHA256SUMS.txt signe.
+sha256sums=('SKIP')
+
+package() {
+    bsdtar -xf data.tar.* -C "$pkgdir"
+}

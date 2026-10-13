@@ -6,9 +6,10 @@
 |---|---|---|
 | Debian, Ubuntu, Mint, Pop!_OS | `.deb` | `sudo apt install ./ForgeChat-v<version>-amd64.deb` |
 | Fedora, Nobara, openSUSE, RHEL | `.rpm` | `sudo dnf install ./ForgeChat-v<version>-x86_64.rpm` (openSUSE : `sudo zypper install ./…rpm`) |
-| Toute autre (Arch, etc.) | `.AppImage` | `chmod +x ForgeChat-v<version>-amd64.AppImage` puis le lancer |
+| Arch, Omarchy, Manjaro, EndeavourOS | `.pkg.tar.zst` | `sudo pacman -U ./ForgeChat-v<version>-x86_64.pkg.tar.zst` |
+| Toute autre | `.AppImage` | `chmod +x ForgeChat-v<version>-amd64.AppImage` puis le lancer |
 
-Le `.deb` et le `.rpm` installent eux-mêmes leurs dépendances. Préférez-les à
+Le `.deb`, le `.rpm` et le `.pkg.tar.zst` installent eux-mêmes leurs dépendances. Préférez-les à
 l'AppImage : ils utilisent le WebKitGTK de votre système.
 
 Depuis la 3.30.1, l'AppImage ne livre plus ses propres bibliothèques Wayland :
@@ -16,14 +17,14 @@ sous Fedora 44 elles empêchaient WebKit de démarrer (fenêtre blanche).
 
 ## Dépendances
 
-Installées automatiquement par le `.deb` et le `.rpm`. À installer à la main pour l'AppImage.
+Installées automatiquement par le `.deb`, le `.rpm` et le `.pkg.tar.zst`. À installer à la main pour l'AppImage.
 
 | Rôle | Debian / Ubuntu | Fedora | Arch |
 |---|---|---|---|
 | Moteur d'affichage (obligatoire) | `libwebkit2gtk-4.1-0` | `webkit2gtk4.1` | `webkit2gtk-4.1` |
 | Icône de la zone de notification | `libayatana-appindicator3-1` | `libayatana-appindicator-gtk3` | `libayatana-appindicator` |
 | Son des appels | `libpulse0` | `pulseaudio-libs` | `libpulse` |
-| Partage d'écran (portail) | `xdg-desktop-portal xdg-desktop-portal-gtk` | `xdg-desktop-portal xdg-desktop-portal-gtk` | `xdg-desktop-portal xdg-desktop-portal-gtk` |
+| Partage d'écran (portail) | `xdg-desktop-portal xdg-desktop-portal-gtk` | `xdg-desktop-portal xdg-desktop-portal-gtk` | `xdg-desktop-portal-hyprland` (Omarchy) ou `xdg-desktop-portal-gtk` |
 | Lancer une AppImage | `libfuse2` | `fuse fuse-libs` | `fuse2` |
 
 Exemple Fedora, pour l'AppImage :
@@ -32,6 +33,14 @@ Exemple Fedora, pour l'AppImage :
 sudo dnf install webkit2gtk4.1 libayatana-appindicator-gtk3 pulseaudio-libs xdg-desktop-portal xdg-desktop-portal-gtk fuse fuse-libs
 ```
 
+## Omarchy (Hyprland)
+
+- Mise à jour : ForgeChat télécharge et vérifie le paquet, puis demande votre
+  mot de passe (fenêtre polkit) pour lancer `pacman -U`.
+- L'icône apparaît dans la zone de notification de la barre (omarchy-shell ou Waybar).
+- Push-to-talk global : Wayland ne laisse pas une application capter une
+  touche hors de sa fenêtre ; il ne marche que fenêtre active.
+
 ## La fenêtre reste blanche
 
 Cela vient de la carte graphique (souvent NVIDIA sous Wayland), pas du paquet.
@@ -39,7 +48,7 @@ Cela vient de la carte graphique (souvent NVIDIA sous Wayland), pas du paquet.
 1. **Automatique** : si ForgeChat n'a pas réussi à s'afficher, le lancement
    suivant passe tout seul en mode compatibilité. Fermez-le et relancez-le.
 2. **Raccourci** : lancez « ForgeChat (mode compatibilité) » depuis le menu des
-   applications (installé par le `.deb` et le `.rpm`).
+   applications (installé par le `.deb`, le `.rpm` et le `.pkg.tar.zst`).
 3. **Zone de notification** : clic droit sur l'icône ForgeChat, puis
    « Redémarrer en mode compatibilité ».
 4. **Terminal** :

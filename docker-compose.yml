@@ -17,6 +17,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD requis}
     volumes:
       - pgdata:/var/lib/postgresql/data
+    networks: [backend]
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U forgechat"]
@@ -25,11 +26,14 @@ services:
       retries: 10
 
   redis:
-    image: redis:7-alpine@sha256:858f009f9709ce576febc734aa78b8f6d624b82571f9ddb6bda4377c833b3499
+    image: redis:8-alpine@sha256:3811787313eba226a2ef38658c6ccb91cd5e110edc89c37767de373120a0e5a0
     logging: *logging
     restart: unless-stopped
     # Aucune persistance : compteurs anti-abus et jetons éphémères ne survivent pas à un redémarrage.
     command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru --save "" --appendonly no
+    # Réseau interne seul : ni LiveKit (exposé à Internet) ni rien d'autre ne peut joindre Redis,
+    # qui n'a pas de mot de passe (audit 2026-10-12).
+    networks: [backend]
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -44,6 +48,8 @@ services:
         GIT_SHA: ${GIT_SHA:-unknown}
     ports:
       - "127.0.0.1:3013:8080"
+    # backend : Postgres et Redis ; default : LiveKit (webhook) et Internet (SMTP, Discord).
+    networks: [backend, default]
     environment:
       DATABASE_URL: postgres://forgechat:${POSTGRES_PASSWORD}@postgres:5432/forgechat
       REDIS_URL: redis://redis:6379
@@ -118,7 +124,7 @@ services:
   # Serveur média (SFU) : tout le son et la vidéo transitent par lui, plus aucun
   # pair-à-pair. Signalisation derrière nginx (/livekit/), média en UDP direct.
   livekit:
-    image: livekit/livekit-server:v1.13.7@sha256:6fd3b7088874c4d119160dd688798dfec852bc014786d392caad15f6f63912a3
+    image: livekit/livekit-server:v1.13.9@sha256:d0c04791bf63ca8dcea123571827d56ba9504bd57c8d5de60ee03b5408cc3154
     logging: *logging
     # Pas de root : aucun volume, ports tous au-dessus de 1024.
     user: "65534:65534"
@@ -155,6 +161,11 @@ services:
       - "7881:7881"
       - "65100:65100/udp"
     restart: unless-stopped
+
+networks:
+  # Sans sortie vers Internet ni accès depuis les autres services : base et cache seulement.
+  backend:
+    internal: true
 
 volumes:
   pgdata:

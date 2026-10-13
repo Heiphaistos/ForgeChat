@@ -1,7 +1,8 @@
 import type { CSSProperties, ReactNode } from 'react'
 import { useLook } from '../../store/nameStyles'
-import { DEFAULT_BG, nameCss, pickNameStyle, shownName } from '../../lib/nameStyle'
+import { DEFAULT_BG, cleanStyle, nameClass, nameCss, pickNameStyle, shownName, waveColors } from '../../lib/nameStyle'
 import { useUxPrefs } from '../../lib/uxPrefs'
+import ClanTag from './ClanTag'
 
 /** Fond actuel du thème (variable --fc-bg si un thème la définit), relu au plus toutes les 2 s. */
 let bgCache = { at: 0, value: DEFAULT_BG }
@@ -15,6 +16,14 @@ function themeBg(): number {
   return bgCache.value
 }
 
+/** Tag de clan d'un serveur, tel que renvoyé par GET /servers/:id/members. */
+export interface MemberClanTag {
+  id: string
+  name: string
+  color: number
+  style?: unknown
+}
+
 interface Props {
   userId?: string | null
   /** Nom d'utilisateur (repli si aucun nom d'affichage). */
@@ -25,6 +34,10 @@ interface Props {
   roleStyle?: CSSProperties
   /** Réglage du serveur : la couleur du rôle remplace la couleur perso (vrai par défaut). */
   roleOverrides?: boolean
+  /** Style du pseudo propre au serveur (profil de serveur), prioritaire sur le style du compte. */
+  serverStyle?: unknown
+  /** Marques de clan du serveur, affichées après le pseudo. */
+  clanTags?: MemberClanTag[]
   /** Affiche l'étiquette perso à côté du nom. */
   withTag?: boolean
   className?: string
@@ -36,29 +49,44 @@ interface Props {
  * Pseudo affiché partout (messages, membres, MP, vocal, profils, mentions) : nom
  * d'affichage + style perso, avec la priorité rôle/perso de lib/nameStyle.ts.
  */
-export default function UserName({ userId, name, nickname, roleStyle, roleOverrides = true, withTag, className = '', title, children }: Props) {
+export default function UserName({ userId, name, nickname, roleStyle, roleOverrides = true, serverStyle, clanTags, withTag, className = '', title, children }: Props) {
   const raw = useLook(userId)
   // Webhook ou message importé : posté sous l'id d'un membre mais avec un autre nom.
   const look = raw && (!raw.username || raw.username === name) ? raw : null
   const hasRole = !!roleStyle && Object.keys(roleStyle).length > 0
-  const { personal, useRole } = pickNameStyle(look?.name_style ?? null, hasRole, roleOverrides)
-  const css = nameCss(personal, themeBg()) as CSSProperties
+  const own = cleanStyle(serverStyle) ?? look?.name_style ?? null
+  const { personal, useRole } = pickNameStyle(own, hasRole, roleOverrides)
+  const bg = themeBg()
+  const css = nameCss(personal, bg) as CSSProperties
   const style = useRole ? { ...roleStyle, ...css } : css
-  const shimmer = personal?.effect === 'shimmer' ? ' fc-name-shimmer' : ''
+  const fx = nameClass(personal)
   const shown = shownName(name, look?.display_name, nickname)
   // Extras : nom d'utilisateur à côté du pseudo affiché (en-têtes de message et profils).
   const withUsername = useUxPrefs(s => s.showUsername) && withTag && shown !== name
+  const wave = personal?.effect === 'wave'
   return (
     <>
-      <span className={className + shimmer} style={style} title={title ?? (shown !== name ? name : undefined)}>
-        {shown}{children}
+      <span
+        className={className + fx}
+        style={style}
+        title={title ?? (shown !== name ? name : undefined)}
+        // Glitch : copies décalées via attr(data-text) (texte seul, jamais du HTML).
+        data-text={personal?.effect === 'glitch' ? shown : undefined}
+      >
+        {wave
+          ? waveColors(shown, useRole ? null : personal, bg).map((c, i) => (
+              <span key={i} style={{ color: c.color, animationDelay: `${(i * 0.08).toFixed(2)}s` }}>{c.ch}</span>
+            ))
+          : shown}
+        {children}
       </span>
       {withUsername && <span className="ml-1 text-xs font-normal text-fc-muted">@{name}</span>}
       {withTag && look?.profile_tag && (
-        <span className="ml-1 px-1 rounded text-[10px] font-semibold leading-4 bg-fc-hover text-fc-muted align-middle whitespace-nowrap">
-          {look.profile_tag}
-        </span>
+        <ClanTag name={look.profile_tag} style={look.name_style?.tag} fallback="soft" className="ml-1" />
       )}
+      {clanTags?.map(tg => (
+        <ClanTag key={tg.id} name={tg.name} color={tg.color} style={tg.style} className="ml-1" />
+      ))}
     </>
   )
 }

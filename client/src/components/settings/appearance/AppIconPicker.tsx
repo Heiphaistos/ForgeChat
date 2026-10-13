@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Upload } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { useT } from '../../../i18n'
-import { errText } from '../../../lib/desktop'
+import { errText, isDesktop } from '../../../lib/desktop'
 import { IconError, PRESET_COUNT, currentIcon, fetchPreset, importIcon, presetUrl, setAppIcon } from '../../../lib/appIcon'
 
 const PRESETS = Array.from({ length: PRESET_COUNT }, (_, i) => i + 1)
@@ -34,6 +34,7 @@ export default function AppIconPicker() {
   return (
     <div className="space-y-3">
       <p className="text-xs text-fc-muted">{t('appIcon.hint')}</p>
+      {isDesktop && /^Win/i.test(navigator.platform) && <p className="text-xs text-fc-muted">{t('appIcon.pinnedHint')}</p>}
       <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label={t('appIcon.title')}>
         <button type="button" role="radio" aria-checked={choice === null} disabled={busy} title={t('appIcon.default')}
           onClick={() => void apply(null)} className={tile(choice === null)}>

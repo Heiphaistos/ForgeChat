@@ -1,7 +1,9 @@
 // Fond virtuel de la caméra (gratuit, calcul local) : MediaPipe détoure la personne image par
-// image, le décor est flouté (ou remplacé par l'image choisie) sur un canvas dont on diffuse le
-// flux. Réglage « fc_cam_blur » (activé) + « fc_cam_bg_image » (image facultative).
+// image, le décor est flouté (ou remplacé par l'image choisie, ou une couleur unie) sur un canvas
+// dont on diffuse le flux. Réglages « fc_cam_blur » (activé), « fc_cam_bg_image » (image
+// facultative) et ceux de lib/avPrefs (décor, intensité du flou, luminosité/contraste/saturation).
 import type { ImageSegmenter } from '@mediapipe/tasks-vision'
+import { avPrefs, camImageFilter } from '../lib/avPrefs'
 
 const BASE = '/mediapipe'
 let segmenter: Promise<ImageSegmenter> | null = null
@@ -56,23 +58,24 @@ async function loadImage(url: string | null): Promise<HTMLImageElement | null> {
 }
 
 /**
- * Renvoie une piste vidéo au décor flouté si le réglage est actif, sinon la piste d'origine
- * (aussi en cas d'échec du moteur : la caméra marche toujours). Arrêter la piste rendue arrête
- * la caméra d'origine.
+ * Renvoie la piste vidéo traitée selon les Réglages : fond virtuel (flou, image ou couleur)
+ * et/ou réglages d'image (luminosité, contraste, saturation). Sans réglage actif, ou en cas
+ * d'échec du moteur, la piste d'origine (la caméra marche toujours). Arrêter la piste rendue
+ * arrête la caméra d'origine.
  */
 export async function maybeBlur(track: MediaStreamTrack): Promise<MediaStreamTrack> {
-  if (!blurEnabled()) return track
+  const adjust = camImageFilter()
+  if (!blurEnabled() && !adjust) return track
   try {
-    return await blurTrack(track)
+    return blurEnabled() ? await blurTrack(track) : await adjustTrack(track, adjust ?? 'none')
   } catch (e) {
-    console.warn('[flou] moteur indisponible, caméra sans flou', e)
+    console.warn('[flou] moteur indisponible, caméra sans traitement', e)
     return track
   }
 }
 
-async function blurTrack(track: MediaStreamTrack): Promise<MediaStreamTrack> {
-  const seg = await loadSegmenter()
-  const bg = await loadImage(backgroundImage())
+/** Lit la caméra dans un <video> caché et prépare un canvas de même taille, diffusé. */
+async function frameSource(track: MediaStreamTrack) {
   const video = document.createElement('video')
   video.muted = true
   video.playsInline = true
@@ -80,22 +83,67 @@ async function blurTrack(track: MediaStreamTrack): Promise<MediaStreamTrack> {
   await video.play()
   const w = video.videoWidth || 640
   const h = video.videoHeight || 480
-
   const out = document.createElement('canvas')
   out.width = w
   out.height = h
   const ctx = out.getContext('2d')
+  if (!ctx) throw new Error('canvas 2D indisponible')
+  const fps = track.getSettings().frameRate ?? 30
+  const rendered = out.captureStream(fps).getVideoTracks()[0]
+  if (!rendered) throw new Error('captureStream sans piste')
+  return { video, w, h, ctx, rendered }
+}
+
+/** Arrêter la piste rendue arrête la boucle, la caméra et le lecteur caché. */
+function bindStop(rendered: MediaStreamTrack, track: MediaStreamTrack, video: HTMLVideoElement, onStop: () => void) {
+  const stop = rendered.stop.bind(rendered)
+  rendered.stop = () => {
+    onStop()
+    stop()
+    track.stop()
+    video.srcObject = null
+  }
+  track.addEventListener('ended', () => rendered.stop())
+}
+
+/** Réglages d'image seuls (sans fond virtuel) : un simple filtre canvas, sans détourage. */
+async function adjustTrack(track: MediaStreamTrack, filter: string): Promise<MediaStreamTrack> {
+  const { video, w, h, ctx, rendered } = await frameSource(track)
+  let running = true
+  let last = -1
+  const frame = () => {
+    if (!running) return
+    if (video.readyState >= 2 && video.currentTime !== last) {
+      last = video.currentTime
+      ctx.filter = filter
+      ctx.drawImage(video, 0, 0, w, h)
+    }
+    requestAnimationFrame(frame)
+  }
+  requestAnimationFrame(frame)
+  bindStop(rendered, track, video, () => { running = false })
+  return rendered
+}
+
+async function blurTrack(track: MediaStreamTrack): Promise<MediaStreamTrack> {
+  const seg = await loadSegmenter()
+  const p = avPrefs()
+  const imageUrl = backgroundImage()
+  // Décor : couleur unie, image choisie ou flou (auto : l'image s'il y en a une, sinon le flou).
+  const mode = p.camBgMode === 'auto' ? (imageUrl ? 'image' : 'blur') : p.camBgMode
+  const bg = mode === 'image' ? await loadImage(imageUrl) : null
+  const color = mode === 'color' ? p.camBgColor : null
+  const adjust = camImageFilter(p) ?? 'none'
+  const blurFilter = adjust === 'none' ? `blur(${p.camBlurStrength}px)` : `blur(${p.camBlurStrength}px) ${adjust}`
+  const { video, w, h, ctx, rendered } = await frameSource(track)
+
   const person = document.createElement('canvas')
   person.width = w
   person.height = h
   const pctx = person.getContext('2d')
   const mask = document.createElement('canvas')
   const mctx = mask.getContext('2d')
-  if (!ctx || !pctx || !mctx) throw new Error('canvas 2D indisponible')
-
-  const fps = track.getSettings().frameRate ?? 30
-  const rendered = out.captureStream(fps).getVideoTracks()[0]
-  if (!rendered) throw new Error('captureStream sans piste')
+  if (!pctx || !mctx) throw new Error('canvas 2D indisponible')
 
   let running = true
   let last = -1
@@ -116,17 +164,22 @@ async function blurTrack(track: MediaStreamTrack): Promise<MediaStreamTrack> {
         const img = mctx.createImageData(m.width, m.height)
         for (let i = 0; i < conf.length; i++) img.data[i * 4 + 3] = (conf[i] ?? 0) * 255
         mctx.putImageData(img, 0, 0)
-        // Personne nette découpée par le masque, posée sur le décor flouté.
+        // Personne nette (réglages d'image compris) découpée par le masque, posée sur le décor.
         pctx.globalCompositeOperation = 'copy'
+        pctx.filter = adjust
         pctx.drawImage(video, 0, 0, w, h)
+        pctx.filter = 'none'
         pctx.globalCompositeOperation = 'destination-in'
         pctx.drawImage(mask, 0, 0, w, h)
-        if (bg) {
+        if (color) {
+          ctx.fillStyle = color
+          ctx.fillRect(0, 0, w, h)
+        } else if (bg) {
           // Image en mode « couvrir » : remplit le cadre sans déformation.
           const k = Math.max(w / bg.width, h / bg.height)
           ctx.drawImage(bg, (w - bg.width * k) / 2, (h - bg.height * k) / 2, bg.width * k, bg.height * k)
         } else {
-          ctx.filter = 'blur(14px)'
+          ctx.filter = blurFilter
           ctx.drawImage(video, 0, 0, w, h)
           ctx.filter = 'none'
         }
@@ -137,14 +190,6 @@ async function blurTrack(track: MediaStreamTrack): Promise<MediaStreamTrack> {
     requestAnimationFrame(frame)
   }
   requestAnimationFrame(frame)
-
-  const stop = rendered.stop.bind(rendered)
-  rendered.stop = () => {
-    running = false
-    stop()
-    track.stop()
-    video.srcObject = null
-  }
-  track.addEventListener('ended', () => rendered.stop())
+  bindStop(rendered, track, video, () => { running = false })
   return rendered
 }

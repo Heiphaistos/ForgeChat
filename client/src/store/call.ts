@@ -10,6 +10,8 @@ import {
   type LocalTrackPublication, type RemoteParticipant,
 } from 'livekit-client'
 import { maybeBlur } from '../utils/backgroundBlur'
+import { micConstraintsFor, camConstraintsFromPrefs, camPublishOptions } from '../lib/avPrefs'
+import { processCallMicStream } from '../lib/audio'
 import toast from 'react-hot-toast'
 import { t } from '../i18n'
 import { e2eeClaim, enableMediaE2EE, mediaE2EEError, nativeMediaKey, openMediaE2EE, watchOutdated } from '../e2e/media'
@@ -239,7 +241,7 @@ async function _connect(lk: LkAccess, set: SetFn, get: () => CallStore) {
       _micPub = await room.localParticipant.publishTrack(mic, { source: Track.Source.Microphone, forceStereo: false })
       if (get().micMuted) await _micPub.mute()
     }
-    if (cam) _camPub = await room.localParticipant.publishTrack(cam, { source: Track.Source.Camera, simulcast: true })
+    if (cam) _camPub = await room.localParticipant.publishTrack(cam, { source: Track.Source.Camera, ...camPublishOptions(get().e2ee) })
   } catch (e) {
     console.warn('[dm-call] publication', e)
   }
@@ -251,32 +253,24 @@ async function _connect(lk: LkAccess, set: SetFn, get: () => CallStore) {
   }
 }
 
-// Mêmes contraintes que store/voice.ts:567-580 : le micro et la caméra choisis dans
-// Réglages étaient ignorés en DM, et aucun traitement (EC/NS/AGC) n'était demandé au
-// navigateur — l'appel DM partait sur le périphérique par défaut, brut (défaut A7).
-// ponytail: NS maison branchée dans le lot 4 (la chaîne WebAudio de voice.ts est en
-// cours de réécriture ; la dupliquer ici créerait un second exemplaire à corriger).
+// Mêmes réglages que le salon vocal (lib/avPrefs) : micro et caméra choisis, annulation
+// d'écho et gain automatique selon Réglages > Voix, réduction de bruit du navigateur
+// (la chaîne RNNoise reste propre au salon vocal), résolution et images/s de la caméra.
 export function callAudioConstraints(): MediaTrackConstraints {
-  const savedMicId = localStorage.getItem('fc_audio_input') || undefined
-  return {
-    channelCount: 1, // voix en mono (idéal, jamais bloquant)
-    echoCancellation: true,
-    noiseSuppression: true,
-    autoGainControl: true,
-    ...(savedMicId ? { deviceId: { exact: savedMicId } } : {}),
-  }
+  return micConstraintsFor('browser')
 }
 
 export function callVideoConstraints(): MediaTrackConstraints {
-  const savedCamId = localStorage.getItem('fc_video_input') || undefined
-  return {
-    width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30 },
-    ...(savedCamId ? { deviceId: { exact: savedCamId } } : {}),
-  }
+  return camConstraintsFromPrefs()
 }
 
-// getUserMedia avec repli audio seul si la caméra est indisponible
+// getUserMedia avec repli audio seul si la caméra est indisponible. Le micro passe
+// ensuite par le volume d'entrée et le seuil de sensibilité des Réglages.
 async function _getCallMedia(type: 'voice' | 'video'): Promise<MediaStream> {
+  return processCallMicStream(await _getRawCallMedia(type))
+}
+
+async function _getRawCallMedia(type: 'voice' | 'video'): Promise<MediaStream> {
   const audio = callAudioConstraints()
   try {
     const s = await navigator.mediaDevices.getUserMedia({ audio, video: type === 'video' ? callVideoConstraints() : false })
@@ -302,7 +296,8 @@ async function _switchDevice(kind: 'audio' | 'video', set: SetFn, get: () => Cal
   const local = get().localStream
   if (_native || !local || (kind === 'video' && get().camOff)) return
   try {
-    const s = await navigator.mediaDevices.getUserMedia(kind === 'audio' ? { audio: callAudioConstraints() } : { video: callVideoConstraints() })
+    const raw = await navigator.mediaDevices.getUserMedia(kind === 'audio' ? { audio: callAudioConstraints() } : { video: callVideoConstraints() })
+    const s = kind === 'audio' ? await processCallMicStream(raw) : raw
     const t = kind === 'video' && s.getVideoTracks()[0] ? await maybeBlur(s.getVideoTracks()[0]!) : s.getTracks()[0]
     // Appel terminé (ou caméra coupée) pendant l'attente : ne rien remplacer.
     if (!t || get().localStream !== local) { s.getTracks().forEach(x => x.stop()); return }
@@ -519,9 +514,11 @@ export const useCallStore = create<CallStore>((set, get) => ({
     }
     try {
       const vs = await navigator.mediaDevices.getUserMedia({ video: callVideoConstraints() })
-      const vt = vs.getVideoTracks()[0]
-      if (!vt) return
-      if (_room?.state === 'connected') _camPub = await _room.localParticipant.publishTrack(vt, { source: Track.Source.Camera, simulcast: true })
+      const rawCam = vs.getVideoTracks()[0]
+      if (!rawCam) return
+      // Fond virtuel et réglages d'image aussi à la réactivation (ils ne valaient qu'au début de l'appel).
+      const vt = await maybeBlur(rawCam)
+      if (_room?.state === 'connected') _camPub = await _room.localParticipant.publishTrack(vt, { source: Track.Source.Camera, ...camPublishOptions(get().e2ee) })
       set({ camOff: false, localStream: new MediaStream([...localStream.getAudioTracks(), vt]) })
     } catch {
       toast.error("Impossible d'accéder à la caméra.")

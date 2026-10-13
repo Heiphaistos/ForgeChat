@@ -160,6 +160,7 @@ export default function AppearanceSection() {
 
       <section>
         <H>{t('settings.appearance.font')}</H>
+        <p className="text-xs text-fc-muted mb-2">{t('fonts.hint')}</p>
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
           {FONTS.map(f => (
             <button key={f.id} onClick={() => applyFont(f.id)} style={{ fontFamily: f.stack }}

@@ -3,7 +3,7 @@ import { AlertTriangle, Copy, Download, RotateCcw, ShieldCheck } from 'lucide-re
 import toast from 'react-hot-toast'
 import { useT, type Key } from '../../../i18n'
 import {
-  COLOR_KEYS, contrastReport, fixContrast, isHex, isSafeImageUrl,
+  COLOR_KEYS, contrastReport, FAMILIES, familyTheme, fixContrast, isHex, isSafeImageUrl, PATTERNS, toHsl, tuneTheme,
   type ColorKey, type CustomTheme, type ThemeSpec,
 } from '../../../theme/themeCore'
 import { useThemeStore } from '../../../theme/themeStore'
@@ -99,7 +99,18 @@ export default function ThemeEditor({ initial, onClose }: { initial: CustomTheme
     patch({ image: { url: data, blur: draft.image?.blur ?? 0, dim: draft.image?.dim ?? 0.4 } })
   }
 
-  const report = contrastReport(draft)
+  const [family, setFamily] = useState(FAMILIES[0]?.id ?? 'tn')
+  const [seed, setSeed] = useState(draft.colors.accent)
+  /** Recalcule toutes les couleurs à partir d'un style et d'une couleur (nom et image gardés). */
+  const generate = () => {
+    const g = familyTheme(family, toHsl(seed)[0], draft.name)
+    if (!g) return
+    setDraft(d => ({ ...g, id: d.id, name: d.name, image: g.gradient ? null : d.image, opacity: d.image && !g.gradient ? d.opacity : g.opacity }))
+    setMode(g.gradient ? 'gradient' : draft.image ? 'image' : 'solid')
+  }
+
+  // Contraste vérifié sur le rendu réel (saturation appliquée).
+  const report = contrastReport(tuneTheme(draft))
   const weak = report.text < 4.5 || report.muted < 4.5 || report.link < 4.5
   const save = () => {
     upsertCustom(draft)
@@ -128,6 +139,18 @@ export default function ThemeEditor({ initial, onClose }: { initial: CustomTheme
             </button>
           ))}
         </Row>
+      </Box>
+
+      <Box title={t('themes.generate')}>
+        <p className="text-xs text-fc-muted">{t('themes.generateHint')}</p>
+        <Row label={t('themes.generateStyle')}>
+          <select value={family} onChange={e => setFamily(e.target.value)} aria-label={t('themes.generateStyle')}
+            className="w-48 px-2 py-1 rounded bg-fc-input text-sm text-fc-text outline-none focus:ring-2 focus:ring-fc-accent">
+            {FAMILIES.map(f => <option key={f.id} value={f.id}>{t(`themes.family.${f.id}` as Key)}</option>)}
+          </select>
+        </Row>
+        <ColorInput label={t('themes.generateColor')} value={seed} onChange={setSeed} />
+        <button className="btn-secondary text-xs" onClick={generate}>{t('themes.generateApply')}</button>
       </Box>
 
       <Box title={t('themes.colors')}>
@@ -183,6 +206,30 @@ export default function ThemeEditor({ initial, onClose }: { initial: CustomTheme
         {translucentBg && <Slider label={t('themes.glass')} value={draft.blur} min={0} max={40} format={v => `${v}px`} onChange={v => patch({ blur: v })} />}
         <Slider label={t('themes.radius')} value={draft.radius} min={0} max={2} step={0.25} format={v => `×${v}`} onChange={v => patch({ radius: v })} />
         <Row label={t('themes.outline')}><Toggle value={draft.outline} onChange={v => patch({ outline: v })} label={t('themes.outline')} /></Row>
+      </Box>
+
+      <Box title={t('themes.effects')}>
+        <Row label={t('themes.accent2')}>
+          <Toggle value={!!draft.accent2} label={t('themes.accent2')}
+            onChange={v => patch({ accent2: v ? (draft.accent2 ?? draft.colors.link) : null })} />
+        </Row>
+        {draft.accent2 && <ColorInput label={t('themes.accent2')} value={draft.accent2} onChange={v => patch({ accent2: v })} />}
+        <p className="text-xs text-fc-muted">{t('themes.accent2Hint')}</p>
+        <div className="space-y-1.5">
+          <span className="text-sm text-fc-text">{t('themes.pattern')}</span>
+          <div role="radiogroup" aria-label={t('themes.pattern')} className="flex flex-wrap gap-1">
+            {PATTERNS.map(p => (
+              <button key={p} role="radio" aria-checked={draft.pattern === p} onClick={() => patch({ pattern: p })}
+                className={`px-2.5 py-1 rounded-md text-xs border ${draft.pattern === p ? 'border-fc-accent bg-fc-accent/15 text-fc-text' : 'border-fc-hover text-fc-muted'}`}>
+                {t(`themes.pattern.${p}` as Key)}
+              </button>
+            ))}
+          </div>
+        </div>
+        {draft.pattern !== 'none' && <Slider label={t('themes.patternOpacity')} value={Math.round(draft.patternOpacity * 100)} min={1} max={40}
+          format={v => `${v} %`} onChange={v => patch({ patternOpacity: v / 100 })} />}
+        <Slider label={t('themes.saturation')} value={Math.round(draft.saturation * 100)} min={0} max={200} step={5}
+          format={v => `${v} %`} onChange={v => patch({ saturation: v / 100 })} />
       </Box>
 
       <div className={`flex items-start gap-2 p-3 rounded-lg text-xs border ${weak ? 'border-fc-yellow/50 text-fc-yellow' : 'border-fc-green/40 text-fc-green'}`}>

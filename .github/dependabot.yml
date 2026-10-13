@@ -10,6 +10,11 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    # Une version majeure de PostgreSQL ne relit pas le volume existant : montée manuelle
+    # par sauvegarde/restauration (docs/MIGRATION-POSTGRES-18.md), jamais par Dependabot.
+    ignore:
+      - dependency-name: postgres
+        update-types: [version-update:semver-major]
   - package-ecosystem: github-actions
     directory: /
     schedule:
@@ -72,3 +77,21 @@ updates:
     ignore:
       - dependency-name: '*'
         update-types: [version-update:semver-major, version-update:semver-minor]
+      # Versions exactes fixées par le SDK Expo (bundledNativeModules.json) : elles ne bougent
+      # qu'avec le SDK, via `npx expo install --fix`, jamais un correctif isolé (PR #10).
+      # `update-types` explicite : seules les montées de version sont ignorées ; les correctifs
+      # de sécurité (alertes Dependabot) restent proposés pour ces paquets.
+      - dependency-name: react
+        update-types: [version-update:semver-major, version-update:semver-minor, version-update:semver-patch]
+      - dependency-name: react-dom
+        update-types: [version-update:semver-major, version-update:semver-minor, version-update:semver-patch]
+      - dependency-name: react-native
+        update-types: [version-update:semver-major, version-update:semver-minor, version-update:semver-patch]
+      - dependency-name: react-native-reanimated
+        update-types: [version-update:semver-major, version-update:semver-minor, version-update:semver-patch]
+      - dependency-name: react-native-worklets
+        update-types: [version-update:semver-major, version-update:semver-minor, version-update:semver-patch]
+      - dependency-name: react-native-webview
+        update-types: [version-update:semver-major, version-update:semver-minor, version-update:semver-patch]
+      - dependency-name: react-native-keyboard-controller
+        update-types: [version-update:semver-major, version-update:semver-minor, version-update:semver-patch]

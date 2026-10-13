@@ -1,0 +1,43 @@
+// Galerie de thèmes étendue (plus de 1 200 thèmes partagés avec le web), mêmes collections que
+// client/src/i18n/parts/themesMore.ts.
+export const fr = {
+  'themesMore.tab.base': 'Base',
+  'themesMore.tab.gradient': 'Dégradés',
+  'themesMore.tab.classic': 'Classiques',
+  'themesMore.tab.tinted': 'Sombres teintés',
+  'themesMore.tab.light': 'Clairs',
+  'themesMore.tab.amoled': 'AMOLED',
+  'themesMore.tab.pastel': 'Pastels',
+  'themesMore.tab.neon': 'Néons',
+  'themesMore.tab.retro': 'Rétro',
+  'themesMore.tab.iridescent': 'Irisés',
+  'themesMore.tab.glass': 'Verre',
+  'themesMore.tab.contrast': 'Contraste élevé',
+  'themesMore.tab.nature': 'Nature',
+  'themesMore.tab.seasonal': 'Saisons et fêtes',
+  'themesMore.search': 'Rechercher parmi {n} thèmes',
+  'themesMore.count': '{n} thèmes',
+  'themesMore.showMore': 'Afficher plus ({n} restants)',
+  'themesMore.noMatch': 'Aucun thème ne correspond.',
+}
+
+export const en: Partial<Record<keyof typeof fr, string>> = {
+  'themesMore.tab.base': 'Base',
+  'themesMore.tab.gradient': 'Gradients',
+  'themesMore.tab.classic': 'Classics',
+  'themesMore.tab.tinted': 'Tinted dark',
+  'themesMore.tab.light': 'Light',
+  'themesMore.tab.amoled': 'AMOLED',
+  'themesMore.tab.pastel': 'Pastel',
+  'themesMore.tab.neon': 'Neon',
+  'themesMore.tab.retro': 'Retro',
+  'themesMore.tab.iridescent': 'Iridescent',
+  'themesMore.tab.glass': 'Glass',
+  'themesMore.tab.contrast': 'High contrast',
+  'themesMore.tab.nature': 'Nature',
+  'themesMore.tab.seasonal': 'Seasons & holidays',
+  'themesMore.search': 'Search {n} themes',
+  'themesMore.count': '{n} themes',
+  'themesMore.showMore': 'Show more ({n} left)',
+  'themesMore.noMatch': 'No theme matches.',
+}

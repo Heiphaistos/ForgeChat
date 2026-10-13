@@ -209,13 +209,17 @@ const EXTENSIONS_EXECUTABLES: &[&str] = &[
     "exe", "com", "scr", "pif", "bat", "cmd", "msi", "msix", "msp", "appx", "appxbundle", "ps1", "psm1",
     "vbs", "vbe", "js", "jse", "wsf", "wsh", "hta", "cpl", "lnk", "url", "reg", "inf", "scf", "jar",
     "dll", "sys", "iso", "img", "vhd", "vhdx", "chm", "xll", "app", "command", "pkg", "dmg", "sh",
-    "run", "appimage", "deb", "rpm", "desktop", "py", "pl",
+    "run", "appimage", "deb", "rpm", "desktop", "py", "pl", "bash", "zsh", "fish", "flatpak", "flatpakref",
+    "snap",
 ];
 
 fn extension_executable(nom: &str) -> bool {
-    nom.rsplit_once('.')
-        .map(|(_, ext)| EXTENSIONS_EXECUTABLES.contains(&ext.to_ascii_lowercase().as_str()))
-        .unwrap_or(false)
+    // Paquet pacman (Arch, Omarchy) : double extension `.pkg.tar.zst`, `.pkg.tar.xz`…
+    nom.to_ascii_lowercase().contains(".pkg.tar.")
+        || nom
+            .rsplit_once('.')
+            .map(|(_, ext)| EXTENSIONS_EXECUTABLES.contains(&ext.to_ascii_lowercase().as_str()))
+            .unwrap_or(false)
 }
 
 /// « Téléchargé d'Internet » : sous Windows le flux `Zone.Identifier` (ZoneId=3), que SmartScreen
@@ -373,6 +377,69 @@ fn decoder_icone(octets: &[u8]) -> Result<Image<'static>, String> {
     Ok(img)
 }
 
+/// Windows : `WebviewWindow::set_icon` (tao `set_window_icon`) ne pose que la PETITE icône
+/// (`WM_SETICON` / `ICON_SMALL`, barre de titre). La barre des tâches et Alt+Tab lisent la
+/// GRANDE icône (`ICON_BIG`), qui restait celle de l'exécutable : l'icône choisie ne s'y voyait
+/// jamais. Tauri 2.11 n'expose pas `set_taskbar_icon` de tao : on la pose ici directement.
+#[cfg(windows)]
+mod grande_icone {
+    use std::sync::Mutex;
+    use windows_sys::Win32::UI::WindowsAndMessaging::{
+        CreateIcon, DestroyIcon, SendMessageW, ICON_BIG, WM_SETICON,
+    };
+
+    /// HICON posée en dernier (gardée en vie tant que la fenêtre l'affiche). En `usize` :
+    /// un pointeur brut n'est pas `Send`.
+    static POSEE: Mutex<usize> = Mutex::new(0);
+
+    /// RGBA carré → HICON 32 bits (alpha conservé), 0 en cas d'échec.
+    fn creer(rgba: &[u8], cote: u32) -> usize {
+        let mut bgra = rgba.to_vec();
+        for px in bgra.chunks_exact_mut(4) {
+            px.swap(0, 2);
+        }
+        // Masque ET monochrome (lignes alignées sur 16 bits), tout à 0 : l'alpha fait la transparence.
+        let ligne = (cote as usize).div_ceil(16) * 2;
+        let masque = vec![0u8; ligne * cote as usize];
+        // SAFETY : tampons valides pour `cote`×`cote` pixels pendant l'appel ; Windows les copie.
+        unsafe {
+            CreateIcon(
+                std::ptr::null_mut(),
+                cote as i32,
+                cote as i32,
+                1,
+                32,
+                masque.as_ptr(),
+                bgra.as_ptr(),
+            ) as usize
+        }
+    }
+
+    /// Pose `rgba` comme grande icône de `hwnd` (barre des tâches, Alt+Tab).
+    pub fn poser(hwnd: *mut core::ffi::c_void, rgba: &[u8], largeur: u32, hauteur: u32) {
+        if largeur != hauteur || rgba.len() != largeur as usize * hauteur as usize * 4 {
+            return;
+        }
+        let nouvelle = creer(rgba, largeur);
+        if nouvelle == 0 {
+            return;
+        }
+        // SAFETY : `hwnd` vient de Tauri (fenêtre vivante) ; `nouvelle` est une HICON valide.
+        unsafe {
+            SendMessageW(hwnd, WM_SETICON, ICON_BIG as usize, nouvelle as isize);
+        }
+        if let Ok(mut posee) = POSEE.lock() {
+            let ancienne = std::mem::replace(&mut *posee, nouvelle);
+            if ancienne != 0 {
+                // SAFETY : créée par `creer`, plus utilisée par la fenêtre depuis le WM_SETICON ci-dessus.
+                unsafe {
+                    DestroyIcon(ancienne as *mut core::ffi::c_void);
+                }
+            }
+        }
+    }
+}
+
 /// Pose l'icône (ou l'icône d'origine si None) sur la fenêtre, la barre des tâches
 /// et la zone de notification. À appeler sur le thread principal.
 fn appliquer_icone(app: &AppHandle, img: Option<Image<'static>>) {
@@ -383,6 +450,10 @@ fn appliquer_icone(app: &AppHandle, img: Option<Image<'static>>) {
     let Some(img) = img else { return };
     if let Some(w) = app.get_webview_window("main") {
         let _ = w.set_icon(img.clone());
+        #[cfg(windows)]
+        if let Ok(hwnd) = w.hwnd() {
+            grande_icone::poser(hwnd.0 as _, img.rgba(), img.width(), img.height());
+        }
     }
     // Icône d'origine sous Windows/macOS : l'animation reprend d'elle-même.
     if let Some(tray) = app.tray_by_id("main-tray") {
@@ -519,10 +590,10 @@ mod tests {
 
     #[test]
     fn executables_reconnus() {
-        for n in ["setup.EXE", "facture.pdf.lnk", "a.ps1", "x.AppImage", "photo.scr"] {
+        for n in ["setup.EXE", "facture.pdf.lnk", "a.ps1", "x.AppImage", "photo.scr", "maj-1.0-1-x86_64.pkg.tar.zst", "a.PKG.TAR.XZ", "x.flatpakref"] {
             assert!(super::extension_executable(n), "{n}");
         }
-        for n in ["photo.png", "doc.pdf", "notes.txt", "sans-extension", "archive.zip"] {
+        for n in ["photo.png", "doc.pdf", "notes.txt", "sans-extension", "archive.zip", "sauvegarde.tar.zst"] {
             assert!(!super::extension_executable(n), "{n}");
         }
     }

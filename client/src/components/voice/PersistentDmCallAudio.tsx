@@ -5,6 +5,7 @@ import { useAudioNotifications } from '../../hooks/useAudioNotifications'
 import { routeAudio, dropPlaybackWhere } from '../../lib/voicePlayback'
 import { clampVolumePct } from '../../lib/voiceMix'
 import { useMyUxPrefs } from '../../store/uxPrefs'
+import { useAvPrefs } from '../../lib/avPrefs'
 
 /**
  * Lecture audio d'un appel DM (vocal ou vidéo) — montée une seule fois, hors de
@@ -26,6 +27,10 @@ export default function PersistentDmCallAudio() {
   const storedVolume = useVoice(s => clampVolumePct(partnerId ? s.userVolumes[partnerId] ?? 100 : 100))
   const locallyMuted = useMyUxPrefs().voiceMuted
   const volume = partnerId && locallyMuted.includes(partnerId) ? 0 : storedVolume
+  // Volume général et sortie mono (Réglages > Voix) : appliqués par routeAudio, abonnés
+  // ici pour re-router l'élément quand ils changent.
+  useAvPrefs(s => s.outputVolume)
+  useAvPrefs(s => s.monoOutput)
   const [autoplayBlocked, setAutoplayBlocked] = useState(false)
   const elRef = useRef<HTMLAudioElement | null>(null)
   const { playRingback } = useAudioNotifications()

@@ -287,3 +287,16 @@ mod tests {
         assert_eq!(rt.unwrap(), (Some("tok-123".into()), None));
     }
 }
+
+/// Où la session est gardée : `os` (trousseau du système), `file` (repli chiffré Linux) ou
+/// `memory` (rien ne survivra à la fermeture) — affiché dans Paramètres > Système.
+#[tauri::command]
+pub async fn session_storage_status() -> String {
+    blocking(|| match keyring::Entry::store_status() {
+        Ok(()) => "os".to_string(),
+        Err(_) if session_file::machine().is_some() => "file".to_string(),
+        Err(_) => "memory".to_string(),
+    })
+    .await
+    .unwrap_or_else(|_| "memory".into())
+}

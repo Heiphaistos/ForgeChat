@@ -253,6 +253,9 @@ impl Importer {
         self.progress("Création des salons").await;
 
         let mut cat_map: HashMap<String, (Uuid, Option<Vec<Overwrite>>)> = HashMap::new();
+        // Pour une synchronisation ultérieure (sync.rs) : correspondances et curseurs.
+        let mut sync_maps: Vec<(&'static str, String, Uuid)> = Vec::new();
+        let mut sync_cursors: Vec<(String, u64)> = Vec::new();
         for c in &g.categories {
             let id: Uuid = sqlx::query_scalar(
                 "INSERT INTO categories (server_id, name, position, created_by) VALUES ($1, $2, $3, (SELECT owner_id FROM servers WHERE id=$1)) RETURNING id",
@@ -263,6 +266,7 @@ impl Importer {
             .fetch_one(&self.db)
             .await?;
             cat_map.insert(c.id.clone(), (id, c.permission_overwrites.clone()));
+            sync_maps.push(("category", c.id.clone(), id));
         }
 
         let overwrite_ctx = (g.id.clone(), everyone, role_map);
@@ -277,6 +281,10 @@ impl Importer {
             let overwrites = ch.permission_overwrites.take().or_else(|| parent.and_then(|p| p.1.clone())).unwrap_or_default();
             let category_id = parent.map(|p| p.0);
             let channel_id = self.create_channel(server_id, category_id, &ch, kind, &ch.name, &overwrites, &overwrite_ctx).await?;
+            sync_maps.push(("channel", ch.id.clone(), channel_id));
+            if matches!(kind, "text" | "announcement") {
+                sync_cursors.push((ch.id.clone(), ch.messages.iter().map(|m| snowflake(&m.id)).max().unwrap_or(0)));
+            }
 
             // Salons vocaux : ForgeChat n'affiche pas de discussion écrite dans un
             // vocal, l'historique va dans un salon texte compagnon.
@@ -302,6 +310,9 @@ impl Importer {
             }
         }
 
+        if let Err(e) = super::sync::record_import(&self.db, server_id, &g.id, &sync_maps, &sync_cursors).await {
+            tracing::warn!("Import Discord : lien de synchronisation non enregistré : {e}");
+        }
         Ok(server_id)
     }
 

@@ -9,6 +9,7 @@ import { desktopInvoke, errText } from '../../lib/desktop'
 import { dragDropEnabled, setDragDropEnabled } from '../../lib/dragDropGuard'
 import { isStreamingSoftwareRunning } from '../../lib/streamingSoftware'
 import { Select, Toggle } from './shared'
+import { sessionStorageStatus } from '../../lib/localSession'
 
 interface SystemState {
   close_to_tray: boolean
@@ -42,12 +43,14 @@ export default function SystemSection({ onOpenKeybindings }: { onOpenKeybindings
   const [gpuAtStart, setGpuAtStart] = useState<boolean | null>(null)
   const [dnd, setDnd] = useState(dragDropEnabled)
   const [stream, setStream] = useState<boolean | null>(null)
+  const [vault, setVault] = useState<string | null>(null)
 
   useEffect(() => {
     desktopInvoke<SystemState>('system_get')
       .then(s => { setSys(s); setGpuAtStart(s.hardware_acceleration) })
       .catch(e => toast.error(t('system.error', { e: errText(e) })))
     void isStreamingSoftwareRunning().then(setStream)
+    void sessionStorageStatus().then(setVault)
   }, [t])
 
   if (!sys) return null
@@ -126,6 +129,15 @@ export default function SystemSection({ onOpenKeybindings }: { onOpenKeybindings
             {sys.download_dir && <button type="button" onClick={clearDir} className={btn}>{t('system.downloads.clear')}</button>}
           </div>
         </Row>
+      </section>
+
+      <section className="space-y-2">
+        <H>{t('system.session.title')}</H>
+        {vault && (
+          <Row label={t('system.session.vault')} hint={t(`system.session.vault.${vault === 'os' || vault === 'file' ? vault : 'memory'}`)}>
+            <span className={`text-xs font-semibold ${vault === 'memory' ? 'text-red-400' : 'text-green-400'}`}>{vault === 'memory' ? '✗' : '✓'}</span>
+          </Row>
+        )}
       </section>
 
       <section>
