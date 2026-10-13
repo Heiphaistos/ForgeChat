@@ -434,7 +434,7 @@ pub async fn get_dm_messages(
         let half = limit / 2;
 
         let mut before_rows = sqlx::query(
-            "SELECT dm.*, u.username, u.avatar, u.avatar_decoration FROM dm_messages dm
+            "SELECT dm.*, u.username, u.avatar, u.avatar_decoration, u.avatar_decoration_opts FROM dm_messages dm
              JOIN users u ON u.id = dm.sender_id
              WHERE dm.dm_channel_id=$1 AND (dm.created_at, dm.id) < ($2, $4)
              ORDER BY dm.created_at DESC, dm.id DESC LIMIT $3"
@@ -443,7 +443,7 @@ pub async fn get_dm_messages(
         .fetch_all(&state.db).await?;
 
         let after_rows = sqlx::query(
-            "SELECT dm.*, u.username, u.avatar, u.avatar_decoration FROM dm_messages dm
+            "SELECT dm.*, u.username, u.avatar, u.avatar_decoration, u.avatar_decoration_opts FROM dm_messages dm
              JOIN users u ON u.id = dm.sender_id
              WHERE dm.dm_channel_id=$1 AND (dm.created_at, dm.id) >= ($2, $4)
              ORDER BY dm.created_at ASC, dm.id ASC LIMIT $3"
@@ -456,7 +456,7 @@ pub async fn get_dm_messages(
         before_rows
     } else if let Some(before_id) = before {
         sqlx::query(
-            "SELECT dm.*, u.username, u.avatar, u.avatar_decoration FROM dm_messages dm
+            "SELECT dm.*, u.username, u.avatar, u.avatar_decoration, u.avatar_decoration_opts FROM dm_messages dm
              JOIN users u ON u.id = dm.sender_id
              WHERE dm.dm_channel_id=$1
                AND (dm.created_at, dm.id) < (SELECT created_at, id FROM dm_messages WHERE id=$3 AND dm_channel_id=$1)
@@ -471,7 +471,7 @@ pub async fn get_dm_messages(
         .await?
     } else {
         sqlx::query(
-            "SELECT dm.*, u.username, u.avatar, u.avatar_decoration FROM dm_messages dm
+            "SELECT dm.*, u.username, u.avatar, u.avatar_decoration, u.avatar_decoration_opts FROM dm_messages dm
              JOIN users u ON u.id = dm.sender_id
              WHERE dm.dm_channel_id=$1
                AND (NOT $3 OR EXISTS (SELECT 1 FROM attachments a WHERE a.dm_message_id = dm.id))
@@ -583,6 +583,7 @@ pub async fn get_dm_messages(
             "sender_username": r.get::<String, _>("username"),
             "sender_avatar": r.get::<Option<String>, _>("avatar"),
             "sender_avatar_decoration": r.get::<Option<String>, _>("avatar_decoration"),
+            "sender_avatar_decoration_opts": r.get::<Option<serde_json::Value>, _>("avatar_decoration_opts"),
             "edited_at": r.get::<Option<chrono::DateTime<chrono::Utc>>, _>("edited_at"),
             "reply_to_id": reply_to_id,
             "reply_to": reply_to_id.and_then(|rid| reply_ctx_map.get(&rid)).cloned(),
@@ -869,7 +870,7 @@ pub async fn send_dm(
 
     // Récupérer username + avatar du sender pour la payload WS
     let sender_info = sqlx::query(
-        "SELECT username, avatar, avatar_decoration FROM users WHERE id=$1"
+        "SELECT username, avatar, avatar_decoration, avatar_decoration_opts FROM users WHERE id=$1"
     )
     .bind(claims.sub)
     .fetch_optional(&state.db)
@@ -878,6 +879,7 @@ pub async fn send_dm(
     .flatten();
 
     let sender_decoration: Option<String> = sender_info.as_ref().and_then(|r| r.get("avatar_decoration"));
+    let sender_decoration_opts: Option<serde_json::Value> = sender_info.as_ref().and_then(|r| r.get("avatar_decoration_opts"));
     let (sender_username, sender_avatar) = sender_info.as_ref().map(|r| {
         (r.get::<String, _>("username"), r.get::<Option<String>, _>("avatar"))
     }).unwrap_or_else(|| (String::new(), None));
@@ -919,6 +921,7 @@ pub async fn send_dm(
             "sender_username": sender_username,
             "sender_avatar": sender_avatar,
             "sender_avatar_decoration": sender_decoration,
+            "sender_avatar_decoration_opts": sender_decoration_opts,
             "reply_to_id": reply_to,
             "reply_to": reply_ctx,
             "created_at": created_at,

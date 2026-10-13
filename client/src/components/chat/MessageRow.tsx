@@ -185,7 +185,7 @@ function MessageRow({
               </span>
             )}
             {!isGrouped && (
-              <AvatarDecoration id={msg.author_avatar_decoration} size={compact ? 28 : 40}>
+              <AvatarDecoration id={msg.author_avatar_decoration} opts={msg.author_avatar_decoration_opts} size={compact ? 28 : 40}>
               <AvatarRing ring={roleDecor?.ring} size={compact ? 28 : 40}>
               <button
                 className={`rounded-full bg-fc-accent flex items-center justify-center font-bold text-sm text-white overflow-hidden hover:opacity-80 transition ${compact ? 'w-7 h-7' : 'w-8 h-8 md:w-10 md:h-10'}`}

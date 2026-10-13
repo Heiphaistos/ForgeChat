@@ -193,6 +193,8 @@ pub async fn update_me(
             profile_tag = CASE WHEN $21 THEN $22 ELSE profile_tag END,
             profile_links = CASE WHEN $23 THEN $24 ELSE profile_links END,
             custom_status_expires_at = CASE WHEN $4::TEXT IS NOT NULL THEN $25 ELSE custom_status_expires_at END,
+            avatar_decoration_opts = CASE WHEN $26 THEN $27 ELSE avatar_decoration_opts END,
+            profile_effect_intensity = CASE WHEN $28::SMALLINT IS NULL THEN profile_effect_intensity WHEN $28 = 100 THEN NULL ELSE $28 END,
             updated_at = NOW()
          WHERE id=$1 RETURNING *"
     )
@@ -221,6 +223,9 @@ pub async fn update_me(
     .bind(custom.profile_links.is_some())
     .bind(custom.profile_links.flatten())
     .bind(custom.status_expires_at)
+    .bind(custom.decoration_opts.is_some())
+    .bind(custom.decoration_opts.flatten())
+    .bind(body.profile_effect_intensity)
     .fetch_one(&state.db)
     .await
     .map_err(|e| {
@@ -506,8 +511,8 @@ pub async fn get_user_profile(
     let user = sqlx::query(
         "SELECT id, username, discriminator, avatar, banner, bio, status, custom_status,
                 custom_status_emoji, activity_type, activity_name, activity_detail,
-                is_verified, created_at, avatar_decoration, profile_color_primary,
-                profile_color_accent, profile_effect, pronouns, display_name, name_style,
+                is_verified, created_at, avatar_decoration, avatar_decoration_opts, profile_color_primary,
+                profile_color_accent, profile_effect, profile_effect_intensity, pronouns, display_name, name_style,
                 profile_tag, profile_links, custom_status_expires_at
          FROM users WHERE id=$1"
     )
@@ -532,9 +537,11 @@ pub async fn get_user_profile(
         "verified":             user.get::<bool, _>("is_verified"),
         "created_at":           user.get::<chrono::DateTime<chrono::Utc>, _>("created_at"),
         "avatar_decoration":    user.get::<Option<String>, _>("avatar_decoration"),
+        "avatar_decoration_opts": user.get::<Option<serde_json::Value>, _>("avatar_decoration_opts"),
         "profile_color_primary": user.get::<Option<i32>, _>("profile_color_primary"),
         "profile_color_accent": user.get::<Option<i32>, _>("profile_color_accent"),
         "profile_effect":       user.get::<Option<String>, _>("profile_effect"),
+        "profile_effect_intensity": user.get::<Option<i16>, _>("profile_effect_intensity"),
         "pronouns":             user.get::<Option<String>, _>("pronouns"),
         "display_name":         user.get::<Option<String>, _>("display_name"),
         "name_style":           user.get::<Option<serde_json::Value>, _>("name_style"),

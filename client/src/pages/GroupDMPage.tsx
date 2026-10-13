@@ -70,6 +70,7 @@ interface GDMMessage {
   sender_username: string
   sender_avatar: string | null
   sender_avatar_decoration?: string | null
+  sender_avatar_decoration_opts?: unknown
   reply_to?: string | null
   reply_to_username?: string | null
   reply_to_content?: string | null
@@ -975,7 +976,7 @@ export default function GroupDMPage() {
                   }
                 }}
               >
-                <AvatarDecoration id={msg.sender_avatar_decoration} size={32}>
+                <AvatarDecoration id={msg.sender_avatar_decoration} opts={msg.sender_avatar_decoration_opts} size={32}>
                 <button
                   onClick={e => { e.stopPropagation(); setUserPopup({ userId: msg.sender_id, x: e.clientX, y: e.clientY }) }}
                   onContextMenu={authorMenu}

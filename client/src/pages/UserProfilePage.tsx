@@ -30,6 +30,8 @@ interface UserPublic {
   activity_detail: string | null
   created_at: string
   avatar_decoration?: string | null
+  avatar_decoration_opts?: unknown
+  profile_effect_intensity?: number | null
   profile_color_primary?: number | null
   profile_color_accent?: number | null
   profile_effect?: string | null
@@ -264,7 +266,7 @@ export default function UserProfilePage() {
 
         {/* Carte profil */}
         <div className="bg-fc-channel rounded-xl overflow-hidden mb-4 relative" style={{ background: profileThemeBackground(user.profile_color_primary, user.profile_color_accent) }}>
-          <ProfileEffect id={user.profile_effect} />
+          <ProfileEffect id={user.profile_effect} intensity={user.profile_effect_intensity} />
           {/* Banner */}
           {/* Bannière entière, à ses proportions (bornées) : jamais rognée. */}
           <ProfileBanner
@@ -284,7 +286,7 @@ export default function UserProfilePage() {
             <div className="flex items-end gap-4 -mt-12 mb-4">
               {/* Avatar */}
               <div className="relative flex-shrink-0">
-                <AvatarDecoration id={user.avatar_decoration} size={88}>
+                <AvatarDecoration id={user.avatar_decoration} opts={user.avatar_decoration_opts} size={88}>
                 <div className="w-24 h-24 rounded-full bg-fc-bg border-4 border-fc-channel overflow-hidden flex items-center justify-center font-bold text-3xl text-white">
                   {user.avatar ? (
                     <AnimatedImg src={user.avatar} alt={user.username} loading="lazy" decoding="async" className="w-full h-full object-cover" />

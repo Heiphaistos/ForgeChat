@@ -251,6 +251,8 @@ pub struct ProfileCustom {
     pub name_style: Option<Option<serde_json::Value>>,
     pub profile_tag: Option<Option<String>>,
     pub profile_links: Option<Option<serde_json::Value>>,
+    /// Réglages de la décoration d'avatar (profile_style::parse_decoration_opts).
+    pub decoration_opts: Option<Option<serde_json::Value>>,
     /// Utilisé seulement si `custom_status` est envoyé dans la même requête.
     pub status_expires_at: Option<chrono::DateTime<chrono::Utc>>,
 }
@@ -267,6 +269,8 @@ impl ProfileCustom {
             profile_tag: body.profile_tag.as_deref()
                 .map(|s| ps::clean_label(s, ps::TAG_MAX, "Étiquette")).transpose().map_err(bad)?,
             profile_links: body.profile_links.as_ref().map(ps::parse_links).transpose().map_err(bad)?,
+            decoration_opts: body.avatar_decoration_opts.as_ref()
+                .map(ps::parse_decoration_opts).transpose().map_err(|e| AppError::BadRequest(e.into()))?,
             status_expires_at: status_expiry(body.custom_status_clear_after)?,
         })
     }

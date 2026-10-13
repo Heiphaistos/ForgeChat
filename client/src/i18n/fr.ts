@@ -14,6 +14,7 @@ import * as avSettings from './parts/avSettings.ts'
 import * as profileEditor from './parts/profileEditor.ts'
 import * as nameStyleMore from './parts/nameStyleMore.ts'
 import * as serverLook from './parts/serverLook.ts'
+import * as profileDecorMore from './parts/profileDecorMore.ts'
 import { profileFr } from './profileFr.ts'
 import { profileStyleFr } from './profileStyleFr.ts'
 import { socialFr } from './socialFr.ts'
@@ -44,6 +45,7 @@ export const fr = {
   ...profileEditor.fr,
   ...nameStyleMore.fr,
   ...serverLook.fr,
+  ...profileDecorMore.fr,
   // --- Connexion, inscription, mot de passe oublié ---
   'auth.email': 'Email',
   'auth.password': 'Mot de passe',

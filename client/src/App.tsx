@@ -906,7 +906,7 @@ function AppInner() {
     const offUserUpdate = on('USER_UPDATE', (d: any) => {
       const u = d.user
       if (!u?.id) return
-      updateUserInMessages(u.id, u.username, u.avatar ?? null, u.avatar_decoration ?? null)
+      updateUserInMessages(u.id, u.username, u.avatar ?? null, u.avatar_decoration ?? null, u.avatar_decoration_opts ?? null)
       useNameStyles.getState().set(u.id, u)
       qcHook.invalidateQueries({ queryKey: ['members'] })
       qcHook.invalidateQueries({ queryKey: ['user', u.id] })

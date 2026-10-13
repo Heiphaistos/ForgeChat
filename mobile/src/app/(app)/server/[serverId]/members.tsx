@@ -70,7 +70,7 @@ export default function MembersScreen() {
             accessibilityRole="button"
             accessibilityLabel={item.is_owner ? t('server.members.owner', { name: item.nickname || item.username }) : item.nickname || item.username}
           >
-            <Avatar uri={item.avatar} name={item.username} userId={item.user_id} status={item.status} showStatus size={38} decoration={item.avatar_decoration} />
+            <Avatar uri={item.avatar} name={item.username} userId={item.user_id} status={item.status} showStatus size={38} decoration={item.avatar_decoration} decorationOpts={item.avatar_decoration_opts} />
             <View style={{ flex: 1 }}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.xs }}>
                 <UserName
