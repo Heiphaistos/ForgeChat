@@ -217,4 +217,19 @@ describe('DELETE /servers/:id via le client HTTP', () => {
     expect(err).toBeInstanceOf(ApiError)
     expect(deleteServerFailure(err)).toMatchObject({ field: 'totp', needTotp: true })
   })
+
+  it.each([
+    [{ error: 'Accès interdit', code: 'forbidden' }, 'forbidden'],
+    [{ error: 'Accès interdit' }, 'forbidden'], // ancien serveur sans `code`
+    [{ error: 'Salon protégé' }, undefined],
+  ])('403 %j → code %s', async (body, expected) => {
+    global.fetch = jest.fn(async (url: string) => {
+      if (url.endsWith('/users/me/kdf')) return new Response(JSON.stringify({ kdf_salt: null, legacy: true }), { status: 200 })
+      return new Response(JSON.stringify(body), { status: 403 })
+    }) as unknown as typeof fetch
+    const err = await serversApi.remove('a0000000-0000-4000-8000-000000000001', deleteServerBody('pw', '')).catch((e: unknown) => e)
+    expect(err).toBeInstanceOf(ApiError)
+    expect((err as ApiError).code).toBe(expected)
+    expect((err as ApiError).message).toBe(body.error)
+  })
 })

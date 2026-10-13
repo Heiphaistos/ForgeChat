@@ -114,13 +114,15 @@ async function parseError(res: Response): Promise<ApiError> {
   let code: string | undefined
   let retryAfter: number | undefined
   try {
-    const data = (await res.json()) as { error?: unknown; retry_after?: unknown }
+    const data = (await res.json()) as { error?: unknown; code?: unknown; retry_after?: unknown }
+    // AppError::Forbidden (server/src/error.rs) envoie `code: "forbidden"` ; les 403 à motif
+    // lisible n'ont pas de code et gardent leur message.
+    if (res.status === 403 && data.code === 'forbidden') code = 'forbidden'
     if (typeof data.error === 'string') {
       message = data.error
       if (data.error === 'totp_required') code = 'totp_required'
-      // AppError::Forbidden (server/src/error.rs) n'a pas de code : son texte générique est
-      // traduit en code ici, une seule fois ; les 403 à motif lisible gardent leur message.
-      else if (res.status === 403 && data.error === 'Accès interdit') code = 'forbidden'
+      // Repli pour les anciens serveurs sans `code` : texte générique de AppError::Forbidden.
+      else if (!code && res.status === 403 && data.error === 'Accès interdit') code = 'forbidden'
     }
     if (typeof data.retry_after === 'number') retryAfter = data.retry_after
   } catch {
