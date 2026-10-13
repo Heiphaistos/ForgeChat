@@ -7,7 +7,7 @@ export const profileEn = {
   'profileId.displayName': 'Display name',
   'profileId.displayNameHint': 'Shown instead of your username (accents, spaces and emoji allowed, 32 characters). Empty = username.',
   'profileId.color': 'Name color',
-  'profileId.colorHint': 'One color = solid, 2 or 3 = gradient. Colors that are too dark are lightened on screen to stay readable. In a server, role colors may take priority (server setting).',
+  'profileId.colorHint': 'One color = solid, 2 to 5 = gradient. Colors that are too dark are lightened on screen to stay readable. In a server, role colors may take priority (server setting).',
   'profileId.defaultColor': 'Default',
   'profileId.preset': 'Preset {n}',
   'profileId.colorN': 'Color {n}',

@@ -1,56 +1,15 @@
 import { useEffect } from 'react'
 import { Text, type StyleProp, type TextStyle } from 'react-native'
 import { useServerDetail } from '@/features/servers/menus'
-import { DEFAULT_BG, cleanNameStyle, displayNameOf, gradientChars, parseHex, resolveNameStyle, type MemberClanTag, type NameStyle, type ResolvedName, type TagStyle } from '@/lib/nameStyle'
+import { DEFAULT_BG, LEVEL_DEFAULT, cleanNameStyle, displayNameOf, gradientChars, parseHex, resolveNameStyle, type MemberClanTag, type NameStyle, type ResolvedName, type TagStyle } from '@/lib/nameStyle'
 import { requestNameStyle, useNameStyles } from '@/stores/nameStyles'
 import { colors } from '@/theme'
 import { ClanTag } from './ClanTag'
+import { OPACITY, effectStyle, outlineStyle } from './nameEffects'
 import { nameFontStyle } from './nameFonts'
 
 /** Fond du thème courant, pour l'éclaircissement des couleurs trop sombres. */
 const BG = parseHex(colors.bg) ?? DEFAULT_BG
-
-const shadow = (color: string, r: number, x = 0, y = 0): TextStyle => ({ textShadowColor: color, textShadowRadius: r, textShadowOffset: { width: x, height: y } })
-
-/**
- * Effets du web en version statique (React Native n'a ni animation CSS ni texte découpé dans
- * un dégradé) : une ombre de texte proche du rendu web, les palettes (arc-en-ciel, feu, givre,
- * holo, chrome) en une couleur par caractère. Couleurs : constantes ou « #rrggbb » résolus.
- */
-function effectStyle(effect: string, color: string | undefined): TextStyle | null {
-  const c = color ?? colors.text
-  switch (effect) {
-    case 'glow':
-    case 'pulse':
-      return shadow(c, 8)
-    case 'outline':
-      return shadow('rgba(0,0,0,0.9)', 2, 1, 1)
-    case 'shimmer':
-    case 'chrome':
-      return shadow('rgba(255,255,255,0.45)', 4)
-    case 'neon':
-      return shadow(c, 12)
-    case 'shadow3d':
-      return shadow('rgba(0,0,0,0.55)', 0.5, 2, 2)
-    case 'retro':
-      return shadow('#ff2bd6', 0.5, 2, 2)
-    case 'fire':
-      return shadow('rgba(255,109,0,0.8)', 5)
-    case 'frost':
-      return shadow('rgba(127,211,255,0.9)', 5)
-    case 'holo':
-      return shadow('rgba(208,168,255,0.7)', 4)
-    case 'glitch':
-      return shadow('rgba(0,229,255,0.7)', 0.5, -1.5, 0)
-    default:
-      return null
-  }
-}
-
-/** Contour choisi : React Native n'a pas de trait de texte, une ombre serrée l'approche. */
-function outlineStyle(o: ResolvedName['outline']): TextStyle | null {
-  return o ? shadow(o.color, Math.max(1, o.width), 0, 0) : null
-}
 
 /**
  * Pseudo rendu selon un style déjà résolu. Dégradé : une couleur par caractère (Text imbriqués),
@@ -93,7 +52,8 @@ export function StyledName({
           style,
           cs.length === 1 && { color: cs[0] },
           nameFontStyle(resolved?.font),
-          resolved ? effectStyle(resolved.effect, cs[0]) : null,
+          resolved ? effectStyle(resolved.effect, cs[0], (resolved.intensity ?? LEVEL_DEFAULT) / LEVEL_DEFAULT) : null,
+          resolved && OPACITY[resolved.effect] ? { opacity: OPACITY[resolved.effect] } : null,
           // Le contour passe devant l'ombre de l'effet (une seule ombre de texte en natif).
           outlineStyle(resolved?.outline),
         ]}

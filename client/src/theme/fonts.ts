@@ -3,8 +3,11 @@
 import '@fontsource-variable/inter'
 import '@fontsource/jetbrains-mono/400.css'
 import '@fontsource/jetbrains-mono/700.css'
+import { nameFontStacks } from '../lib/nameStyle'
 
-export const FONTS = [
+export interface FontChoice { id: string; label: string; stack: string }
+
+const BASE_FONTS: readonly FontChoice[] = [
   { id: 'system', label: 'settings.appearance.systemFont', stack: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif' },
   { id: 'inter', label: 'Inter', stack: '"Inter Variable", Inter, sans-serif' },
   { id: 'jetbrains', label: 'JetBrains Mono', stack: '"JetBrains Mono", Consolas, monospace' },
@@ -30,7 +33,19 @@ export const FONTS = [
   { id: 'cascadia', label: 'Cascadia Code', stack: '"Cascadia Code", "Cascadia Mono", Consolas, monospace' },
   { id: 'comic', label: 'Comic Sans MS', stack: '"Comic Sans MS", "Comic Neue", "Chalkboard SE", cursive' },
   { id: 'dyslexic', label: 'fonts.dyslexic', stack: '"OpenDyslexic", "Lexend", Verdana, sans-serif' },
-] as const
+]
+
+/**
+ * Polices proposées pour toute l'appli : celles ci-dessus, puis les polices du pseudo qui
+ * changent de famille (lib/nameStyle.ts, dont les six polices OFL embarquées « FC … »),
+ * sans doublon de pile. Le réglage stocke la pile (user_settings.font_family, 100 caractères).
+ */
+export const FONTS: readonly FontChoice[] = [
+  ...BASE_FONTS,
+  ...nameFontStacks()
+    .filter(n => !BASE_FONTS.some(b => b.stack === n.stack))
+    .map(n => ({ id: `name-${n.id}`, label: `profileId.font.${n.id}`, stack: n.stack })),
+]
 
 /**
  * Réglage font_family du compte → pile CSS connue. Accepte l'identifiant, l'ancienne valeur

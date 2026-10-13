@@ -13,7 +13,7 @@ import { PROFILE_IMAGE_MAX_BYTES, pickAnimatedImage } from '@/features/account/p
 import { ProfileLinksEditor } from '@/features/account/ProfileLinksEditor'
 import { profileLinkError, usernameError } from '@/features/account/rules'
 import { formatUntil } from '@/lib/format'
-import type { NameStyle } from '@/lib/nameStyle'
+import { cleanNameStyle, type NameStyle } from '@/lib/nameStyle'
 import { rememberUserStyle } from '@/stores/nameStyles'
 import { useSettings } from '@/stores/settings'
 import { useT } from '@/i18n'
@@ -82,7 +82,7 @@ export default function ProfileSettings() {
         custom_status_clear_after: sendStatus ? (clearAfter ?? 0) : undefined,
         display_name: displayName.trim(),
         profile_tag: tag.trim(),
-        name_style: nameStyle.colors.length || nameStyle.effect || nameStyle.font ? { ...nameStyle, angle: nameStyle.angle ?? 90 } : {},
+        name_style: cleanNameStyle(nameStyle) ?? {},
         profile_links: links.map((l) => ({ label: l.label.trim(), url: l.url.trim() })),
         pronouns: pronouns.trim(),
         // "" et -1 = retirer.
