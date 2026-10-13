@@ -13,6 +13,7 @@ import { AvatarDecoration } from '../ui/ProfileDecor'
 import AvatarRing from '../ui/AvatarRing'
 import { useNameStyles } from '../../store/nameStyles'
 import { setUnsaved, useDraft, type DraftReport, type Patch } from './profileDraft'
+import ImageCropDialog from './ImageCropDialog'
 
 interface Props {
   user: any
@@ -70,6 +71,7 @@ export default function ProfileSection({ user, updateMe }: Props) {
   const [bannerPreview, setBannerPreview] = useState<string | null>(user.banner ?? null)
   const fileRef = React.useRef<HTMLInputElement>(null)
   const bannerRef = React.useRef<HTMLInputElement>(null)
+  const [cropFile, setCropFile] = useState<File | null>(null)
   // `gen` remonte les parties du formulaire : réinitialiser, ou repartir du profil enregistré.
   const [gen, setGen] = useState(0)
   const [drafts, setDrafts] = useState<Record<string, { patch: Patch; invalid: boolean }>>({})
@@ -235,7 +237,7 @@ export default function ProfileSection({ user, updateMe }: Props) {
             onChange={e => {
               const file = e.target.files?.[0]
               e.target.value = ''
-              if (file) uploadAvatar.mutate(file)
+              if (file) setCropFile(file)
             }}
           />
         </div>
@@ -270,6 +272,10 @@ export default function ProfileSection({ user, updateMe }: Props) {
             {save.isPending ? t('common.saving') : t('psave.save')}
           </button>
         </div>
+      )}
+      {cropFile && (
+        <ImageCropDialog file={cropFile} onCancel={() => setCropFile(null)}
+          onDone={f => { setCropFile(null); uploadAvatar.mutate(f) }} />
       )}
     </div>
   )

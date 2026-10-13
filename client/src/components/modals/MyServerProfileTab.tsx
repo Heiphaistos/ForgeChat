@@ -12,6 +12,7 @@ import StyledNameText from '../ui/StyledNameText'
 import AvatarRingFields from '../settings/AvatarRingFields'
 import NameStyleFields, { EMPTY_STYLE } from '../settings/NameStyleFields'
 import { cleanStyle, shownName, type NameStyle } from '../../lib/nameStyle'
+import ImageCropDialog from '../settings/ImageCropDialog'
 
 type ImageKind = 'avatar' | 'banner'
 
@@ -23,6 +24,7 @@ export default function MyServerProfileTab({ serverId }: { serverId: string }) {
   const me = useAuth(s => s.user)
   const avatarRef = useRef<HTMLInputElement>(null)
   const bannerRef = useRef<HTMLInputElement>(null)
+  const [cropFile, setCropFile] = useState<File | null>(null)
   const { data: member } = useQuery({
     queryKey: ['member', serverId, me?.id],
     queryFn: () => api.get(`/servers/${serverId}/members/${me?.id}`).then(r => r.data),
@@ -104,7 +106,8 @@ export default function MyServerProfileTab({ serverId }: { serverId: string }) {
       className="hidden"
       onChange={e => {
         const file = e.target.files?.[0]
-        if (file) upload.mutate({ kind, file })
+        if (file && kind === 'avatar') setCropFile(file)
+        else if (file) upload.mutate({ kind, file })
         e.target.value = ''
       }}
     />
@@ -226,6 +229,10 @@ export default function MyServerProfileTab({ serverId }: { serverId: string }) {
           {saveLook.isPending ? t('common.saving') : t('pedit.server.saveLook')}
         </button>
       </section>
+      {cropFile && (
+        <ImageCropDialog file={cropFile} onCancel={() => setCropFile(null)}
+          onDone={file => { setCropFile(null); upload.mutate({ kind: 'avatar', file }) }} />
+      )}
     </div>
   )
 }
