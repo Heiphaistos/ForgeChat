@@ -192,6 +192,12 @@ export const messagesApi = {
     }
   },
 
+  /** « Marquer comme non lu » à partir de `messageId` (inclus). Groupe : même route que le MP. */
+  markUnread(ref: ConversationRef, messageId: string) {
+    const p = ref.kind === 'channel' ? path`/channels/${ref.channelId}/unread` : path`/dms/${ref.kind === 'dm' ? ref.dmId : ref.groupId}/unread`
+    return http.post<unknown>(p, { message_id: messageId })
+  },
+
   /**
    * Épingle (pinned=true) ou désépingle. Le groupe n'a qu'une bascule côté serveur :
    * l'appelant doit connaître l'état actuel (liste des épinglés).

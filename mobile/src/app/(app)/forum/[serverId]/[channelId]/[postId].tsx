@@ -1,9 +1,12 @@
-import { useInfiniteQuery } from '@tanstack/react-query'
+import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
 import { Image } from 'expo-image'
 import { router, Stack } from 'expo-router'
 import { useMemo, useState } from 'react'
 import { Alert, StyleSheet, Text, View } from 'react-native'
 import { forumApi } from '@/api/forum'
+import { serversApi } from '@/api/servers'
+import { QUICK_REACTIONS } from '@/lib/emojis'
+import { withDefaultReaction } from '@/features/servers/discordFeatures'
 import { e2eErrorText } from '@/e2e/conversations'
 import { Avatar } from '@/components/Avatar'
 import { MessageText } from '@/components/MessageText'
@@ -49,6 +52,10 @@ export default function PostScreen() {
     getNextPageParam: (last) => olderCursor(last.replies, LIMITS.pageSize),
     enabled: valid,
   })
+  // Réaction par défaut du salon (réglages du forum) : premier choix, en un appui, sur chaque réponse.
+  const channels = useQuery({ queryKey: qk.channels(ids.serverId ?? ''), queryFn: () => serversApi.channels(ids.serverId), enabled: valid, staleTime: 60_000 })
+  const defaultReaction = channels.data?.find((c) => c.id === ids.channelId)?.default_reaction_emoji
+  const quickReactions = useMemo(() => withDefaultReaction(QUICK_REACTIONS, defaultReaction), [defaultReaction])
   const replies = useMemo(() => (q.data?.pages ?? []).flatMap((p) => [...p.replies].reverse()), [q.data])
   if (!valid) return <ErrorState message={t('social.post.invalid')} />
   const post = q.data?.pages[0]?.post
@@ -159,6 +166,7 @@ export default function PostScreen() {
         canModerate={canModerate}
         disabledReason={post?.locked ? t('social.post.locked') : null}
         placeholder={t('social.post.replyPlaceholder')}
+        quickReactions={quickReactions}
         header={
           post ? (
             <View style={styles.post}>

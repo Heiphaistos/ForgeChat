@@ -8,19 +8,26 @@ import { Button, Row, SwitchRow, TextField } from '@/components/ui'
 import { LIMITS } from '@/config/env'
 import { ProfileBanner } from '@/features/account/ProfileBanner'
 import { ProfileCosmeticsEditor, type Cosmetics } from '@/features/account/ProfileCosmeticsEditor'
-import { cleanDecoOpts, cleanIntensity, decoOptsPayload } from '@/features/account/profileDecor'
+import { hexColor } from '@/features/account/profileDecor'
 import { NameStyleEditor } from '@/features/account/NameStyleEditor'
+import { TagStyleEditor } from '@/features/account/TagStyleEditor'
+import { AvatarRingEditor } from '@/features/account/AvatarRingEditor'
+import { ProfileCardEditor } from '@/features/account/ProfileCardEditor'
+import type { ProfileCard } from '@/features/account/profileCard'
+import { profileForm, profilePatch } from '@/features/account/profilePatch'
+import { AvatarRing, type AvatarRingData } from '@/components/AvatarRing'
 import { PROFILE_IMAGE_MAX_BYTES, pickAnimatedImage } from '@/features/account/pickAnimated'
 import { ProfileLinksEditor } from '@/features/account/ProfileLinksEditor'
 import { profileLinkError, usernameError } from '@/features/account/rules'
 import { formatUntil } from '@/lib/format'
-import { cleanNameStyle, type NameStyle } from '@/lib/nameStyle'
+import type { NameStyle } from '@/lib/nameStyle'
 import { rememberUserStyle } from '@/stores/nameStyles'
 import { useSettings } from '@/stores/settings'
 import { useT } from '@/i18n'
 import { errorMessage } from '@/lib/http'
+import { logger } from '@/lib/logger'
 import { useAuth } from '@/stores/auth'
-import type { ProfileLink } from '@/types/models'
+import type { ProfileLink, User } from '@/types/models'
 import { colors, font, radius, spacing } from '@/theme'
 import { ensurePhotoAccess } from '@/lib/photoAccess'
 
@@ -39,33 +46,34 @@ const CLEAR_AFTER_LABEL = {
 
 export default function ProfileSettings() {
   const user = useAuth((s) => s.user)
+  // Formulaire monté seulement une fois le compte chargé, remonté si le compte change.
+  return user ? <ProfileForm key={user.id} user={user} /> : null
+}
+
+function ProfileForm({ user }: { user: User }) {
   const setUser = useAuth((s) => s.setUser)
   const t = useT()
-  const [username, setUsername] = useState(user?.username ?? '')
-  const [bio, setBio] = useState(user?.bio ?? '')
-  const [customStatus, setCustomStatus] = useState(user?.custom_status ?? '')
+  // Valeurs de départ lues une fois, au montage (le formulaire est remonté par `key` si le compte change).
+  const [init] = useState(() => profileForm(user))
+  const [username, setUsername] = useState(init.username)
+  const [bio, setBio] = useState(init.bio)
+  const [customStatus, setCustomStatus] = useState(init.customStatus)
   /** null = garder l'échéance actuelle (le statut n'est alors renvoyé que s'il a changé). */
   const [clearAfter, setClearAfter] = useState<number | null>(null)
-  const [displayName, setDisplayName] = useState(user?.display_name ?? '')
-  const [tag, setTag] = useState(user?.profile_tag ?? '')
-  const [nameStyle, setNameStyle] = useState<NameStyle>(user?.name_style ?? { colors: [] })
-  const [links, setLinks] = useState<ProfileLink[]>(user?.profile_links ?? [])
+  const [displayName, setDisplayName] = useState(init.displayName)
+  const [tag, setTag] = useState(init.tag)
+  const [nameStyle, setNameStyle] = useState<NameStyle>(init.nameStyle)
+  const [links, setLinks] = useState<ProfileLink[]>(init.links)
   const [linkErrors, setLinkErrors] = useState(false)
   const animate = useSettings((s) => s.animateAvatars)
   const setSettings = useSettings((s) => s.set)
-  const [pronouns, setPronouns] = useState(user?.pronouns ?? '')
-  const [cosmetics, setCosmetics] = useState<Cosmetics>({
-    decoration: user?.avatar_decoration ?? '',
-    opts: cleanDecoOpts(user?.avatar_decoration_opts),
-    primary: user?.profile_color_primary ?? null,
-    accent: user?.profile_color_accent ?? null,
-    effect: user?.profile_effect ?? '',
-    intensity: cleanIntensity(user?.profile_effect_intensity),
-  })
+  const [pronouns, setPronouns] = useState(init.pronouns)
+  const [cosmetics, setCosmetics] = useState<Cosmetics>(init.cosmetics)
+  const [ring, setRing] = useState<AvatarRingData | null>(init.ring)
+  const [card, setCard] = useState<ProfileCard>(init.card)
   const [errors, setErrors] = useState<{ username?: string }>({})
   const [saving, setSaving] = useState(false)
   const [uploading, setUploading] = useState<'avatar' | 'banner' | null>(null)
-  if (!user) return null
 
   const save = async () => {
     const nameErr = usernameError(username)
@@ -74,28 +82,9 @@ export default function ProfileSettings() {
     const linkBad = links.some((l) => profileLinkError(l))
     setLinkErrors(linkBad)
     if (errs.username || linkBad) return
-    // Renvoyer le statut remet son échéance à zéro : seulement s'il change ou si une durée est choisie.
-    const sendStatus = customStatus.trim() !== (user.custom_status ?? '') || clearAfter != null
     setSaving(true)
     try {
-      const updated = await usersApi.updateMe({
-        username: username.trim() !== user.username ? username.trim() : undefined,
-        bio: bio.trim(),
-        custom_status: sendStatus ? customStatus.trim() : undefined,
-        custom_status_clear_after: sendStatus ? (clearAfter ?? 0) : undefined,
-        display_name: displayName.trim(),
-        profile_tag: tag.trim(),
-        name_style: cleanNameStyle(nameStyle) ?? {},
-        profile_links: links.map((l) => ({ label: l.label.trim(), url: l.url.trim() })),
-        pronouns: pronouns.trim(),
-        // "" et -1 = retirer.
-        avatar_decoration: cosmetics.decoration,
-        avatar_decoration_opts: decoOptsPayload(cosmetics.opts),
-        profile_effect_intensity: cosmetics.intensity,
-        profile_color_primary: cosmetics.primary ?? -1,
-        profile_color_accent: cosmetics.accent ?? -1,
-        profile_effect: cosmetics.effect,
-      })
+      const updated = await usersApi.updateMe(profilePatch(user, { username, bio, customStatus, clearAfter, displayName, tag, nameStyle, links, pronouns, cosmetics, ring, card }))
       setUser(updated)
       rememberUserStyle(updated)
       setClearAfter(null)
@@ -119,35 +108,56 @@ export default function ProfileSettings() {
     }
   }
 
-  const pickAnimated = async (kind: 'avatar' | 'banner') => {
-    const file = await pickAnimatedImage()
-    if (file) await upload(kind, file)
+  const removeBanner = async () => {
+    try {
+      await usersApi.updateMe({ banner: '' })
+      setUser({ banner: null })
+    } catch (e) {
+      Alert.alert(t('settings.profile.saveFailed'), errorMessage(e))
+    }
   }
 
-  const pick = async (kind: 'avatar' | 'banner') => {
-    if (!(await ensurePhotoAccess())) return
-    const res = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
-      // Bannière gardée entière (aucun recadrage) : elle est affichée sans rognage partout.
-      allowsEditing: kind === 'avatar',
-      aspect: kind === 'avatar' ? [1, 1] : undefined,
-      quality: kind === 'avatar' ? 0.8 : 0.92, // ré-encodage JPEG : retire les métadonnées EXIF (GPS…)
+  /** Galerie indisponible ou refusée par le système : message au lieu d'un rejet non géré. */
+  const guarded = (fn: () => Promise<void>) => () => {
+    fn().catch((e: unknown) => {
+      logger.warn('profile', 'sélection d’image impossible', e)
+      Alert.alert(t('settings.profile.pickFailed'), errorMessage(e))
     })
-    if (res.canceled || !res.assets[0]) return
-    const a = res.assets[0]
-    const max = kind === 'avatar' ? LIMITS.avatarMaxBytes : BANNER_MAX_BYTES
-    if (a.fileSize && a.fileSize > max) {
-      Alert.alert(t('settings.profile.tooLarge'), t('settings.profile.maxSize', { n: max / 1024 / 1024 }))
-      return
-    }
-    await upload(kind, { uri: a.uri, name: `${kind}.jpg`, type: 'image/jpeg' })
   }
+
+  const pickAnimated = (kind: 'avatar' | 'banner') =>
+    guarded(async () => {
+      const file = await pickAnimatedImage()
+      if (file) await upload(kind, file)
+    })
+
+  const pick = (kind: 'avatar' | 'banner') =>
+    guarded(async () => {
+      if (!(await ensurePhotoAccess())) return
+      const res = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        // Bannière gardée entière (aucun recadrage) : elle est affichée sans rognage partout.
+        allowsEditing: kind === 'avatar',
+        aspect: kind === 'avatar' ? [1, 1] : undefined,
+        quality: kind === 'avatar' ? 0.8 : 0.92, // ré-encodage JPEG : retire les métadonnées EXIF (GPS…)
+      })
+      if (res.canceled || !res.assets[0]) return
+      const a = res.assets[0]
+      const max = kind === 'avatar' ? LIMITS.avatarMaxBytes : BANNER_MAX_BYTES
+      if (a.fileSize && a.fileSize > max) {
+        Alert.alert(t('settings.profile.tooLarge'), t('settings.profile.maxSize', { n: max / 1024 / 1024 }))
+        return
+      }
+      await upload(kind, { uri: a.uri, name: `${kind}.jpg`, type: 'image/jpeg' })
+    })
 
   return (
     <ScrollView style={{ backgroundColor: colors.bg }} contentContainerStyle={{ padding: spacing.xl, gap: spacing.lg }} keyboardShouldPersistTaps="handled">
-      <ProfileBanner uri={user.banner} name={user.username} />
-      <Pressable onPress={() => void pick('avatar')} style={{ alignItems: 'center', gap: spacing.sm }} accessibilityRole="button" accessibilityLabel={t('settings.profile.changeAvatarA11y')}>
-        <Avatar uri={user.avatar} name={user.username} size={96} decoration={cosmetics.decoration} />
+      <ProfileBanner uri={user.banner} name={user.username} card={card} tint={cosmetics.primary != null ? hexColor(cosmetics.primary) : undefined} />
+      <Pressable onPress={pick('avatar')} style={{ alignItems: 'center', gap: spacing.sm }} accessibilityRole="button" accessibilityLabel={t('settings.profile.changeAvatarA11y')}>
+        <AvatarRing ring={ring} size={96}>
+          <Avatar uri={user.avatar} name={user.username} size={96} decoration={cosmetics.decoration} decorationOpts={cosmetics.opts} />
+        </AvatarRing>
         <Text style={{ color: colors.link, fontSize: font.sm }}>{uploading === 'avatar' ? t('settings.profile.uploading') : t('settings.profile.changeAvatar')}</Text>
       </Pressable>
       <Button
@@ -155,11 +165,12 @@ export default function ProfileSettings() {
         variant="secondary"
         icon="image-outline"
         disabled={uploading !== null}
-        onPress={() => void pick('banner')}
+        onPress={pick('banner')}
       />
+      {user.banner ? <Button title={t('pcard.removeBanner')} variant="ghost" icon="trash-outline" disabled={uploading !== null} onPress={() => void removeBanner()} /> : null}
       <View style={{ flexDirection: 'row', gap: spacing.sm }}>
-        <Button title={t('settings.animated.avatar')} variant="ghost" icon="film-outline" disabled={uploading !== null} onPress={() => void pickAnimated('avatar')} style={{ flex: 1 }} />
-        <Button title={t('settings.animated.banner')} variant="ghost" icon="film-outline" disabled={uploading !== null} onPress={() => void pickAnimated('banner')} style={{ flex: 1 }} />
+        <Button title={t('settings.animated.avatar')} variant="ghost" icon="film-outline" disabled={uploading !== null} onPress={pickAnimated('avatar')} style={{ flex: 1 }} />
+        <Button title={t('settings.animated.banner')} variant="ghost" icon="film-outline" disabled={uploading !== null} onPress={pickAnimated('banner')} style={{ flex: 1 }} />
       </View>
       <SwitchRow
         icon="play-circle-outline"
@@ -179,6 +190,7 @@ export default function ProfileSettings() {
         error={errors.username}
       />
       <TextField label={t('settings.profile.tag')} placeholder={t('settings.profile.tagPlaceholder')} value={tag} onChangeText={setTag} maxLength={16} autoCorrect={false} />
+      <TagStyleEditor name={tag} value={nameStyle.tag} onChange={(st) => setNameStyle((s) => ({ ...s, tag: st }))} />
       <NameStyleEditor value={nameStyle} onChange={setNameStyle} name={displayName.trim() || user.username} tag={tag.trim()} />
       <TextField label={t('settings.profile.customStatus')} value={customStatus} onChangeText={setCustomStatus} maxLength={128} />
       <View style={{ gap: spacing.sm }}>
@@ -206,6 +218,8 @@ export default function ProfileSettings() {
       <TextField label={t('settings.profile.bio')} value={bio} onChangeText={setBio} maxLength={190} multiline style={{ minHeight: 100 }} />
       <ProfileLinksEditor value={links} onChange={setLinks} showErrors={linkErrors} />
       <ProfileCosmeticsEditor value={cosmetics} onChange={setCosmetics} avatar={user.avatar} name={user.username} />
+      <AvatarRingEditor value={ring} onChange={setRing} avatar={user.avatar} name={user.username} hint={t('ring.hint')} />
+      <ProfileCardEditor value={card} onChange={setCard} primary={cosmetics.primary} accent={cosmetics.accent} avatar={user.avatar} name={displayName.trim() || user.username} ring={ring} />
       <Button title={t('settings.profile.save')} onPress={save} loading={saving} />
     </ScrollView>
   )

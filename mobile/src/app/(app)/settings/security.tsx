@@ -28,7 +28,14 @@ export default function SecuritySettings() {
   const [bioOk, setBioOk] = useState<boolean | null>(null)
 
   useEffect(() => {
-    void biometricAvailability().then((a) => setBioOk(a.usable))
+    // Garde de montage : pas de mise à jour d'état après avoir quitté l'écran.
+    let alive = true
+    biometricAvailability()
+      .then((a) => alive && setBioOk(a.usable))
+      .catch(() => alive && setBioOk(false))
+    return () => {
+      alive = false
+    }
   }, [])
 
   const toggleLock = async (on: boolean) => {

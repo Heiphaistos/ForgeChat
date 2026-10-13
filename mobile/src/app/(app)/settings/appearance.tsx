@@ -6,10 +6,9 @@ import { router } from 'expo-router'
 import { settingsApi, settingsKey, type ServerSideSettings } from '@/api/settings'
 import { Button, Row, Section, SwitchRow, TextField } from '@/components/ui'
 import { shareCode, studioWithImport } from '@/features/appearance/themeShare'
-import { http } from '@/lib/http'
+import { errorMessage, http } from '@/lib/http'
 import { accountCustomThemes, restartApp, themeStudioKey } from '@/features/appearance/sync'
 import { useLang, useT, type Lang } from '@/i18n'
-import { errorMessage } from '@/lib/http'
 import { queryClient } from '@/lib/queryClient'
 import { colors, font, radius, spacing } from '@/theme'
 import { paletteFromSpec, THEMES, type Palette } from '@/theme/palettes'
@@ -88,7 +87,8 @@ export default function AppearanceScreen() {
   const customs = accountCustomThemes(studio.data)
   const pickTheme = (id: string, custom?: ThemeSpec) => {
     saveAppearance({ theme: id, custom: custom ? deviceCustom(custom) : null })
-    settingsApi.setTheme(id).catch(() => undefined)
+    // Appliqué localement quoi qu'il arrive ; l'échec de synchro est signalé comme les autres réglages.
+    settingsApi.setTheme(id).catch((e: unknown) => Alert.alert(t('appearance.notSynced'), t('appearance.notSyncedBody', { error: errorMessage(e) })))
   }
 
   // Import / export d'un code de thème (amélioration n° 42).

@@ -15,6 +15,9 @@ interface UnreadState {
   increment: (conversationId: string, serverId?: string | null) => void
   addMention: (channelId: string) => void
   clear: (conversationId: string) => void
+  /** « Marquer comme non lu » (réponse de POST …/unread ou READ_STATE_UPDATE {unread:true}) :
+   *  compteurs posés tels quels, même pour la conversation ouverte. Mentions : salons seulement. */
+  setUnread: (conversationId: string, count: number, mentionCount: number, serverId?: string | null) => void
   setActive: (conversationId: string | null) => void
   reset: () => void
 }
@@ -60,6 +63,17 @@ export const useUnread = create<UnreadState>((set, get) => ({
       delete counts[id]
       delete mentions[id]
       return { counts, mentions }
+    }),
+  setUnread: (id, count, mentionCount, serverId) =>
+    set((s) => {
+      const counts = { ...s.counts }
+      const mentions = { ...s.mentions }
+      const sid = serverId ?? s.serverOf[id]
+      if (count > 0) counts[id] = count
+      else delete counts[id]
+      if (sid && mentionCount > 0) mentions[id] = mentionCount
+      else delete mentions[id]
+      return { counts, mentions, serverOf: sid ? { ...s.serverOf, [id]: sid } : s.serverOf }
     }),
   setActive: (id) => {
     set({ activeConversation: id })

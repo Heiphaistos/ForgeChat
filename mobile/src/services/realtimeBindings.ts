@@ -19,6 +19,7 @@ import { qk, queryClient } from '@/lib/queryClient'
 import { realtime, type RealtimeEvent } from '@/lib/realtime'
 import { showNotice, showReminder } from '@/services/push'
 import { activityFrom } from '@/features/social/rich'
+import { parseUnreadEvent } from '@/features/servers/discordFeatures'
 import { t as tr } from '@/i18n'
 import { getMyId, useAuth } from '@/stores/auth'
 import { usePresence } from '@/stores/presence'
@@ -119,6 +120,18 @@ export function bindRealtime(): () => void {
   on('MENTION_CREATE', (e) => {
     const channelId = isObj(e.mention) ? str(e.mention.channel_id) : null
     if (channelId && isObj(e.mention) && str(e.mention.server_id)) useUnread.getState().addMention(channelId)
+  })
+  // Lecture sur une autre session : « lu » remet à zéro ; `unread: true` (marquer comme non lu)
+  // pose les compteurs reçus tels quels (salon, MP ou groupe).
+  on('READ_STATE_UPDATE', (e) => {
+    const patch = parseUnreadEvent(e)
+    if (patch) return useUnread.getState().setUnread(patch.channelId, patch.count, patch.mentionCount, patch.serverId)
+    if (e.unread !== undefined) return
+    const st = useUnread.getState()
+    const cid = str(e.channel_id), sid = str(e.server_id)
+    if (cid) st.clear(cid)
+    else if (e.all === true) st.load([])
+    else if (e.whole_server === true && sid) Object.keys(st.counts).forEach((id) => st.serverOf[id] === sid && st.clear(id))
   })
   on('MESSAGE_UPDATE', async (e) => {
     const cid = str(e.channel_id)
@@ -334,7 +347,9 @@ export function bindRealtime(): () => void {
   }
 
   // ── Structure des serveurs ────────────────────────────────────────────────
-  for (const t of ['CHANNEL_CREATE', 'CHANNEL_UPDATE', 'CHANNEL_DELETE', 'CHANNELS_REORDER', 'CATEGORY_CREATE', 'CATEGORY_DELETE', 'CHANNEL_ARCHIVE_UPDATE']) {
+  // CHANNEL_UPDATE peut être partiel (statut vocal, réglages du forum) : on relit la liste plutôt que de
+  // fusionner. CATEGORIES_REORDER ne porte que les catégories visibles : la relecture le respecte aussi.
+  for (const t of ['CHANNEL_CREATE', 'CHANNEL_UPDATE', 'CHANNEL_DELETE', 'CHANNELS_REORDER', 'CATEGORY_CREATE', 'CATEGORY_UPDATE', 'CATEGORIES_REORDER', 'CATEGORY_DELETE', 'CHANNEL_ARCHIVE_UPDATE']) {
     on(t, (e) => {
       const sid = str(e.server_id) ?? (isObj(e.channel) ? str(e.channel.server_id) : null)
       if (sid) {

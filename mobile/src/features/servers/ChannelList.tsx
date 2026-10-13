@@ -240,6 +240,12 @@ export function ChannelList({
                 {/* Discord : pastille rouge chiffrée pour les mentions, point pour le simple non-lu. */}
                 {mention ? <Badge count={mention} /> : unread ? <View style={[styles.dot, look?.unread_color != null && { backgroundColor: hex(look.unread_color) }]} /> : null}
               </Pressable>
+              {/* Statut du salon vocal (PUT …/voice-status), comme Discord : une ligne sous son nom. */}
+              {isVoice && item.voice_status ? (
+                <Text style={styles.voiceStatus} numberOfLines={1} accessibilityLabel={t('df.voice.a11y', { status: item.voice_status })}>
+                  {item.voice_status}
+                </Text>
+              ) : null}
               {people.map((p) => (
                 <View key={p.userId} style={styles.participant} accessible accessibilityLabel={p.muted ? `${p.username}, ${t('channels.micOff')}` : p.username}>
                   <Avatar uri={p.avatar} name={p.username} size={20} />
@@ -296,6 +302,7 @@ const styles = StyleSheet.create({
   empty: { color: colors.textMuted, fontSize: font.xs, fontWeight: '700', textAlign: 'center', paddingTop: spacing.lg },
   dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.text },
   participant: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginLeft: 44, marginRight: spacing.sm, paddingVertical: 3 },
+  voiceStatus: { color: colors.textMuted, fontSize: font.xs, marginLeft: 44, marginRight: spacing.sm, marginTop: -6, paddingBottom: 4 },
   participantName: { flex: 1, color: colors.textMuted, fontSize: font.sm },
   channel: {
     flexDirection: 'row',

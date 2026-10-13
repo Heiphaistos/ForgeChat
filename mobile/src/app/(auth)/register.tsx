@@ -23,16 +23,33 @@ export default function RegisterScreen() {
   const [loading, setLoading] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [serverError, setServerError] = useState<string | null>(null)
+  // Mode d'inscription illisible : erreur affichée + « Réessayer » (relance via infoTry).
+  const [infoError, setInfoError] = useState<string | null>(null)
+  const [infoTry, setInfoTry] = useState(0)
   const strength = passwordStrength(password)
 
   useEffect(() => {
-    http.get<{ mode: 'open' | 'invite' | 'closed' }>('/auth/registration-info', { auth: false }).then((r) => setMode(r.mode)).catch(() => {})
-  }, [])
+    // Garde de montage : la réponse peut arriver après avoir quitté l'écran.
+    let alive = true
+    http
+      .get<{ mode: 'open' | 'invite' | 'closed' }>('/auth/registration-info', { auth: false })
+      .then((r) => {
+        if (!alive) return
+        setMode(r.mode)
+        setInfoError(null)
+      })
+      .catch((e: unknown) => {
+        if (alive) setInfoError(errorMessage(e))
+      })
+    return () => {
+      alive = false
+    }
+  }, [infoTry])
 
   const submit = async () => {
     const errs = validateRegistration({ username, email, password, confirm })
     setErrors(errs)
-    if (mode === 'invite' && !inviteCode.trim()) errs.invite = 'Un code d’invitation est nécessaire'
+    if (mode === 'invite' && !inviteCode.trim()) errs.invite = t('auth.register.inviteRequired')
     setErrors(errs)
     if (Object.keys(errs).length) return
     setLoading(true)
@@ -57,10 +74,16 @@ export default function RegisterScreen() {
             {t('auth.createAccount')}
           </T>
           <View style={{ gap: spacing.lg, marginTop: spacing.xl }}>
-            {mode === 'closed' ? <T variant="error">Les inscriptions sont fermées pour le moment.</T> : null}
+            {infoError ? (
+              <>
+                <T variant="error">{t('auth.register.infoFailed', { error: infoError })}</T>
+                <Button title={t('common.retry')} variant="secondary" onPress={() => setInfoTry((n) => n + 1)} />
+              </>
+            ) : null}
+            {mode === 'closed' ? <T variant="error">{t('auth.register.closed')}</T> : null}
             {mode === 'invite' ? (
               <TextField
-                label="Code d’invitation"
+                label={t('auth.register.inviteCode')}
                 value={inviteCode}
                 onChangeText={setInviteCode}
                 autoCapitalize="characters"

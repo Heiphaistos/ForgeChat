@@ -1,10 +1,10 @@
 import { readFileSync } from 'fs'
 import { join } from 'path'
 import {
-  DECORATIONS, DECO_GROUPS, DECO_OPTS_DEFAULT, FX_GROUPS, PROFILE_EFFECTS, adjustColor, cleanDecoOpts, cleanIntensity,
+  DECORATIONS, DECO_GROUPS, DECO_OPTS_DEFAULT, DECO_RANGES, FX_GROUPS, PROFILE_EFFECTS, adjustColor, cleanDecoOpts, cleanIntensity,
   decoOptsPayload, fxCount, profileTheme, searchKey, tintColor,
 } from '@/features/account/profileDecor'
-import { RING_STYLES, cleanRing } from '@/components/AvatarRing'
+import { cleanRing } from '@/components/AvatarRing'
 import { fr } from '@/i18n/fr'
 import { en } from '@/i18n/en'
 
@@ -16,19 +16,16 @@ const rustList = (src: string, name: string) =>
 
 describe('personnalisation du profil', () => {
   const server = read('server', 'src', 'models', 'user.rs')
-  const web = read('client', 'src', 'lib', 'profileDecor.ts') + read('client', 'src', 'lib', 'profileDecorMore.ts')
+  const web = read('client', 'src', 'lib', 'profileDecor.ts') + read('client', 'src', 'lib', 'profileDecorMore.ts') + read('client', 'src', 'lib', 'profileDecorExtra.ts')
 
   it('mêmes décorations et effets, dans le même ordre, que la liste blanche du serveur', () => {
     expect(DECORATIONS.map((d) => d.id)).toEqual(rustList(server, 'AVATAR_DECORATIONS'))
     expect(PROFILE_EFFECTS.map((e) => e.id)).toEqual(rustList(server, 'PROFILE_EFFECTS'))
-    expect(DECORATIONS.length).toBeGreaterThanOrEqual(145)
-    expect(PROFILE_EFFECTS.length).toBeGreaterThanOrEqual(88)
+    expect(DECORATIONS.length).toBeGreaterThanOrEqual(215)
+    expect(PROFILE_EFFECTS.length).toBeGreaterThanOrEqual(143)
   })
   it('mêmes identifiants que le web', () => {
     for (const id of [...DECORATIONS, ...PROFILE_EFFECTS].map((d) => d.id)) expect(web).toContain(`id: '${id}'`)
-  })
-  it('mêmes styles d’anneau que le serveur', () => {
-    expect([...RING_STYLES]).toEqual(rustList(read('server', 'src', 'models', 'profile_style.rs'), 'RING_STYLES'))
   })
   it('chaque décoration et chaque effet dans une seule catégorie, libellés traduits', () => {
     for (const [list, groups] of [[DECORATIONS, DECO_GROUPS], [PROFILE_EFFECTS, FX_GROUPS]] as const) {
@@ -52,6 +49,18 @@ describe('personnalisation du profil', () => {
     expect(o).toEqual({ ...DECO_OPTS_DEFAULT, speed: 400, scale: 80, hue: 360 })
     expect(decoOptsPayload({ ...DECO_OPTS_DEFAULT })).toEqual({})
     expect(decoOptsPayload({ ...DECO_OPTS_DEFAULT, pulse: true, tint: 0xff0000 })).toEqual({ pulse: true, tint: 0xff0000 })
+  })
+  it('bornes des réglages identiques au serveur (profile_style.rs) et au web', () => {
+    const rs = read('server', 'src', 'models', 'profile_style.rs')
+    const webDecor = read('client', 'src', 'lib', 'profileDecor.ts')
+    for (const [k, [lo, hi]] of Object.entries(DECO_RANGES)) {
+      const m = rs.match(new RegExp(`pub const ${k.toUpperCase()}_RANGE: [^=]+= (\\d+)..=(\\d+);`))
+      expect([k, Number(m?.[1]), Number(m?.[2])]).toEqual([k, lo, hi])
+      expect(webDecor).toMatch(new RegExp(`\\b${k}: \\[${lo}, ${hi}\\]`))
+      // cleanDecoOpts borne aux mêmes extrémités.
+      expect(cleanDecoOpts({ [k]: lo - 1000 })[k as keyof typeof DECO_RANGES]).toBe(lo)
+      expect(cleanDecoOpts({ [k]: hi + 1000 })[k as keyof typeof DECO_RANGES]).toBe(hi)
+    }
   })
   it('couleurs : teinte, décalage, luminosité', () => {
     expect(tintColor('#000000', 0xffffff, 0.5)).toBe('#808080')

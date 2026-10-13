@@ -17,13 +17,14 @@ const BADGE_ICONS: Record<string, string> = {
   friends_1: '🤝', friends_25: '🫂', founder: '🏰',
 }
 
-export function UserSocialInfo({ userId, activity }: { userId: string; activity?: RichActivity }) {
+/** `showBadges` : choix de la carte de profil (profile_card.show_badges). */
+export function UserSocialInfo({ userId, activity, showBadges = true }: { userId: string; activity?: RichActivity; showBadges?: boolean }) {
   const t = useT()
   const live = useActivityOf(userId)
   const q = useQuery({ queryKey: socialKeys.user(userId), queryFn: () => socialApi.user(userId), staleTime: 60_000 })
   if (!q.data) return null
   const rich = richText({ ...(live ?? activity), in_call: live?.in_call ?? q.data.in_call }, t)
-  const badges = q.data.badges.filter((b) => b in BADGE_ICONS)
+  const badges = showBadges ? q.data.badges.filter((b) => b in BADGE_ICONS) : []
   const bday = q.data.birthday
   if (!rich && !bday && badges.length === 0) return null
   return (

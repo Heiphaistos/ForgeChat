@@ -20,9 +20,14 @@ import * as accountGuard from './parts/accountGuard'
 import * as themesMore from './parts/themesMore'
 import * as profileStyle from './parts/profileStyle'
 import * as profileDecorMore from './parts/profileDecorMore'
+import * as profileDecorExtra from './parts/profileDecorExtra'
 import * as appIcon from './parts/appIcon'
 import * as nameStyleMore from './parts/nameStyleMore'
 import * as serverLook from './parts/serverLook'
+import * as ringCard from './parts/ringCard'
+import * as siteAdmin from './parts/siteAdmin'
+import * as auditMobile from './parts/auditMobile'
+import * as discordFeatures from './parts/discordFeatures'
 
 export const fr = {
   ...settings.fr,
@@ -44,9 +49,14 @@ export const fr = {
   ...themesMore.fr,
   ...profileStyle.fr,
   ...profileDecorMore.fr,
+  ...profileDecorExtra.fr,
   ...appIcon.fr,
   ...nameStyleMore.fr,
   ...serverLook.fr,
+  ...ringCard.fr,
+  ...siteAdmin.fr,
+  ...auditMobile.fr,
+  ...discordFeatures.fr,
 
   // --- Commun ---
   'common.cancel': 'Annuler',

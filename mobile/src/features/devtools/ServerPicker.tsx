@@ -5,6 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Button, TextField } from '@/components/ui'
 import { APP_ENV, BUILD_API_ORIGIN, apiHost, apiOrigin, setApiOrigin } from '@/config/env'
 import { CLEARTEXT_RULE, checkServerUrl, localServerUrl, type ServerUrlCheck } from '@/config/serverUrl'
+import { t, useT } from '@/i18n'
 import { useAuth } from '@/stores/auth'
 import { colors, font, radius, spacing } from '@/theme'
 import { clearOrigin, saveOrigin, serverChoiceEnabled } from './serverChoice'
@@ -15,7 +16,7 @@ import { clearOrigin, saveOrigin, serverChoiceEnabled } from './serverChoice'
  * EXPO_PUBLIC_APP_ENV, voir env.ts, login.tsx et DevInfo.tsx).
  */
 
-const BUILD_LABEL = APP_ENV === 'preview' ? 'Pré-prod' : 'Serveur du build'
+const buildLabel = () => t(APP_ENV === 'preview' ? 'dev.sp.buildPreview' : 'dev.sp.buildServer')
 
 /**
  * Change de serveur : déconnexion complète du serveur actuel (révocation de la session, désinscription
@@ -36,6 +37,7 @@ export async function switchServer(next: string): Promise<void> {
  * `host` vient de l'écran (abonné aux changements via subscribeApiOrigin).
  */
 export function DevServerLink({ host }: { host: string }) {
+  const tr = useT()
   const [open, setOpen] = useState(false)
   if (!serverChoiceEnabled(APP_ENV)) return null
   return (
@@ -43,11 +45,11 @@ export function DevServerLink({ host }: { host: string }) {
       <Pressable
         onPress={() => setOpen(true)}
         accessibilityRole="button"
-        accessibilityLabel={`Serveur de test : ${host || 'aucun'}. Changer de serveur`}
+        accessibilityLabel={tr('dev.sp.linkA11y', { host: host || tr('dev.noServer') })}
         style={[styles.link, !host && styles.linkWarning]}
       >
-        <Text style={styles.linkText}>{host ? `Serveur (dev) : ${host}` : 'Aucun serveur choisi'}</Text>
-        <Text style={styles.linkAction}>Changer</Text>
+        <Text style={styles.linkText}>{host ? tr('dev.sp.link', { host }) : tr('dev.sp.noneChosen')}</Text>
+        <Text style={styles.linkAction}>{tr('dev.sp.change')}</Text>
       </Pressable>
       {open ? <ServerModal onClose={() => setOpen(false)} /> : null}
     </>
@@ -55,6 +57,7 @@ export function DevServerLink({ host }: { host: string }) {
 }
 
 export function ServerModal({ onClose }: { onClose: () => void }) {
+  const tr = useT()
   const insets = useSafeAreaInsets()
   const [ip, setIp] = useState('')
   const [port, setPort] = useState('8080')
@@ -74,18 +77,18 @@ export function ServerModal({ onClose }: { onClose: () => void }) {
       return
     }
     Alert.alert(
-      'Changer de serveur ?',
-      `${current ? `Tu seras déconnecté de ${apiHost()} : session, cache et notifications de cet appareil sont effacés.\n\n` : ''}Nouveau serveur : ${check.origin}`,
+      tr('dev.sp.confirmTitle'),
+      `${current ? `${tr('dev.sp.confirmLogout', { host: apiHost() })}\n\n` : ''}${tr('dev.sp.newServer', { origin: check.origin })}`,
       [
-        { text: 'Annuler', style: 'cancel' },
+        { text: tr('common.cancel'), style: 'cancel' },
         {
-          text: 'Changer',
+          text: tr('dev.sp.change'),
           style: 'destructive',
           onPress: () => {
             setBusy(true)
             switchServer(check.origin)
               .then(onClose)
-              .catch((e: unknown) => setError(e instanceof Error ? e.message : 'Changement impossible'))
+              .catch((e: unknown) => setError(e instanceof Error ? e.message : tr('dev.sp.failed')))
               .finally(() => setBusy(false))
           },
         },
@@ -97,24 +100,24 @@ export function ServerModal({ onClose }: { onClose: () => void }) {
     <Modal visible animationType="slide" onRequestClose={onClose} statusBarTranslucent navigationBarTranslucent>
       <View style={[styles.root, { paddingTop: insets.top + spacing.md, paddingBottom: insets.bottom + spacing.md }]}>
         <View style={styles.header}>
-          <Text style={styles.title}>Serveur</Text>
-          <Pressable onPress={onClose} accessibilityRole="button" accessibilityLabel="Fermer" hitSlop={8}>
-            <Text style={styles.close}>Fermer</Text>
+          <Text style={styles.title}>{tr('dev.sp.title')}</Text>
+          <Pressable onPress={onClose} accessibilityRole="button" accessibilityLabel={tr('common.close')} hitSlop={8}>
+            <Text style={styles.close}>{tr('common.close')}</Text>
           </Pressable>
         </View>
         <ScrollView contentContainerStyle={{ gap: spacing.md }} keyboardShouldPersistTaps="handled">
           <View style={styles.card}>
-            <Text style={styles.key}>Actuel</Text>
+            <Text style={styles.key}>{tr('dev.sp.current')}</Text>
             <Text style={styles.value} selectable>
-              {current || 'Aucun serveur choisi'}
+              {current || tr('dev.sp.noneChosen')}
             </Text>
           </View>
 
           <View style={styles.card}>
-            <Text style={styles.key}>{BUILD_LABEL}</Text>
-            <Text style={styles.value}>{BUILD_API_ORIGIN || 'Non configurée dans ce build'}</Text>
+            <Text style={styles.key}>{buildLabel()}</Text>
+            <Text style={styles.value}>{BUILD_API_ORIGIN || tr('dev.sp.notConfigured')}</Text>
             <Button
-              title={`Utiliser : ${BUILD_LABEL}`}
+              title={tr('dev.sp.use', { label: buildLabel() })}
               variant="secondary"
               disabled={!BUILD_API_ORIGIN || busy}
               onPress={() => choose({ ok: true, origin: BUILD_API_ORIGIN })}
@@ -122,16 +125,16 @@ export function ServerModal({ onClose }: { onClose: () => void }) {
           </View>
 
           <View style={styles.card}>
-            <Text style={styles.key}>Serveur local (PC du réseau)</Text>
-            <TextField label="IP du PC" value={ip} onChangeText={setIp} placeholder="192.168.1.x" keyboardType="decimal-pad" autoCorrect={false} />
-            <TextField label="Port" value={port} onChangeText={setPort} keyboardType="number-pad" maxLength={5} />
-            <Button title="Utiliser : serveur local" variant="secondary" disabled={busy} onPress={() => choose(localServerUrl(ip, port))} />
+            <Text style={styles.key}>{tr('dev.sp.local')}</Text>
+            <TextField label={tr('dev.sp.ip')} value={ip} onChangeText={setIp} placeholder="192.168.1.x" keyboardType="decimal-pad" autoCorrect={false} />
+            <TextField label={tr('dev.sp.port')} value={port} onChangeText={setPort} keyboardType="number-pad" maxLength={5} />
+            <Button title={tr('dev.sp.useLocal')} variant="secondary" disabled={busy} onPress={() => choose(localServerUrl(ip, port))} />
           </View>
 
           <View style={styles.card}>
-            <Text style={styles.key}>Adresse libre</Text>
+            <Text style={styles.key}>{tr('dev.sp.free')}</Text>
             <TextField
-              label="URL du serveur"
+              label={tr('dev.sp.url')}
               value={url}
               onChangeText={setUrl}
               placeholder="https://…"
@@ -139,13 +142,12 @@ export function ServerModal({ onClose }: { onClose: () => void }) {
               autoCorrect={false}
               keyboardType="url"
             />
-            <Button title="Utiliser cette adresse" variant="secondary" disabled={busy} onPress={() => choose(checkServerUrl(url))} />
+            <Button title={tr('dev.sp.useUrl')} variant="secondary" disabled={busy} onPress={() => choose(checkServerUrl(url))} />
           </View>
 
           {error ? <Text style={styles.error}>{error}</Text> : null}
           <Text style={styles.note}>
-            {CLEARTEXT_RULE} Changer de serveur te déconnecte complètement (session, cache, notifications). Le choix est
-            conservé au redémarrage.
+            {CLEARTEXT_RULE} {tr('dev.sp.note')}
           </Text>
         </ScrollView>
       </View>

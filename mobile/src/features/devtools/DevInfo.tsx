@@ -4,6 +4,7 @@ import { Modal, Platform, Pressable, ScrollView, Share, StyleSheet, Text, View }
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Button, Row } from '@/components/ui'
 import { APP_ENV, APP_VERSION, apiHost, apiOrigin, wsUrl } from '@/config/env'
+import { t, useT } from '@/i18n'
 import { clearLogs, recentLogs, redact } from '@/lib/logger'
 import { useConnection } from '@/lib/realtime'
 import { colors, font, radius, spacing } from '@/theme'
@@ -17,10 +18,11 @@ import { serverChoiceEnabled } from './serverChoice'
  * sous la condition constante EXPO_PUBLIC_APP_ENV !== 'production' (voir (tabs)/you.tsx).
  */
 export function DevInfoRow() {
+  const tr = useT()
   const [open, setOpen] = useState(false)
   return (
     <>
-      <Row icon="construct-outline" title="Infos dev" subtitle={`${APP_ENV} · ${apiHost() || 'aucun serveur'}`} onPress={() => setOpen(true)} chevron />
+      <Row icon="construct-outline" title={tr('dev.title')} subtitle={`${APP_ENV} · ${apiHost() || tr('dev.noServer')}`} onPress={() => setOpen(true)} chevron />
       {open ? <DevInfoModal onClose={() => setOpen(false)} /> : null}
     </>
   )
@@ -28,16 +30,17 @@ export function DevInfoRow() {
 
 export function devInfoLines(): [string, string][] {
   return [
-    ['Version', `${APP_VERSION} (build ${Application.nativeBuildVersion ?? '?'})`],
-    ['Application', Application.applicationId ?? '?'],
-    ['Environnement', APP_ENV],
-    ['Serveur', apiOrigin() || '(aucun)'],
-    ['Temps réel', apiOrigin() ? wsUrl() : '—'],
-    ['Système', `${Platform.OS} ${String(Platform.Version)}`],
+    [t('dev.version'), `${APP_VERSION} (build ${Application.nativeBuildVersion ?? '?'})`],
+    [t('dev.app'), Application.applicationId ?? '?'],
+    [t('dev.env'), APP_ENV],
+    [t('dev.server'), apiOrigin() || t('dev.none')],
+    [t('dev.realtime'), apiOrigin() ? wsUrl() : '—'],
+    [t('dev.system'), `${Platform.OS} ${String(Platform.Version)}`],
   ]
 }
 
 function DevInfoModal({ onClose }: { onClose: () => void }) {
+  const tr = useT()
   const insets = useSafeAreaInsets()
   const ws = useConnection((s) => s.status)
   const [count, setCount] = useState(recentLogs().length)
@@ -45,26 +48,26 @@ function DevInfoModal({ onClose }: { onClose: () => void }) {
   const lines = devInfoLines()
 
   const exportLogs = async () => {
-    const header = [...lines, ['Connexion', ws], ['Exporté le', new Date().toISOString()]]
+    const header = [...lines, [tr('dev.connection'), ws], [tr('dev.exportedAt'), new Date().toISOString()]]
       .map(([k, v]) => `${k} : ${v}`)
       .join('\n')
     // Lignes déjà masquées à l'écriture ; second passage par sécurité.
-    const body = recentLogs().map(redact).join('\n') || '(aucune ligne)'
-    await Share.share({ title: 'Journaux ForgeChat', message: `${header}\n\n${body}` })
+    const body = recentLogs().map(redact).join('\n') || tr('dev.noLines')
+    await Share.share({ title: tr('dev.logsTitle'), message: `${header}\n\n${body}` })
   }
 
   return (
     <Modal visible animationType="slide" onRequestClose={onClose} statusBarTranslucent navigationBarTranslucent>
       <View style={[styles.root, { paddingTop: insets.top + spacing.md, paddingBottom: insets.bottom + spacing.md }]}>
         <View style={styles.header}>
-          <Text style={styles.title}>Infos dev</Text>
-          <Pressable onPress={onClose} accessibilityRole="button" accessibilityLabel="Fermer" hitSlop={8}>
-            <Text style={styles.close}>Fermer</Text>
+          <Text style={styles.title}>{tr('dev.title')}</Text>
+          <Pressable onPress={onClose} accessibilityRole="button" accessibilityLabel={tr('common.close')} hitSlop={8}>
+            <Text style={styles.close}>{tr('common.close')}</Text>
           </Pressable>
         </View>
         <ScrollView contentContainerStyle={{ gap: spacing.md }}>
           <View style={styles.card}>
-            {[...lines, ['Connexion', ws] as [string, string]].map(([k, v]) => (
+            {[...lines, [tr('dev.connection'), ws] as [string, string]].map(([k, v]) => (
               <View key={k} style={styles.line}>
                 <Text style={styles.key}>{k}</Text>
                 <Text style={styles.value} selectable>
@@ -73,16 +76,13 @@ function DevInfoModal({ onClose }: { onClose: () => void }) {
               </View>
             ))}
           </View>
-          <Text style={styles.note}>
-            {count} ligne{count > 1 ? 's' : ''} de journal en mémoire. Jetons, mots de passe et tickets sont masqués avant
-            l’export ; relis quand même le texte avant de l’envoyer.
-          </Text>
+          <Text style={styles.note}>{tr('dev.logCount', { n: count })}</Text>
           {serverChoiceEnabled(APP_ENV) ? (
-            <Button title="Changer de serveur" icon="server-outline" variant="secondary" onPress={() => setServerOpen(true)} />
+            <Button title={tr('dev.changeServer')} icon="server-outline" variant="secondary" onPress={() => setServerOpen(true)} />
           ) : null}
-          <Button title="Exporter les journaux" icon="share-outline" onPress={() => void exportLogs()} />
+          <Button title={tr('dev.exportLogs')} icon="share-outline" onPress={() => void exportLogs()} />
           <Button
-            title="Effacer les journaux"
+            title={tr('dev.clearLogs')}
             variant="secondary"
             onPress={() => {
               clearLogs()

@@ -18,6 +18,8 @@ import { useVoice } from '@/stores/voice'
 import type { Category, Channel, Server } from '@/types/models'
 import { spacing } from '@/theme'
 import { serverMenuKeys, serverPerms, type ServerMenuKey } from './perms'
+import { canSetVoiceStatus } from './discordFeatures'
+import { openVoiceStatus, saveVoiceStatus } from '@/features/voice/voiceStatus'
 
 export function useServerDetail(serverId: string, enabled = true) {
   return useQuery({ queryKey: qk.server(serverId), queryFn: () => serversApi.detail(serverId), enabled, staleTime: 60_000 })
@@ -166,8 +168,18 @@ export function confirmDeleteChannel(serverId: string, ch: Channel, after?: () =
 /** Appui long sur un salon de la liste. */
 export function ChannelMenu({ server, channel, onClose }: { server: Server; channel: Channel | null; onClose: () => void }) {
   const perms = useServerPerms(server.id)
+  const inVoice = useVoice((s) => s.channelId)
   const ch = channel
   const actions: SheetAction[] = []
+  if (ch && canSetVoiceStatus(ch.type, ch.id, inVoice, perms.canEditChannels)) {
+    actions.push({ label: t('df.voice.set'), icon: 'chatbubble-ellipses-outline', onPress: () => openVoiceStatus(server.id, ch.id) })
+    if (ch.voice_status)
+      actions.push({
+        label: t('df.voice.clear'),
+        icon: 'close-circle-outline',
+        onPress: () => void saveVoiceStatus(server.id, ch.id, null).catch((e: unknown) => Alert.alert(t('common.actionFailed'), errorMessage(e))),
+      })
+  }
   if (ch) {
     actions.push({
       label: t('menu.markRead'),

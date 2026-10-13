@@ -6,9 +6,12 @@
  * pulsation), coupé si « réduire les animations ». Toutes les valeurs sont des constantes.
  */
 import type { Key } from '@/i18n'
-import { DECORATIONS_MORE, DECO_GROUPS, FX_GROUPS, PROFILE_EFFECTS_MORE } from './profileDecorMore'
+import { DECORATIONS_EXTRA, DECO_GROUPS_EXTRA, FX_GROUPS_EXTRA, PROFILE_EFFECTS_EXTRA } from './profileDecorExtra'
+import { DECORATIONS_MORE, DECO_GROUPS as DECO_GROUPS_MORE, FX_GROUPS as FX_GROUPS_MORE, PROFILE_EFFECTS_MORE } from './profileDecorMore'
 
-export { DECO_GROUPS, FX_GROUPS }
+/** Catégories des sélecteurs (dans l'ordre d'affichage). */
+export const DECO_GROUPS = [...DECO_GROUPS_MORE, ...DECO_GROUPS_EXTRA]
+export const FX_GROUPS = [...FX_GROUPS_MORE, ...FX_GROUPS_EXTRA]
 
 export interface Decoration {
   id: string
@@ -128,6 +131,7 @@ export const DECORATIONS: Decoration[] = [
   { id: 'sapphire', label: 'pstyle.deco.sapphire', colors: ['#0f52ba', '#6ca0dc', '#082567'], kind: 'ring', glow: '#0f52ba' },
   { id: 'amethyst', label: 'pstyle.deco.amethyst', colors: ['#9966cc', '#5d3a9b', '#d8bfd8'], kind: 'ring', glow: '#9966cc' },
   ...DECORATIONS_MORE,
+  ...DECORATIONS_EXTRA,
 ]
 
 export const PROFILE_EFFECTS: ProfileFx[] = [
@@ -170,6 +174,7 @@ export const PROFILE_EFFECTS: ProfileFx[] = [
   { id: 'plasma', label: 'pstyle.fx.plasma', chars: [], colors: [], motion: 'twinkle', tint: 'rgba(114,9,183,0.24)' },
   { id: 'ocean', label: 'pstyle.fx.ocean', chars: ['○', '∘'], colors: ['#9be7ff', '#e0f7ff'], motion: 'rise', tint: 'rgba(0,120,200,0.24)' },
   ...PROFILE_EFFECTS_MORE,
+  ...PROFILE_EFFECTS_EXTRA,
 ]
 
 export const findDecoration = (id: string | null | undefined) => DECORATIONS.find((d) => d.id === id)

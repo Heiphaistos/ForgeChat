@@ -39,6 +39,11 @@ export interface User {
   profile_tag?: string | null
   profile_links?: ProfileLink[] | null
   custom_status_expires_at?: string | null
+  /** Anneau d'avatar global (migration 136), relu par components/avatarRingCore::cleanRing ;
+   *  l'anneau du profil de serveur (server_avatar_ring) le remplace s'il existe. */
+  avatar_ring?: unknown
+  /** Mise en page de la carte de profil (migration 136), relue par features/account/profileCard::cleanCard. */
+  profile_card?: unknown
 }
 
 export interface ProfileLink {
@@ -102,6 +107,11 @@ export interface Channel {
   disappear_seconds?: number | null
   /** Fils automatiques : chaque message ouvre son fil. */
   auto_threads?: boolean
+  /** Statut d'un salon vocal ou d'une scène (PUT …/voice-status), null = aucun. */
+  voice_status?: string | null
+  /** Forum / média : réaction proposée sur les publications et consignes de publication. */
+  default_reaction_emoji?: string | null
+  post_guidelines?: string | null
 }
 
 export interface Category {
@@ -393,6 +403,9 @@ export interface Member {
    *  par le serveur et relu par components/AvatarRing::cleanRing / lib/nameStyle::cleanNameStyle. */
   server_avatar_ring?: unknown
   server_name_style?: unknown
+  /** Anneau global du compte (GET /servers/:id/members) ; l'anneau effectif est
+   *  components/avatarRingCore::effectiveRing (anneau de serveur, sinon celui-ci). */
+  avatar_ring?: unknown
   /** Marques de clan du membre (couleur 0xRRGGBB + style validé). */
   tags?: { id: string; name: string; color: number; style?: unknown }[]
   is_owner?: boolean

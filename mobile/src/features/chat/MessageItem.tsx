@@ -3,6 +3,7 @@ import { Image } from 'expo-image'
 import { memo, useEffect, useState, type ReactNode } from 'react'
 import { AccessibilityInfo, Alert, Animated, Easing, Pressable, StyleSheet, Text, View } from 'react-native'
 import { Avatar } from '@/components/Avatar'
+import { AvatarRing, type AvatarRingData } from '@/components/AvatarRing'
 import { MessageText } from '@/components/MessageText'
 import { SystemCard } from '@/features/community/SystemCard'
 import { UserName } from '@/components/UserName'
@@ -50,6 +51,8 @@ interface Props {
   translation?: string
   /** Couleur et icône du rôle de l'auteur (salons). */
   decor?: RoleDecor
+  /** Anneau effectif de l'auteur (salons : liste des membres déjà chargée). */
+  ring?: AvatarRingData | null
   /** MP : identifiant de la conversation (cartes de support à distance) et réponse déjà donnée. */
   dmId?: string
   supportReply?: SupportPayload['k']
@@ -212,6 +215,7 @@ export const MessageItem = memo(function MessageItem({
   onReactionLongPress,
   translation,
   decor,
+  ring,
   dmId,
   supportReply,
 }: Props) {
@@ -257,7 +261,9 @@ export const MessageItem = memo(function MessageItem({
         <View style={styles.gutter}>
           {grouped ? null : (
             <Pressable onPress={() => onPressAuthor(m.authorId)} onLongPress={authorMenu} delayLongPress={300} accessibilityRole="button" accessibilityLabel={t('msg.authorProfile', { name: m.authorName })}>
-              <Avatar uri={m.authorAvatar} name={m.authorName} size={40} decoration={m.authorDecoration} decorationOpts={m.authorDecorationOpts} />
+              <AvatarRing ring={ring} size={40}>
+                <Avatar uri={m.authorAvatar} name={m.authorName} size={40} decoration={m.authorDecoration} decorationOpts={m.authorDecorationOpts} />
+              </AvatarRing>
             </Pressable>
           )}
         </View>

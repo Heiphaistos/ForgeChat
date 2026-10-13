@@ -67,7 +67,8 @@ export default function AppLayout() {
         <Stack.Screen name="server/[serverId]/nickname" options={{ title: t('menu.nickname'), presentation: 'modal' }} />
         <Stack.Screen name="server/[serverId]/delete" options={{ title: t('screen.deleteServer'), presentation: 'modal' }} />
         <Stack.Screen name="server/[serverId]/onboarding" options={{ title: t('menu.onboarding'), presentation: 'modal' }} />
-        <Stack.Screen name="server/[serverId]/follow" options={{ title: t('screen.followChannel'), presentation: 'modal' }} />
+        <Stack.Screen name="server/[serverId]/voice-status" options={{ title: t('df.voice.title'), presentation: 'modal' }} />
+        <Stack.Screen name="server/[serverId]/follow"options={{ title: t('screen.followChannel'), presentation: 'modal' }} />
         <Stack.Screen name="server/[serverId]/settings/onboarding" options={{ title: t('screen.onboardingSettings') }} />
         <Stack.Screen name="server/[serverId]/settings/index" options={{ title: t('screen.serverSettings') }} />
         <Stack.Screen name="server/[serverId]/settings/overview" options={{ title: t('screen.overview') }} />

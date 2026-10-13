@@ -118,6 +118,9 @@ async function parseError(res: Response): Promise<ApiError> {
     if (typeof data.error === 'string') {
       message = data.error
       if (data.error === 'totp_required') code = 'totp_required'
+      // AppError::Forbidden (server/src/error.rs) n'a pas de code : son texte générique est
+      // traduit en code ici, une seule fois ; les 403 à motif lisible gardent leur message.
+      else if (res.status === 403 && data.error === 'Accès interdit') code = 'forbidden'
     }
     if (typeof data.retry_after === 'number') retryAfter = data.retry_after
   } catch {
@@ -332,7 +335,7 @@ export const http = {
 export function errorMessage(e: unknown, fallback = t('error.generic')): string {
   if (e instanceof ApiError) {
     if (e.code === 'rate_limited' && e.retryAfter) return t('error.rateLimited', { s: e.retryAfter })
-    if (e.status === 403 && e.message === 'Accès interdit') return t('error.forbidden')
+    if (e.code === 'forbidden') return t('error.forbidden')
     return e.message
   }
   if (e instanceof Error && e.message) return e.message

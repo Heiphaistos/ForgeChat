@@ -70,17 +70,17 @@ export default function NewEventScreen() {
     <ScrollView style={{ backgroundColor: colors.bg }} contentContainerStyle={{ padding: spacing.lg, gap: spacing.lg }} keyboardShouldPersistTaps="handled">
       <Stack.Screen options={{ title: t('server.eventNew.title') }} />
       <TextField label={t('server.eventNew.name')} value={name} onChangeText={setName} maxLength={100} placeholder={t('server.eventNew.namePlaceholder')} />
-      <TextField label="Description" value={description} onChangeText={setDescription} multiline maxLength={1000} style={{ minHeight: 80, textAlignVertical: 'top' }} />
+      <TextField label={t('server.eventNew.description')} value={description} onChangeText={setDescription} multiline maxLength={1000} style={{ minHeight: 80, textAlignVertical: 'top' }} />
       <View style={{ flexDirection: 'row', gap: spacing.md }}>
         <View style={{ flex: 3 }}>
-          <TextField label="Date" value={day} onChangeText={(v) => setWhen((w) => ({ ...w, day: v }))} placeholder={t('server.eventNew.datePlaceholder')} keyboardType="numbers-and-punctuation" maxLength={10} />
+          <TextField label={t('server.eventNew.date')} value={day} onChangeText={(v) => setWhen((w) => ({ ...w, day: v }))} placeholder={t('server.eventNew.datePlaceholder')} keyboardType="numbers-and-punctuation" maxLength={10} />
         </View>
         <View style={{ flex: 2 }}>
           <TextField label={t('server.eventNew.time')} value={time} onChangeText={(v) => setWhen((w) => ({ ...w, time: v }))} placeholder="HH:MM" keyboardType="numbers-and-punctuation" maxLength={5} />
         </View>
       </View>
       <Section>
-        <ChoiceRow icon="pricetag-outline" title="Type" value={type} options={EVENT_TYPES.map((et) => ({ value: et.value, label: t(et.label) }))} onChange={setType} />
+        <ChoiceRow icon="pricetag-outline" title={t('server.eventNew.type')} value={type} options={EVENT_TYPES.map((et) => ({ value: et.value, label: t(et.label) }))} onChange={setType} />
         <ChoiceRow icon="hourglass-outline" title={t('server.eventNew.duration')} value={duration} options={DURATIONS.map((m) => ({ value: m, label: m === 0 ? t('server.eventNew.noDuration') : m < 60 ? `${m} min` : `${m / 60} h` }))} onChange={setDuration} />
         <ChoiceRow
           icon="chatbubble-outline"

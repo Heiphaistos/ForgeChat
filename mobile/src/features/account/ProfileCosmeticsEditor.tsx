@@ -3,9 +3,10 @@ import { Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from
 import { Avatar } from '@/components/Avatar'
 import { ProfileEffect, ProfileThemeCard } from '@/components/ProfileDecor'
 import {
-  DECORATIONS, DECO_GROUPS, DECO_OPTS_DEFAULT, DECO_RANGES, FX_GROUPS, FX_INTENSITY, PROFILE_EFFECTS, THEME_SWATCHES,
-  cleanDecoOpts, cleanIntensity, decoOptsPayload, hexColor, searchKey, type DecoNumKey, type DecoOpts,
+  DECORATIONS, DECO_GROUPS, DECO_OPTS_DEFAULT, DECO_RANGES, FX_GROUPS, FX_INTENSITY, PROFILE_EFFECTS,
+  cleanDecoOpts, cleanIntensity, decoOptsPayload, searchKey, type DecoNumKey, type DecoOpts,
 } from '@/features/account/profileDecor'
+import { ColorPicker } from './ColorPicker'
 import { useT, type Key } from '@/i18n'
 import { colors, font, radius, spacing } from '@/theme'
 
@@ -101,23 +102,9 @@ export function ProfileCosmeticsEditor({
     </View>
   )
 
+  // Couleur libre (nuancier + teinte + #rrggbb) ; « par défaut » = null.
   const swatches = (label: string, current: number | null, pick: (c: number | null) => void) => (
-    <View style={{ gap: spacing.sm }}>
-      <Text style={styles.label}>{label}</Text>
-      <View style={styles.wrap}>
-        {chip(t('settings.cosmetics.default'), current == null, () => pick(null), 'none')}
-        {THEME_SWATCHES.map((c) => (
-          <Pressable
-            key={c}
-            onPress={() => pick(c)}
-            accessibilityRole="button"
-            accessibilityLabel={t('settings.cosmetics.colorA11y', { hex: hexColor(c) })}
-            accessibilityState={{ selected: current === c }}
-            style={[styles.swatch, { backgroundColor: hexColor(c) }, current === c && styles.swatchOn]}
-          />
-        ))}
-      </View>
-    </View>
+    <ColorPicker label={label} value={current} onChange={pick} onClear={() => pick(null)} clearLabel={t('settings.cosmetics.default')} />
   )
 
   const stepper = (key: DecoNumKey) => {
@@ -194,20 +181,7 @@ export function ProfileCosmeticsEditor({
             {chip(t('pdeco.opts.ccw'), value.opts.direction === 'ccw', () => setOpts({ direction: 'ccw' }), 'ccw')}
           </View>
           {(Object.keys(DECO_RANGES) as DecoNumKey[]).map(stepper)}
-          <Text style={styles.optLabel}>{t('pdeco.opts.tint')}</Text>
-          <View style={styles.wrap}>
-            {chip(t('settings.cosmetics.default'), value.opts.tint == null, () => setOpts({ tint: null }), 'none')}
-            {THEME_SWATCHES.map((c) => (
-              <Pressable
-                key={c}
-                onPress={() => setOpts({ tint: c })}
-                accessibilityRole="button"
-                accessibilityLabel={t('settings.cosmetics.colorA11y', { hex: hexColor(c) })}
-                accessibilityState={{ selected: value.opts.tint === c }}
-                style={[styles.swatch, { backgroundColor: hexColor(c) }, value.opts.tint === c && styles.swatchOn]}
-              />
-            ))}
-          </View>
+          {swatches(t('pdeco.opts.tint'), value.opts.tint, (c) => setOpts({ tint: c }))}
           {!isDefault ? chip(t('pdeco.opts.reset'), false, () => set({ opts: { ...DECO_OPTS_DEFAULT } }), 'reset') : null}
         </View>
       ) : null}

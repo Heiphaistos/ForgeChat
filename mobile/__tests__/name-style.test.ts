@@ -7,7 +7,7 @@ import { effectLabel, fontLabel } from '@/features/account/nameStyleLabels'
 import { fr } from '@/i18n/fr'
 import {
   LEVEL_DEFAULT, LEVEL_MAX, NAME_COLORS_MAX, NAME_EFFECTS, NAME_FONTS, NAME_GRADIENTS, OUTLINE_STYLES, OUTLINE_WIDTH_MAX,
-  cleanNameStyle, contrastRatio, displayNameOf, ensureContrast, gradientChars, parseHex, resolveNameStyle, toHex,
+  TAG_BADGES, TAG_ICONS, cleanNameStyle, contrastRatio, displayNameOf, ensureContrast, gradientChars, parseHex, resolveNameStyle, toHex,
 } from '@/lib/nameStyle'
 
 describe('style du pseudo', () => {
@@ -85,7 +85,7 @@ describe('style du pseudo : listes blanches, réglages et polices', () => {
   it('mêmes listes et bornes que le serveur et le web', () => {
     const server = read('server', 'src', 'models', 'profile_style.rs')
     const web = read('client', 'src', 'lib', 'nameStyle.ts')
-    const lists: Record<string, readonly string[]> = { NAME_EFFECTS, NAME_FONTS, NAME_GRADIENTS, OUTLINE_STYLES }
+    const lists: Record<string, readonly string[]> = { NAME_EFFECTS, NAME_FONTS, NAME_GRADIENTS, OUTLINE_STYLES, TAG_BADGES, TAG_ICONS }
     for (const [name, list] of Object.entries(lists)) {
       expect(rustList(server, name)).toEqual([...list])
       expect(tsList(web, name)).toEqual([...list])

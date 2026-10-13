@@ -2,6 +2,8 @@ import { openRaw } from '@/e2e/conversations'
 import { passwordProof } from '@/e2e/accountKey'
 import { http, path } from '@/lib/http'
 import type { NameInfo, NameStyle } from '@/lib/nameStyle'
+import type { AvatarRingData } from '@/components/avatarRingCore'
+import type { ProfileCard } from '@/features/account/profileCard'
 import type { MentionItem, ProfileLink, UnreadItem, User } from '@/types/models'
 
 export interface UpdateProfile {
@@ -30,6 +32,12 @@ export interface UpdateProfile {
   /** Activité (« listening » saisi à la main) ; "" = retirer. */
   activity_type?: string
   activity_name?: string
+  /** "" = retirer la bannière (null est ignoré par le serveur). */
+  banner?: string
+  /** Anneau global (components/avatarRingCore::cleanRing) ; null = retirer, absent = inchangé. */
+  avatar_ring?: AvatarRingData | null
+  /** Carte de profil (features/account/profileCard::cardPayload) ; null = carte par défaut. */
+  profile_card?: Partial<ProfileCard> | null
 }
 
 /** Durées d'effacement du statut perso acceptées par le serveur (minutes ; 0 = jamais). */

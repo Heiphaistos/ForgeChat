@@ -6,6 +6,7 @@ import { KeyboardAvoidingView } from 'react-native-keyboard-controller'
 import { useQuery } from '@tanstack/react-query'
 import { Image } from 'expo-image'
 import { Avatar } from '@/components/Avatar'
+import { effectiveRing, type AvatarRingData } from '@/components/AvatarRing'
 import { Sheet, type SheetAction } from '@/components/Sheet'
 import { Button, EmptyState, ErrorState, Loading } from '@/components/ui'
 import { apiOrigin } from '@/config/env'
@@ -41,6 +42,7 @@ import { threadsByParent } from './threads'
 import { useConversation } from './useConversation'
 import type { SupportPayload } from '@/lib/remoteSupport'
 import { useRoleDecor } from '@/features/servers/roleDecor'
+import { unreadCounts } from '@/features/servers/discordFeatures'
 
 
 const GROUP_WINDOW_MS = 5 * 60_000
@@ -136,6 +138,15 @@ export function ChatView({
   }, [conv.messages])
   const members = useQuery({ queryKey: qk.members(serverId), queryFn: () => serversApi.members(serverId), enabled: !!serverId })
   const decorOf = useRoleDecor(serverId)
+  // Anneau effectif de chaque auteur, tiré de la liste des membres déjà chargée (aucune requête en plus).
+  const ringOf = useMemo(() => {
+    const map = new Map<string, AvatarRingData>()
+    for (const mb of members.data ?? []) {
+      const r = effectiveRing(mb)
+      if (r) map.set(mb.user_id, r)
+    }
+    return map
+  }, [members.data])
   const group = useQuery({ queryKey: qk.group(groupId), queryFn: () => dmsApi.group(groupId), enabled: !!groupId })
   // Emojis personnalisés du serveur (salons uniquement) : texte, réactions et palette.
   const emojiQuery = useQuery({ queryKey: qk.emojis(serverId), queryFn: () => serversApi.emojis(serverId), enabled: !!serverId, staleTime: 60_000 })
@@ -331,6 +342,8 @@ ${t('e2e.report.notice')}` : t('chat.reportReason'), [
           : { label: t('ai.translate'), icon: 'language-outline', onPress: () => translate(m) },
       )
     }
+    // « Marquer comme non lu » (comme Discord) : non-lus à partir de ce message, pastille posée par la réponse.
+    if (!m.pending && !m.id.startsWith('tmp-')) list.push({ label: t('df.unread.mark'), icon: 'mail-unread-outline', onPress: () => markUnread(m) })
     if (!m.pending) list.push({ label: t('chat.copyLink'), icon: 'link-outline', onPress: () => void Clipboard.setStringAsync(messageLink(apiOrigin(), conversation, m.id)) })
     if (!mine) list.push({ label: t('chat.viewProfile'), icon: 'person-circle-outline', onPress: () => router.push(userRoute(m.authorId, serverId)) })
     // MP 1-à-1 : le signalement part aux administrateurs du site (serveur : dm_reports).
@@ -339,6 +352,15 @@ ${t('e2e.report.notice')}` : t('chat.reportReason'), [
     if (mine || conversation.kind === 'channel') list.push({ label: t('chat.delete'), icon: 'trash-outline', danger: true, onPress: () => confirmDelete(m) })
     return list
   }
+
+  const markUnread = (m: ChatMessage) =>
+    void messagesApi
+      .markUnread(conversation, m.id)
+      .then((r) => {
+        const c = unreadCounts(r)
+        if (c) useUnread.getState().setUnread(conv.id, c.count, c.mentionCount, serverId || null)
+      })
+      .catch((e) => Alert.alert(t('common.actionFailed'), errorMessage(e)))
 
   const translate = (m: ChatMessage) =>
     void translateOnDevice(m.content ?? '').then((text) => {
@@ -390,13 +412,14 @@ ${t('e2e.report.notice')}` : t('chat.reportReason'), [
             onReactionLongPress={showReactors}
             translation={translations[item.id]}
             decor={serverId ? decorOf(item.authorId) : undefined}
+            ring={serverId ? ringOf.get(item.authorId) : undefined}
             dmId={dmId}
             supportReply={item.clientMsgId ? supportReplies.get(item.clientMsgId) : undefined}
           />
         </View>
       )
     },
-    [conv.messages, me?.id, me?.username, onLongPress, react, onPressAuthor, highlightId, serverId, channelId, threadOf, openThread, showReactors, translations, decorOf, dmId, supportReplies],
+    [conv.messages, me?.id, me?.username, onLongPress, react, onPressAuthor, highlightId, serverId, channelId, threadOf, openThread, showReactors, translations, decorOf, ringOf, dmId, supportReplies],
   )
 
   const quickReactions = useMemo(
