@@ -12,7 +12,7 @@ import { useT, t as tr, type Key } from '../../i18n'
 import type { ContextMenuItem } from '../ui/ContextMenu'
 import { confirm } from '../ui/ConfirmModal'
 import {
-  GHD_WINDOWS_DOWNLOAD, canHostGhd, connectLink, expired, formatCode, formatId, invite, isDeviceId, newCode, parseSupport,
+  GHD_WINDOWS_DOWNLOAD, canHostGhd, connectLink, ghdLaunchArgs, expired, formatCode, formatId, invite, isDeviceId, newCode, parseSupport,
   shareLink, webViewerLink, type SupportPayload,
 } from '../../lib/remoteSupport'
 
@@ -30,7 +30,15 @@ export function useSupportSender(dmId: string | undefined, send: Sender) {
 
 const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
 /** Partager son écran (être aidé) : agent GhostHandDesk, Windows seulement. Aider : partout (visionneuse web). */
-const canHost = canHostGhd(typeof navigator === 'undefined' ? '' : navigator.userAgent)
+// L'appli de bureau a son propre user-agent (« ForgeChat/x (Desktop) », sans « Windows NT ») :
+// on y demande la plateforme au système. ponytail: lu au chargement du module ; un rendu avant
+// la réponse (quelques ms) voit « non », sans effet tant que le menu n'est pas ouvert.
+let canHost = !isTauri && canHostGhd(typeof navigator === 'undefined' ? '' : navigator.userAgent)
+if (isTauri) {
+  void tauri<{ platform?: string }>('system_get')
+    .then(s => { canHost = s.platform === 'windows' })
+    .catch(e => console.warn('[remoteSupport] system_get', e))
+}
 const ID_KEY = 'fc_ghd_id'
 const savedId = () => { try { return localStorage.getItem(ID_KEY) ?? '' } catch { return '' } }
 
@@ -77,15 +85,18 @@ async function openWeb(url: string) {
 /**
  * Lance GhostHandDesk par un lien `ghosthanddesk://`, avec toujours un retour visible : un lien
  * sans appli inscrite est ignoré en silence par le navigateur, et échoue (ou n'aboutit à rien)
- * dans l'appli de bureau. Celle-ci sait si GhostHandDesk est installé : false = absent.
+ * dans l'appli de bureau. Retour : true = lancé, false = absent ou lien refusé, null = annulé
+ * dans la boîte de confirmation du bureau.
  */
-async function launchGhd(url: string, missing: Key = 'rs.notInstalled'): Promise<boolean> {
-  if (!/^ghosthanddesk:\/\/(share|connect)\?/.test(url)) return false
+async function launchGhd(url: string, missing: Key = 'rs.notInstalled'): Promise<boolean | null> {
+  const args = ghdLaunchArgs(url)
+  if (!args) return false
   if (isTauri) {
-    // Ancienne appli de bureau sans la commande : on tente l'ouverture quand même.
-    const installed = await tauri<boolean>('ghd_installed').catch(() => true)
-    const opened = installed && await tauri('plugin:shell|open', { path: url }).then(() => true, () => false)
-    if (!opened) { toast.error(tr(missing), { id: 'ghd', duration: 8000 }); return false }
+    // L'appli de bureau valide le lien, demande confirmation et lance GhostHandDesk (ghd_launch) :
+    // false = annulé par l'utilisateur ; erreur = absent (ou ancienne appli sans la commande).
+    const launched = await tauri<boolean>('ghd_launch', args).then(ok => (ok ? 'ok' : 'cancelled'), () => 'missing')
+    if (launched === 'cancelled') return null // annulé : ni toast, ni repli web
+    if (launched === 'missing') { toast.error(tr(missing), { id: 'ghd', duration: 8000 }); return false }
   } else {
     window.location.href = url
   }
@@ -280,7 +291,7 @@ export function RemoteSupportCard({ msg, isOwn }: { msg: any; isOwn: boolean }) 
     setUsed(true)
     const web = webViewerLink(rs.id, rs.code)
     if (how === 'web') void openWeb(web)
-    else void launchGhd(connectLink(rs.id, rs.code), 'rs.webFallback').then(ok => { if (!ok) void openWeb(web) })
+    else void launchGhd(connectLink(rs.id, rs.code), 'rs.webFallback').then(ok => { if (ok === false) void openWeb(web) })
     if (!reply) send(dmId, { v: 1, k: 'accept', ref: cmid })
   }
   // Personne aidée : confirmation (dans l'appli : confirm() natif est muet sous macOS), puis GhostHandDesk.

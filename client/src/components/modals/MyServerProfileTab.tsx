@@ -7,7 +7,7 @@ import ProfileBanner from '../ui/ProfileBanner'
 import { useAuth } from '../../store/auth'
 import { Field, Toggle } from '../settings/shared'
 import { useT } from '../../i18n'
-import AvatarRing, { cleanRing, type AvatarRingData } from '../ui/AvatarRing'
+import AvatarRing, { cleanRing, pickRing, type AvatarRingData } from '../ui/AvatarRing'
 import StyledNameText from '../ui/StyledNameText'
 import AvatarRingFields from '../settings/AvatarRingFields'
 import NameStyleFields, { EMPTY_STYLE } from '../settings/NameStyleFields'
@@ -34,15 +34,19 @@ export default function MyServerProfileTab({ serverId }: { serverId: string }) {
   const [ring, setRing] = useState<AvatarRingData | null>(null)
   const [ownStyle, setOwnStyle] = useState(false)
   const [nameStyle, setNameStyle] = useState<NameStyle>(EMPTY_STYLE)
+  // Champs initialisés une fois par serveur : un rafraîchissement de `member` (sauvegarde,
+  // événement temps réel) n'écrase plus la saisie en cours.
+  const initFor = useRef<string | null>(null)
   useEffect(() => {
-    if (!member) return
+    if (!member || initFor.current === serverId) return
+    initFor.current = serverId
     setNickname(member.nickname ?? '')
     setBio(member.server_bio ?? '')
     setRing(cleanRing(member.server_avatar_ring))
     const st = cleanStyle(member.server_name_style)
     setOwnStyle(!!st)
     setNameStyle(st ?? cleanStyle(me?.name_style) ?? EMPTY_STYLE)
-  }, [member, me?.name_style])
+  }, [member, serverId, me?.name_style])
 
   const refresh = () => {
     qc.invalidateQueries({ queryKey: ['member', serverId] })
@@ -194,7 +198,8 @@ export default function MyServerProfileTab({ serverId }: { serverId: string }) {
         </div>
 
         <div className="rounded-xl border border-fc-hover bg-fc-bg px-4 py-4 flex items-center gap-4" aria-live="polite">
-          <span className="p-2"><AvatarRing ring={ring} size={56}>{avatarImg(56)}</AvatarRing></span>
+          {/* Anneau affiché : celui du serveur, sinon l'anneau global du compte. */}
+          <span className="p-2"><AvatarRing ring={pickRing(ring, me.avatar_ring)} size={56}>{avatarImg(56)}</AvatarRing></span>
           <div className="min-w-0">
             <p className="text-xs text-fc-muted mb-0.5">{t('pedit.server.preview')}</p>
             <StyledNameText text={previewName} style={previewStyle} className="text-lg font-semibold text-white" />

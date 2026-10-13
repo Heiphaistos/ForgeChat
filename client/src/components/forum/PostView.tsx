@@ -1,6 +1,7 @@
 // Vue d'un post de forum : contenu, réponses paginées (curseur), pièces jointes,
 // réactions, édition/suppression. Extraite de ForumPage.tsx (fichier > 800 lignes).
 import { useState, useEffect, useLayoutEffect, useRef } from 'react'
+import { useDefaultReaction } from './ForumGuidelines'
 import { useQuery, useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Pin, Lock, X, ArrowLeft, Trash2, Pencil, Check, Paperclip, Loader2, Link2, SmilePlus } from 'lucide-react'
 import api, { mediaUrl } from '../../api/client'
@@ -234,6 +235,8 @@ export default function PostView({ serverId, channelId, post, onBack, canManageM
   }
 
   const [reactionPickerFor, setReactionPickerFor] = useState<string | null>(null)
+  // Réaction par défaut du forum : proposée en un clic sur les réponses pas encore réagies avec elle.
+  const defaultReaction = useDefaultReaction(serverId, channelId)
   // Double-tap sur une réponse → réaction ❤️ (parité canaux/groupes/threads)
   const dblTapStart = useRef<{ x: number; y: number } | null>(null)
   const dblTapRef = useRef<{ msgId: string; time: number } | null>(null)
@@ -559,6 +562,12 @@ export default function PostView({ serverId, channelId, post, onBack, canManageM
                     title={t('msg.react')}
                     aria-label={t('post.reactLabel')}
                   ><SmilePlus size={13} aria-hidden /></button>
+                )}
+                {editingReplyId !== r.id && defaultReaction && !r.reactions?.some(rc => rc.me && rc.emoji === defaultReaction) && (
+                  <button onClick={() => toggleReplyReaction.mutate({ replyId: r.id, emoji: defaultReaction })}
+                    className="p-1.5 min-w-[44px] min-h-[44px] flex items-center justify-center rounded text-sm opacity-70 hover:opacity-100 hover:bg-fc-hover/50 transition"
+                    title={t('dfeat.forum.react', { emoji: defaultReaction })} aria-label={t('dfeat.forum.react', { emoji: defaultReaction })}
+                  >{defaultReaction}</button>
                 )}
                 {r.unencrypted === true && <UnencryptedBadge />}
                 {r.user_id === user?.id && editingReplyId !== r.id && r.e2e !== 'locked' && (

@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Calendar, MessageCircle, ExternalLink, UserPlus, UserCheck } from 'lucide-react'
+import { Calendar, MessageCircle, ExternalLink, UserPlus, UserCheck, Check, X, Pencil, Ban } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { format } from 'date-fns'
 import api from '../api/client'
@@ -8,29 +8,18 @@ import { useNavigate } from 'react-router-dom'
 import UserPrivateNotes from './UserPrivateNotes'
 import UserSocialInfo from './UserSocialInfo'
 import { AvatarDecoration, ProfileEffect, profileThemeBackground } from './ui/ProfileDecor'
-import { dateLocale, t as tr } from '../i18n'
+import { dateLocale, useT, type Key } from '../i18n'
 import AnimatedImg from './ui/AnimatedImg'
 import ProfileBanner from './ui/ProfileBanner'
 import UserName from './ui/UserName'
 import ProfileLinks from './ui/ProfileLinks'
+import ConnectedAccountsLinks from './ui/ConnectedAccountsLinks'
 import { renderMarkdown } from '../utils/markdown'
 import { useRemoteSupportItem } from './chat/RemoteSupport'
-
-const ACTIVITY_ICONS: Record<string, string> = {
-  playing: '🎮',
-  listening: '🎵',
-  watching: '📺',
-  streaming: '📡',
-  competing: '🏆',
-}
-
-const ACTIVITY_LABELS: Record<string, string> = {
-  playing: 'Joue à',
-  listening: 'Écoute',
-  watching: 'Regarde',
-  streaming: 'Stream',
-  competing: 'En compétition sur',
-}
+import AvatarRing, { pickRing } from './ui/AvatarRing'
+import { CardPatternLayer, cardView } from './ui/ProfileCardParts'
+import { ACTIVITY_ICONS, activityLabel } from '../lib/activity'
+import { useMediaQuery } from '../hooks/useMediaQuery'
 
 // Gradient déterministe basé sur le hash du username (style Discord)
 function getUserGradient(username: string): string {
@@ -47,9 +36,9 @@ const STATUS_COLOR: Record<string, string> = {
   online: 'bg-fc-green', idle: 'bg-fc-yellow',
   dnd: 'bg-fc-red', invisible: 'bg-fc-muted', offline: 'bg-fc-muted',
 }
-const STATUS_LABEL: Record<string, string> = {
-  online: 'En ligne', idle: 'Absent', dnd: 'Ne pas déranger',
-  invisible: 'Invisible', offline: 'Hors ligne',
+const STATUS_LABEL: Record<string, Key> = {
+  online: 'presence.online', idle: 'presence.idle', dnd: 'presence.dnd',
+  invisible: 'presence.invisible', offline: 'presence.offline',
 }
 
 interface Props {
@@ -62,7 +51,11 @@ interface Props {
 }
 
 export default function UserPopup({ userId, serverId, anchorX, anchorY, onClose }: Props) {
+  const tr = useT()
   const ref = useRef<HTMLDivElement>(null)
+  // Dernier onClose reçu : les écouteurs posés une seule fois ne gardent pas une fermeture périmée.
+  const onCloseRef = useRef(onClose)
+  useEffect(() => { onCloseRef.current = onClose })
   const nav = useNavigate()
   const qc = useQueryClient()
 
@@ -92,33 +85,59 @@ export default function UserPopup({ userId, serverId, anchorX, anchorY, onClose 
   const avatar = member?.server_avatar ?? user?.avatar
   const bio = member?.server_bio ?? user?.bio
   const theme = profileThemeBackground(user?.profile_color_primary, user?.profile_color_accent)
+  // Carte de profil (mise en page, fond, motif, bannière) et anneau : serveur sinon compte.
+  const { card, look, style: cardStyle } = cardView(user?.profile_card, user?.profile_color_primary, user?.profile_color_accent)
+  const ring = pickRing(member?.server_avatar_ring, user?.avatar_ring)
 
   const remoteSupport = useRemoteSupportItem()(userId)
   const openDm = useMutation({
     mutationFn: () => api.post(`/dms/${userId}`).then(r => r.data),
     onSuccess: (dm: any) => { nav(`/dms/${dm.dm_id}`); onClose() },
-    onError: (e: any) => toast.error(e.response?.data?.error ?? "Impossible d'ouvrir la conversation"),
+    onError: (e: any) => toast.error(e.response?.data?.error ?? tr('profile.dmError')),
   })
 
+  const refreshRelation = () => {
+    void qc.invalidateQueries({ queryKey: ['profile', userId] })
+    void qc.invalidateQueries({ queryKey: ['friends'] })
+  }
   const sendFriend = useMutation({
     mutationFn: () => api.post('/friends', { user_id: userId }),
-    onSuccess: () => { toast.success('Demande envoyée !'); qc.invalidateQueries({ queryKey: ['profile', userId] }) },
-    onError: (e: any) => toast.error(e.response?.data?.error ?? 'Erreur'),
+    onSuccess: () => { toast.success(tr('friends.requestSent')); refreshRelation() },
+    onError: (e: any) => toast.error(e.response?.data?.error ?? tr('common.error')),
+  })
+  // Demande reçue : mêmes routes que la page Amis (POST /friends/:friendship_id/accept|decline).
+  const answerFriend = useMutation({
+    mutationFn: (accept: boolean) => api.post(`/friends/${profile?.friendship_id}/${accept ? 'accept' : 'decline'}`),
+    onSuccess: (_r, accept) => { toast.success(tr(accept ? 'upop.accepted' : 'upop.declined')); refreshRelation() },
+    onError: (e: any, accept) => toast.error(e.response?.data?.error ?? tr(accept ? 'friends.acceptError' : 'friends.declineError')),
   })
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) onClose()
+      if (ref.current && !ref.current.contains(e.target as Node)) onCloseRef.current()
     }
-    const keyHandler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    const keyHandler = (e: KeyboardEvent) => { if (e.key === 'Escape') onCloseRef.current() }
     document.addEventListener('mousedown', handler)
     document.addEventListener('keydown', keyHandler)
     return () => { document.removeEventListener('mousedown', handler); document.removeEventListener('keydown', keyHandler) }
   }, [])
 
-  // Bottom-sheet sur mobile (cohérent avec les menus contextuels),
+  // Focus : sur la carte à l'ouverture, rendu à l'élément d'origine à la fermeture — sauf si
+  // l'utilisateur a cliqué ailleurs sur un élément focalisable (on ne lui vole pas le focus).
+  useEffect(() => {
+    const node = ref.current
+    const origin = document.activeElement instanceof HTMLElement ? document.activeElement : null
+    node?.focus({ preventScroll: true })
+    return () => {
+      const now = document.activeElement
+      if (origin?.isConnected && (!now || now === document.body || node?.contains(now))) origin.focus({ preventScroll: true })
+    }
+  }, [])
+
+  // Bottom-sheet sur mobile (cohérent avec les menus contextuels), suivi en direct (rotation),
   // popup positionnée à l'ancre sur desktop, clampée dans l'écran
-  const isSheet = window.innerWidth < 768
+  const isSheet = useMediaQuery('(max-width: 767px)')
+  const relation: string | undefined = profile?.relationship
   const style: React.CSSProperties = isSheet
     ? { position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 9999, maxHeight: '80dvh' }
     : {
@@ -138,54 +157,60 @@ export default function UserPopup({ userId, serverId, anchorX, anchorY, onClose 
       ref={ref}
       role="dialog"
       aria-modal="false"
-      aria-label={user ? `Profil de ${user.username}` : 'Profil utilisateur'}
-      style={theme ? { ...style, background: theme } : style}
+      tabIndex={-1}
+      aria-label={user ? tr('upop.profileOf', { name: user.username }) : tr('upop.profile')}
+      style={isSheet ? { ...style, ...cardStyle, borderRadius: undefined } : { ...style, ...cardStyle }}
       className={isSheet
-        ? 'bg-fc-bg border-t border-fc-hover rounded-t-2xl shadow-2xl overflow-y-auto overscroll-contain pb-[max(env(safe-area-inset-bottom),0.5rem)] sheet-slide-up'
-        : 'w-[340px] bg-fc-bg border border-fc-hover rounded-xl shadow-2xl overflow-y-auto'}
+        ? 'bg-fc-bg border-t border-fc-hover rounded-t-2xl shadow-2xl overflow-y-auto overscroll-contain pb-[max(env(safe-area-inset-bottom),0.5rem)] sheet-slide-up outline-none'
+        : 'w-[340px] bg-fc-bg border border-fc-hover rounded-xl shadow-2xl overflow-y-auto outline-none'}
     >
+      <CardPatternLayer pattern={look.pattern} />
       {user && <ProfileEffect id={user.profile_effect} intensity={user.profile_effect_intensity} />}
-      {/* Banner */}
-      {/* Bannière entière (jamais rognée) ; l'avatar déborde dessous, hors de son cadre. */}
+      {/* Bannière entière (rognée seulement en mise en page compacte ou large) ; l'avatar déborde dessous. */}
       <div className="relative" aria-hidden>
         <ProfileBanner
           src={banner}
           minHeight={80}
           maxHeight={220}
+          cover={look.banner.height ? { height: look.banner.height } : undefined}
+          focus={look.banner.focus}
+          className={look.banner.className}
           emptyClassName="h-28"
           emptyStyle={{ background: theme ?? (user ? getUserGradient(user.username) : 'linear-gradient(135deg, #5865f2 0%, #9b59b6 100%)') }}
         />
         {/* Avatar */}
-        <div className="absolute -bottom-12 left-4">
+        <div className={`absolute -bottom-12 ${look.centered ? 'left-1/2 -translate-x-1/2' : 'left-4'}`}>
           <AvatarDecoration id={user?.avatar_decoration} opts={user?.avatar_decoration_opts} size={84}>
+          <AvatarRing ring={ring} size={96}>
           <div className="w-24 h-24 rounded-full border-[6px] border-fc-bg bg-fc-accent flex items-center justify-center font-bold text-3xl text-white overflow-hidden">
             {avatar
               ? <AnimatedImg src={avatar} alt={user?.username} loading="lazy" decoding="async" className="w-full h-full object-cover" />
               : (user?.username?.charAt(0)?.toUpperCase() ?? '?')}
           </div>
+          </AvatarRing>
           </AvatarDecoration>
           {user && (
             <div
               className={`absolute bottom-1 right-1 w-6 h-6 rounded-full border-4 border-fc-bg ${STATUS_COLOR[user.status] ?? 'bg-fc-muted'}`}
-              aria-label={STATUS_LABEL[user.status] ?? 'Hors ligne'}
-              title={STATUS_LABEL[user.status] ?? 'Hors ligne'}
+              aria-label={tr(STATUS_LABEL[user.status] ?? 'presence.offline')}
+              title={tr(STATUS_LABEL[user.status] ?? 'presence.offline')}
             />
           )}
         </div>
       </div>
 
-      <div className="pt-14 px-4 pb-4">
+      <div className="relative pt-14 px-4 pb-4">
         {user ? (
           <>
-            <div className="font-bold text-white text-xl break-words">
+            <div className={`font-bold text-white text-xl break-words${look.nameCenter ? ' text-center' : ''}`}>
               <UserName userId={user.id} name={user.username} nickname={member?.nickname} withTag />
             </div>
-            <div className="text-xs text-fc-muted mb-1">
+            <div className={`text-xs text-fc-muted mb-1${look.nameCenter ? ' text-center' : ''}`}>
               {(member?.nickname || user.display_name) ? `${user.username}#${user.discriminator}` : `#${user.discriminator}`}
               {user.pronouns && <span> · {user.pronouns}</span>}
             </div>
-            <div className="text-xs text-fc-muted mb-3">
-              {STATUS_LABEL[user.status] ?? 'Hors ligne'}
+            <div className={`text-xs text-fc-muted mb-3${look.nameCenter ? ' text-center' : ''}`}>
+              {tr(STATUS_LABEL[user.status] ?? 'presence.offline')}
             </div>
 
             {(user.custom_status || user.custom_status_emoji) && (
@@ -205,7 +230,7 @@ export default function UserPopup({ userId, serverId, anchorX, anchorY, onClose 
                 <span className="text-base flex-shrink-0 mt-0.5">{ACTIVITY_ICONS[user.activity_type] ?? '🎯'}</span>
                 <div className="min-w-0">
                   <div className="text-xs font-semibold text-fc-muted uppercase tracking-wide">
-                    {ACTIVITY_LABELS[user.activity_type] ?? user.activity_type}
+                    {tr(activityLabel(user.activity_type))}
                   </div>
                   <div className="text-sm text-white font-medium truncate">{user.activity_name}</div>
                   {user.activity_detail && (
@@ -215,18 +240,19 @@ export default function UserPopup({ userId, serverId, anchorX, anchorY, onClose 
               </div>
             )}
 
-            <UserSocialInfo userId={userId} />
+            <UserSocialInfo userId={userId} showBadges={card.show_badges} />
 
             {bio && (
               <div className="mb-3">
-                <div className="text-xs font-semibold text-fc-muted uppercase tracking-wide mb-1">À propos</div>
+                <div className="text-xs font-semibold text-fc-muted uppercase tracking-wide mb-1">{tr('profile.about')}</div>
                 <div className="text-sm text-fc-text break-words">{renderMarkdown(bio)}</div>
               </div>
             )}
 
-            <ProfileLinks links={user.profile_links} />
+            {card.show_links && <ProfileLinks links={user.profile_links} />}
+            {card.show_links && <ConnectedAccountsLinks userId={userId} />}
 
-            {profile && profile.relationship !== 'self' && (
+            {profile && relation !== 'self' && (
               <UserPrivateNotes userId={userId} isFriend={profile.relationship === 'friend'} />
             )}
 
@@ -242,7 +268,7 @@ export default function UserPopup({ userId, serverId, anchorX, anchorY, onClose 
                 </div>
                 {(member.roles ?? []).length > 0 && (
                   <div>
-                    <div className="text-xs font-semibold text-fc-muted uppercase tracking-wide mb-1">Rôles</div>
+                    <div className="text-xs font-semibold text-fc-muted uppercase tracking-wide mb-1">{tr('upop.roles')}</div>
                     <div className="flex flex-wrap gap-1">
                       {member.roles.map((r: any) => (
                         <span key={r.id} className="flex items-center gap-1 text-[11px] text-fc-text bg-fc-channel rounded px-1.5 py-0.5">
@@ -257,15 +283,31 @@ export default function UserPopup({ userId, serverId, anchorX, anchorY, onClose 
             )}
 
             <div className="border-t border-fc-hover pt-3 flex flex-col gap-2">
-              <button
-                onClick={() => openDm.mutate()}
-                disabled={openDm.isPending}
-                className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-fc-accent hover:bg-indigo-500 text-white rounded-lg text-sm font-medium transition disabled:opacity-50"
-              >
-                <MessageCircle size={14} />
-                Envoyer un message
-              </button>
-              {remoteSupport && (
+              {/* Soi : modifier son profil ; bloqué : pas de message ; demande reçue : accepter / refuser. */}
+              {relation === 'self' ? (
+                <button
+                  onClick={() => { nav('/settings?section=profile'); onClose() }}
+                  className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-fc-accent hover:bg-indigo-500 text-white rounded-lg text-sm font-medium transition"
+                >
+                  <Pencil size={14} aria-hidden />
+                  {tr('upop.editProfile')}
+                </button>
+              ) : relation === 'blocked' ? (
+                <div className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-fc-hover text-fc-muted rounded-lg text-sm">
+                  <Ban size={14} aria-hidden />
+                  {tr('upop.blocked')}
+                </div>
+              ) : (
+                <button
+                  onClick={() => openDm.mutate()}
+                  disabled={openDm.isPending}
+                  className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-fc-accent hover:bg-indigo-500 text-white rounded-lg text-sm font-medium transition disabled:opacity-50"
+                >
+                  <MessageCircle size={14} aria-hidden />
+                  {tr('msg.sendMessage')}
+                </button>
+              )}
+              {remoteSupport && relation !== 'self' && (
                 <button
                   onClick={() => { remoteSupport.onClick?.(); onClose() }}
                   className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-fc-hover hover:bg-fc-input text-fc-muted hover:text-white rounded-lg text-sm font-medium transition"
@@ -274,28 +316,51 @@ export default function UserPopup({ userId, serverId, anchorX, anchorY, onClose 
                   {remoteSupport.label}
                 </button>
               )}
-              {profile?.relationship === 'none' && (
+              {relation === 'none' && (
                 <button
                   onClick={() => sendFriend.mutate()}
                   disabled={sendFriend.isPending}
                   className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-green-600/20 hover:bg-green-600/30 text-green-400 rounded-lg text-sm font-medium transition disabled:opacity-50"
                 >
-                  <UserPlus size={14} />
-                  Ajouter en ami
+                  <UserPlus size={14} aria-hidden />
+                  {tr('um.addFriend')}
                 </button>
               )}
-              {(profile?.relationship === 'pending_sent' || profile?.relationship === 'friend') && (
+              {relation === 'pending_received' && profile?.friendship_id && (
+                <div role="group" aria-label={tr('upop.incoming', { name: user.username })} className="space-y-1.5">
+                  <p className="text-xs text-fc-muted text-center">{tr('upop.incoming', { name: user.username })}</p>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => answerFriend.mutate(true)}
+                      disabled={answerFriend.isPending}
+                      className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-green-600/20 hover:bg-green-600/30 text-green-400 rounded-lg text-sm font-medium transition disabled:opacity-50"
+                    >
+                      <Check size={14} aria-hidden />
+                      {tr('friends.accept')}
+                    </button>
+                    <button
+                      onClick={() => answerFriend.mutate(false)}
+                      disabled={answerFriend.isPending}
+                      className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-fc-hover hover:bg-red-600/20 text-fc-muted hover:text-red-400 rounded-lg text-sm font-medium transition disabled:opacity-50"
+                    >
+                      <X size={14} aria-hidden />
+                      {tr('friends.decline')}
+                    </button>
+                  </div>
+                </div>
+              )}
+              {(relation === 'pending_sent' || relation === 'friend') && (
                 <div className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-fc-hover text-fc-muted rounded-lg text-sm">
-                  <UserCheck size={14} />
-                  {profile.relationship === 'friend' ? 'Déjà amis' : 'Demande envoyée'}
+                  <UserCheck size={14} aria-hidden />
+                  {tr(relation === 'friend' ? 'upop.friends' : 'upop.requestSent')}
                 </div>
               )}
               <button
                 onClick={() => { nav(`/users/${userId}`); onClose() }}
                 className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-fc-hover hover:bg-fc-input text-fc-muted hover:text-white rounded-lg text-sm font-medium transition"
               >
-                <ExternalLink size={14} />
-                Voir le profil
+                <ExternalLink size={14} aria-hidden />
+                {tr('dms.viewProfile')}
               </button>
             </div>
           </>

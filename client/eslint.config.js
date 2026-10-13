@@ -14,8 +14,10 @@ export default [
     plugins: { 'react-hooks': reactHooks },
     rules: {
       'react-hooks/rules-of-hooks': 'error',
-      // exhaustive-deps volontairement off : trop de faux positifs sur
-      // l'existant ; rules-of-hooks est la règle anti-crash critique
+      // exhaustive-deps en avertissement (audit C8, 2026-10-13) : visible dans l'éditeur et
+      // avec `npx eslint src`, sans casser `npm run lint` (--quiet n'affiche que les erreurs) ;
+      // l'existant en compte 85 (2026-10-13), à résorber au fil des modifications.
+      'react-hooks/exhaustive-deps': 'warn',
     },
   },
 ]

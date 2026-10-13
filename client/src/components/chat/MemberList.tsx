@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { X } from 'lucide-react'
 import { useSwipeRightToClose } from '../../hooks/useSwipeClose'
-import api from '../../api/client'
+import { fetchAllMembers } from '../../api/members'
 import { usePresence } from '../../store/presence'
 import { userMenuProps } from '../userMenu/store'
 import UserPopup from '../UserPopup'
@@ -11,7 +11,7 @@ import AnimatedImg from '../ui/AnimatedImg'
 import UserName from '../ui/UserName'
 import RichStatus from '../ui/RichStatus'
 import { AvatarDecoration } from '../ui/ProfileDecor'
-import AvatarRing from '../ui/AvatarRing'
+import AvatarRing, { pickRing } from '../ui/AvatarRing'
 import { useT, type Key } from '../../i18n'
 
 interface Props {
@@ -60,7 +60,7 @@ function MemberRow({ m, decor, serverId, onClick }: { m: any; decor?: RoleDecor;
     >
       <div className="relative flex-shrink-0">
         <AvatarDecoration id={m.avatar_decoration} opts={m.avatar_decoration_opts} size={32}>
-        <AvatarRing ring={m.server_avatar_ring} size={32}>
+        <AvatarRing ring={pickRing(m.server_avatar_ring, m.avatar_ring)} size={32}>
         <div className="w-8 h-8 rounded-full bg-fc-accent flex items-center justify-center font-semibold text-sm text-white overflow-hidden">
           {m.avatar
             ? <AnimatedImg src={m.avatar} alt={m.nickname ?? m.username} loading="lazy" decoding="async" className="w-full h-full rounded-full object-cover" />
@@ -95,7 +95,7 @@ export default function MemberList({ serverId, onClose }: Props) {
   const t = useT()
   const { data: members = [] } = useQuery({
     queryKey: ['members', serverId],
-    queryFn: () => api.get(`/servers/${serverId}/members`).then(r => r.data),
+    queryFn: () => fetchAllMembers(serverId),
     // Plus de rechargement périodique : la présence arrive par WS (usePresence) et
     // App.tsx invalide ['members', serverId] sur MEMBER_JOIN/LEAVE/REMOVE/KICKED/
     // BANNED/UNBAN/ROLE_UPDATE/NICKNAME_UPDATE/TIMEOUT et USER_UPDATE.

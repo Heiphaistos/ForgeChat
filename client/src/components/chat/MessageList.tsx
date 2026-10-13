@@ -23,6 +23,7 @@ import toast from 'react-hot-toast'
 import { t as tr, useT, dateLocale, useLang } from '../../i18n'
 import { translate as translateOnDevice } from '../../ai/engine'
 import MessageRow from './MessageRow'
+import { MarkUnreadButton } from './MarkUnread'
 import UnreadSummary from '../ai/UnreadSummary'
 import { QUICK_EMOJIS, DBLCLICK_EMOJIS } from './messageListShared'
 
@@ -1125,13 +1126,9 @@ export default function MessageList({
               <Share2 size={14} /> {t('msg.share')}
             </button>
           )}
-          <button
-            onClick={() => { navigator.clipboard.writeText(contextMenu.msg.id); setContextMenu(null) }}
-            className="flex items-center gap-2.5 w-full px-3 py-2.5 min-h-[44px] hover:bg-fc-hover transition text-fc-muted text-xs"
-          >
-            <Copy size={12} /> {t('msg.copyId')}
-          </button>
-
+          <MarkUnreadButton serverId={serverId} channelId={channelId} messageId={contextMenu.msg.id} onDone={() => setContextMenu(null)} />
+          <button onClick={() => { navigator.clipboard.writeText(contextMenu.msg.id); setContextMenu(null) }}
+            className="flex items-center gap-2.5 w-full px-3 py-2.5 min-h-[44px] hover:bg-fc-hover transition text-fc-muted text-xs"><Copy size={12} /> {t('msg.copyId')}</button>
           <div className="border-t border-fc-hover my-1" />
 
           <button

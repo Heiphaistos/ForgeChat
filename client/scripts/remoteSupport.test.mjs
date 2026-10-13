@@ -20,6 +20,11 @@ test('invitation valide, liens et expiration', () => {
   assert.equal(rs.expired(p, 601_000), true)
   assert.equal(rs.shareLink('7K2MQ9XR4TVB'), 'ghosthanddesk://share?code=7K2MQ9XR4TVB&ttl=600')
   assert.equal(rs.connectLink('482 915 036', '7K2MQ9XR4TVB'), 'ghosthanddesk://connect?id=482915036&code=7K2MQ9XR4TVB')
+  // Bureau : arguments de ghd_launch (le lien n'est plus ouvert par le shell).
+  assert.deepEqual(rs.ghdLaunchArgs(rs.shareLink('7K2MQ9XR4TVB')), { action: 'share', code: '7K2MQ9XR4TVB', id: null, ttl: 600 })
+  assert.deepEqual(rs.ghdLaunchArgs(rs.connectLink('482 915 036', '7K2MQ9XR4TVB')), { action: 'connect', code: '7K2MQ9XR4TVB', id: '482915036', ttl: null })
+  assert.equal(rs.ghdLaunchArgs('ghosthanddesk://evil?code=1'), null)
+  assert.equal(rs.ghdLaunchArgs('https://example.com/share?code=1'), null)
   assert.equal(rs.webViewerLink('482915036', '7K2MQ9XR4TVB'), 'https://ghd.heiphaistos.org/app/#id=482915036&code=7K2MQ9XR4TVB')
   assert.equal(rs.formatId('482915036'), '482 915 036')
 })

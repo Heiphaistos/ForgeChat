@@ -1,49 +1,20 @@
 import { useState } from 'react'
+import { useT, type Key } from '../i18n'
 
 interface Props {
   onDone: () => void
 }
 
-const STEPS = [
-  {
-    title: 'Bienvenue sur ForgeChat',
-    description: 'Votre messagerie self-hosted. Créez des serveurs, invitez vos amis, et discutez en temps réel.',
-    emoji: '💬',
-  },
-  {
-    // Amélioration n° 40 (2026-10-12) : le chiffrement expliqué dès l'arrivée.
-    title: 'Chiffré de bout en bout',
-    description: 'Vos messages privés, groupes, salons et fichiers sont chiffrés sur votre appareil : le serveur ne peut pas les lire. Gardez votre code de récupération en lieu sûr, il est le seul moyen de retrouver vos messages si vous oubliez votre mot de passe.',
-    emoji: '🔒',
-  },
-  {
-    title: 'Vérifiez vos contacts',
-    description: 'Sur le profil d’un contact, comparez le code de sécurité (ou scannez son QR code en personne). Si les codes sont identiques, personne ne s’interpose entre vous. ForgeChat vous prévient si sa clé change.',
-    emoji: '🛡️',
-  },
-  {
-    title: 'Protégez votre compte',
-    description: 'Activez la double authentification et une clé d’accès dans Paramètres > Sécurité. Un e-mail vous prévient de chaque connexion depuis un nouvel appareil, avec un lien pour tout verrouiller.',
-    emoji: '🔑',
-  },
-  {
-    title: 'Découvrez les serveurs',
-    description: 'Rejoignez ou créez des serveurs thématiques avec des canaux textuels et vocaux.',
-    emoji: '🌐',
-  },
-  {
-    title: 'Notifications & sons',
-    description: 'Personnalisez vos notifications dans Paramètres > Notifications pour ne rien manquer.',
-    emoji: '🔔',
-  },
-  {
-    title: "C'est parti !",
-    description: 'Tout est prêt. Explorez ForgeChat et rejoignez la conversation !',
-    emoji: '🚀',
-  },
-]
+// Étapes : emoji + clés intro.sN.title / intro.sN.desc (i18n/parts/auditChat.ts).
+// Étape 2 = amélioration n° 40 (2026-10-12) : le chiffrement expliqué dès l'arrivée.
+const STEPS = ['💬', '🔒', '🛡️', '🔑', '🌐', '🔔', '🚀'].map((emoji, i) => ({
+  emoji,
+  title: `intro.s${i + 1}.title` as Key,
+  description: `intro.s${i + 1}.desc` as Key,
+}))
 
 export default function Onboarding({ onDone }: Props) {
+  const tr = useT()
   const [step, setStep] = useState(0)
 
   const finish = () => {
@@ -75,7 +46,7 @@ export default function Onboarding({ onDone }: Props) {
           aria-valuenow={step + 1}
           aria-valuemin={1}
           aria-valuemax={STEPS.length}
-          aria-label={`Étape ${step + 1} sur ${STEPS.length}`}
+          aria-label={tr('intro.step', { n: step + 1, total: STEPS.length })}
           className="flex justify-center gap-2"
         >
           {STEPS.map((_, i) => (
@@ -92,8 +63,8 @@ export default function Onboarding({ onDone }: Props) {
         {/* Step content — aria-live so screen readers announce step changes */}
         <div aria-live="polite" aria-atomic="true" className="flex flex-col items-center text-center gap-3">
           <span aria-hidden className="text-5xl">{current.emoji}</span>
-          <h2 id="onboarding-title" className="text-xl font-bold text-white">{current.title}</h2>
-          <p className="text-fc-muted text-sm leading-relaxed">{current.description}</p>
+          <h2 id="onboarding-title" className="text-xl font-bold text-white">{tr(current.title)}</h2>
+          <p className="text-fc-muted text-sm leading-relaxed">{tr(current.description)}</p>
         </div>
 
         <div className="flex flex-col items-center gap-3">
@@ -101,14 +72,14 @@ export default function Onboarding({ onDone }: Props) {
             onClick={next}
             className="w-full bg-fc-accent hover:bg-fc-accent/80 text-white font-semibold py-2.5 rounded-xl transition"
           >
-            {step < STEPS.length - 1 ? 'Suivant' : 'Commencer'}
+            {tr(step < STEPS.length - 1 ? 'intro.next' : 'intro.start')}
           </button>
           <button
             onClick={finish}
-            aria-label="Passer l'introduction"
+            aria-label={tr('intro.skipA11y')}
             className="text-fc-muted text-sm hover:text-white transition"
           >
-            Passer
+            {tr('intro.skip')}
           </button>
         </div>
       </div>

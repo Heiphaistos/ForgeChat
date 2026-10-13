@@ -1,19 +1,25 @@
 import { useMemo, useState } from 'react'
-import { useMutation } from '@tanstack/react-query'
-import toast from 'react-hot-toast'
 import { Search } from 'lucide-react'
-import api, { mediaUrl } from '../../api/client'
+import { mediaUrl } from '../../api/client'
 import { Field, Toggle } from './shared'
 import { useT, type Key } from '../../i18n'
-import { AvatarDecoration, DECORATIONS, DECO_GROUPS, FX_GROUPS, PROFILE_EFFECTS, ProfileEffect, hexColor, profileThemeBackground, type ProfileFx } from '../ui/ProfileDecor'
+import { AvatarDecoration, DECORATIONS, DECO_GROUPS, FX_GROUPS, PROFILE_EFFECTS, ProfileEffect, hexColor, type ProfileFx } from '../ui/ProfileDecor'
 import {
   DECO_OPTS_DEFAULT, DECO_RANGES, FX_INTENSITY, cleanDecoOpts, cleanIntensity, decoOptsPayload, isDefaultDecoOpts, matches, searchKey,
   type DecoNumKey, type DecoOpts,
 } from '../../lib/profileDecor'
+import AvatarRing, { cleanRing, type AvatarRingData } from '../ui/AvatarRing'
+import AvatarRingFields from './AvatarRingFields'
+import ProfileCardFields, { ProfileCardPreview } from './ProfileCardFields'
+import { cardPayload, cleanCard, type ProfileCard } from '../../lib/profileCard'
+import { useDraft, type DraftReport } from './profileDraft'
 
 interface Props {
   user: any
-  updateMe: (d: any) => void
+  /** Brouillon remonté à ProfileSection (enregistrement unique, profileDraft.ts). */
+  report: DraftReport
+  /** Nom affiché dans l'aperçu (brouillon de l'identité compris). */
+  previewName: string
 }
 
 const toInt = (hex: string) => parseInt(hex.slice(1), 16)
@@ -64,7 +70,7 @@ function PickerBar({ query, setQuery, cat, setCat, groups, all, a11y }: {
 }
 
 /** Décoration d'avatar (et ses réglages), thème et effet de la fiche profil — gratuits, avec aperçu. */
-export default function ProfileCosmetics({ user, updateMe }: Props) {
+export default function ProfileCosmetics({ user, report, previewName }: Props) {
   const t = useT()
   const [decoration, setDecoration] = useState<string>(user.avatar_decoration ?? '')
   const [opts, setOpts] = useState<DecoOpts>(() => cleanDecoOpts(user.avatar_decoration_opts))
@@ -72,6 +78,9 @@ export default function ProfileCosmetics({ user, updateMe }: Props) {
   const [accent, setAccent] = useState<number | null>(user.profile_color_accent ?? null)
   const [effect, setEffect] = useState<string>(user.profile_effect ?? '')
   const [intensity, setIntensity] = useState<number>(() => cleanIntensity(user.profile_effect_intensity))
+  // Anneau global (users.avatar_ring, null = aucun) et carte de profil (users.profile_card).
+  const [ring, setRing] = useState<AvatarRingData | null>(() => cleanRing(user.avatar_ring))
+  const [card, setCard] = useState<ProfileCard>(() => cleanCard(user.profile_card))
   const [replay, setReplay] = useState(0)
   const [decoQuery, setDecoQuery] = useState('')
   const [decoCat, setDecoCat] = useState('')
@@ -79,19 +88,18 @@ export default function ProfileCosmetics({ user, updateMe }: Props) {
   const [fxCat, setFxCat] = useState('')
   const patchOpts = (p: Partial<DecoOpts>) => setOpts(o => cleanDecoOpts({ ...o, ...p }))
 
-  const save = useMutation({
-    // "" et -1 = retirer (le serveur ignore les champs absents) ; {} = réglages par défaut.
-    mutationFn: () => api.patch('/users/me', {
-      avatar_decoration: decoration,
-      avatar_decoration_opts: decoOptsPayload(opts),
-      profile_color_primary: primary ?? -1,
-      profile_color_accent: accent ?? -1,
-      profile_effect: effect,
-      profile_effect_intensity: intensity,
-    }),
-    onSuccess: r => { updateMe(r.data); toast.success(t('settings.cosmetics.saved')) },
-    onError: (e: any) => toast.error(e.response?.data?.error ?? t('common.error')),
-  })
+  // "" et -1 = retirer (le serveur ignore les champs absents) ; {} = réglages par défaut ;
+  // null = pas d'anneau global / carte par défaut.
+  useDraft('cosmetics', {
+    avatar_ring: cleanRing(ring),
+    profile_card: cardPayload(card),
+    avatar_decoration: decoration,
+    avatar_decoration_opts: decoOptsPayload(opts),
+    profile_color_primary: primary ?? -1,
+    profile_color_accent: accent ?? -1,
+    profile_effect: effect,
+    profile_effect_intensity: intensity,
+  }, report)
 
   const avatar = (size: number) => (
     <div className="rounded-full bg-fc-accent flex items-center justify-center font-bold text-white overflow-hidden" style={{ width: size, height: size, fontSize: size * 0.4 }}>
@@ -131,19 +139,25 @@ export default function ProfileCosmetics({ user, updateMe }: Props) {
     <div className="space-y-5 border-t border-fc-hover pt-6">
       <h3 className="text-sm font-semibold text-white">{t('settings.cosmetics.title')} <span className="text-xs font-normal text-fc-muted">{t('settings.cosmetics.free')}</span></h3>
 
-      {/* Aperçu de la fiche (réglages appliqués en direct) */}
-      <div
-        key={replay}
-        className="relative rounded-xl overflow-hidden border border-fc-hover p-6 flex items-center gap-5 bg-fc-bg"
-        style={{ background: profileThemeBackground(primary, accent) }}
-      >
+      {/* Aperçu de la fiche (carte, bannière, anneau, décoration et effet appliqués en direct) */}
+      <ProfileCardPreview key={replay} card={card} primary={primary} accent={accent} banner={user.banner} name={previewName}
+        avatar={
+          <AvatarDecoration id={decoration} size={64} opts={opts}>
+            <AvatarRing ring={ring} size={72}>
+              <span className="block rounded-full border-4 border-fc-bg">{avatar(64)}</span>
+            </AvatarRing>
+          </AvatarDecoration>
+        }>
         <ProfileEffect key={`${effect}-${intensity}`} id={effect} intensity={intensity} />
-        <AvatarDecoration id={decoration} size={64} opts={opts}>{avatar(64)}</AvatarDecoration>
-        <div className="min-w-0">
-          <p className="text-white font-semibold truncate">{user.username}</p>
-          <p className="text-xs text-fc-muted">{t('settings.cosmetics.preview')}</p>
-        </div>
-      </div>
+      </ProfileCardPreview>
+
+      <Field label={t('ring.global.title')} hint={t('ring.global.hint')}>
+        <AvatarRingFields value={ring} onChange={setRing} avatar={avatar} />
+      </Field>
+
+      <Field label={t('card.title')} hint={t('card.hint')}>
+        <ProfileCardFields value={card} onChange={setCard} />
+      </Field>
 
       <Field label={t('settings.cosmetics.decoration')} hint={t('pedit.deco.count', { n: DECORATIONS.length })}>
         <div className="space-y-3">
@@ -282,14 +296,6 @@ export default function ProfileCosmetics({ user, updateMe }: Props) {
           )}
         </div>
       </Field>
-
-      <button
-        onClick={() => save.mutate()}
-        disabled={save.isPending}
-        className="px-5 py-2 bg-fc-accent hover:bg-fc-accent/80 text-white rounded-lg text-sm font-medium disabled:opacity-50 transition"
-      >
-        {save.isPending ? t('common.saving') : t('settings.cosmetics.save')}
-      </button>
     </div>
   )
 }

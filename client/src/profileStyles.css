@@ -502,31 +502,7 @@
 @keyframes fc-orn-flap  { 0%, 100% { transform: scaleX(1) rotate(0); } 50% { transform: scaleX(.72) rotate(-7deg); } }
 @keyframes fc-orn-beat  { 0%, 100% { transform: scale(1); } 30% { transform: scale(1.035); } }
 
-/* ── ANNEAU DU PROFIL DE SERVEUR : nouveaux styles et réglages (AvatarRing.tsx) ── */
-.fc-ring.fc-ring-fx { filter: brightness(var(--ring-bright, 1)) drop-shadow(0 0 var(--ring-glow-r, 0px) var(--ring-glow-c, transparent)); }
-.fc-ring.fc-ring-spin, .fc-ring.fc-ring-gradient_spin, .fc-ring.fc-ring-dashed_spin, .fc-ring.fc-ring-comet {
-  animation: fc-deco-spin calc(4s / var(--ring-speed, 1)) linear infinite;
-}
-.fc-ring.fc-ring-gradient_spin { animation-duration: calc(2.6s / var(--ring-speed, 1)); }
-.fc-ring.fc-ring-comet { animation-duration: calc(1.8s / var(--ring-speed, 1)); }
-.fc-ring.fc-ring-pulse { animation: fc-deco-pulse calc(2.4s / var(--ring-speed, 1)) ease-in-out infinite; }
-.fc-ring.fc-ring-rainbow { animation: fc-deco-spin calc(6s / var(--ring-speed, 1)) linear infinite; }
-.fc-ring.fc-ring-neon_pulse { animation: fc-ring-neon calc(2s / var(--ring-speed, 1)) ease-in-out infinite; }
-.fc-ring.fc-ring-breathe { animation: fc-ring-breathe calc(3.2s / var(--ring-speed, 1)) ease-in-out infinite; }
-@keyframes fc-ring-neon {
-  0%, 100% { opacity: 1; }
-  45% { opacity: .55; } 50% { opacity: 1; } 55% { opacity: .7; }
-}
-@keyframes fc-ring-breathe {
-  0%, 100% { filter: brightness(var(--ring-bright, 1)) drop-shadow(0 0 calc(var(--ring-glow-r, 0px) * .3) var(--ring-glow-c, transparent)); }
-  50%      { filter: brightness(var(--ring-bright, 1)) drop-shadow(0 0 calc(var(--ring-glow-r, 0px) * 1.6) var(--ring-glow-c, transparent)); }
-}
-/* Tête de la comète : point lumineux au bout de la traînée. */
-.fc-ring-head {
-  position: absolute; left: 50%; top: 0;
-  border-radius: 9999px;
-  transform: translate(-50%, -50%);
-}
+/* Anneau d'avatar v2 (styles, réglages, animations) : ringStyles.css. */
 
 /* ── EFFETS DE PROFIL : nouveaux mouvements et particules dessinées ───── */
 @keyframes fc-fx-swirl {

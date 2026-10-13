@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
 import api from '../../api/client'
+import { fetchAllMembers } from '../../api/members'
 import { passwordProof } from '../../e2e/accountKey'
 import { useAuth } from '../../store/auth'
 import { useT } from '../../i18n'
@@ -24,7 +25,7 @@ export default function TransferOwnershipSection({ serverId, ownerId }: { server
   const isOwner = !!me && me.id === ownerId
   const { data: members = [] } = useQuery<Member[]>({
     queryKey: ['members', serverId],
-    queryFn: () => api.get(`/servers/${serverId}/members`).then(r => r.data),
+    queryFn: () => fetchAllMembers<Member>(serverId),
     enabled: isOwner,
   })
 

@@ -74,6 +74,13 @@ export const expired = (p: SupportPayload, now = Date.now()) => p.k === 'invite'
 export const shareLink = (code: string, ttl = CODE_TTL) => `ghosthanddesk://share?code=${code}&ttl=${ttl}`
 /** Aidant avec l'application : connexion directe avec le code. */
 export const connectLink = (id: string, code: string) => `ghosthanddesk://connect?id=${cleanId(id)}&code=${code}`
+/** Arguments de la commande de bureau `ghd_launch` tirés d'un lien share/connect (null = lien refusé). */
+export function ghdLaunchArgs(url: string): { action: string; code: string; id: string | null; ttl: number | null } | null {
+  if (!/^ghosthanddesk:\/\/(share|connect)\?/.test(url)) return null
+  const u = new URL(url)
+  const ttl = Number(u.searchParams.get('ttl'))
+  return { action: u.host, code: u.searchParams.get('code') ?? '', id: u.searchParams.get('id'), ttl: ttl > 0 ? ttl : null }
+}
 /** Aidant sans l'application : visionneuse web. Fragment = jamais envoyé au serveur web ni journalisé. */
 export const webViewerLink = (id: string, code: string) => `${GHD_WEB_VIEWER}#id=${cleanId(id)}&code=${code}`
 

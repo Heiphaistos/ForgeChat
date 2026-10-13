@@ -8,7 +8,8 @@
  * Pur TypeScript (sans JSX) : testé par scripts/profileDecor.test.mjs.
  */
 import type { Key } from '../i18n'
-import { DECORATIONS_MORE, DECO_GROUPS_MORE, FX_GROUPS, PROFILE_EFFECTS_MORE } from './profileDecorMore.ts'
+import { DECORATIONS_MORE, DECO_GROUPS_MORE, FX_GROUPS as FX_GROUPS_MORE, PROFILE_EFFECTS_MORE } from './profileDecorMore.ts'
+import { DECORATIONS_EXTRA, DECO_GROUPS_EXTRA, FX_GROUPS_EXTRA, PROFILE_EFFECTS_EXTRA } from './profileDecorExtra.ts'
 
 /** Forme de l'anneau. */
 export type DecoKind =
@@ -99,8 +100,10 @@ export const DECO_GROUPS: { id: string; label: Key; ids: string[] }[] = [
   { id: 'cosmos', label: 'pstyle.decoGroup.cosmos', ids: ['galaxy', 'nebula', 'starry', 'moonlit', 'solar', 'orbit', 'comet'] },
   { id: 'gems', label: 'pstyle.decoGroup.gems', ids: ['royal', 'diamond', 'ruby', 'sapphire', 'amethyst'] },
   ...DECO_GROUPS_MORE,
+  ...DECO_GROUPS_EXTRA,
 ]
-export { FX_GROUPS }
+/** Catégories du sélecteur d'effets (dans l'ordre d'affichage). */
+export const FX_GROUPS = [...FX_GROUPS_MORE, ...FX_GROUPS_EXTRA]
 
 export const DECORATIONS: Deco[] = [
   { id: 'gold', label: 'profile.deco.gold', colors: ['#f7d774', '#b8860b', '#fff1b8', '#b8860b'], kind: 'ring' },
@@ -176,6 +179,7 @@ export const DECORATIONS: Deco[] = [
   { id: 'sapphire', label: 'pstyle.deco.sapphire', colors: ['#0f52ba', '#6ca0dc', '#082567'], kind: 'ring', glow: '#0f52ba' },
   { id: 'amethyst', label: 'pstyle.deco.amethyst', colors: ['#9966cc', '#5d3a9b', '#d8bfd8'], kind: 'ring', glow: '#9966cc' },
   ...DECORATIONS_MORE,
+  ...DECORATIONS_EXTRA,
 ]
 
 export const PROFILE_EFFECTS: ProfileFx[] = [
@@ -218,6 +222,7 @@ export const PROFILE_EFFECTS: ProfileFx[] = [
   { id: 'plasma', label: 'pstyle.fx.plasma', chars: [], colors: [], motion: 'twinkle', overlay: 'plasma', count: 0 },
   { id: 'ocean', label: 'pstyle.fx.ocean', chars: ['○', '∘'], colors: ['#9be7ff', '#e0f7ff'], motion: 'rise', overlay: 'ocean', count: 12, size: 10 },
   ...PROFILE_EFFECTS_MORE,
+  ...PROFILE_EFFECTS_EXTRA,
 ]
 
 /** Entier 0xRRGGBB → « #rrggbb ». */

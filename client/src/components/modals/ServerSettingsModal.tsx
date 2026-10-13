@@ -1,7 +1,7 @@
 import { useState, useRef } from 'react'
 import BirthdayChannelSetting from '../server/BirthdayChannelSetting'
 import { createPortal } from 'react-dom'
-import { X, Trash2, Upload, SmilePlus, Bot, Plus, RefreshCw, Copy, Check, Shield, Users, Ban, Tag, Link, ScrollText, Rss, BarChart2, Image, Calendar, Sparkles, Lock, Trophy, Palette } from 'lucide-react'
+import { X, Trash2, Upload, SmilePlus, Bot, Plus, RefreshCw, Copy, Check, Shield, Users, Ban, Tag, Link, ScrollText, Rss, BarChart2, Image, Calendar, Sparkles, Lock, Trophy, Palette, Ticket } from 'lucide-react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import api, { mediaUrl } from '../../api/client'
 import ProfileBanner from '../ui/ProfileBanner'
@@ -22,6 +22,7 @@ import AutoModTab from './AutoModTab'
 import FeedsTab from './FeedsTab'
 import DiscordSyncTab from './DiscordSyncTab'
 import StatsTab from './StatsTab'
+import InviteTrackingTab from './InviteTrackingTab'
 import OnboardingTab from './OnboardingTab'
 import ServerEventsPage from '../../pages/ServerEventsPage'
 import SaveAsTemplateButton from './SaveAsTemplateButton'
@@ -69,7 +70,7 @@ interface Props {
   initialTab?: ServerSettingsTab
 }
 
-export type ServerSettingsTab = 'general' | 'appearance' | 'profile' | 'e2e' | 'roles' | 'members' | 'bans' | 'tags' | 'emojis' | 'bots' | 'webhooks' | 'audit' | 'automod' | 'feeds' | 'discordSync' | 'stats' | 'events' | 'onboarding' | 'community'
+export type ServerSettingsTab = 'general' | 'appearance' | 'profile' | 'e2e' | 'roles' | 'members' | 'bans' | 'tags' | 'emojis' | 'bots' | 'webhooks' | 'audit' | 'automod' | 'feeds' | 'discordSync' | 'stats' | 'events' | 'onboarding' | 'community' | 'invites'
 
 function BoostSection({ server }: { server: any }) {
   // Boost gratuit (un par membre et par serveur) : même appel que le bouton de la barre des salons.
@@ -324,8 +325,7 @@ export default function ServerSettingsModal({ server, onClose, isAdmin = false, 
       label: null,
       tabs: [
         { id: 'general' },
-        { id: 'appearance', icon: Palette },
-        { id: 'profile' },
+        { id: 'appearance', icon: Palette }, { id: 'profile' },
         { id: 'e2e', icon: Lock },
       ],
     },
@@ -339,7 +339,7 @@ export default function ServerSettingsModal({ server, onClose, isAdmin = false, 
         { id: 'emojis', icon: SmilePlus },
         { id: 'bots', icon: Bot },
         ...(isAdmin ? [{ id: 'webhooks' as Tab, icon: Link }] : []),
-        { id: 'feeds', icon: Rss },
+        { id: 'feeds', icon: Rss }, ...(canManageServer ? [{ id: 'invites' as Tab, icon: Ticket }] : []),
         ...(isAdmin || estProprietaire || canManageServer ? [{ id: 'discordSync' as Tab, icon: RefreshCw }] : []),
         ...(estProprietaire ? [{ id: 'onboarding' as Tab, icon: Sparkles }] : []),
         ...(isAdmin ? [{ id: 'community' as Tab, icon: Trophy }] : []),
@@ -350,9 +350,7 @@ export default function ServerSettingsModal({ server, onClose, isAdmin = false, 
       tabs: [
         { id: 'events', icon: Calendar },
         ...(isAdmin ? [
-          { id: 'audit' as Tab, icon: ScrollText },
-          { id: 'automod' as Tab, icon: Shield },
-          { id: 'stats' as Tab, icon: BarChart2 },
+          { id: 'audit' as Tab, icon: ScrollText }, { id: 'automod' as Tab, icon: Shield }, { id: 'stats' as Tab, icon: BarChart2 },
         ] : []),
       ],
     },
@@ -877,6 +875,7 @@ export default function ServerSettingsModal({ server, onClose, isAdmin = false, 
             {tab === 'e2e' && <ServerKeySettings serverId={server.id} serverName={server.name} isOwner={estProprietaire} />}
             {tab === 'events'  && <ServerEventsPage serverId={server.id} />}
             {tab === 'stats'   && <StatsTab serverId={server.id} />}
+            {tab === 'invites' && <InviteTrackingTab serverId={server.id} />}
             {tab === 'onboarding' && <OnboardingTab serverId={server.id} channels={channels} />}
             {tab === 'community' && <CommunitySettings server={server} channels={channels} />}
             {tab === 'roles'   && <RolesTab serverId={server.id} />}

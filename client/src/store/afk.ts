@@ -5,6 +5,7 @@ import toast from 'react-hot-toast'
 import api from '../api/client'
 import { useAuth } from './auth'
 import { useVoice } from './voice'
+import { t } from '../i18n'
 
 interface AfkInfo { channelId: string | null; timeoutMs: number; at: number }
 const cache = new Map<string, AfkInfo>()
@@ -47,7 +48,7 @@ export function startAfkWatch() {
       const cur = useVoice.getState()
       if (!info.channelId || cur.channelId !== channelId || channelId === info.channelId) return
       if (Date.now() - lastActive < info.timeoutMs) return
-      toast('Inactif : déplacé dans le salon AFK', { icon: '💤' })
+      toast(t('afk.moved'), { icon: '💤' })
       void cur.join(info.channelId, serverId)
     }).catch(() => { /* réseau : on réessaie au prochain passage */ })
   }, 30_000)

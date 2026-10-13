@@ -36,6 +36,10 @@ interface User {
   display_name?: string | null
   /** Style du pseudo du compte (validé par le serveur, relu par lib/nameStyle::cleanStyle). */
   name_style?: unknown
+  /** Anneau d'avatar global (relu par lib/avatarRing::cleanRing ; null = aucun). */
+  avatar_ring?: unknown
+  /** Carte de profil (relue par lib/profileCard::cleanCard ; null = par défaut). */
+  profile_card?: unknown
   /** Activité (jeu détecté, musique saisie à la main…). */
   activity_type?: string | null
   activity_name?: string | null

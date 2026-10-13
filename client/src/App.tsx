@@ -476,7 +476,7 @@ function AppInner() {
       } else if (d.whole_server && d.server_id) {
         u.resetServer(d.server_id)
         keep(m => m.server_id !== d.server_id)
-      } else if (d.channel_id) {
+      } else if (d.channel_id && !u.applyUnread(raw)) { // `unread: true` (marquer non lu) : compteurs posés tels quels
         u.reset(d.channel_id, d.server_id ?? undefined)
         keep(m => m.channel_id !== d.channel_id)
       }
@@ -904,12 +904,12 @@ function AppInner() {
   useEffect(() => {
     if (!user) return
     const offUserUpdate = on('USER_UPDATE', (d: any) => {
-      const u = d.user
-      if (!u?.id) return
+      const u = d.user; if (!u?.id) return
+      if (u.id === useAuth.getState().user?.id) useAuth.getState().updateMe(u) // soi : avatar, style… à jour partout
       updateUserInMessages(u.id, u.username, u.avatar ?? null, u.avatar_decoration ?? null, u.avatar_decoration_opts ?? null)
       useNameStyles.getState().set(u.id, u)
       qcHook.invalidateQueries({ queryKey: ['members'] })
-      qcHook.invalidateQueries({ queryKey: ['user', u.id] })
+      for (const k of ['user', 'profile']) qcHook.invalidateQueries({ queryKey: [k, u.id] })
     })
     const offBoost = on('SERVER_BOOST', (d: any) => {
       toast.success(tr('toast.boosted', { name: d.username ?? tr('toast.aMember') }), { duration: 5000, icon: '🚀' })

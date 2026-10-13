@@ -38,6 +38,7 @@ import { AvatarDecoration } from '../components/ui/ProfileDecor'
 import AnimatedImg from '../components/ui/AnimatedImg'
 import UserName from '../components/ui/UserName'
 import { openUserMenu } from '../components/userMenu/store'
+import { openMarkUnreadMenu } from '../components/chat/MarkUnread'
 import { useMyUxPrefs } from '../store/uxPrefs'
 import { gifMessage, GifMessage } from '../components/chat/gif-utils'
 import { isQueued } from '../lib/offline'
@@ -950,6 +951,7 @@ export default function GroupDMPage() {
               <div
                 id={`gdm-msg-${msg.id}`}
                 className={`flex items-start gap-2.5 group transition-colors rounded-lg ${isMe ? 'flex-row-reverse' : ''}${highlightMsgId === msg.id ? ' bg-fc-accent/10' : ''}`}
+                onContextMenu={e => openMarkUnreadMenu(e, '', groupId!, msg.id)}
                 onTouchStart={e => { dblTapStart.current = { x: e.touches[0].clientX, y: e.touches[0].clientY } }}
                 onTouchEnd={e => {
                   const s = dblTapStart.current
@@ -1015,10 +1017,7 @@ export default function GroupDMPage() {
                         className="p-1.5 bg-fc-accent hover:bg-indigo-500 text-white rounded-lg"
                         aria-label={t('msg.saveEdit')}
                       ><Check size={13} /></button>
-                      <button onClick={() => setEditingMsgId(null)}
-                        className="p-1.5 text-fc-muted hover:text-white rounded-lg"
-                        aria-label={t('msg.cancel')}
-                      ><X size={13} /></button>
+                      <button onClick={() => setEditingMsgId(null)} className="p-1.5 text-fc-muted hover:text-white rounded-lg" aria-label={t('msg.cancel')}><X size={13} /></button>
                     </div>
                   ) : (
                     <div className="flex items-center gap-1">

@@ -5,6 +5,7 @@ import api, { mediaUrl } from '../../api/client'
 import { RoleIcon, roleNameStyle } from '../../hooks/useRoleDecor'
 import toast from 'react-hot-toast'
 import { useT, type Key } from '../../i18n'
+import { Toggle } from '../settings/shared'
 
 // Utilise des puissances de 2 comme nombres JS (safe jusqu'à 2**52 avec Number)
 const B = (n: number) => Math.pow(2, n)
@@ -171,14 +172,9 @@ function PermGroup({
                   <div className="text-sm text-white font-medium">{t(`perm.${p.key}` as Key)}</div>
                   <div className="text-xs text-fc-muted truncate">{t(`perm.${p.key}.desc` as Key)}</div>
                 </div>
-                <div
-                  onClick={() => { if (!disabled) onChange(toggleBit(perms, p.bit)) }}
-                  className={`w-11 h-6 rounded-full relative transition flex-shrink-0 cursor-pointer
-                    ${on ? 'bg-fc-accent' : 'bg-fc-hover'} ${disabled && !hasBit(perms, p.bit) ? 'opacity-50' : ''}`}
-                >
-                  <div className={`w-4.5 h-4.5 w-[18px] h-[18px] bg-white rounded-full absolute top-[3px] transition-all shadow
-                    ${on ? 'left-[23px]' : 'left-[3px]'}`} />
-                </div>
+                {/* Interrupteur accessible (role=switch, clavier) au lieu d'une div cliquable */}
+                <Toggle value={on} disabled={disabled} label={t(`perm.${p.key}` as Key)}
+                  onChange={() => onChange(toggleBit(perms, p.bit))} />
               </label>
             )
           })}

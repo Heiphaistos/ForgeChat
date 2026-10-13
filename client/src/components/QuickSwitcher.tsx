@@ -5,6 +5,7 @@ import { Search, Hash, Volume2, Video, Megaphone, MessagesSquare, Images, Radio,
 import api, { mediaUrl } from '../api/client'
 import { useKeyboardNav } from '../hooks/useKeyboardNav'
 import { messageLink } from '../utils/searchLink'
+import { useT } from '../i18n'
 
 const HISTORY_KEY = 'fc_search_history'
 function loadHistory(): string[] {
@@ -48,6 +49,7 @@ function ChannelIcon({ type }: { type: string }) {
 }
 
 export default function QuickSwitcher({ onClose }: Props) {
+  const tr = useT()
   const [query, setQuery] = useState('')
   const [history, setHistory] = useState<string[]>(loadHistory)
   const [searchResults, setSearchResults] = useState<{
@@ -93,7 +95,7 @@ export default function QuickSwitcher({ onClose }: Props) {
 
   for (const dm of dms) {
     // /dms mélange DMs 1:1 (username) et groupes (is_group + name)
-    const label: string = dm.is_group ? (dm.name ?? 'Groupe') : (dm.username ?? '')
+    const label: string = dm.is_group ? (dm.name ?? tr('qs.group')) : (dm.username ?? '')
     if (!label) continue
     if (!query || label.toLowerCase().includes(query.toLowerCase())) {
       results.push({
@@ -156,7 +158,7 @@ export default function QuickSwitcher({ onClose }: Props) {
   if (query.startsWith('?')) {
     return (
       <div className="fixed inset-0 bg-black/50 z-50 flex items-start justify-center pt-16 md:pt-24 px-3 md:px-0" onClick={onClose}>
-        <div role="dialog" aria-modal="true" aria-label="Recherche globale" className="bg-fc-sidebar border border-fc-hover rounded-xl w-full max-w-xl shadow-2xl" onClick={e => e.stopPropagation()}>
+        <div role="dialog" aria-modal="true" aria-label={tr('qs.globalSearch')} className="bg-fc-sidebar border border-fc-hover rounded-xl w-full max-w-xl shadow-2xl" onClick={e => e.stopPropagation()}>
           <div className="flex items-center gap-3 px-4 py-3 border-b border-fc-hover">
             <Search size={16} className="text-fc-muted flex-shrink-0" aria-hidden />
             <input
@@ -164,9 +166,9 @@ export default function QuickSwitcher({ onClose }: Props) {
               value={query}
               onChange={e => setQuery(e.target.value)}
               onKeyDown={e => { if (e.key === 'Escape') onClose() }}
-              placeholder="? Rechercher messages, utilisateurs, canaux..."
+              placeholder={tr('qs.searchPh')}
               inputMode="search" autoComplete="off"
-              aria-label="Rechercher des messages, utilisateurs ou canaux"
+              aria-label={tr('qs.searchA11y')}
               className="flex-1 bg-transparent text-white text-sm outline-none placeholder:text-fc-muted"
               autoFocus
             />
@@ -177,7 +179,7 @@ export default function QuickSwitcher({ onClose }: Props) {
               <>
                 {searchResults.messages.length > 0 && (
                   <div>
-                    <p className="text-[10px] text-fc-muted uppercase font-semibold tracking-wide px-2 mb-1">Messages</p>
+                    <p className="text-[10px] text-fc-muted uppercase font-semibold tracking-wide px-2 mb-1">{tr('qs.messages')}</p>
                     {searchResults.messages.map((m: any) => (
                       <button key={m.id}
                         onClick={() => { nav(messageLink(m)); onClose() }}
@@ -186,7 +188,7 @@ export default function QuickSwitcher({ onClose }: Props) {
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-1 text-xs text-fc-muted">
                             <span className="font-medium text-white">{m.author_username}</span>
-                            <span>dans {m.kind === 'channel' || !m.kind ? '#' : ''}{m.channel_name}</span>
+                            <span>{tr('qs.in', { where: `${m.kind === 'channel' || !m.kind ? '#' : ''}${m.channel_name}` })}</span>
                           </div>
                           <p className="text-sm text-fc-text truncate">{m.content}</p>
                         </div>
@@ -196,7 +198,7 @@ export default function QuickSwitcher({ onClose }: Props) {
                 )}
                 {searchResults.users.length > 0 && (
                   <div>
-                    <p className="text-[10px] text-fc-muted uppercase font-semibold tracking-wide px-2 mb-1">Utilisateurs</p>
+                    <p className="text-[10px] text-fc-muted uppercase font-semibold tracking-wide px-2 mb-1">{tr('qs.users')}</p>
                     {searchResults.users.map((u: any) => (
                       <button key={u.id}
                         onClick={() => { nav(`/users/${u.id}`); onClose() }}
@@ -211,7 +213,7 @@ export default function QuickSwitcher({ onClose }: Props) {
                 )}
                 {searchResults.channels.length > 0 && (
                   <div>
-                    <p className="text-[10px] text-fc-muted uppercase font-semibold tracking-wide px-2 mb-1">Canaux</p>
+                    <p className="text-[10px] text-fc-muted uppercase font-semibold tracking-wide px-2 mb-1">{tr('qs.channels')}</p>
                     {searchResults.channels.map((c: any) => (
                       <button key={c.id}
                         onClick={() => { nav(`/servers/${c.server_id}/channels/${c.id}`); onClose() }}
@@ -226,15 +228,15 @@ export default function QuickSwitcher({ onClose }: Props) {
                   </div>
                 )}
                 {!searching && searchResults.messages.length === 0 && searchResults.users.length === 0 && searchResults.channels.length === 0 && (
-                  <p className="text-center text-fc-muted text-sm py-6">Aucun résultat</p>
+                  <p className="text-center text-fc-muted text-sm py-6">{tr('qs.noResult')}</p>
                 )}
               </>
             ) : (
-              <p className="text-center text-fc-muted text-sm py-6">Tapez votre recherche...</p>
+              <p className="text-center text-fc-muted text-sm py-6">{tr('qs.typeSearch')}</p>
             )}
           </div>
           <div className="px-4 py-2 border-t border-fc-hover">
-            <p className="text-[10px] text-fc-muted">Commencez par <kbd className="bg-fc-hover px-1 rounded">?</kbd> pour rechercher · <kbd className="bg-fc-hover px-1 rounded">Esc</kbd> pour fermer</p>
+            <p className="text-[10px] text-fc-muted">{tr('qs.hintStart')} <kbd className="bg-fc-hover px-1 rounded">?</kbd> {tr('qs.hintSearch')} · <kbd className="bg-fc-hover px-1 rounded">{tr('qs.esc')}</kbd> {tr('qs.hintClose')}</p>
           </div>
         </div>
       </div>
@@ -250,7 +252,7 @@ export default function QuickSwitcher({ onClose }: Props) {
       <div
         role="dialog"
         aria-modal="true"
-        aria-label="Navigation rapide"
+        aria-label={tr('qs.title')}
         className="w-full max-w-[560px] bg-fc-channel border border-fc-hover rounded-xl shadow-2xl overflow-hidden"
         onClick={e => e.stopPropagation()}
       >
@@ -262,41 +264,41 @@ export default function QuickSwitcher({ onClose }: Props) {
             value={query}
             onChange={e => setQuery(e.target.value)}
             onKeyDown={handleKey}
-            placeholder="Aller à... (? pour rechercher)"
+            placeholder={tr('qs.gotoPh')}
             role="combobox"
             aria-expanded={filtered.length > 0}
             aria-controls="qs-listbox"
             aria-activedescendant={activeItemId}
-            aria-label="Naviguer vers un canal ou un message direct"
+            aria-label={tr('qs.gotoA11y')}
             enterKeyHint="go"
             inputMode="search"
             autoCapitalize="none"
             className="flex-1 bg-transparent text-white placeholder-fc-muted outline-none text-sm"
           />
-          <kbd className="text-xs text-fc-muted bg-fc-hover px-1.5 py-0.5 rounded" aria-hidden>Échap</kbd>
+          <kbd className="text-xs text-fc-muted bg-fc-hover px-1.5 py-0.5 rounded" aria-hidden>{tr('qs.esc')}</kbd>
         </div>
 
         {/* Résultats */}
-        <div id="qs-listbox" role="listbox" aria-label="Canaux et messages directs" className="max-h-80 overflow-y-auto overscroll-contain py-2">
+        <div id="qs-listbox" role="listbox" aria-label={tr('qs.listA11y')} className="max-h-80 overflow-y-auto overscroll-contain py-2">
           {!query && history.length > 0 && (
-            <div className="mb-1" role="group" aria-label="Recherches récentes">
+            <div className="mb-1" role="group" aria-label={tr('qs.recent')}>
               <div className="flex items-center justify-between px-3 py-1.5">
-                <span className="text-xs font-semibold text-fc-muted uppercase tracking-wide" aria-hidden>Recherches récentes</span>
-                <button onClick={() => { clearHistory(); setHistory([]) }} aria-label="Effacer l'historique de recherche" className="text-xs text-fc-muted hover:text-white">Effacer tout</button>
+                <span className="text-xs font-semibold text-fc-muted uppercase tracking-wide" aria-hidden>{tr('qs.recent')}</span>
+                <button onClick={() => { clearHistory(); setHistory([]) }} aria-label={tr('qs.clearHistory')} className="text-xs text-fc-muted hover:text-white">{tr('qs.clearAll')}</button>
               </div>
               {history.map(h => (
-                <div key={h} className="flex items-center justify-between px-3 py-2 hover:bg-fc-hover cursor-pointer rounded-lg mx-1"
-                     onClick={() => setQuery(h)}>
-                  <span className="text-sm text-white">{h}</span>
-                  <button onClick={e => { e.stopPropagation(); removeFromHistory(h); setHistory(loadHistory()) }}
-                          aria-label={`Supprimer "${h}" de l'historique`}
+                <div key={h} className="flex items-center justify-between px-3 py-2 hover:bg-fc-hover rounded-lg mx-1">
+                  {/* Vrai bouton (clavier, lecteur d'écran) au lieu d'une ligne cliquable */}
+                  <button type="button" onClick={() => setQuery(h)} aria-label={tr('qs.useHistory', { q: h })} className="flex-1 text-left text-sm text-white truncate">{h}</button>
+                  <button onClick={() => { removeFromHistory(h); setHistory(loadHistory()) }}
+                          aria-label={tr('qs.removeHistory', { q: h })}
                           className="text-fc-muted hover:text-white p-1">✕</button>
                 </div>
               ))}
             </div>
           )}
           {filtered.length === 0 && (query || history.length === 0) && (
-            <div role="status" className="px-4 py-6 text-center text-fc-muted text-sm">Aucun résultat</div>
+            <div role="status" className="px-4 py-6 text-center text-fc-muted text-sm">{tr('qs.noResult')}</div>
           )}
           {filtered.map((r, i) => (
             <button
@@ -328,9 +330,9 @@ export default function QuickSwitcher({ onClose }: Props) {
         </div>
 
         <div className="px-4 py-2 border-t border-fc-hover flex items-center gap-4 text-xs text-fc-muted" aria-hidden>
-          <span><kbd className="bg-fc-hover px-1 rounded">↑↓</kbd> naviguer</span>
-          <span><kbd className="bg-fc-hover px-1 rounded">Entrée</kbd> ouvrir</span>
-          <span><kbd className="bg-fc-hover px-1 rounded">Échap</kbd> fermer</span>
+          <span><kbd className="bg-fc-hover px-1 rounded">↑↓</kbd> {tr('qs.navigate')}</span>
+          <span><kbd className="bg-fc-hover px-1 rounded">{tr('qs.enter')}</kbd> {tr('qs.open')}</span>
+          <span><kbd className="bg-fc-hover px-1 rounded">{tr('qs.esc')}</kbd> {tr('qs.close')}</span>
         </div>
       </div>
     </div>
