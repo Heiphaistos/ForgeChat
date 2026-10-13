@@ -554,7 +554,7 @@ pub async fn get_members(
     require_member(&state, claims.sub, server_id).await?;
 
     let members = sqlx::query(
-        "SELECT sm.*, u.username, u.discriminator, COALESCE(sm.server_avatar, u.avatar) AS avatar, u.avatar_decoration, u.status, u.custom_status,
+        "SELECT sm.*, u.username, u.discriminator, COALESCE(sm.server_avatar, u.avatar) AS avatar, u.avatar_decoration, u.avatar_decoration_opts, u.status, u.custom_status,
                 COALESCE((SELECT array_agg(mr.role_id) FROM member_roles mr
                           WHERE mr.user_id = sm.user_id AND mr.server_id = sm.server_id),
                          '{}'::uuid[]) AS role_ids,
@@ -585,6 +585,7 @@ pub async fn get_members(
                 // Avatar du profil de serveur s'il existe (075), sinon celui du compte.
                 "avatar": r.get::<Option<String>, _>("avatar"),
                 "avatar_decoration": r.get::<Option<String>, _>("avatar_decoration"),
+                "avatar_decoration_opts": r.get::<Option<serde_json::Value>, _>("avatar_decoration_opts"),
                 "server_banner": r.get::<Option<String>, _>("server_banner"),
                 "server_bio": r.get::<Option<String>, _>("server_bio"),
                 // Profil de serveur (129) : anneau d'avatar et style du pseudo, JSON validé.

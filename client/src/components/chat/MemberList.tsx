@@ -59,7 +59,7 @@ function MemberRow({ m, decor, serverId, onClick }: { m: any; decor?: RoleDecor;
       {...userMenuProps({ userId: m.user_id, username: m.username, avatar: m.avatar, serverId })}
     >
       <div className="relative flex-shrink-0">
-        <AvatarDecoration id={m.avatar_decoration} size={32}>
+        <AvatarDecoration id={m.avatar_decoration} opts={m.avatar_decoration_opts} size={32}>
         <AvatarRing ring={m.server_avatar_ring} size={32}>
         <div className="w-8 h-8 rounded-full bg-fc-accent flex items-center justify-center font-semibold text-sm text-white overflow-hidden">
           {m.avatar

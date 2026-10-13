@@ -368,7 +368,8 @@ a.text-fc-accent { color: rgb(var(--fc-link-rgb)); text-decoration: underline; t
   -webkit-mask-composite: xor;
   mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
 }
-@keyframes fc-deco-spin { to { transform: rotate(360deg); } }
+/* --deco-turn : -1 = sens antihoraire (réglage de la décoration ou de l'anneau). */
+@keyframes fc-deco-spin { to { transform: rotate(calc(360deg * var(--deco-turn, 1))); } }
 @keyframes fc-deco-pulse {
   0%, 100% { opacity: 1; transform: scale(1); }
   50%      { opacity: 0.6; transform: scale(1.06); }

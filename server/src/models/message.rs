@@ -36,6 +36,9 @@ pub struct MessageWithAuthor {
     pub author_avatar: Option<String>,
     /// Décoration d'avatar de l'auteur (jamais pour un webhook).
     pub author_avatar_decoration: Option<String>,
+    /// Réglages de cette décoration (profile_style::parse_decoration_opts).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub author_avatar_decoration_opts: Option<serde_json::Value>,
     pub author_is_bot: bool,
     pub author_verified: bool,
     pub attachments: Vec<Attachment>,

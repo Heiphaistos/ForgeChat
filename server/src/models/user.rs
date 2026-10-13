@@ -36,12 +36,18 @@ pub struct User {
     pub preferred_status: String,
     #[sqlx(default)]
     pub avatar_decoration: Option<String>,
+    /// Réglages de la décoration (models/profile_style::parse_decoration_opts), JSON déjà validé.
+    #[sqlx(default)]
+    pub avatar_decoration_opts: Option<serde_json::Value>,
     #[sqlx(default)]
     pub profile_color_primary: Option<i32>,
     #[sqlx(default)]
     pub profile_color_accent: Option<i32>,
     #[sqlx(default)]
     pub profile_effect: Option<String>,
+    /// Intensité de l'effet de profil en % (25-200) ; NULL = 100.
+    #[sqlx(default)]
+    pub profile_effect_intensity: Option<i16>,
     #[sqlx(default)]
     pub display_name: Option<String>,
     /// Style du pseudo (models/profile_style.rs), JSON déjà validé.
@@ -93,9 +99,11 @@ pub struct UserPublic {
     pub created_at: DateTime<Utc>,
     pub pronouns: Option<String>,
     pub avatar_decoration: Option<String>,
+    pub avatar_decoration_opts: Option<serde_json::Value>,
     pub profile_color_primary: Option<i32>,
     pub profile_color_accent: Option<i32>,
     pub profile_effect: Option<String>,
+    pub profile_effect_intensity: Option<i16>,
     pub display_name: Option<String>,
     pub name_style: Option<serde_json::Value>,
     pub profile_tag: Option<String>,
@@ -135,9 +143,11 @@ impl From<User> for UserPublic {
             created_at: u.created_at,
             pronouns: u.pronouns,
             avatar_decoration: u.avatar_decoration,
+            avatar_decoration_opts: u.avatar_decoration_opts,
             profile_color_primary: u.profile_color_primary,
             profile_color_accent: u.profile_color_accent,
             profile_effect: u.profile_effect,
+            profile_effect_intensity: u.profile_effect_intensity,
             display_name: u.display_name,
             name_style: u.name_style,
             profile_tag: u.profile_tag,
@@ -219,11 +229,16 @@ pub struct UpdateProfileRequest {
     pub pronouns: Option<String>,
     /// "" = retirer la décoration.
     pub avatar_decoration: Option<String>,
+    /// Réglages de la décoration ; absent = inchangés, `{}` = réglages par défaut
+    /// (models/profile_style::parse_decoration_opts).
+    pub avatar_decoration_opts: Option<serde_json::Value>,
     /// 0xRRGGBB ; -1 = revenir au thème par défaut.
     pub profile_color_primary: Option<i32>,
     pub profile_color_accent: Option<i32>,
     /// "" = aucun effet.
     pub profile_effect: Option<String>,
+    /// Intensité de l'effet en % (PROFILE_EFFECT_INTENSITY) ; 100 = normale.
+    pub profile_effect_intensity: Option<i16>,
     /// "" = retirer (on retombe sur le nom d'utilisateur).
     pub display_name: Option<String>,
     /// Absent = inchangé ; null = style par défaut (models/profile_style.rs).
@@ -236,8 +251,10 @@ pub struct UpdateProfileRequest {
     pub custom_status_clear_after: Option<i64>,
 }
 
-/// Catalogue des décorations d'avatar (mêmes identifiants côté web et mobile :
-/// client/src/components/ui/ProfileDecor.tsx, mobile/src/features/account/profileDecor.ts).
+/// Catalogue des décorations d'avatar (mêmes identifiants, dans le même ordre, côté web et
+/// mobile : client/src/lib/profileDecor.ts + profileDecorMore.ts, mobile/src/features/account/
+/// profileDecor.ts + profileDecorMore.ts ; vérifié par mobile/__tests__/profile-decor.test.ts
+/// et client/scripts/profileDecor.test.mjs).
 pub const AVATAR_DECORATIONS: &[&str] = &[
     "gold", "silver", "neon", "rainbow", "fire", "ice", "emerald",
     "sakura", "void", "sunset", "ocean", "dashed", "double", "glow",
@@ -256,7 +273,31 @@ pub const AVATAR_DECORATIONS: &[&str] = &[
     // Cosmos
     "galaxy", "nebula", "starry", "moonlit", "solar", "orbit", "comet",
     // Pierres
-    "royal", "diamond", "ruby", "sapphire", "amethyst",
+    "royal", "diamond", "ruby", "sapphire", "amethyst",    // Anneaux animés
+    "vortex", "turbine", "radar_sweep", "dual_spin", "holo_ring", "iridescent_flux", "chrome_spin", "candy_spin",
+    "rgb_cycle", "kaleido", "gyro", "spectrum",
+    // Orbites et particules
+    "orbit_duo", "orbit_trio", "electrons", "firefly_ring", "sparkle_ring", "stardust_ring", "snow_orbit", "bubble_ring",
+    "confetti_ring", "heart_orbit", "star_orbit", "moon_orbit",
+    // Auras
+    "aura_violet", "aura_gold", "aura_crimson", "aura_azure", "aura_emerald", "chakra", "spirit", "shadow_aura",
+    "solar_flare", "divine",
+    // Flammes, foudre et eau
+    "blaze", "blue_flame", "green_flame", "phoenix", "thunder", "tesla", "volt_violet", "ripple",
+    "raindrop", "whirlpool", "sakura_fall", "blossom", "snowfall", "tornado", "vines",
+    // Magie et runes
+    "runes", "arcane", "lunar_sigil", "elven", "alchemy", "crystal_ball", "fairy", "enchanted",
+    // Cadres néon et pixel
+    "neon_square", "neon_square_cyan", "neon_duo", "neon_sign", "neon_frame_rgb", "pixel_frame", "pixel_gold", "glitch_ring",
+    // Jeu vidéo
+    "gamer_rgb", "headset", "dpad", "pixel_hearts", "pixel_coin", "boss", "respawn", "legendary",
+    "epic", "rare", "level_up", "critical", "speedrun",
+    // Accessoires
+    "crown_gold", "crown_silver", "tiara", "angel", "angel_wings", "devil", "demon_wings", "cat_ears",
+    "fox_ears", "bunny_ears", "headphones", "antlers", "bow", "party_hat", "laurel",
+    // Fêtes et saisons, suite
+    "witch", "ghostly", "pumpkin", "santa", "reindeer", "frosty", "easter_bunny", "shamrock",
+    "cupid", "sunshine", "harvest", "lantern_festival", "fireworks_ring",
 ];
 
 /// Effets animés de la fiche profil (même catalogue côté web et mobile).
@@ -266,8 +307,34 @@ pub const PROFILE_EFFECTS: &[&str] = &[
     "aurora", "matrix", "galaxy", "meteors", "fireflies", "notes", "coins", "gems",
     "petals", "lightning", "sunrays", "moonlight", "love", "soap", "blizzard", "pixels",
     "glitch", "rainbow", "mist", "spooky", "festive", "synthwave", "stardust", "plasma",
-    "ocean",
+    "ocean",    // Météo
+    "drizzle", "monsoon", "lightning_storm", "hail", "clouds", "sandstorm", "ashfall", "fog",
+    // Nature
+    "maple", "dandelion", "pollen", "butterflies", "cherry_blossoms", "clovers", "firefly_swarm",
+    // Eau
+    "caustics", "aquarium", "champagne", "rain_ripples",
+    // Feu et énergie
+    "smoke", "lava_lamp", "inferno_rise", "static_charge",
+    // Ciel et cosmos
+    "northern_lights", "meteor_shower", "galaxy_swirl", "shooting_stars", "starfield", "supernova", "black_hole", "planets",
+    "sunset_glow", "god_rays",
+    // Fête
+    "streamers", "sparklers", "jackpot", "party", "balloons", "lanterns", "glitter", "new_year",
+    "disco",
+    // Amour
+    "hearts_rain", "heartbeat", "roses",
+    // Saisons et frissons
+    "ghosts", "bats", "pumpkins", "skulls", "witchy", "snow_globe", "snowmen", "gifts",
+    "candy", "easter_eggs",
+    // Rétro et techno
+    "cyber_grid", "retro_sun", "vaporwave", "binary", "tetris", "scanlines", "radar", "hologram",
+    "vhs", "equalizer", "neon_rain",
+    // Magie et jeux
+    "portal", "runes", "spotlight", "dice", "cards", "chess",
 ];
+
+/// Intensité de l'effet de profil en % (nombre de particules) ; 100 = normale.
+pub const PROFILE_EFFECT_INTENSITY: std::ops::RangeInclusive<i16> = 25..=200;
 
 impl UpdateProfileRequest {
     /// Liste blanche stricte de la personnalisation du profil.
@@ -280,6 +347,9 @@ impl UpdateProfileRequest {
         }
         if !in_list(&self.profile_effect, PROFILE_EFFECTS) {
             return Err("Effet de profil inconnu");
+        }
+        if self.profile_effect_intensity.is_some_and(|i| !PROFILE_EFFECT_INTENSITY.contains(&i)) {
+            return Err("Intensité de l'effet : 25 à 200 %");
         }
         let color_ok = |c: Option<i32>| c.is_none_or(|c| (-1..=0xFF_FFFF).contains(&c));
         if !color_ok(self.profile_color_primary) || !color_ok(self.profile_color_accent) {
@@ -318,7 +388,20 @@ mod tests {
                 assert!(seen.insert(id), "doublon {id}");
             }
         }
-        assert!(AVATAR_DECORATIONS.len() >= 54 && PROFILE_EFFECTS.len() >= 35);
+        assert!(AVATAR_DECORATIONS.len() >= 145 && PROFILE_EFFECTS.len() >= 88);
+    }
+
+    #[test]
+    fn cosmetics_intensite_et_nouveaux_ids() {
+        for i in [25, 100, 200] {
+            assert!(req(serde_json::json!({ "profile_effect_intensity": i })).validate_cosmetics().is_ok());
+        }
+        for i in [0, 24, 201, -1] {
+            assert!(req(serde_json::json!({ "profile_effect_intensity": i })).validate_cosmetics().is_err());
+        }
+        assert!(serde_json::from_value::<UpdateProfileRequest>(serde_json::json!({ "profile_effect_intensity": 1.5 })).is_err());
+        assert!(req(serde_json::json!({ "avatar_decoration": "cat_ears", "profile_effect": "galaxy_swirl" })).validate_cosmetics().is_ok());
+        assert!(req(serde_json::json!({ "avatar_decoration": "runes", "profile_effect": "runes" })).validate_cosmetics().is_ok());
     }
 
     #[test]

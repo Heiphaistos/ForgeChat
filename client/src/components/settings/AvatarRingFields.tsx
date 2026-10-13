@@ -3,12 +3,14 @@ import { Plus, Trash2 } from 'lucide-react'
 import { Field, Toggle } from './shared'
 import { useT, type Key } from '../../i18n'
 import { clampInt, colorFromInput, hex } from '../../lib/nameStyle'
-import AvatarRing, { RING_WIDTH_MAX, type AvatarRingData, type RingStyle } from '../ui/AvatarRing'
+import AvatarRing, { RING_ANIMATED, RING_RANGES, RING_WIDTH_MAX, type AvatarRingData, type RingStyle } from '../ui/AvatarRing'
 import { COLOR_PRESETS } from './NameStyleFields'
 
-/** Traits statiques ; « spin » et « pulse » sont des animations d'un anneau plein. */
-const TRAITS: RingStyle[] = ['solid', 'dashed', 'dotted', 'double', 'glow']
-const ANIMS: ('' | 'spin' | 'pulse')[] = ['', 'spin', 'pulse']
+/** Traits statiques ; les animations remplacent le trait (anneau plein, tirets pour « dashed_spin »). */
+const TRAITS: RingStyle[] = ['solid', 'dashed', 'dotted', 'double', 'glow', 'segmented', 'rainbow']
+type Anim = '' | Exclude<(typeof RING_ANIMATED)[number], 'rainbow'>
+const ANIMS: Anim[] = ['', 'spin', 'pulse', 'gradient_spin', 'dashed_spin', 'neon_pulse', 'comet', 'breathe']
+const isAnim = (s: RingStyle): s is Exclude<Anim, ''> => (ANIMS as string[]).includes(s)
 
 export const DEFAULT_RING: AvatarRingData = { colors: [0x5865f2, 0xeb459e], width: 3, style: 'solid' }
 
@@ -26,8 +28,20 @@ export default function AvatarRingFields({ value, onChange, avatar }: {
   const t = useT()
   const ring = value ?? DEFAULT_RING
   const patch = (p: Partial<AvatarRingData>) => onChange({ ...ring, ...p })
-  const anim = ring.style === 'spin' || ring.style === 'pulse' ? ring.style : ''
-  const trait: RingStyle = anim ? 'solid' : ring.style
+  const anim: Anim = isAnim(ring.style) ? ring.style : ''
+  const trait: RingStyle = anim ? (anim === 'dashed_spin' ? 'dashed' : 'solid') : ring.style
+  const slider = (key: 'speed' | 'brightness' | 'glow', label: Key) => {
+    const [min, max] = RING_RANGES[key]
+    const v = ring[key] ?? 100
+    return (
+      <label key={key} className="flex items-center gap-3 text-xs text-fc-muted">
+        <span className="w-32 flex-shrink-0">{t(label, { n: v })}</span>
+        <input type="range" min={min} max={max} step={5} value={v}
+          onChange={e => patch({ [key]: clampInt(Number(e.target.value), min, max) })}
+          className="flex-1 accent-fc-accent" aria-label={t(label, { n: v })} />
+      </label>
+    )
+  }
   const setColor = (i: number, raw: string) => {
     const c = colorFromInput(raw)
     if (c != null) patch({ colors: ring.colors.map((v, j) => (j === i ? c : v)) })
@@ -76,7 +90,7 @@ export default function AvatarRingFields({ value, onChange, avatar }: {
           </Field>
 
           <Field label={t('pedit.ring.style')}>
-            <div role="radiogroup" aria-label={t('pedit.ring.style')} className="grid grid-cols-3 sm:grid-cols-5 gap-2">
+            <div role="radiogroup" aria-label={t('pedit.ring.style')} className="fc-pick-still grid grid-cols-3 sm:grid-cols-5 gap-2">
               {TRAITS.map(s => (
                 <button key={s} type="button" role="radio" aria-checked={trait === s} onClick={() => patch({ style: s })} className={tile(trait === s)}>
                   {mini(s)}
@@ -87,10 +101,10 @@ export default function AvatarRingFields({ value, onChange, avatar }: {
           </Field>
 
           <Field label={t('pedit.ring.animation')} hint={t('pedit.ring.animationHint')}>
-            <div role="radiogroup" aria-label={t('pedit.ring.animation')} className="grid grid-cols-3 gap-2 max-w-sm">
+            <div role="radiogroup" aria-label={t('pedit.ring.animation')} className="grid grid-cols-3 sm:grid-cols-4 gap-2">
               {ANIMS.map(a => (
                 <button key={a || 'none'} type="button" role="radio" aria-checked={anim === a}
-                  onClick={() => patch({ style: a || trait })} className={tile(anim === a)}>
+                  onClick={() => patch({ style: a || (anim === 'dashed_spin' ? 'dashed' : trait) })} className={`fc-pick-still ${tile(anim === a)}`}>
                   {mini(a || trait)}
                   <span className="text-[10px] text-fc-muted">{t(`pedit.ring.anim.${a || 'none'}` as Key)}</span>
                 </button>
@@ -104,6 +118,22 @@ export default function AvatarRingFields({ value, onChange, avatar }: {
               onChange={e => patch({ width: clampInt(Number(e.target.value), 1, RING_WIDTH_MAX) })}
               className="flex-1 accent-fc-accent" aria-label={t('pedit.ring.title')} />
           </label>
+
+          <div className="space-y-2 max-w-sm">
+            {slider('speed', 'pedit.ring.speed')}
+            {slider('brightness', 'pedit.ring.brightness')}
+            {slider('glow', 'pedit.ring.glow')}
+            <div role="radiogroup" aria-label={t('pedit.ring.direction')} className="flex items-center gap-2 text-xs text-fc-muted">
+              <span className="w-32 flex-shrink-0">{t('pedit.ring.direction')}</span>
+              {(['cw', 'ccw'] as const).map(d => (
+                <button key={d} type="button" role="radio" aria-checked={(ring.direction ?? 'cw') === d}
+                  onClick={() => patch({ direction: d })}
+                  className={`px-2.5 py-1 rounded-md border ${(ring.direction ?? 'cw') === d ? 'border-fc-accent bg-fc-accent/10 text-white' : 'border-fc-hover hover:border-fc-muted'}`}>
+                  {t(d === 'cw' ? 'pdeco.opts.cw' : 'pdeco.opts.ccw')}
+                </button>
+              ))}
+            </div>
+          </div>
         </>
       )}
     </div>

@@ -25,6 +25,7 @@ export function Avatar({
   showStatus,
   rounded = true,
   decoration,
+  decorationOpts,
 }: {
   uri: string | null | undefined
   name: string
@@ -35,6 +36,8 @@ export function Avatar({
   rounded?: boolean
   /** Décoration d'avatar (catalogue features/account/profileDecor). */
   decoration?: string | null
+  /** Réglages de la décoration (users.avatar_decoration_opts, relus par cleanDecoOpts). */
+  decorationOpts?: unknown
 }) {
   const live = usePresenceOf(showStatus ? userId : undefined, status)
   const t = useT()
@@ -67,7 +70,7 @@ export function Avatar({
     </View>
   )
   return decoration ? (
-    <AvatarDecoration id={decoration} size={size}>
+    <AvatarDecoration id={decoration} opts={decorationOpts} size={size}>
       {body}
     </AvatarDecoration>
   ) : (

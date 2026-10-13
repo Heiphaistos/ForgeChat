@@ -143,7 +143,7 @@ export default function UserPopup({ userId, serverId, anchorX, anchorY, onClose 
         ? 'bg-fc-bg border-t border-fc-hover rounded-t-2xl shadow-2xl overflow-y-auto overscroll-contain pb-[max(env(safe-area-inset-bottom),0.5rem)] sheet-slide-up'
         : 'w-[340px] bg-fc-bg border border-fc-hover rounded-xl shadow-2xl overflow-y-auto'}
     >
-      {user && <ProfileEffect id={user.profile_effect} />}
+      {user && <ProfileEffect id={user.profile_effect} intensity={user.profile_effect_intensity} />}
       {/* Banner */}
       <div className="h-28 relative" aria-hidden>
         {banner
@@ -155,7 +155,7 @@ export default function UserPopup({ userId, serverId, anchorX, anchorY, onClose 
         }
         {/* Avatar */}
         <div className="absolute -bottom-12 left-4">
-          <AvatarDecoration id={user?.avatar_decoration} size={84}>
+          <AvatarDecoration id={user?.avatar_decoration} opts={user?.avatar_decoration_opts} size={84}>
           <div className="w-24 h-24 rounded-full border-[6px] border-fc-bg bg-fc-accent flex items-center justify-center font-bold text-3xl text-white overflow-hidden">
             {avatar
               ? <AnimatedImg src={avatar} alt={user?.username} loading="lazy" decoding="async" className="w-full h-full object-cover" />

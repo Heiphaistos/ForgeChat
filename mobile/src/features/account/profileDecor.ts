@@ -6,6 +6,9 @@
  * pulsation), coupé si « réduire les animations ». Toutes les valeurs sont des constantes.
  */
 import type { Key } from '@/i18n'
+import { DECORATIONS_MORE, DECO_GROUPS, FX_GROUPS, PROFILE_EFFECTS_MORE } from './profileDecorMore'
+
+export { DECO_GROUPS, FX_GROUPS }
 
 export interface Decoration {
   id: string
@@ -13,14 +16,35 @@ export interface Decoration {
   label: Key
   /** Couleurs réparties sur les côtés de l'anneau (pas de dégradé natif sans dépendance). */
   colors: string[]
-  /** Forme du web ; `dual` = anneau + liseré, `segments`/`stripes` = tirets colorés. */
-  kind: 'ring' | 'dashed' | 'double' | 'dual' | 'segments' | 'stripes'
+  /** Forme du web ; `dual` = anneau + liseré, `segments`/`stripes` = tirets colorés,
+   *  `frame`/`pixelframe` = cadre carré (coins arrondis ou droits). */
+  kind: 'ring' | 'dashed' | 'double' | 'dual' | 'segments' | 'stripes' | 'frame' | 'pixelframe'
   /** Animations du web ramenées à deux mouvements natifs. */
   anim?: 'spin' | 'pulse'
+  /** Rotation inverse (« spinrev » du web). */
+  reverse?: boolean
   /** Halo (ombre colorée). */
   glow?: string
   /** Ornement répété autour de l'avatar (4 glyphes fixes). */
   glyph?: string
+  /** Particule(s) en orbite (orbitN réparties). */
+  orbit?: string
+  orbitN?: number
+  /** Couronne de glyphes qui tourne lentement. */
+  wreath?: string
+  /** Aura pulsante. */
+  aura?: string
+  /** Onde qui s'élargit. */
+  ripple?: string
+  /** Particules autour de l'avatar (scintillement sur place sur mobile). */
+  rain?: { chars: string; motion: 'fall' | 'rise' | 'twinkle' }
+  /** Flammes (▲ vacillants aux couleurs de l'anneau). */
+  flames?: boolean
+  /** Arcs électriques (⚡ qui clignotent). */
+  arcs?: string
+  /** Accessoire (couronne, auréole, oreilles…) : rendu approché par glyphes et formes. */
+  ornament?: string
+  thick?: number
 }
 
 /** Effet de la fiche : particules (glyphes et couleurs du web) et voile coloré éventuel. */
@@ -33,6 +57,8 @@ export interface ProfileFx {
   motion: 'rise' | 'fall' | 'twinkle'
   /** Calque du web (aurore, éclair, brume…) rendu en voile qui apparaît puis s'efface. */
   tint?: string
+  /** Nombre de particules (14 par défaut), multiplié par l'intensité. */
+  count?: number
 }
 
 export const DECORATIONS: Decoration[] = [
@@ -101,6 +127,7 @@ export const DECORATIONS: Decoration[] = [
   { id: 'ruby', label: 'pstyle.deco.ruby', colors: ['#9b111e', '#e0115f', '#ff6f91'], kind: 'ring', glow: '#e0115f' },
   { id: 'sapphire', label: 'pstyle.deco.sapphire', colors: ['#0f52ba', '#6ca0dc', '#082567'], kind: 'ring', glow: '#0f52ba' },
   { id: 'amethyst', label: 'pstyle.deco.amethyst', colors: ['#9966cc', '#5d3a9b', '#d8bfd8'], kind: 'ring', glow: '#9966cc' },
+  ...DECORATIONS_MORE,
 ]
 
 export const PROFILE_EFFECTS: ProfileFx[] = [
@@ -142,6 +169,7 @@ export const PROFILE_EFFECTS: ProfileFx[] = [
   { id: 'stardust', label: 'pstyle.fx.stardust', chars: ['·', '•', '✦'], colors: ['#ffd700', '#fff1b8', '#ffe680'], motion: 'twinkle' },
   { id: 'plasma', label: 'pstyle.fx.plasma', chars: [], colors: [], motion: 'twinkle', tint: 'rgba(114,9,183,0.24)' },
   { id: 'ocean', label: 'pstyle.fx.ocean', chars: ['○', '∘'], colors: ['#9be7ff', '#e0f7ff'], motion: 'rise', tint: 'rgba(0,120,200,0.24)' },
+  ...PROFILE_EFFECTS_MORE,
 ]
 
 export const findDecoration = (id: string | null | undefined) => DECORATIONS.find((d) => d.id === id)
@@ -160,3 +188,116 @@ export function profileTheme(primary?: number | null, accent?: number | null): {
   if (primary == null && accent == null) return null
   return { top: hexColor(primary ?? accent!), bottom: hexColor(accent ?? primary!) }
 }
+
+// ── Réglages de la décoration (users.avatar_decoration_opts) : mêmes bornes que le serveur
+// (models/profile_style.rs) et le web (client/src/lib/profileDecor.ts).
+
+export interface DecoOpts {
+  animate: boolean
+  direction: 'cw' | 'ccw'
+  speed: number
+  pulse: boolean
+  brightness: number
+  saturation: number
+  glow: number
+  opacity: number
+  hue: number
+  scale: number
+  tint: number | null
+}
+
+export const DECO_OPTS_DEFAULT: Readonly<DecoOpts> = {
+  animate: true, direction: 'cw', speed: 100, pulse: false, brightness: 100, saturation: 100,
+  glow: 100, opacity: 100, hue: 0, scale: 100, tint: null,
+}
+
+export const DECO_RANGES = {
+  speed: [25, 400],
+  brightness: [50, 200],
+  saturation: [0, 200],
+  glow: [0, 300],
+  opacity: [20, 100],
+  hue: [0, 360],
+  scale: [80, 130],
+} as const
+export type DecoNumKey = keyof typeof DECO_RANGES
+
+const clamp = (v: number, min: number, max: number) => Math.min(max, Math.max(min, v))
+
+/** Réglages reçus nettoyés : objet complet, nombres entiers bornés. */
+export function cleanDecoOpts(raw: unknown): DecoOpts {
+  const o = raw && typeof raw === 'object' && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {}
+  const out: DecoOpts = { ...DECO_OPTS_DEFAULT }
+  if (typeof o.animate === 'boolean') out.animate = o.animate
+  if (o.direction === 'cw' || o.direction === 'ccw') out.direction = o.direction
+  if (typeof o.pulse === 'boolean') out.pulse = o.pulse
+  for (const k of Object.keys(DECO_RANGES) as DecoNumKey[]) {
+    const v = o[k]
+    if (typeof v === 'number' && Number.isFinite(v)) out[k] = clamp(Math.round(v), DECO_RANGES[k][0], DECO_RANGES[k][1])
+  }
+  if (typeof o.tint === 'number' && Number.isInteger(o.tint) && o.tint >= 0 && o.tint <= 0xffffff) out.tint = o.tint
+  return out
+}
+
+/** Corps envoyé à PATCH /users/me : seulement ce qui diffère du défaut (`{}` = défaut). */
+export function decoOptsPayload(o: DecoOpts): Record<string, number | boolean | string> {
+  const c = cleanDecoOpts(o)
+  const out: Record<string, number | boolean | string> = {}
+  for (const k of Object.keys(DECO_OPTS_DEFAULT) as (keyof DecoOpts)[]) {
+    const v = c[k]
+    if (v !== DECO_OPTS_DEFAULT[k] && v != null) out[k] = v
+  }
+  return out
+}
+
+/** Couleur « #rrggbb » mélangée à la teinte (k = part de la teinte) ; le reste est inchangé. */
+export function tintColor(c: string, tint: number | null, k = 0.6): string {
+  if (tint == null || !/^#[0-9a-f]{6}$/i.test(c)) return c
+  const a = parseInt(c.slice(1), 16)
+  const mix = (sh: number) => Math.round(((a >> sh) & 255) * (1 - k) + ((tint >> sh) & 255) * k)
+  return hexColor((mix(16) << 16) | (mix(8) << 8) | mix(0))
+}
+
+/** Teinte, saturation et luminosité appliquées à une couleur « #rrggbb » : React Native n'a pas
+ *  de filtre CSS, on transforme la couleur elle-même (HSL). */
+export function adjustColor(c: string, hue: number, sat = 100, bright = 100): string {
+  if ((!hue && sat === 100 && bright === 100) || !/^#[0-9a-f]{6}$/i.test(c)) return c
+  const n = parseInt(c.slice(1), 16)
+  const r = ((n >> 16) & 255) / 255
+  const g = ((n >> 8) & 255) / 255
+  const b = (n & 255) / 255
+  const max = Math.max(r, g, b)
+  const min = Math.min(r, g, b)
+  const d = max - min
+  let l = (max + min) / 2
+  let s = d === 0 ? 0 : d / (1 - Math.abs(2 * l - 1))
+  let h = 0
+  if (d) h = max === r ? ((g - b) / d) % 6 : max === g ? (b - r) / d + 2 : (r - g) / d + 4
+  h = (((h * 60 + hue) % 360) + 360) % 360
+  s = clamp((s * sat) / 100, 0, 1)
+  l = clamp((l * bright) / 100, 0, 1)
+  const C = (1 - Math.abs(2 * l - 1)) * s
+  const X = C * (1 - Math.abs(((h / 60) % 2) - 1))
+  const m = l - C / 2
+  const [r1, g1, b1] = h < 60 ? [C, X, 0] : h < 120 ? [X, C, 0] : h < 180 ? [0, C, X] : h < 240 ? [0, X, C] : h < 300 ? [X, 0, C] : [C, 0, X]
+  const to = (v: number) => clamp(Math.round((v + m) * 255), 0, 255)
+  return hexColor((to(r1) << 16) | (to(g1) << 8) | to(b1))
+}
+
+/** Couleur finale d'une décoration : teinte mélangée, puis décalage, saturation et luminosité. */
+export const decoColor = (c: string, o: DecoOpts) => adjustColor(tintColor(c, o.tint), o.hue, o.saturation, o.brightness)
+
+// ── Intensité de l'effet (users.profile_effect_intensity)
+
+export const FX_INTENSITY: readonly [number, number] = [25, 200]
+export function cleanIntensity(v: unknown): number {
+  return typeof v === 'number' && Number.isFinite(v) ? clamp(Math.round(v), FX_INTENSITY[0], FX_INTENSITY[1]) : 100
+}
+/** Particules d'un effet à l'intensité donnée (au plus 40 sur mobile). */
+export function fxCount(fx: ProfileFx, intensity = 100): number {
+  if (!fx.chars.length) return 0
+  return Math.min(40, Math.max(1, Math.round(((fx.count ?? 14) * cleanIntensity(intensity)) / 100)))
+}
+
+/** Texte comparable pour la recherche : minuscules, sans accents. */
+export const searchKey = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim()

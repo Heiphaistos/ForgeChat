@@ -21,6 +21,7 @@ export function fromServerMessage(m: ServerMessage): ChatMessage {
     authorName: m.author_username,
     authorAvatar: m.author_avatar,
     authorDecoration: m.author_avatar_decoration ?? null,
+    authorDecorationOpts: m.author_avatar_decoration_opts ?? null,
     authorIsBot: !!m.author_is_bot,
     reply: m.reply_to
       ? { id: m.reply_to, authorName: m.reply_to_username, content: m.reply_to_content }
@@ -49,6 +50,7 @@ export function fromDmMessage(m: DmMessage): ChatMessage {
     authorName: m.sender_username,
     authorAvatar: m.sender_avatar,
     authorDecoration: m.sender_avatar_decoration ?? null,
+    authorDecorationOpts: m.sender_avatar_decoration_opts ?? null,
     authorIsBot: false,
     reply: m.reply_to
       ? { id: m.reply_to.id, authorName: m.reply_to.sender_username, content: m.reply_to.content }
@@ -102,6 +104,7 @@ export function fromGroupMessage(m: GroupMessage): ChatMessage {
     authorName: m.sender_username,
     authorAvatar: m.sender_avatar,
     authorDecoration: m.sender_avatar_decoration ?? null,
+    authorDecorationOpts: m.sender_avatar_decoration_opts ?? null,
     authorIsBot: false,
     reply: m.reply_to
       ? { id: m.reply_to, authorName: m.reply_to_username ?? null, content: m.reply_to_content ?? null }
