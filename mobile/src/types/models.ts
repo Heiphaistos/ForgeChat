@@ -66,6 +66,8 @@ export interface Server {
   boost_level?: number
   /** La couleur des rôles remplace la couleur perso du pseudo (défaut true). */
   role_color_overrides_name?: boolean
+  /** Apparence du serveur (migration 135), nettoyée par features/servers/serverLook.ts. */
+  look?: unknown
 }
 
 export type ChannelType =

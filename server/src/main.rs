@@ -656,6 +656,9 @@ fn protected_routes(state: AppState) -> Router<AppState> {
         .route("/servers/:server_id/members/:user_id/nickname", patch(handlers::nicknames::set_member_nickname).layer(DefaultBodyLimit::max(SMALL_JSON_LIMIT)))
         .route("/servers/:server_id/icon", post(handlers::servers::upload_server_icon))
         .route("/servers/:server_id/banner", post(handlers::servers::upload_server_banner))
+        // Apparence du serveur (135) : document validé (models/server_look.rs) et images de fond.
+        .route("/servers/:server_id/look", put(handlers::server_look::put_look).layer(DefaultBodyLimit::max(SMALL_JSON_LIMIT)))
+        .route("/servers/:server_id/look/image", post(handlers::server_look::upload_look_image))
         .route("/admin/stats", get(handlers::servers::get_admin_stats))
         .route("/admin/me", get(handlers::site_admin::admin_me))
         .route("/admin/overview", get(handlers::site_admin::overview))

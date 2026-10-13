@@ -41,6 +41,10 @@ pub struct Server {
     /// La couleur du rôle remplace la couleur perso du pseudo dans ce serveur (migration 088).
     #[sqlx(default)]
     pub role_color_overrides_name: bool,
+    /// Apparence du serveur (migration 135, validée par models/server_look.rs) ; None = par défaut.
+    #[sqlx(default)]
+    #[serde(default)]
+    pub look: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Deserialize)]

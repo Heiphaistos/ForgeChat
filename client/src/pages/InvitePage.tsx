@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import api, { mediaUrl } from '../api/client'
+import ProfileBanner from '../components/ui/ProfileBanner'
 import { useAuth } from '../store/auth'
 import toast from 'react-hot-toast'
 
@@ -51,16 +52,22 @@ export default function InvitePage() {
   }
 
   return (
-    <div
-      className="flex items-center justify-center min-h-screen bg-fc-bg px-4 bg-cover bg-center"
-      // Fond d'invitation : la bannière du serveur, assombrie pour garder la carte lisible.
-      style={serverInfo.server.banner ? { backgroundImage: `linear-gradient(rgba(0,0,0,.55), rgba(0,0,0,.55)), url(${JSON.stringify(mediaUrl(serverInfo.server.banner) ?? '')})` } : undefined}
-    >
+    <div className="relative flex items-center justify-center min-h-screen bg-fc-bg px-4 overflow-hidden">
+      {/* Fond d'invitation : la bannière floutée et assombrie (image <img>, jamais d'URL dans du CSS). */}
+      {mediaUrl(serverInfo.server.banner) && (
+        <>
+          <img src={mediaUrl(serverInfo.server.banner)} alt="" aria-hidden className="absolute inset-0 w-full h-full object-cover blur-2xl scale-110 pointer-events-none select-none" />
+          <div aria-hidden className="absolute inset-0 bg-black/55" />
+        </>
+      )}
       <div
         role="main"
         aria-labelledby="invite-server-name"
-        className="bg-fc-channel rounded-lg p-8 w-full max-w-sm shadow-2xl text-center"
+        className="relative bg-fc-channel rounded-lg w-full max-w-sm shadow-2xl text-center overflow-hidden"
       >
+        {/* La bannière entière en tête de carte (jamais rognée). */}
+        {serverInfo.server.banner && <ProfileBanner src={serverInfo.server.banner} minHeight={80} maxHeight={220} />}
+        <div className="p-8">
         <div
           aria-label={serverInfo.server.name}
           className="w-16 h-16 rounded-2xl bg-fc-accent flex items-center justify-center font-bold text-2xl text-white mx-auto mb-4 overflow-hidden"
@@ -97,6 +104,7 @@ export default function InvitePage() {
             </button>
           </div>
         )}
+        </div>
       </div>
     </div>
   )

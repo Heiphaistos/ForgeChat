@@ -3,6 +3,7 @@ import { usePageTitle } from '../hooks/usePageTitle'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Search, Users, Compass, ChevronLeft } from 'lucide-react'
 import api, { mediaUrl } from '../api/client'
+import ProfileBanner from '../components/ui/ProfileBanner'
 import toast from 'react-hot-toast'
 import { useNavigate } from 'react-router-dom'
 import { useMobile } from '../contexts/MobileContext'
@@ -12,6 +13,7 @@ interface PublicServer {
   id: string
   name: string
   icon: string | null
+  banner?: string | null
   description: string | null
   member_count: number
   invite_code: string
@@ -132,15 +134,22 @@ function ServerCard({
   const t = useT()
   return (
     <div className="group bg-fc-channel rounded-xl overflow-hidden hover:bg-fc-hover/30 transition-colors flex flex-col">
-      {/* Banner / icône */}
-      <div className="relative h-24 bg-gradient-to-br from-indigo-600/40 via-purple-600/30 to-fc-accent/20 flex items-center justify-center overflow-hidden">
-        <div className="absolute inset-0 opacity-20 bg-gradient-to-t from-black to-transparent" />
-        <div className="relative w-16 h-16 rounded-2xl bg-fc-bg flex items-center justify-center font-bold text-2xl text-white shadow-lg overflow-hidden border-2 border-fc-hover">
-          {server.icon
-            ? <img src={mediaUrl(server.icon)} alt={server.name} loading="lazy" decoding="async" className="w-full h-full object-cover" />
-            : server.name.charAt(0).toUpperCase()}
+      {/* Bannière entière si le serveur en a une (jamais rognée), sinon le dégradé ; icône par-dessus. */}
+      <ProfileBanner
+        src={server.banner}
+        minHeight={96}
+        maxHeight={160}
+        emptyClassName="h-24 bg-gradient-to-br from-indigo-600/40 via-purple-600/30 to-fc-accent/20"
+      >
+        <div className={`absolute inset-0 flex ${server.banner ? 'items-end justify-start p-2' : 'items-center justify-center'}`}>
+          <div className="absolute inset-0 opacity-20 bg-gradient-to-t from-black to-transparent" />
+          <div className="relative w-14 h-14 rounded-2xl bg-fc-bg flex items-center justify-center font-bold text-2xl text-white shadow-lg overflow-hidden border-2 border-fc-hover">
+            {server.icon
+              ? <img src={mediaUrl(server.icon)} alt={server.name} loading="lazy" decoding="async" className="w-full h-full object-cover" />
+              : server.name.charAt(0).toUpperCase()}
+          </div>
         </div>
-      </div>
+      </ProfileBanner>
 
       {/* Contenu */}
       <div className="p-4 flex flex-col flex-1">

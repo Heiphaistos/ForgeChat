@@ -26,6 +26,8 @@ import ForumPage from './ForumPage'
 import ThreadPanel from '../components/chat/ThreadPanel'
 import ThreadSidebar from '../components/chat/ThreadSidebar'
 import WelcomeScreen from '../components/chat/WelcomeScreen'
+import LookBackdrop from '../components/ui/LookBackdrop'
+import { useServerAppearance } from '../hooks/useServerAppearance'
 import VerificationGateModal from '../components/modals/VerificationGateModal'
 import FollowChannelModal from '../components/modals/FollowChannelModal'
 import OnboardingModal from '../components/modals/OnboardingModal'
@@ -130,6 +132,8 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
     enabled: !!serverId,
     staleTime: 60_000,
   })
+  // Fond de la zone des messages choisi dans l'apparence du serveur.
+  const serverLook = useServerAppearance(serverId)
 
   const { data: messages = [], isError: messagesError, refetch: refetchMessages } = useQuery({
     queryKey: ['messages', serverId, channelId, highlightMessageId ?? null],
@@ -553,7 +557,8 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
   // Canal texte / annonces
   return (
     <div className="relative flex h-full overflow-hidden">
-      <div className="flex flex-col flex-1 min-w-0">
+      <LookBackdrop bg={serverLook?.message_bg} />
+      <div className="relative flex flex-col flex-1 min-w-0">
         {/* Header canal */}
         <div className={`fc-chat-header flex items-center gap-2 px-4 py-2.5 border-b shadow-sm flex-shrink-0 min-h-[48px] ${
           isSplit ? 'border-fc-accent/30 bg-fc-accent/5' : 'border-fc-bg'

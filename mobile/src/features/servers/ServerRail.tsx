@@ -13,6 +13,8 @@ import { unreadLabel } from '@/lib/format'
 import { http } from '@/lib/http'
 import { railEntries, type ServerLayout } from './layout'
 import { ServerMenu } from './menus'
+import { ServerIconView } from './ServerIconView'
+import { cleanLook, hex, iconRadius } from './serverLook'
 
 /**
  * Colonne d'icônes de l'accueil. `selected === null` : « Messages privés ».
@@ -54,6 +56,7 @@ export function ServerRail({
   const serverItem = (s: Server) => {
     const active = s.id === selected
     const unread = serverUnread(counts, serverOf, s.id)
+    const look = cleanLook(s.look)
     return (
       <Pressable
         key={s.id}
@@ -67,8 +70,13 @@ export function ServerRail({
         onAccessibilityAction={(e) => e.nativeEvent.actionName === 'longpress' && setMenu(s)}
         style={styles.item}
       >
-        <View style={[styles.pill, { height: active ? 36 : unread ? 8 : 0 }]} />
-        <Avatar uri={s.icon} name={s.name} size={48} rounded={!active} />
+        <View style={[styles.pill, { height: active ? 36 : unread ? 8 : 0 }, look?.unread_color != null && { backgroundColor: hex(look.unread_color) }]} />
+        {/* Forme de l'icône choisie dans l'apparence du serveur. */}
+        {look?.icon_shape ? (
+          <ServerIconView uri={s.icon} name={s.name} size={48} radius={iconRadius(look.icon_shape, 48)} accent={look.accent != null ? hex(look.accent) : undefined} />
+        ) : (
+          <Avatar uri={s.icon} name={s.name} size={48} rounded={!active} />
+        )}
         {unread ? (
           <View style={styles.badge}>
             <Badge count={unread} />

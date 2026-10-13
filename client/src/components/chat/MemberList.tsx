@@ -6,7 +6,7 @@ import api from '../../api/client'
 import { usePresence } from '../../store/presence'
 import { userMenuProps } from '../userMenu/store'
 import UserPopup from '../UserPopup'
-import { RoleIcon, useRoleDecor, type RoleDecor } from '../../hooks/useRoleDecor'
+import { RoleIcon, RoleMark, useRoleDecor, type RoleDecor } from '../../hooks/useRoleDecor'
 import AnimatedImg from '../ui/AnimatedImg'
 import UserName from '../ui/UserName'
 import RichStatus from '../ui/RichStatus'
@@ -78,6 +78,7 @@ function MemberRow({ m, decor, serverId, onClick }: { m: any; decor?: RoleDecor;
         <div className={`text-sm font-medium truncate ${m.liveStatus === 'offline' || m.liveStatus === 'invisible' ? 'text-fc-muted' : 'text-fc-text group-hover:text-white'}`}>
           <UserName userId={m.user_id} name={m.username} nickname={m.nickname} roleStyle={decor?.style} roleOverrides={decor?.overridesName} serverStyle={m.server_name_style} clanTags={m.tags} />
           {decor?.icon && <span className="ml-1"><RoleIcon icon={decor.icon} title={decor.iconTitle} /></span>}
+          {decor?.mark && <span className="ml-1 inline-flex"><RoleMark mark={decor.mark} /></span>}
           {m.is_owner && <span aria-hidden className="ml-1 text-xs text-fc-yellow">👑</span>}
         </div>
         {(m.activity_type && m.activity_name) || m.in_call ? (

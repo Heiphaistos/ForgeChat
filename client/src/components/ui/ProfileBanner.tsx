@@ -3,47 +3,78 @@ import { mediaUrl } from '../../api/client'
 import { stillUrl } from '../../lib/nameStyle'
 import AnimatedImg from './AnimatedImg'
 
-/** Proportions acceptées sans bandes : de 3:2 (haute) à 4:1 (très large). */
-const MIN_RATIO = 1.5
-const MAX_RATIO = 4
-
 /**
- * Bannière de profil affichée en entier (jamais rognée) : le cadre prend les
- * proportions de l'image (bornées entre 3:2 et 4:1) et l'image est en `contain`.
- * Hors de ces bornes, un fond flouté de la même image remplit les bandes.
- * Sans bannière : `empty` (dégradé du thème, etc.) dans un cadre de classe `emptyClassName`.
+ * Bannière affichée EN ENTIER, partout (profil, fiche, aperçus, serveur, annuaire) :
+ * - le cadre prend les proportions de l'image (lues au chargement), sa hauteur est
+ *   seulement bornée par `minHeight` / `maxHeight` — jamais de hauteur fixe qui rogne ;
+ * - l'image est en `object-fit: contain` : haute, très large, petite ou énorme, GIF compris,
+ *   elle n'est jamais coupée ;
+ * - quand les bornes laissent des bandes, une copie floutée et agrandie de la même image
+ *   (version fixe si elle est animée) les remplit, sans bandes vides.
+ * Les animations suivent le réglage « animer les avatars et bannières » et la réduction
+ * des animations (AnimatedImg). Sans image : `emptyClassName` / `emptyStyle` (dégradé…).
  */
-export default function ProfileBanner({ src, defaultRatio = 3, className = '', emptyClassName = 'h-28', emptyStyle, children }: {
+export default function ProfileBanner({
+  src, defaultRatio = 3, minHeight = 64, maxHeight = 240, focus, className = '', emptyClassName = 'h-28', emptyStyle,
+  imgClassName = '', alt = '', children,
+}: {
   src?: string | null
   /** Proportions avant chargement (largeur / hauteur). */
   defaultRatio?: number
+  /** Hauteur minimale du cadre (px ou longueur CSS écrite dans le code). */
+  minHeight?: number | string
+  /** Hauteur maximale du cadre (px ou longueur CSS écrite dans le code). */
+  maxHeight?: number | string
+  /** Ancrage de l'image entière quand il reste des bandes (« 50% 50% » par défaut). */
+  focus?: string
   className?: string
   emptyClassName?: string
   emptyStyle?: CSSProperties
-  /** Superposé à la bannière (dégradé, boutons). */
+  imgClassName?: string
+  alt?: string
+  /** Superposé à la bannière (voile, boutons). */
   children?: ReactNode
 }) {
-  const [ratio, setRatio] = useState<number | null>(null)
-  if (!src) {
+  // Proportions mémorisées avec leur image : un changement de bannière repart du défaut.
+  const [loaded, setLoaded] = useState<{ src: string; ratio: number } | null>(null)
+  if (!src || !mediaUrl(src)) {
     return <div className={`relative ${emptyClassName} ${className}`} style={emptyStyle}>{children}</div>
   }
-  const shown = Math.min(MAX_RATIO, Math.max(MIN_RATIO, ratio ?? defaultRatio))
-  const fill = ratio != null && Math.abs(shown - ratio) > 0.02
+  const ratio = loaded?.src === src ? loaded.ratio : defaultRatio
+  const still = stillUrl(src)
   return (
-    <div className={`fc-banner ${className}`} style={{ aspectRatio: String(shown) }}>
-      {fill && <img src={mediaUrl(stillUrl(src) ?? src)} alt="" aria-hidden className="fc-banner-fill" loading="lazy" decoding="async" />}
-      <AnimatedImg
-        src={src}
+    <div
+      className={`relative w-full overflow-hidden bg-black/40 ${className}`}
+      style={{ aspectRatio: String(ratio), minHeight, maxHeight }}
+    >
+      <img
+        src={mediaUrl(still ?? src)}
         alt=""
+        aria-hidden
         loading="lazy"
         decoding="async"
-        className="fc-banner-img"
+        className="absolute -inset-4 w-[calc(100%+2rem)] h-[calc(100%+2rem)] max-w-none object-cover blur-xl brightness-75 scale-105 pointer-events-none select-none"
+      />
+      <AnimatedImg
+        src={src}
+        alt={alt}
+        aria-hidden={alt ? undefined : true}
+        loading="lazy"
+        decoding="async"
+        draggable={false}
+        className={`absolute inset-0 w-full h-full object-contain ${imgClassName}`}
+        style={focus ? { objectPosition: focus } : undefined}
         onLoad={e => {
           const img = e.currentTarget
-          if (img.naturalWidth && img.naturalHeight) setRatio(img.naturalWidth / img.naturalHeight)
+          if (img.naturalWidth && img.naturalHeight) {
+            const r = img.naturalWidth / img.naturalHeight
+            setLoaded(prev => (prev?.src === src && Math.abs(prev.ratio - r) < 0.001 ? prev : { src, ratio: r }))
+          }
         }}
       />
       {children}
     </div>
   )
 }
+
+export { ProfileBanner as Banner }
