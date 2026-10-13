@@ -12,7 +12,7 @@ Procédure pas à pas (serveur, clé, build, vérification, distribution) : **`d
 | bêta (client-apk) | `production` (APK) / `store` (AAB) | `org.heiphaistos.forgechat` | ForgeChat | **fixé au build** (`--server` / `FORGECHAT_API_URL`, obligatoire, aucun défaut) | bêta publique, puis Play Store |
 
 - Icônes : variante orange « DEV » pour development, lan et dev-apk ; icône officielle pour le
-  client-apk (`scripts/generate-icons.mjs`).
+  client-apk (`../scripts/gen-brand-icons.py`, logo 3D commun au web et au bureau).
 - Version lisible commune (`version` dans `app.config.ts`) ; `versionCode` incrémenté par EAS
   (`appVersionSource: remote`, `autoIncrement`).
 - APK DEV : panneau « Infos dev » (version, environnement, serveur, export des journaux masqués) et

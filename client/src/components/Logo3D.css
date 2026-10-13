@@ -1,0 +1,88 @@
+/* Logo 3D animé (Logo3D.tsx). Unités des transformations SVG : celles du dessin (carré de 1024). */
+.fc-logo3d {
+  display: inline-block;
+  flex-shrink: 0;
+  perspective: 600px;
+  vertical-align: middle;
+}
+.fc-logo3d__body {
+  display: block;
+  width: 100%;
+  height: 100%;
+  transform-style: preserve-3d;
+}
+.fc-logo3d__body svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+/* Flottement et inclinaison : boucle douce de 6 s, jamais de tour complet (le profil reste lisible). */
+.fc-logo3d--anim .fc-logo3d__body {
+  animation: fc-logo-float 6s ease-in-out infinite;
+  will-change: transform;
+}
+@keyframes fc-logo-float {
+  0%, 100% { transform: translateY(0) rotateX(8deg) rotateY(-12deg); }
+  25% { transform: translateY(-5%) rotateX(-2deg) rotateY(-2deg); }
+  50% { transform: translateY(-2%) rotateX(-8deg) rotateY(12deg); }
+  75% { transform: translateY(-6%) rotateX(2deg) rotateY(3deg); }
+}
+
+/* Reflet qui balaie la bulle, puis pause. */
+.fc-logo3d--anim .fc-shine {
+  animation: fc-logo-shine 4.5s cubic-bezier(0.45, 0, 0.2, 1) infinite;
+}
+@keyframes fc-logo-shine {
+  0% { transform: translateX(-400px); }
+  40%, 100% { transform: translateX(1150px); }
+}
+
+/* Étincelle : frappe (gonfle et tourne), puis retombe ; satellites qui scintillent. */
+.fc-logo3d--anim .fc-spark {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: fc-logo-spark 1.8s ease-in-out infinite;
+}
+@keyframes fc-logo-spark {
+  0%, 100% { transform: scale(0.85) rotate(0deg); }
+  12% { transform: scale(1.3) rotate(30deg); }
+  45% { transform: scale(1) rotate(45deg); }
+}
+.fc-logo3d--anim .fc-twinkle {
+  animation: fc-logo-twinkle 1.8s ease-in-out infinite;
+}
+.fc-logo3d--anim .fc-t1 { animation-delay: 0.6s; }
+.fc-logo3d--anim .fc-t2 { animation-delay: 1.2s; }
+@keyframes fc-logo-twinkle {
+  0%, 100% { opacity: 0.2; }
+  50% { opacity: 1; }
+}
+
+/* Braises projetées à chaque frappe, qui retombent en s'éteignant. */
+.fc-logo3d--anim .fc-ember {
+  animation: fc-logo-ember 1.8s ease-out infinite;
+}
+.fc-logo3d--anim .fc-e0 { --dx: 150px; --dy: -150px; }
+.fc-logo3d--anim .fc-e1 { --dx: 210px; --dy: -60px; animation-delay: 0.05s; }
+.fc-logo3d--anim .fc-e2 { --dx: 70px; --dy: -200px; animation-delay: 0.1s; }
+.fc-logo3d--anim .fc-e3 { --dx: 190px; --dy: -170px; animation-delay: 0.15s; }
+.fc-logo3d--anim .fc-e4 { --dx: 230px; --dy: 10px; animation-delay: 0.08s; }
+.fc-logo3d--anim .fc-e5 { --dx: 120px; --dy: -230px; animation-delay: 0.12s; }
+@keyframes fc-logo-ember {
+  0% { opacity: 0; transform: translate(0, 0); }
+  6% { opacity: 1; }
+  35% { opacity: 0.9; transform: translate(calc(var(--dx) * 0.7), var(--dy)); }
+  60%, 100% { opacity: 0; transform: translate(var(--dx), calc(var(--dy) * 0.4 + 90px)); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fc-logo3d--anim .fc-logo3d__body,
+  .fc-logo3d--anim .fc-shine,
+  .fc-logo3d--anim .fc-spark,
+  .fc-logo3d--anim .fc-twinkle,
+  .fc-logo3d--anim .fc-ember {
+    animation: none;
+  }
+}
