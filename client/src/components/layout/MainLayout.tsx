@@ -198,7 +198,7 @@ export default function MainLayout() {
           <nav
             aria-label="Navigation"
             className={[
-              'flex flex-col h-full flex-shrink-0',
+              'fc-nav flex flex-col h-full flex-shrink-0',
               'fixed inset-y-0 left-0 z-50',
               'md:static md:inset-auto md:z-auto',
               'transition-transform duration-300 ease-in-out will-change-transform',
@@ -211,7 +211,7 @@ export default function MainLayout() {
               navSwipeX.current = null
             }}
           >
-            <div className="flex flex-1 min-h-0">
+            <div className="fc-nav-row flex flex-1 min-h-0">
               <ServerSidebar />
               {/* Actualités : la page a sa propre colonne de rubriques ; la liste des MP ne ferait que
                   manger de la place (sur téléphone, le tiroir reste là pour naviguer). */}
@@ -236,7 +236,7 @@ export default function MainLayout() {
 
           {/* Handle de redimensionnement sidebar — desktop uniquement */}
           <div
-            className="hidden md:flex w-1 flex-shrink-0 cursor-col-resize bg-transparent hover:bg-fc-accent/40 transition-colors group z-10"
+            className="fc-nav-handle hidden md:flex w-1 flex-shrink-0 cursor-col-resize bg-transparent hover:bg-fc-accent/40 transition-colors group z-10"
             onMouseDown={onResizeStart}
             onDoubleClick={() => { setSidebarWidth(SIDEBAR_DEFAULT); localStorage.setItem('fc_sidebar_width', String(SIDEBAR_DEFAULT)) }}
             title="Redimensionner la barre latérale (double-clic : largeur par défaut)"

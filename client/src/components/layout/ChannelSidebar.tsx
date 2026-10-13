@@ -33,6 +33,9 @@ import { useMobile } from '../../contexts/MobileContext'
 import { useT } from '../../i18n'
 import { openMessages, type RawMsg } from '../../e2e/conversations'
 import ServerLookModal from '../modals/ServerLookModal'
+import { CategoryArrowIcon, CategoryIconGlyph } from './CategoryHeadDecor'
+import { effectiveCategory, useThemeStore } from '../../theme/themeStore'
+import { categoryAttrs } from '../../theme/serverLook'
 import DmList, { TypingDots } from './DmList'
 import VoicePeople, { VOICE_MEMBER_MIME } from './VoicePeople'
 import { useMyUxPrefs } from '../../store/uxPrefs'
@@ -56,6 +59,9 @@ export default function ChannelSidebar() {
   const nav = useNavigate()
   const { closeSidebar } = useMobile()
   const t = useT()
+  // Style des en-têtes de catégorie (général ou propre au serveur ouvert) : attributs lus par index.css.
+  const catLook = useThemeStore(effectiveCategory)
+  const catAttrs = useMemo(() => categoryAttrs(catLook), [catLook])
   const [showCreateChannel, setShowCreateChannel] = useState(false)
   const [createInCategory, setCreateInCategory] = useState<string | null>(null)
   const [showInvite, setShowInvite] = useState(false)
@@ -444,7 +450,7 @@ export default function ChannelSidebar() {
           }}
           onMouseEnter={() => { if (!isVoiceCh && channelId !== ch.id) prefetchChannelMessages(ch.id) }}
           aria-current={channelId === ch.id ? 'page' : undefined}
-          className={`flex items-center gap-1.5 w-full px-2 py-1.5 rounded transition text-left group
+          className={`fc-ch flex items-center gap-1.5 w-full px-2 py-1.5 rounded transition text-left group
             ${isMeConnected
               ? 'bg-green-600/20 text-green-300 hover:bg-green-600/30'
               : channelId === ch.id
@@ -622,6 +628,7 @@ export default function ChannelSidebar() {
                   role="button"
                   tabIndex={0}
                   className="fc-cat flex items-center justify-between px-2 py-1 group cursor-pointer sticky top-0 z-10 bg-fc-channel"
+                  {...catAttrs}
                   onClick={() => toggleGroup(key)}
                   onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleGroup(key) } }}
                   onContextMenu={e => ctxMenu.open(e, [
@@ -640,11 +647,9 @@ export default function ChannelSidebar() {
                     setDragOverChannelId(null)
                   } : undefined}
                 >
-                  <div className="flex items-center gap-1">
-                    <ChevronRight
-                      size={12}
-                      className={`text-fc-muted transition-transform ${isCollapsed ? '' : 'rotate-90'}`}
-                    />
+                  <div className="fc-cat-main flex items-center gap-1 min-w-0">
+                    <CategoryArrowIcon open={!isCollapsed} />
+                    <CategoryIconGlyph />
                     <span className="fc-cat-label text-xs font-semibold text-fc-muted uppercase tracking-wide select-none">{label}</span>
                   </div>
                   {canCreate && <button

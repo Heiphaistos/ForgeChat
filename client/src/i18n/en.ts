@@ -11,6 +11,7 @@ import * as menus from './parts/menus.ts'
 import * as accountGuard from './parts/accountGuard.ts'
 import * as discordSync from './parts/discordSync.ts'
 import * as themesMore from './parts/themesMore.ts'
+import * as looksMore from './parts/looksMore.ts'
 import * as avSettings from './parts/avSettings.ts'
 import * as profileEditor from './parts/profileEditor.ts'
 import * as nameStyleMore from './parts/nameStyleMore.ts'
@@ -42,6 +43,7 @@ export const en: Partial<Record<Key, string>> = {
   ...accountGuard.en,
   ...discordSync.en,
   ...themesMore.en,
+  ...looksMore.en,
   ...avSettings.en,
   ...profileEditor.en,
   ...nameStyleMore.en,
