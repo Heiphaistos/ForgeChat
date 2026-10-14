@@ -49,6 +49,7 @@ DESKTOP = {
     "linux-x86_64": "ForgeChat-v{v}-amd64.deb",
     "linux-rpm": "ForgeChat-v{v}-x86_64.rpm",
     "linux-arch": "ForgeChat-v{v}-x86_64.pkg.tar.zst",
+    "linux-flatpak": "ForgeChat-v{v}-x86_64.flatpak",
     "linux-portable": "ForgeChat-v{v}-amd64.AppImage",
     "macos": "ForgeChat-v{v}-macos.app.tar.gz",
     "macos-dmg": "ForgeChat-v{v}-macos.dmg",

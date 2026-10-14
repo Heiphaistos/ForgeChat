@@ -17,8 +17,10 @@ export interface DesktopUpdateInfo {
   current_version: string
   notes: string
   pub_date: string
-  /** `windows-x86_64` | `windows-portable` | `linux-x86_64` | `linux-rpm` | `linux-arch` | `linux-portable` */
+  /** `windows-x86_64` | `windows-portable` | `linux-x86_64` | `linux-rpm` | `linux-arch` | `linux-flatpak` | `linux-portable` */
   target: string
+  /** Artefact vérifié par le Rust ; son nom donne le fichier à installer en Flatpak. */
+  url: string
   /** true = l'exécutable est remplacé sur place, sans installeur ni UAC */
   portable: boolean
 }
@@ -137,7 +139,18 @@ export function DesktopUpdateToast({ info, onClose }: { info: DesktopUpdateInfo;
         </div>
       )}
 
-      {phase === 'installing' && (
+      {phase === 'installing' && info.target === 'linux-flatpak' && (
+        <div className="mt-3 text-xs text-fc-text/90">
+          Paquet téléchargé et vérifié. Fermez ForgeChat, puis installez-le dans un terminal et relisez
+          les permissions affichées avant de valider :
+          <pre className="mt-1 whitespace-pre-wrap break-all font-mono bg-fc-bg rounded p-2 select-all">
+            {/* Sans -y : flatpak montre les permissions du paquet et demande confirmation (le cache est modifiable par l'appli). */}
+            {`flatpak install --user --reinstall ~/.var/app/org.heiphaistos.forgechat/cache/${info.url.split('/').pop()}`}
+          </pre>
+        </div>
+      )}
+
+      {phase === 'installing' && info.target !== 'linux-flatpak' && (
         <div className="mt-3 text-xs text-fc-text/90">
           Paquet téléchargé et vérifié. Terminez l'installation dans la fenêtre qui vient de s'ouvrir,
           puis relancez ForgeChat.

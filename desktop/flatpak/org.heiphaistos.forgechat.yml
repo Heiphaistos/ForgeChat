@@ -1,0 +1,46 @@
+# Paquet Flatpak : reprend le binaire du .deb (meme build que les autres paquets Linux) dans le runtime
+# GNOME, qui fournit WebKitGTK 4.1. Construit par flatpak/paquet.sh, pas a la main.
+id: org.heiphaistos.forgechat
+runtime: org.gnome.Platform
+runtime-version: '51'
+sdk: org.gnome.Sdk
+command: forgechat-desktop
+finish-args:
+  - --share=ipc
+  - --share=network
+  - --socket=wayland
+  # X11 seulement sans Wayland : le mode compatibilite ne force X11 que si un affichage X est la.
+  - --socket=fallback-x11
+  - --socket=pulseaudio
+  # Webcam des appels (nokhwa, V4L2) : Flatpak n'a pas de permission plus etroite pour /dev/video*.
+  - --device=all
+  # Icone de la zone de notification, notifications.
+  - --talk-name=org.kde.StatusNotifierWatcher
+  - --talk-name=org.freedesktop.Notifications
+  # Pas de --talk-name=org.freedesktop.secrets : il ouvre TOUT le trousseau (secrets des autres applis).
+  # Les jetons vont dans le repli chiffre session.bin (session_file.rs), dans ~/.var/app/<id>.
+modules:
+  - shared-modules/libayatana-appindicator/libayatana-appindicator-gtk3.json
+
+  - name: forgechat
+    buildsystem: simple
+    sources:
+      # Copie par paquet.sh depuis dist-desktop/ForgeChat-vX.Y.Z-amd64.deb.
+      - type: file
+        path: forgechat.deb
+      - type: file
+        path: org.heiphaistos.forgechat.metainfo.xml
+    build-commands:
+      - ar x forgechat.deb
+      - tar -xf data.tar.*
+      - install -Dm755 usr/bin/forgechat-desktop /app/bin/forgechat-desktop
+      - |
+        for d in usr/share/icons/hicolor/*/apps; do
+          size=$(basename "$(dirname "$d")")
+          install -Dm644 "$d/forgechat-desktop.png" "/app/share/icons/hicolor/$size/apps/org.heiphaistos.forgechat.png"
+        done
+      # Le raccourci « mode compatibilite » du .deb n'est pas repris : il force X11, absent sous Wayland ici.
+      - install -Dm644 usr/share/applications/ForgeChat.desktop /app/share/applications/org.heiphaistos.forgechat.desktop
+      - desktop-file-edit --set-icon=org.heiphaistos.forgechat /app/share/applications/org.heiphaistos.forgechat.desktop
+      - install -Dm644 org.heiphaistos.forgechat.metainfo.xml /app/share/metainfo/org.heiphaistos.forgechat.metainfo.xml
+      - install -Dm644 usr/share/doc/forgechat/LISEZ-MOI-LINUX.md /app/share/doc/forgechat/LISEZ-MOI-LINUX.md

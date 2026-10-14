@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>org.heiphaistos.forgechat</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT</project_license>
+  <name>ForgeChat</name>
+  <summary>Client de chat communautaire auto-hébergé</summary>
+  <description>
+    <p>ForgeChat : serveurs, salons, messages privés, appels audio et vidéo, sur un serveur auto-hébergé.</p>
+  </description>
+  <launchable type="desktop-id">org.heiphaistos.forgechat.desktop</launchable>
+  <url type="homepage">https://forgechat.heiphaistos.org</url>
+  <developer id="org.heiphaistos">
+    <name>Heiphaistos</name>
+  </developer>
+  <content_rating type="oars-1.1"/>
+</component>
