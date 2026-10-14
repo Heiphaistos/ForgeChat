@@ -881,8 +881,8 @@ export default function MessageList({
             <div className="w-16 h-16 rounded-2xl bg-red-500/15 flex items-center justify-center text-3xl" aria-hidden>
               ⚠️
             </div>
-            <p className="text-base font-semibold text-white">Impossible de charger les messages</p>
-            <p className="text-sm text-fc-muted">Problème réseau ou serveur.</p>
+            <p className="text-base font-semibold text-white">{t('hc.ml.loadFail')}</p>
+            <p className="text-sm text-fc-muted">{t('hc.ml.loadFailHint')}</p>
             {onRetryLoad && (
               <button
                 onClick={onRetryLoad}
@@ -916,7 +916,7 @@ export default function MessageList({
               💬
             </div>
             <p className="text-base font-semibold text-white">Aucun message ici… pour l'instant.</p>
-            <p className="text-sm text-fc-muted">Soyez le premier à envoyer un message !</p>
+            <p className="text-sm text-fc-muted">{t('hc.ml.first')}</p>
           </div>
         )}
 

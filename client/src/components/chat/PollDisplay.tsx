@@ -226,7 +226,7 @@ export default function PollDisplay({ pollId, serverId, channelId }: Props) {
                         ? <Loader2 size={11} className="animate-spin" aria-hidden />
                         : isMyVote && <CheckCircle2 size={13} className="text-fc-accent flex-shrink-0" aria-hidden />}
                       <span className={isMyVote ? 'text-white font-medium' : undefined}>
-                        {isMyVote && <span className="sr-only">Votre vote : </span>}
+                        {isMyVote && <span className="sr-only">{tr('hc.poll.myVote')}</span>}
                         {option.text}
                       </span>
                     </span>
@@ -237,7 +237,7 @@ export default function PollDisplay({ pollId, serverId, channelId }: Props) {
                       <CheckCircle2 size={13} className="text-fc-accent flex-shrink-0" aria-hidden />
                     )}
                     <span className={isMyVote ? 'text-white font-medium' : 'text-fc-text'}>
-                      {isMyVote && <span className="sr-only">Votre vote : </span>}
+                      {isMyVote && <span className="sr-only">{tr('hc.poll.myVote')}</span>}
                       {option.text}
                     </span>
                   </div>
@@ -276,7 +276,7 @@ export default function PollDisplay({ pollId, serverId, channelId }: Props) {
 
       {/* Footer état */}
       {isExpired && (
-        <p className="text-xs text-red-400/80 mt-2 text-center">Ce sondage est terminé.</p>
+        <p className="text-xs text-red-400/80 mt-2 text-center">{tr('hc.poll.ended')}</p>
       )}
       {hasVoted && !isExpired && (
         <p className="text-xs text-fc-muted mt-2 text-center">

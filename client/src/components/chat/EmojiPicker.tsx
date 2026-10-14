@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useT } from '../../i18n'
 import { useEscapeKey } from '../../hooks/useEscapeKey'
 import PickerShell from '../ui/PickerShell'
 import { Search, Smile } from 'lucide-react'
@@ -72,6 +73,7 @@ interface Props {
 }
 
 export default function EmojiPicker({ onPick, onClose, serverId }: Props) {
+  const t = useT()
   useEscapeKey(onClose)
   const [search, setSearch] = useState('')
   const [activeCategory, setActiveCategory] = useState(0)
@@ -105,15 +107,15 @@ export default function EmojiPicker({ onPick, onClose, serverId }: Props) {
       desktopClassName="absolute bottom-full right-0 mb-2 bg-fc-channel border border-fc-hover rounded-xl shadow-2xl w-80 z-50 overflow-hidden"
     >
       {/* Barre de recherche */}
-      <div role="search" aria-label="Rechercher un emoji" className="p-2 border-b border-fc-hover">
+      <div role="search" aria-label={t('hc.emoji.search')} className="p-2 border-b border-fc-hover">
         <div className="flex items-center gap-2 bg-fc-input rounded-lg px-2 py-1.5">
           <Search size={14} aria-hidden className="text-fc-muted flex-shrink-0" />
           <input
             autoFocus
             value={search}
             onChange={e => setSearch(e.target.value)}
-            placeholder="Rechercher un emoji..."
-            aria-label="Rechercher un emoji"
+            placeholder={t('hc.emoji.searchPh')}
+            aria-label={t('hc.emoji.search')}
             enterKeyHint="search"
             inputMode="search"
             autoComplete="off"
@@ -150,8 +152,8 @@ export default function EmojiPicker({ onPick, onClose, serverId }: Props) {
           {serverEmojis.length === 0 ? (
             <div role="status" className="flex flex-col items-center justify-center h-full gap-2 text-fc-muted">
               <Smile size={32} className="opacity-30" aria-hidden />
-              <p className="text-sm">Aucun emoji personnalisé</p>
-              <p className="text-xs">Ajoutez-en dans les paramètres du serveur</p>
+              <p className="text-sm">{t('hc.emoji.noCustom')}</p>
+              <p className="text-xs">{t('hc.emoji.noCustomHint')}</p>
             </div>
           ) : (
             <div className="space-y-2">
@@ -184,7 +186,7 @@ export default function EmojiPicker({ onPick, onClose, serverId }: Props) {
         <>
           {/* Onglets catégories standard */}
           {!filtered && (
-            <div role="tablist" aria-label="Catégories d'emojis" className="flex overflow-x-auto no-scrollbar border-b border-fc-hover px-1">
+            <div role="tablist" aria-label={t('hc.emoji.cats')} className="flex overflow-x-auto no-scrollbar border-b border-fc-hover px-1">
               {CATEGORIES.map((cat, i) => {
                 const catName = cat.label.split(' ').slice(1).join(' ')
                 return (
@@ -210,7 +212,7 @@ export default function EmojiPicker({ onPick, onClose, serverId }: Props) {
             {!filtered && recents.length > 0 && (
               <>
                 <div className="text-xs font-semibold text-fc-muted uppercase tracking-wide mb-2 px-1" aria-hidden>
-                  Récents
+                  {t('hc.emoji.recent')}
                 </div>
                 <div className="grid grid-cols-9 gap-0.5 mb-2">
                   {recents.map((emoji, i) => (
@@ -243,7 +245,7 @@ export default function EmojiPicker({ onPick, onClose, serverId }: Props) {
                 </button>
               ))}
               {displayed.length === 0 && (
-                <div role="status" className="col-span-9 text-center text-fc-muted text-sm py-6">Aucun résultat</div>
+                <div role="status" className="col-span-9 text-center text-fc-muted text-sm py-6">{t('hc.emoji.none')}</div>
               )}
             </div>
           </div>
