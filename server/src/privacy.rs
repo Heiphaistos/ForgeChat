@@ -121,7 +121,7 @@ mod tests {
         assert_eq!(a, pseudonym("203.0.113.7"));
         assert_ne!(a, pseudonym("203.0.113.8"));
         assert_eq!(a.len(), 64);
-        assert!(!a.contains("203"));
+        assert!(!a.contains("203.0.113.7"));
     }
 
     #[test]

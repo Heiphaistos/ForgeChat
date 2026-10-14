@@ -106,7 +106,7 @@ export default (ctx: ConfigContext): ExpoConfig => {
 }
 
 // Version publique : la changer ici (et dans package.json) pour chaque nouvelle bêta.
-const VERSION = '1.38.0'
+const VERSION = '1.39.0'
 
 const buildConfig = ({ config }: ConfigContext): ExpoConfig => ({
   ...config,
