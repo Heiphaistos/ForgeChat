@@ -186,6 +186,7 @@ pub(crate) fn hash_bot_token(token: &str) -> String {
 // Route sans JWT — authentification via header "Authorization: Bot <token>"
 pub async fn bot_send_message(
     State(state): State<AppState>,
+    axum::extract::ConnectInfo(addr): axum::extract::ConnectInfo<std::net::SocketAddr>,
     headers: HeaderMap,
     Json(body): Json<BotMessageRequest>,
 ) -> Result<Json<MessageWithAuthor>> {
@@ -195,6 +196,16 @@ pub async fn bot_send_message(
         .and_then(|v| v.strip_prefix("Bot "))
         .ok_or(AppError::Unauthorized)?;
 
+    // Déjà trop d'échecs depuis cette IP : refus avant tout accès DB (fail-closed si Redis KO).
+    let fail_key = format!("bot_auth_fail:{}", crate::privacy::client_key(&headers, &addr));
+    {
+        use redis::AsyncCommands;
+        let n: Option<i64> = state.redis.lock().await.get(&fail_key).await
+            .map_err(|_| AppError::Unavailable("Service momentanément indisponible, réessaie dans un instant".into()))?;
+        if n.unwrap_or(0) >= 30 {
+            return Err(AppError::TooManyRequests);
+        }
+    }
     // Lookup direct par hash SHA-256 — O(1), pas de timing leak via boucle bcrypt
     let token_hash = hash_bot_token(raw_token);
     use sqlx::Row;
@@ -206,9 +217,11 @@ pub async fn bot_send_message(
     .fetch_optional(&state.db)
     .await?;
 
-    let bot_id: Uuid = row
-        .map(|r| r.get("bot_user_id"))
-        .ok_or(AppError::Unauthorized)?;
+    let Some(bot_id) = row.map(|r| r.get::<Uuid, _>("bot_user_id")) else {
+        // Jeton invalide : compté par IP (30 échecs / 15 min), les bots valides ne comptent pas.
+        crate::handlers::auth_v2::hit(&state, &fail_key, 30, 900).await?;
+        return Err(AppError::Unauthorized);
+    };
 
     // Vérifier que le channel appartient bien au server indiqué
     let channel_in_server = sqlx::query_scalar::<_, bool>(
