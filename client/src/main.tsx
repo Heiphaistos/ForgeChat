@@ -16,6 +16,7 @@ import './responsive.css'
 import { initFaviconAnimation } from './faviconAnimator'
 import { initAppIcon } from './lib/appIcon'
 import { installDragDropGuard } from './lib/dragDropGuard'
+import { installFocusTrap } from './lib/focusTrap'
 
 // Exporté pour permettre à des utilitaires hors-composant (ex. sendNativeNotification)
 // de lire le cache sans avoir à traverser le contexte React.

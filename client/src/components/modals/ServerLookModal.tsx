@@ -1,6 +1,7 @@
 // « Apparence de ce serveur » : thème et style des catégories propres à un serveur, pour soi seul.
 // Sans choix, le serveur reprend l'apparence de ForgeChat. Appliqué en direct, synchronisé avec le compte.
 import { useState } from 'react'
+import { useEscapeKey } from '../../hooks/useEscapeKey'
 import { createPortal } from 'react-dom'
 import { Search, X } from 'lucide-react'
 import { useLang, useT } from '../../i18n'
@@ -24,6 +25,7 @@ function Swatch({ spec }: { spec: ThemeSpec }) {
 
 export default function ServerLookModal({ serverId, serverName, onClose }: { serverId: string; serverName: string; onClose: () => void }) {
   const t = useT()
+  useEscapeKey(onClose)
   const lang = useLang(s => s.lang)
   const { servers, customs, category, setServerLook } = useThemeStore()
   const look = servers[serverId.toLowerCase()] ?? {}
