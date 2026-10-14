@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { AlertTriangle } from 'lucide-react'
+import { useT } from '../../i18n'
 
 interface ConfirmOptions {
   title?: string
@@ -33,6 +34,7 @@ export function confirm(opts: ConfirmOptions | string): Promise<boolean> {
 }
 
 export function ConfirmModal() {
+  const t = useT()
   const [req, setReq] = useState<ConfirmRequest | null>(null)
 
   useEffect(() => {
@@ -100,7 +102,7 @@ export function ConfirmModal() {
             onClick={() => resolve('cancel')}
             className="flex-1 px-4 py-2 rounded-lg bg-fc-hover hover:bg-fc-hover/70 text-fc-text text-sm font-medium transition"
           >
-            {req.cancelLabel ?? 'Annuler'}
+            {req.cancelLabel ?? t('common.cancel')}
           </button>
           <button
             onClick={() => resolve('confirm')}
@@ -110,7 +112,7 @@ export function ConfirmModal() {
                 : 'bg-fc-accent hover:bg-indigo-500'
             }`}
           >
-            {req.confirmLabel ?? 'Confirmer'}
+            {req.confirmLabel ?? t('sw.confirm')}
           </button>
         </div>
       </div>

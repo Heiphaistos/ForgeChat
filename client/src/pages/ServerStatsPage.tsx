@@ -29,7 +29,7 @@ interface MetricCardProps {
 }
 
 function MetricCard({ icon, iconBg, label, value, sub, loading }: MetricCardProps) {
-  const displayValue = loading ? 'Chargement' : (value !== undefined ? value.toLocaleString(intlLocale()) : '—')
+  const displayValue = loading ? tr('common.loading') : (value !== undefined ? value.toLocaleString(intlLocale()) : '—')
   return (
     <div
       className="p-4 bg-fc-channel rounded-lg flex items-center gap-4"
