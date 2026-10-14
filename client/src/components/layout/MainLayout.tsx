@@ -6,6 +6,7 @@ import UserPanel from './UserPanel'
 import VoiceBar from '../voice/VoiceBar'
 import RightSidebar, { useRightSidebar } from './RightSidebar'
 import ConnectionBanner from './ConnectionBanner'
+import DiscordFeatureHost from './DiscordFeatureHost'
 import { SplitContext } from '../../contexts/SplitContext'
 import { MobileContext } from '../../contexts/MobileContext'
 import { SIDEBAR_MIN, SIDEBAR_MAX, SIDEBAR_DEFAULT } from '../../constants/layout'
@@ -185,6 +186,7 @@ export default function MainLayout() {
 
           {/* Bannière d'état de connexion (WS + réseau navigateur) */}
           <ConnectionBanner />
+          <DiscordFeatureHost />
 
           {/* Mobile backdrop */}
           {sidebarOpen && (

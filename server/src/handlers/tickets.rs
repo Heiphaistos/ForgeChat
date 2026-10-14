@@ -141,7 +141,7 @@ pub async fn put_settings(
         "INSERT INTO ticket_settings (server_id, enabled, category_id, staff_role_ids) VALUES ($1, $2, $3, $4)
          ON CONFLICT (server_id) DO UPDATE SET enabled=$2, category_id=$3, staff_role_ids=$4"
     ).bind(server_id).bind(b.enabled).bind(b.category_id).bind(&b.staff_role_ids).execute(&state.db).await?;
-    crate::handlers::audit::log_event(&state, server_id, "TICKETS_UPDATE", Some(claims.sub), None, None, None, None).await;
+    crate::handlers::audit::log_event(&state, server_id, "TICKETS_UPDATE", Some(claims.sub), None, None, None).await;
     Ok(Json(serde_json::json!({ "ok": true })))
 }
 
@@ -247,7 +247,7 @@ pub async fn create_ticket(
             state.broadcast_to_channel_members(ch, ev.to_string()).await;
         }
     }
-    crate::handlers::audit::log_event(&state, server_id, "TICKET_OPEN", Some(claims.sub), None, Some(ticket.id), Some(&ticket.title), None).await;
+    crate::handlers::audit::log_event(&state, server_id, "TICKET_OPEN", Some(claims.sub), Some(ticket.id), Some(&ticket.title), None).await;
     let event = serde_json::json!({ "type": "TICKET_CREATE", "server_id": server_id, "ticket": ticket });
     broadcast_ticket(&state, server_id, &event).await;
 
@@ -348,7 +348,7 @@ pub async fn update_ticket(
         }
     }
     if input.status.as_deref().is_some_and(|s| s != old_status) {
-        crate::handlers::audit::log_event(&state, server_id, "TICKET_STATUS", Some(claims.sub), None,
+        crate::handlers::audit::log_event(&state, server_id, "TICKET_STATUS", Some(claims.sub),
             Some(ticket.id), Some(&ticket.title), Some(serde_json::json!({ "status": ticket.status }))).await;
     }
 

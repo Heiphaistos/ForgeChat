@@ -39,6 +39,12 @@ pub struct User {
     /// Réglages de la décoration (models/profile_style::parse_decoration_opts), JSON déjà validé.
     #[sqlx(default)]
     pub avatar_decoration_opts: Option<serde_json::Value>,
+    /// Anneau d'avatar global (models/avatar_ring.rs), JSON déjà validé.
+    #[sqlx(default)]
+    pub avatar_ring: Option<serde_json::Value>,
+    /// Mise en page de la carte de profil (models/profile_card.rs), JSON déjà validé.
+    #[sqlx(default)]
+    pub profile_card: Option<serde_json::Value>,
     #[sqlx(default)]
     pub profile_color_primary: Option<i32>,
     #[sqlx(default)]
@@ -100,6 +106,8 @@ pub struct UserPublic {
     pub pronouns: Option<String>,
     pub avatar_decoration: Option<String>,
     pub avatar_decoration_opts: Option<serde_json::Value>,
+    pub avatar_ring: Option<serde_json::Value>,
+    pub profile_card: Option<serde_json::Value>,
     pub profile_color_primary: Option<i32>,
     pub profile_color_accent: Option<i32>,
     pub profile_effect: Option<String>,
@@ -144,6 +152,8 @@ impl From<User> for UserPublic {
             pronouns: u.pronouns,
             avatar_decoration: u.avatar_decoration,
             avatar_decoration_opts: u.avatar_decoration_opts,
+            avatar_ring: u.avatar_ring,
+            profile_card: u.profile_card,
             profile_color_primary: u.profile_color_primary,
             profile_color_accent: u.profile_color_accent,
             profile_effect: u.profile_effect,
@@ -222,6 +232,8 @@ pub struct UpdateProfileRequest {
     pub custom_status: Option<String>,
     pub status: Option<String>,
     pub banner: Option<String>,
+    /// Seule valeur admise : "" = retirer l'avatar (l'image passe par /users/me/avatar).
+    pub avatar: Option<String>,
     pub activity_type: Option<String>,
     pub activity_name: Option<String>,
     pub activity_detail: Option<String>,
@@ -232,6 +244,14 @@ pub struct UpdateProfileRequest {
     /// Réglages de la décoration ; absent = inchangés, `{}` = réglages par défaut
     /// (models/profile_style::parse_decoration_opts).
     pub avatar_decoration_opts: Option<serde_json::Value>,
+    /// Anneau d'avatar global : absent = inchangé, null = effacer, objet = validé
+    /// (models/avatar_ring::parse_avatar_ring).
+    #[serde(default, deserialize_with = "crate::models::serde_helpers::deserialize_double_option")]
+    pub avatar_ring: Option<Option<serde_json::Value>>,
+    /// Carte de profil : absent = inchangée, null = effacer, objet = validé
+    /// (models/profile_card::parse_profile_card).
+    #[serde(default, deserialize_with = "crate::models::serde_helpers::deserialize_double_option")]
+    pub profile_card: Option<Option<serde_json::Value>>,
     /// 0xRRGGBB ; -1 = revenir au thème par défaut.
     pub profile_color_primary: Option<i32>,
     pub profile_color_accent: Option<i32>,
@@ -298,6 +318,18 @@ pub const AVATAR_DECORATIONS: &[&str] = &[
     // Fêtes et saisons, suite
     "witch", "ghostly", "pumpkin", "santa", "reindeer", "frosty", "easter_bunny", "shamrock",
     "cupid", "sunshine", "harvest", "lantern_festival", "fireworks_ring",
+    // Mythes et légendes
+    "dragon_fire", "frost_dragon", "valkyrie", "pharaoh", "medusa", "kitsune", "oni", "seraph",
+    "vampire", "unicorn", "cerberus",
+    // Mignon
+    "kawaii_cat", "bubblegum", "cotton_candy", "lollipop", "bunny_love", "teddy", "strawberry", "honey",
+    "mochi", "starlight_bow", "rainbow_cloud",
+    // Techno et science-fiction
+    "circuit", "hud", "reactor", "hologrid", "data_stream", "warp_core", "ufo", "android",
+    "laser_grid", "quantum", "nanotech",
+    // Éléments, suite
+    "sandstorm_ring", "volcano", "crystal_cave", "coral_reef", "aurora_borealis", "thunderstorm", "flower_crown", "eclipse",
+    "tsunami", "wildfire", "frozen_star",
 ];
 
 /// Effets animés de la fiche profil (même catalogue côté web et mobile).
@@ -331,6 +363,15 @@ pub const PROFILE_EFFECTS: &[&str] = &[
     "vhs", "equalizer", "neon_rain",
     // Magie et jeux
     "portal", "runes", "spotlight", "dice", "cards", "chess",
+    // Animaux
+    "birds", "doves", "fish_school", "jellyfish", "ladybugs", "bees",
+    // Gourmandises
+    "donuts", "popcorn", "sprinkles", "cookies", "boba", "sugar_rush", "coffee",
+    // Symboles
+    "zodiac", "peace", "astral", "music_wave", "ankhs", "mystery", "arrows", "royalty",
+    // Lumières
+    "bokeh", "prism_light", "candlelight", "neon_glow", "laser_show", "solar_eclipse", "comets", "wishing_stars",
+    "moon_phases", "dreamy", "heat_wave", "magma_glow",
 ];
 
 /// Intensité de l'effet de profil en % (nombre de particules) ; 100 = normale.

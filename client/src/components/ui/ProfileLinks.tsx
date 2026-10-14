@@ -12,9 +12,10 @@ export default function ProfileLinks({ links }: { links?: unknown }) {
   if (!list.length) return null
   return (
     <div className="flex flex-wrap gap-1.5 mb-3">
-      {list.map(l => (
+      {/* Deux liens peuvent viser la même URL : l'index rend la clé unique. */}
+      {list.map((l, i) => (
         <a
-          key={l.url}
+          key={`${i}:${l.url}`}
           href={l.url}
           target="_blank"
           rel="noopener noreferrer nofollow"

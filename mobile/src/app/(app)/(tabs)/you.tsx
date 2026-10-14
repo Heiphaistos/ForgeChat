@@ -83,7 +83,7 @@ export default function YouScreen() {
 
       {isSiteAdmin ? (
         <Section>
-          <Row icon="ribbon-outline" title="Administration" subtitle="Comptes, invitations, bannissements" onPress={() => router.push('/admin')} chevron />
+          <Row icon="ribbon-outline" title={t('sadmin.entry')} subtitle={t('sadmin.entrySub')} onPress={() => router.push('/admin')} chevron />
         </Section>
       ) : null}
 

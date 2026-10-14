@@ -159,6 +159,7 @@ function VoiceLobby({
 export default function VoiceVideoPage({ channel, serverId }: Props) {
   const { user } = useAuth()
   const t = useT()
+  const { openSidebar } = useContext(MobileContext)
   // Menu utilisateur partagé (volume, modération vocale, profil…) : clic droit sur une tuile.
   const openTileMenu = (e: React.MouseEvent, userId: string, username: string) =>
     openUserMenu(e, { userId, username, serverId, voice: true })
@@ -418,7 +419,12 @@ export default function VoiceVideoPage({ channel, serverId }: Props) {
     <div className="flex flex-col h-full bg-fc-bg relative">
       {/* Header */}
       <div className="flex items-center justify-between px-3 md:px-4 py-2 bg-fc-sidebar border-b border-fc-hover flex-shrink-0">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 min-w-0">
+          {/* Téléphone : retour à la liste des salons pendant l'appel (sinon seul le glissement depuis le bord y menait). */}
+          <button className="md:hidden -ml-2 flex items-center justify-center rounded hover:bg-fc-hover text-fc-muted hover:text-white transition flex-shrink-0"
+            onClick={openSidebar} aria-label={t('voice.backToChannels')}>
+            <ChevronLeft size={20} />
+          </button>
           <Volume2 size={16} className="text-fc-accent flex-shrink-0" />
           <span className="text-sm font-semibold text-white truncate max-w-[120px] md:max-w-none">{channel.name}</span>
           <MeetingTimer startTime={joinTime} />

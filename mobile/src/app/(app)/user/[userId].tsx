@@ -7,7 +7,7 @@ import { friendsApi } from '@/api/friends'
 import { serversApi } from '@/api/servers'
 import { usersApi } from '@/api/users'
 import { Avatar } from '@/components/Avatar'
-import { AvatarRing } from '@/components/AvatarRing'
+import { AvatarRing, effectiveRing } from '@/components/AvatarRing'
 import { SafetyCode } from '@/e2e/E2ESettings'
 import { useAccountKey } from '@/e2e/accountKey'
 import { NOTE_LOCKED, loadNote, saveNote } from '@/e2e/notes'
@@ -15,11 +15,15 @@ import { UserSocialInfo } from '@/features/social/UserSocialInfo'
 import { Button, ErrorState, Loading, Row, Section, TextField } from '@/components/ui'
 import { MessageText } from '@/components/MessageText'
 import { StyledName, previewName } from '@/components/UserName'
-import { ProfileEffect, ProfileThemeCard } from '@/components/ProfileDecor'
+import { ProfileEffect } from '@/components/ProfileDecor'
+import { ProfileCardFrame } from '@/features/account/ProfileCardView'
+import { cardHeader, cardOnColor, cleanCard } from '@/features/account/profileCard'
+import { hexColor } from '@/features/account/profileDecor'
 import { ProfileBanner } from '@/features/account/ProfileBanner'
 import { openDmWith } from '@/features/friends/openDm'
 import { relationWith } from '@/features/friends/relation'
 import { shownProfile } from '@/features/servers/memberProfile'
+import { platformIcon, publicAccounts } from '@/features/servers/discordFeatures'
 import { useT } from '@/i18n'
 import { formatUntil } from '@/lib/format'
 import { errorMessage } from '@/lib/http'
@@ -52,7 +56,13 @@ export default function UserScreen() {
   const nameStyle = cleanNameStyle(member?.server_name_style) ?? cleanNameStyle(u.name_style)
   const isMe = u.id === me?.id
   // Thème du profil : texte clair sur le voile sombre de la fiche colorée.
-  const themed = u.profile_color_primary != null || u.profile_color_accent != null
+  const card = cleanCard(u.profile_card)
+  const head = cardHeader(card)
+  const themed = cardOnColor(card.card, u.profile_color_primary != null || u.profile_color_accent != null)
+  // Anneau effectif : celui du profil de serveur s'il existe, sinon l'anneau global du compte.
+  const ring = effectiveRing(member, u.avatar_ring)
+  const align = head.textCenter ? ('center' as const) : ('flex-start' as const)
+  const primaryHex = u.profile_color_primary != null ? hexColor(u.profile_color_primary) : undefined
   const relation = relationWith(u.id, [blocked.data?.friends, accepted.data?.friends, pending.data?.friends])
 
   const run = (fn: () => Promise<unknown>, ok: string) =>
@@ -65,56 +75,61 @@ export default function UserScreen() {
 
   return (
     <ScrollView style={{ backgroundColor: colors.bg }} contentContainerStyle={{ padding: spacing.xl }} keyboardShouldPersistTaps="handled">
-      <ProfileThemeCard primary={u.profile_color_primary} accent={u.profile_color_accent} style={themed ? styles.themed : null}>
-        <ProfileEffect id={u.profile_effect} intensity={u.profile_effect_intensity} />
-        <ProfileBanner uri={shown.banner} name={u.username} />
-        <View style={styles.header}>
-          <AvatarRing ring={member?.server_avatar_ring} size={96}>
-            <Avatar uri={shown.avatar} name={u.username} size={96} userId={u.id} status={u.status} showStatus decoration={u.avatar_decoration} decorationOpts={u.avatar_decoration_opts} />
-          </AvatarRing>
-          <View style={styles.nameRow}>
-            <StyledName
-              text={displayNameOf(u, member?.nickname)}
-              resolved={previewName(nameStyle)}
-              style={[styles.name, themed && styles.onTheme]}
-              tag={u.profile_tag}
-              tagStyle={nameStyle?.tag ?? null}
-              clanTags={member?.tags}
-              numberOfLines={2}
-            />
+      <ProfileCardFrame card={card} primary={u.profile_color_primary} accent={u.profile_color_accent} style={styles.card}>
+        {/* Clé effet-intensité : les particules sont recréées quand l'un des deux change. */}
+        <ProfileEffect key={`${u.profile_effect ?? ''}-${u.profile_effect_intensity ?? ''}`} id={u.profile_effect} intensity={u.profile_effect_intensity} />
+        <ProfileBanner uri={shown.banner} name={u.username} card={card} tint={primaryHex} fadeTo={primaryHex} />
+        <View style={[styles.header, head.row && styles.headerRow]}>
+          <View style={{ alignSelf: head.row ? 'auto' : head.avatarCenter ? 'center' : 'flex-start' }}>
+            <AvatarRing ring={ring} size={head.avatar}>
+              <Avatar uri={shown.avatar} name={u.username} size={head.avatar} userId={u.id} status={u.status} showStatus decoration={u.avatar_decoration} decorationOpts={u.avatar_decoration_opts} />
+            </AvatarRing>
           </View>
-          <Text style={[styles.tag, themed && styles.onThemeMuted]}>
-            {u.username}#{u.discriminator}
-            {u.pronouns ? ` · ${u.pronouns}` : ''}
-          </Text>
-          {u.custom_status ? (
-            <Text style={[styles.status, themed && styles.onThemeMuted]}>
-              {u.custom_status}
-              {u.custom_status_expires_at ? ` · ${t('settings.status.until', { when: formatUntil(u.custom_status_expires_at) })}` : ''}
-            </Text>
-          ) : null}
-          {u.profile_links?.length ? (
-            <View style={styles.links}>
-              {u.profile_links
-                .filter((l) => l.url.startsWith('https://'))
-                .map((l, i) => (
-                  <Pressable
-                    key={`${i}-${l.url}`}
-                    onPress={() => void openExternalUrl(l.url)}
-                    style={styles.link}
-                    accessibilityRole="link"
-                    accessibilityHint={l.url}
-                  >
-                    <Ionicons name="link" size={14} color={colors.link} />
-                    <Text style={styles.linkText} numberOfLines={1}>
-                      {l.label}
-                    </Text>
-                  </Pressable>
-                ))}
+          <View style={{ alignItems: align, alignSelf: 'stretch', flex: head.row ? 1 : undefined, gap: 4 }}>
+            <View style={[styles.nameRow, { justifyContent: align }]}>
+              <StyledName
+                text={displayNameOf(u, member?.nickname)}
+                resolved={previewName(nameStyle)}
+                style={[styles.name, { textAlign: head.textCenter ? 'center' : 'left' }, themed && styles.onTheme]}
+                tag={u.profile_tag}
+                tagStyle={nameStyle?.tag ?? null}
+                clanTags={member?.tags}
+                numberOfLines={2}
+              />
             </View>
-          ) : null}
+            <Text style={[styles.tag, themed && styles.onThemeMuted]}>
+              {u.username}#{u.discriminator}
+              {u.pronouns ? ` · ${u.pronouns}` : ''}
+            </Text>
+            {u.custom_status ? (
+              <Text style={[styles.status, themed && styles.onThemeMuted, { textAlign: head.textCenter ? 'center' : 'left' }]}>
+                {u.custom_status}
+                {u.custom_status_expires_at ? ` · ${t('settings.status.until', { when: formatUntil(u.custom_status_expires_at) })}` : ''}
+              </Text>
+            ) : null}
+            {card.show_links && u.profile_links?.length ? (
+              <View style={[styles.links, { justifyContent: align }]}>
+                {u.profile_links
+                  .filter((l) => l.url.startsWith('https://'))
+                  .map((l, i) => (
+                    <Pressable
+                      key={`${i}-${l.url}`}
+                      onPress={() => void openExternalUrl(l.url)}
+                      style={styles.link}
+                      accessibilityRole="link"
+                      accessibilityHint={l.url}
+                    >
+                      <Ionicons name="link" size={14} color={colors.link} />
+                      <Text style={styles.linkText} numberOfLines={1}>
+                        {l.label}
+                      </Text>
+                    </Pressable>
+                  ))}
+              </View>
+            ) : null}
+          </View>
         </View>
-      </ProfileThemeCard>
+      </ProfileCardFrame>
 
       {shown.bio ? (
         <Section title={t('social.user.about')}>
@@ -124,7 +139,8 @@ export default function UserScreen() {
         </Section>
       ) : null}
 
-      <UserSocialInfo userId={u.id} activity={u} />
+      <UserSocialInfo userId={u.id} activity={u} showBadges={card.show_badges} />
+      {card.show_links ? <ConnectedAccounts userId={u.id} /> : null}
       {!isMe ? <MutualServers userId={u.id} /> : null}
       {!isMe ? <SafetyCode userId={u.id} /> : null}
       {!isMe && relation.kind === 'friend' ? (
@@ -198,6 +214,30 @@ export default function UserScreen() {
         <Button title={t('social.user.editProfile')} onPress={() => router.push('/settings/profile')} />
       )}
     </ScrollView>
+  )
+}
+
+/** Comptes connectés que la personne a rendus visibles (GET /users/:id/profile), masqués avec ses liens. */
+function ConnectedAccounts({ userId }: { userId: string }) {
+  const t = useT()
+  const q = useQuery({ queryKey: ['user-profile', userId], queryFn: () => usersApi.profile(userId), select: (p) => publicAccounts(p.connected_accounts) })
+  if (!q.data?.length) return null
+  return (
+    <Section title={t('df.accounts.title')}>
+      {q.data.map((a) => {
+        const url = a.url
+        return (
+          <Row
+            key={`${a.platform}:${a.username}`}
+            icon={platformIcon(a.platform)}
+            title={a.username}
+            subtitle={a.verified ? `${a.platform} · ${t('df.accounts.verified')}` : a.platform}
+            onPress={url ? () => void openExternalUrl(url) : undefined}
+            right={url ? <Ionicons name="open-outline" size={16} color={colors.textFaint} /> : undefined}
+          />
+        )
+      })}
+    </Section>
   )
 }
 
@@ -278,16 +318,17 @@ function SavedText({
 }
 
 const styles = StyleSheet.create({
-  header: { alignItems: 'center', gap: 4, marginBottom: spacing.xl },
-  nameRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', justifyContent: 'center', gap: spacing.sm, marginTop: spacing.md },
-  name: { color: colors.text, fontSize: font.xxl, fontWeight: '800', textAlign: 'center' },
-  links: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: spacing.sm, marginTop: spacing.sm },
+  header: { gap: 4, marginTop: spacing.md },
+  headerRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.lg },
+  nameRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: spacing.sm, marginTop: spacing.sm },
+  name: { color: colors.text, fontSize: font.xxl, fontWeight: '800' },
+  links: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginTop: spacing.sm },
   link: { flexDirection: 'row', alignItems: 'center', gap: 4, maxWidth: '100%', paddingHorizontal: spacing.md, paddingVertical: 6, borderRadius: radius.full, backgroundColor: colors.bgElevated },
   linkText: { color: colors.link, fontSize: font.sm, fontWeight: '600', flexShrink: 1 },
   tag: { color: colors.textMuted },
   status: { color: colors.textSecondary, marginTop: spacing.sm },
   relation: { color: colors.textMuted, textAlign: 'center', paddingVertical: spacing.sm },
-  themed: { borderRadius: radius.lg, padding: spacing.md, marginBottom: spacing.xl },
+  card: { padding: spacing.md, marginBottom: spacing.xl },
   onTheme: { color: '#fff' },
   onThemeMuted: { color: 'rgba(255,255,255,0.8)' },
 })

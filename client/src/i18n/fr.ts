@@ -16,8 +16,15 @@ import * as profileEditor from './parts/profileEditor.ts'
 import * as nameStyleMore from './parts/nameStyleMore.ts'
 import * as serverLook from './parts/serverLook.ts'
 import * as profileDecorMore from './parts/profileDecorMore.ts'
+import * as profileDecorExtra from './parts/profileDecorExtra.ts'
+import * as auditUi from './parts/auditUi.ts'
+import * as auditChat from './parts/auditChat.ts'
+import * as siteAdmin from './parts/siteAdmin.ts'
+import * as discordFeatures from './parts/discordFeatures.ts'
+import * as auditRest from './parts/auditRest.ts'
 import { profileFr } from './profileFr.ts'
 import { profileStyleFr } from './profileStyleFr.ts'
+import { ringFr } from './ringFr.ts'
 import { socialFr } from './socialFr.ts'
 import { comfortFr } from './comfort.ts'
 import { voiceLotFr } from './voiceLotFr.ts'
@@ -28,6 +35,7 @@ import { systemDeskFr } from './systemDesk.ts'
 export const fr = {
   ...profileFr,
   ...profileStyleFr,
+  ...ringFr,
   ...socialFr,
   ...comfortFr,
   ...voiceLotFr,
@@ -48,6 +56,12 @@ export const fr = {
   ...nameStyleMore.fr,
   ...serverLook.fr,
   ...profileDecorMore.fr,
+  ...profileDecorExtra.fr,
+  ...auditUi.fr,
+  ...auditChat.fr,
+  ...siteAdmin.fr,
+  ...discordFeatures.fr,
+  ...auditRest.fr,
   // --- Connexion, inscription, mot de passe oublié ---
   'auth.email': 'Email',
   'auth.password': 'Mot de passe',
@@ -1049,7 +1063,7 @@ export const fr = {
   'settings.profile.removeBanner': 'Retirer la bannière',
   'settings.profile.bannerFormats': 'PNG, JPG, GIF, WEBP ou APNG (animés acceptés) · max 10 Mo',
   'settings.profile.changeAvatar': "Changer l'avatar",
-  'settings.profile.avatarHint': "Cliquez sur l'avatar pour le changer · GIF animé accepté (10 Mo)",
+  'settings.profile.avatarHint': "Utilisez le bouton appareil photo pour changer l'avatar · GIF animé accepté (10 Mo)",
   'settings.profile.bio': 'Bio (markdown accepté)',
   'settings.profile.bioCount': '{n}/190 caractères',
   'settings.profile.bioPlaceholder': 'Décrivez-vous en quelques mots...',

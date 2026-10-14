@@ -3,6 +3,9 @@ import { matches, parseCombo } from '../../lib/shortcuts'
 import { useShortcutBindings } from '../../hooks/useShortcuts'
 import { useVoice } from '../../store/voice'
 import { useClipsSetting } from '../../lib/clipBuffer'
+import toast from 'react-hot-toast'
+import { errText } from '../../lib/desktop'
+import { t } from '../../i18n'
 
 /**
  * Raccourcis vocaux, montés au niveau racine.
@@ -118,7 +121,11 @@ export default function VoiceHotkeys() {
         ])
         const accelerator = toAccelerator(binding('push_to_talk'))
         if (!accelerator) return
-        await invoke('register_ptt_shortcut', { accelerator })
+        // Le bureau refuse une touche seule sans modificateur (sauf F1-F24) : on le dit à l'utilisateur.
+        await invoke('register_ptt_shortcut', { accelerator }).catch((e: unknown) => {
+          toast.error(t('ptt.globalRefused', { err: errText(e) }), { id: 'ptt-global', duration: 8000 })
+          throw e
+        })
         if (cancelled) { await invoke('unregister_ptt_shortcut').catch(() => {}); return }
         unlisteners.push(await listen('ptt-down', () => useVoice.getState().activatePtt()))
         unlisteners.push(await listen('ptt-up', () => useVoice.getState().deactivatePtt()))

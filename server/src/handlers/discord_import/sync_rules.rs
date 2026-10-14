@@ -256,7 +256,7 @@ pub fn page_step<T>(cursor: u64, page: Vec<T>, id: impl Fn(&T) -> u64) -> PageSt
     let mut fresh: Vec<T> = page.into_iter().filter(|m| id(m) > cursor).collect();
     fresh.sort_by_key(|m| id(m));
     fresh.dedup_by_key(|m| id(m));
-    let next = fresh.last().map(|m| id(m)).unwrap_or(cursor).max(cursor);
+    let next = fresh.last().map(id).unwrap_or(cursor).max(cursor);
     // Page pleine mais sans progrès : on s'arrête (pas de boucle infinie).
     PageStep { more: full && next > cursor, cursor: next, fresh }
 }

@@ -12,6 +12,29 @@ use uuid::Uuid;
 
 use crate::state::AppState;
 
+/// Parmi `ids`, ceux qui voient la présence de `me` et réciproquement : amis
+/// acceptés ou membres d'un serveur commun. Les autres (inconnus, visiteurs)
+/// ne voient ni statut ni statut personnalisé (recherche, fiche, profil).
+pub(crate) async fn related_users(
+    db: &sqlx::PgPool,
+    me: Uuid,
+    ids: &[Uuid],
+) -> sqlx::Result<HashSet<Uuid>> {
+    Ok(sqlx::query_scalar::<_, Uuid>(
+        "SELECT u FROM UNNEST($1::uuid[]) AS u WHERE
+            EXISTS(SELECT 1 FROM server_members a JOIN server_members b ON a.server_id=b.server_id
+                   WHERE a.user_id=$2 AND b.user_id=u)
+         OR EXISTS(SELECT 1 FROM friendships f WHERE f.status='accepted'
+                   AND ((f.user_id=$2 AND f.friend_id=u) OR (f.friend_id=$2 AND f.user_id=u)))",
+    )
+    .bind(ids)
+    .bind(me)
+    .fetch_all(db)
+    .await?
+    .into_iter()
+    .collect())
+}
+
 /// Statuts qu'un utilisateur peut choisir.
 pub const CHOOSABLE: [&str; 4] = ["online", "idle", "dnd", "invisible"];
 

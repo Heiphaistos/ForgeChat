@@ -4,7 +4,6 @@ use axum::{
 };
 use uuid::Uuid;
 use chrono::Utc;
-use redis::AsyncCommands;
 
 use crate::{
     error::{AppError, Result},
@@ -255,56 +254,6 @@ pub async fn send_message(
         &state.db, channel_id, !content_empty, body.enc.as_ref(), body.client_msg_id, exempt,
     ).await?;
 
-    // Enforcement du slowmode
-    let slowmode: i32 = sqlx::query_scalar(
-        "SELECT slowmode_delay FROM channels WHERE id=$1"
-    )
-    .bind(channel_id)
-    .fetch_optional(&state.db)
-    .await?
-    .unwrap_or(0);
-
-    if slowmode > 0 {
-        let key = format!("slowmode:{}:{}", channel_id, claims.sub);
-        let mut redis = state.redis.lock().await;
-        let last: Option<i64> = redis.get(&key).await.unwrap_or(None);
-        let now = Utc::now().timestamp();
-        if let Some(ts) = last {
-            let remaining = slowmode as i64 - (now - ts);
-            if remaining > 0 {
-                return Err(AppError::SlowMode(remaining));
-            }
-        }
-        let _: () = redis.set_ex(&key, now, (slowmode as u64).saturating_add(5)).await.unwrap_or(());
-        drop(redis);
-    }
-
-    // Anti-spam atomique : max 5 messages par 3 secondes (UPSERT évite la race condition)
-    {
-        let new_count: i32 = sqlx::query_scalar(
-            "INSERT INTO message_spam_track (user_id, channel_id, count, window_start)
-             VALUES ($1, $2, 1, NOW())
-             ON CONFLICT (user_id, channel_id) DO UPDATE
-             SET count = CASE
-                     WHEN NOW() - message_spam_track.window_start >= INTERVAL '3 seconds' THEN 1
-                     ELSE message_spam_track.count + 1
-                 END,
-                 window_start = CASE
-                     WHEN NOW() - message_spam_track.window_start >= INTERVAL '3 seconds' THEN NOW()
-                     ELSE message_spam_track.window_start
-                 END
-             RETURNING count"
-        )
-        .bind(claims.sub)
-        .bind(channel_id)
-        .fetch_one(&state.db)
-        .await?;
-
-        if new_count > 5 {
-            return Err(AppError::TooManyRequests);
-        }
-    }
-
     let content_str: Option<String> = if enc.is_some() { None } else { body.content.clone() };
 
     // Mentions : lues dans le texte en clair, ou déclarées en métadonnées par
@@ -322,6 +271,9 @@ pub async fn send_message(
     } else if let Some(err) = crate::handlers::audit::check_automod_mentions(&state, server_id, mentions.count()).await {
         return Err(err);
     }
+    // Mode lent (staff exempté) + anti-spam, APRÈS l'AutoMod : un message refusé
+    // par le filtre ne consomme plus le créneau du mode lent.
+    crate::handlers::post_guard::throttle(&state, claims.sub, channel_id).await?;
 
     // @everyone / @here sans MENTION_EVERYONE : le message part quand même mais
     // ne notifie personne (comportement Discord ; voir `notify::dispatch_channel_mentions`).
@@ -591,15 +543,8 @@ pub async fn delete_message(
         .await?;
 
     // Supprimer les fichiers du disque (fail silencieux — DB est la source de vérité)
-    let upload_dir = state.config.upload_dir.clone();
-    tokio::spawn(async move {
-        for url in attachment_urls {
-            if let Some(rel) = url.strip_prefix("/uploads/") {
-                let path = std::path::Path::new(&upload_dir).join(rel);
-                let _ = tokio::fs::remove_file(&path).await;
-            }
-        }
-    });
+    // Chemin validé (pas de traversée) par le nettoyeur commun.
+    crate::handlers::uploads::remove_upload_files(&state, attachment_urls);
 
     let event = serde_json::json!({
         "type": "MESSAGE_DELETE",
@@ -611,7 +556,7 @@ pub async fn delete_message(
     if msg_user != claims.sub {
         log_event(
             &state, server_id, "MESSAGE_DELETE",
-            Some(claims.sub), None,
+            Some(claims.sub),
             Some(message_id), None,
             Some(serde_json::json!({ "channel_id": channel_id, "author_id": msg_user })),
         ).await;
@@ -709,6 +654,9 @@ pub async fn remove_reaction(
     Ok(Json(serde_json::json!({ "ok": true })))
 }
 
+/// Épingles par salon, au plus.
+const MAX_PINS: i64 = 50;
+
 pub async fn pin_message(
     State(state): State<AppState>,
     Extension(claims): Extension<Claims>,
@@ -724,15 +672,30 @@ pub async fn pin_message(
         return Err(AppError::NotFound("Message introuvable dans ce salon".into()));
     }
 
-    sqlx::query(
-        "INSERT INTO pinned_messages (channel_id, message_id, pinned_by) VALUES ($1, $2, $3)
+    // Plafond de 50 épingles par salon (comme Discord), vérifié dans l'INSERT même.
+    let done = sqlx::query(
+        "INSERT INTO pinned_messages (channel_id, message_id, pinned_by)
+         SELECT $1, $2, $3 WHERE (SELECT COUNT(*) FROM pinned_messages WHERE channel_id=$1) < $4
          ON CONFLICT DO NOTHING"
     )
     .bind(channel_id)
     .bind(message_id)
     .bind(claims.sub)
+    .bind(MAX_PINS)
     .execute(&state.db)
     .await?;
+    if done.rows_affected() == 0 {
+        let already: bool = sqlx::query_scalar(
+            "SELECT EXISTS(SELECT 1 FROM pinned_messages WHERE channel_id=$1 AND message_id=$2)",
+        )
+        .bind(channel_id)
+        .bind(message_id)
+        .fetch_one(&state.db)
+        .await?;
+        if !already {
+            return Err(AppError::BadRequest(format!("{MAX_PINS} messages épinglés au plus par salon")));
+        }
+    }
 
     sqlx::query("UPDATE messages SET pinned=true WHERE id=$1 AND channel_id=$2")
         .bind(message_id)
@@ -748,7 +711,7 @@ pub async fn pin_message(
         "pinned_by": claims.sub,
     });
     state.broadcast_to_channel_members(channel_id, event.to_string()).await;
-    log_event(&state, server_id, "MESSAGE_PIN", Some(claims.sub), None, Some(message_id), None,
+    log_event(&state, server_id, "MESSAGE_PIN", Some(claims.sub), Some(message_id), None,
         Some(serde_json::json!({ "channel_id": channel_id }))).await;
 
     Ok(Json(serde_json::json!({ "ok": true })))
@@ -780,7 +743,7 @@ pub async fn unpin_message(
         "pinned": false,
     });
     state.broadcast_to_channel_members(channel_id, event.to_string()).await;
-    log_event(&state, server_id, "MESSAGE_UNPIN", Some(claims.sub), None, Some(message_id), None,
+    log_event(&state, server_id, "MESSAGE_UNPIN", Some(claims.sub), Some(message_id), None,
         Some(serde_json::json!({ "channel_id": channel_id }))).await;
 
     Ok(Json(serde_json::json!({ "ok": true })))
@@ -793,6 +756,7 @@ pub async fn search_messages(
     axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>,
 ) -> Result<Json<Vec<MessageWithAuthor>>> {
     require_member_and_channel(&state, claims.sub, server_id, channel_id).await?;
+    crate::handlers::channel_access::require_read_history(&state, claims.sub, channel_id).await?;
 
     let q = params.get("q").cloned().unwrap_or_default();
     if q.trim().len() < 2 {
@@ -810,6 +774,7 @@ pub async fn search_messages(
          LEFT JOIN messages rm ON rm.id = m.reply_to AND rm.channel_id = m.channel_id
          LEFT JOIN users ru ON ru.id = rm.user_id
          WHERE m.channel_id=$1 AND m.content ILIKE $2
+           AND (m.expires_at IS NULL OR m.expires_at > NOW())
          ORDER BY m.created_at DESC LIMIT 50"
     )
     .bind(channel_id)
@@ -862,9 +827,12 @@ pub(crate) async fn channel_message_visible(state: &AppState, user: Uuid, messag
     .fetch_optional(&state.db)
     .await?;
     let Some((server_id, channel_id)) = loc else { return Ok(false) };
-    require_member_and_channel(state, user, server_id, channel_id)
-        .await
-        .map_err(|_| AppError::NotFound("Message introuvable".into()))?;
+    // READ_HISTORY aussi : sans lui, l'historique (éditions, réactions…) reste fermé.
+    let readable = require_member_and_channel(state, user, server_id, channel_id).await.is_ok()
+        && crate::handlers::servers::can_read_history(state, user, channel_id).await;
+    if !readable {
+        return Err(AppError::NotFound("Message introuvable".into()));
+    }
     Ok(true)
 }
 
@@ -955,6 +923,7 @@ pub async fn forward_message(
         // privé en révélait le contenu dans un salon public.
         let (src_channel, src_server): (Uuid, Uuid) = (row.get("channel_id"), row.get("server_id"));
         require_member_and_channel(&state, claims.sub, src_server, src_channel).await?;
+        crate::handlers::channel_access::require_read_history(&state, claims.sub, src_channel).await?;
         let content = if has_enc {
             None
         } else if row.get::<bool, _>("encrypted") {
@@ -1013,6 +982,9 @@ pub async fn forward_message(
             return Err(err);
         }
     }
+    // Mêmes freins qu'un envoi : le transfert contournait débit AutoMod, mode lent et anti-spam.
+    crate::handlers::automod::check_rate(&state, dest_server_id, claims.sub).await?;
+    crate::handlers::post_guard::throttle(&state, claims.sub, body.channel_id).await?;
 
     // Insérer le message forwardé dans le canal cible
     let new_msg = sqlx::query(
@@ -1117,6 +1089,15 @@ pub async fn set_reminder(
 
     if !channel_ok && !dm_ok {
         return Err(AppError::NotFound("Message introuvable".into()));
+    }
+    // Échéance bornée et plafond de rappels en attente (avant : ni l'un ni l'autre).
+    if !crate::handlers::reminders::valid_remind_at(input.remind_at, Utc::now()) {
+        return Err(AppError::BadRequest("Rappel : date future, dans un an au plus".into()));
+    }
+    let pending: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM message_reminders WHERE user_id=$1 AND sent=FALSE")
+        .bind(claims.sub).fetch_one(&state.db).await?;
+    if pending >= crate::handlers::reminders::MAX_PENDING {
+        return Err(AppError::BadRequest(format!("{} rappels en attente au plus", crate::handlers::reminders::MAX_PENDING)));
     }
 
     sqlx::query(

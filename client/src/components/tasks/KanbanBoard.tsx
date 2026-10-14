@@ -4,7 +4,7 @@ import { Plus, X, AlertCircle } from 'lucide-react'
 import api, { mediaUrl } from '../../api/client'
 import { useWs } from '../../store/ws'
 import toast from 'react-hot-toast'
-import { intlLocale } from '../../i18n'
+import { intlLocale, useT, type Key } from '../../i18n'
 
 interface Task {
   id: string
@@ -27,16 +27,16 @@ interface KanbanBoardProps {
 // Le serveur ne stocke qu'un booléen `completed` : deux colonnes, pas de statut intermédiaire.
 type Col = 'todo' | 'done'
 
-const COLUMNS: { id: Col; label: string }[] = [
-  { id: 'todo', label: 'À faire' },
-  { id: 'done', label: 'Terminé' },
+const COLUMNS: { id: Col; label: Key }[] = [
+  { id: 'todo', label: 'kanban.todo' },
+  { id: 'done', label: 'kanban.done' },
 ]
 
-const PRIORITY_BADGE: Record<Task['priority'], { label: string; cls: string }> = {
-  low:    { label: 'Low',    cls: 'bg-zinc-500/20 text-zinc-400' },
-  normal: { label: 'Medium', cls: 'bg-blue-500/20 text-blue-300' },
-  high:   { label: 'High',   cls: 'bg-orange-500/20 text-orange-300' },
-  urgent: { label: 'Urgent', cls: 'bg-red-500/20 text-red-300' },
+const PRIORITY_BADGE: Record<Task['priority'], { label: Key; cls: string }> = {
+  low:    { label: 'kanban.prio.low',    cls: 'bg-zinc-500/20 text-zinc-400' },
+  normal: { label: 'kanban.prio.normal', cls: 'bg-blue-500/20 text-blue-300' },
+  high:   { label: 'kanban.prio.high',   cls: 'bg-orange-500/20 text-orange-300' },
+  urgent: { label: 'kanban.prio.urgent', cls: 'bg-red-500/20 text-red-300' },
 }
 
 function dueDateClass(due?: string): string {
@@ -58,6 +58,7 @@ interface CreateFormProps {
 }
 
 function CreateTaskForm({ channelId, onClose, onCreated }: CreateFormProps) {
+  const tr = useT()
   const [title, setTitle] = useState('')
   const [priority, setPriority] = useState<Task['priority']>('normal')
   const [desc, setDesc] = useState('')
@@ -65,8 +66,8 @@ function CreateTaskForm({ channelId, onClose, onCreated }: CreateFormProps) {
   const createTask = useMutation({
     mutationFn: (body: { title: string; description?: string; priority: Task['priority'] }) =>
       api.post(`/channels/${channelId}/tasks`, body),
-    onSuccess: () => { onCreated(); toast.success('Tâche créée') },
-    onError: (e: any) => toast.error(e.response?.data?.error ?? 'Erreur création'),
+    onSuccess: () => { onCreated(); toast.success(tr('kanban.created')) },
+    onError: (e: any) => toast.error(e.response?.data?.error ?? tr('kanban.createError')),
   })
 
   const submit = (ev: React.FormEvent) => {
@@ -81,7 +82,7 @@ function CreateTaskForm({ channelId, onClose, onCreated }: CreateFormProps) {
         autoFocus
         value={title}
         onChange={e => setTitle(e.target.value)}
-        placeholder="Titre de la tâche..."
+        placeholder={tr('kanban.titlePh')}
         maxLength={200}
         enterKeyHint="next" autoCapitalize="sentences"
         className="w-full bg-transparent text-white text-sm outline-none placeholder:text-fc-muted"
@@ -89,7 +90,7 @@ function CreateTaskForm({ channelId, onClose, onCreated }: CreateFormProps) {
       <textarea
         value={desc}
         onChange={e => setDesc(e.target.value)}
-        placeholder="Description (optionnelle)"
+        placeholder={tr('kanban.descPh')}
         rows={2}
         maxLength={1000}
         className="w-full bg-transparent text-white text-xs outline-none placeholder:text-fc-muted resize-none"
@@ -101,11 +102,11 @@ function CreateTaskForm({ channelId, onClose, onCreated }: CreateFormProps) {
           className="bg-fc-hover text-white text-xs rounded px-2 py-1 outline-none"
         >
           {(['low', 'normal', 'high', 'urgent'] as Task['priority'][]).map(p => (
-            <option key={p} value={p}>{PRIORITY_BADGE[p].label}</option>
+            <option key={p} value={p}>{tr(PRIORITY_BADGE[p].label)}</option>
           ))}
         </select>
         <div className="flex gap-1.5">
-          <button type="button" onClick={onClose} aria-label="Fermer" className="p-1.5 min-w-[44px] min-h-[44px] flex items-center justify-center text-fc-muted hover:text-white rounded hover:bg-fc-hover transition">
+          <button type="button" onClick={onClose} aria-label={tr('common.close')} className="p-1.5 min-w-[44px] min-h-[44px] flex items-center justify-center text-fc-muted hover:text-white rounded hover:bg-fc-hover transition">
             <X size={14} aria-hidden />
           </button>
           <button
@@ -113,7 +114,7 @@ function CreateTaskForm({ channelId, onClose, onCreated }: CreateFormProps) {
             disabled={!title.trim() || createTask.isPending}
             className="px-3 py-1 bg-fc-accent hover:bg-indigo-500 text-white text-xs rounded font-medium transition disabled:opacity-50"
           >
-            Ajouter
+            {tr('kanban.add')}
           </button>
         </div>
       </div>
@@ -128,6 +129,7 @@ interface TaskCardProps {
 }
 
 function TaskCard({ task, onDragStart, onDelete }: TaskCardProps) {
+  const tr = useT()
   const badge = PRIORITY_BADGE[task.priority]
   return (
     <div
@@ -140,7 +142,7 @@ function TaskCard({ task, onDragStart, onDelete }: TaskCardProps) {
         <button
           onClick={e => { e.stopPropagation(); onDelete(task.id) }}
           className="opacity-100 md:opacity-0 md:group-hover:opacity-100 p-1.5 min-w-[44px] min-h-[44px] flex items-center justify-center text-fc-muted hover:text-red-400 transition flex-shrink-0 rounded"
-          aria-label="Supprimer la tâche"
+          aria-label={tr('kanban.delete')}
         >
           <X size={12} />
         </button>
@@ -152,7 +154,7 @@ function TaskCard({ task, onDragStart, onDelete }: TaskCardProps) {
 
       <div className="flex items-center gap-1.5 flex-wrap">
         <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${badge.cls}`}>
-          {badge.label}
+          {tr(badge.label)}
         </span>
 
         {task.due_date && (
@@ -187,6 +189,7 @@ function TaskCard({ task, onDragStart, onDelete }: TaskCardProps) {
 }
 
 export default function KanbanBoard({ channelId }: KanbanBoardProps) {
+  const tr = useT()
   const qc = useQueryClient()
   const { on } = useWs()
   const [openCreateCol, setOpenCreateCol] = useState<Col | null>(null)
@@ -224,7 +227,7 @@ export default function KanbanBoard({ channelId }: KanbanBoardProps) {
     },
     onError: (_e, _v, ctx) => {
       if (ctx?.prev) qc.setQueryData(['tasks', channelId], ctx.prev)
-      toast.error('Déplacement échoué — rollback')
+      toast.error(tr('kanban.moveError'))
     },
     onSettled: () => qc.invalidateQueries({ queryKey: ['tasks', channelId] }),
   })
@@ -233,9 +236,9 @@ export default function KanbanBoard({ channelId }: KanbanBoardProps) {
     mutationFn: (id: string) => api.delete(`/channels/${channelId}/tasks/${id}`),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['tasks', channelId] })
-      toast.success('Tâche supprimée')
+      toast.success(tr('kanban.deleted'))
     },
-    onError: (e: any) => toast.error(e.response?.data?.error ?? 'Erreur suppression'),
+    onError: (e: any) => toast.error(e.response?.data?.error ?? tr('kanban.deleteError')),
   })
 
   const handleDrop = (col: Col) => {
@@ -255,7 +258,7 @@ export default function KanbanBoard({ channelId }: KanbanBoardProps) {
       <div className="flex items-center justify-center h-64 text-fc-muted text-sm">
         <div className="text-center space-y-2">
           <AlertCircle size={32} className="mx-auto text-fc-muted/40" />
-          <p>Impossible de charger les tâches.</p>
+          <p>{tr('kanban.loadError')}</p>
         </div>
       </div>
     )
@@ -275,7 +278,7 @@ export default function KanbanBoard({ channelId }: KanbanBoardProps) {
             {/* En-tête colonne */}
             <div className="flex items-center justify-between px-3 py-2.5 border-b border-fc-hover">
               <div className="flex items-center gap-2">
-                <span className="text-xs font-semibold text-white uppercase tracking-wide">{col.label}</span>
+                <span className="text-xs font-semibold text-white uppercase tracking-wide">{tr(col.label)}</span>
                 <span className="text-xs bg-fc-hover text-fc-muted rounded-full px-1.5 py-0.5 font-medium min-w-[20px] text-center">
                   {colTasks.length}
                 </span>
@@ -284,8 +287,8 @@ export default function KanbanBoard({ channelId }: KanbanBoardProps) {
               {col.id === 'todo' && <button
                 onClick={() => setOpenCreateCol(openCreateCol === col.id ? null : col.id)}
                 className="p-1.5 min-w-[44px] min-h-[44px] flex items-center justify-center text-fc-muted hover:text-white hover:bg-fc-hover rounded transition"
-                title="Ajouter une tâche"
-                aria-label="Ajouter une tâche"
+                title={tr('kanban.addTask')}
+                aria-label={tr('kanban.addTask')}
               >
                 <Plus size={14} />
               </button>}
@@ -308,7 +311,7 @@ export default function KanbanBoard({ channelId }: KanbanBoardProps) {
             {/* Cards */}
             <div className="flex-1 overflow-y-auto overscroll-contain px-2 py-2 space-y-2 min-h-[80px]">
               {colTasks.length === 0 && openCreateCol !== col.id && (
-                <p className="text-xs text-fc-muted/50 text-center pt-4 select-none">Aucune tâche</p>
+                <p className="text-xs text-fc-muted/50 text-center pt-4 select-none">{tr('kanban.empty')}</p>
               )}
               {colTasks.map(task => (
                 <TaskCard

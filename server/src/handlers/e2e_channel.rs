@@ -112,8 +112,11 @@ pub async fn check_content(
 
 /// Champs de réponse propres aux salons : clé de récupération du serveur et
 /// époques qui n'y sont pas encore enveloppées.
+/// (serveur, clé publique, empreinte, signature, signataire) de la clé de récupération.
+type ServerKeyRow = (Uuid, String, String, Option<String>, Option<Uuid>);
+
 pub async fn extend_keys(db: &PgPool, channel: Uuid, me: Uuid, out: &mut Value) -> Result<()> {
-    let key: Option<(Uuid, String, String, Option<String>, Option<Uuid>)> = sqlx::query_as(
+    let key: Option<ServerKeyRow> = sqlx::query_as(
         "SELECT sk.server_id, sk.public_key, sk.fingerprint, sk.signature, sk.signed_by FROM server_keys sk
          JOIN channels c ON c.server_id = sk.server_id WHERE c.id=$1",
     )

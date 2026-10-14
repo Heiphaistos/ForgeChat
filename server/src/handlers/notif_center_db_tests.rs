@@ -66,7 +66,7 @@ async fn notif_center_categories_roles_and_reset() {
     let set_cat = |who: Uuid, level: &str| set_category_notif(claims(who), State(state.clone()), Path(cat), Json(SetLevel { level: level.into() }));
     assert!(set_cat(outsider, "nothing").await.is_err(), "non-membre refusé");
     assert!(set_cat(a, "bavard").await.is_err(), "niveau invalide");
-    set_cat(a, "nothing").await.unwrap();
+    let _ = set_cat(a, "nothing").await.unwrap();
     let Json(center) = get_notif_center(claims(a), State(state.clone())).await.unwrap();
     assert_eq!(center.categories.len(), 1);
     assert_eq!(center.categories[0].channel_ids, vec![chan]);
@@ -76,7 +76,7 @@ async fn notif_center_categories_roles_and_reset() {
     let body: crate::handlers::user_settings::SetNotifOverride = serde_json::from_value(serde_json::json!({
         "server_id": s, "level": "inherit", "muted": false, "suppress_roles": true
     })).unwrap();
-    crate::handlers::user_settings::set_notification_override(claims(a), State(state.clone()), Json(body)).await.unwrap();
+    let _ = crate::handlers::user_settings::set_notification_override(claims(a), State(state.clone()), Json(body)).await.unwrap();
     let dispatch = |msg: Uuid, users: Vec<Uuid>, roles: Vec<Uuid>| {
         let mentions = crate::notify::ParsedMentions { users: users.into_iter().collect(), roles: roles.into_iter().collect(), ..Default::default() };
         crate::notify::dispatch_channel_mentions(&state, crate::notify::ChannelMessage {
@@ -98,7 +98,7 @@ async fn notif_center_categories_roles_and_reset() {
     sqlx::query("INSERT INTO notification_overrides_channel (user_id, channel_id, level, muted) VALUES ($1, $2, 'all', TRUE)")
         .bind(a).bind(chan).execute(&db).await.unwrap();
     assert!(set_level_everywhere(claims(a), State(state.clone()), Json(SetLevel { level: "all".into() })).await.is_err());
-    set_level_everywhere(claims(a), State(state.clone()), Json(SetLevel { level: "mentions".into() })).await.unwrap();
+    let _ = set_level_everywhere(claims(a), State(state.clone()), Json(SetLevel { level: "mentions".into() })).await.unwrap();
     let (lvl, sup): (String, bool) = sqlx::query_as("SELECT level, suppress_roles FROM notification_overrides_server WHERE user_id = $1 AND server_id = $2")
         .bind(a).bind(s).fetch_one(&db).await.unwrap();
     assert_eq!((lvl.as_str(), sup), ("mentions", true));
@@ -111,7 +111,7 @@ async fn notif_center_categories_roles_and_reset() {
     assert_eq!(center.channels[0].channel_name, "general");
 
     // Remise à zéro d'un serveur : serveur, catégories et salons effacés.
-    reset_notif(claims(a), State(state.clone()), Query(ResetQuery { server_id: Some(s) })).await.unwrap();
+    let _ = reset_notif(claims(a), State(state.clone()), Query(ResetQuery { server_id: Some(s) })).await.unwrap();
     let left: i64 = sqlx::query_scalar(
         "SELECT (SELECT COUNT(*) FROM notification_overrides_server WHERE user_id = $1)
               + (SELECT COUNT(*) FROM notification_overrides_category WHERE user_id = $1)

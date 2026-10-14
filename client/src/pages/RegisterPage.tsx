@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useId, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { Eye, EyeOff } from 'lucide-react'
 import api from '../api/client'
@@ -37,6 +37,7 @@ export default function RegisterPage() {
   const { register } = useAuth()
   const nav = useNavigate()
   const t = useT()
+  const id = useId()
 
   useEffect(() => {
     api.get('/auth/registration-info').then(r => setMode(r.data.mode)).catch(() => { /* serveur injoignable : on laisse le champ affiché */ })
@@ -81,15 +82,17 @@ export default function RegisterPage() {
 
         {mode === 'closed' && (
           <p role="alert" className="mb-4 rounded bg-red-500/10 border border-red-500/40 text-red-300 text-sm px-3 py-2">
-            Les inscriptions sont fermées pour le moment.
+            {t('reg.closed')}
           </p>
         )}
 
         <form onSubmit={submit} className="space-y-4">
           {mode === 'invite' && (
             <div>
-              <label className="block text-xs font-semibold text-fc-muted uppercase mb-1">Code d’invitation</label>
+              <label htmlFor={`${id}-invite`} className="block text-xs font-semibold text-fc-muted uppercase mb-1">{t('reg.inviteLabel')}</label>
               <input
+                id={`${id}-invite`}
+                aria-describedby={`${id}-invite-hint`}
                 value={inviteCode}
                 onChange={e => setInviteCode(e.target.value)}
                 required
@@ -101,12 +104,13 @@ export default function RegisterPage() {
                 placeholder="XXXX-XXXX-XXXX-XXXX-XXXX"
                 className="w-full px-3 py-2 bg-fc-input rounded text-white text-base font-mono tracking-widest outline-none focus:ring-2 focus:ring-fc-accent"
               />
-              <p className="text-xs text-fc-muted mt-1">ForgeChat est un cercle privé : demande ton code à la personne qui t’invite.</p>
+              <p id={`${id}-invite-hint`} className="text-xs text-fc-muted mt-1">{t('reg.inviteHint')}</p>
             </div>
           )}
           <div>
-            <label className="block text-xs font-semibold text-fc-muted uppercase mb-1">{t('auth.register.username')}</label>
+            <label htmlFor={`${id}-username`} className="block text-xs font-semibold text-fc-muted uppercase mb-1">{t('auth.register.username')}</label>
             <input
+              id={`${id}-username`}
               value={username}
               onChange={e => setUsername(e.target.value)}
               required
@@ -123,8 +127,9 @@ export default function RegisterPage() {
             />
           </div>
           <div>
-            <label className="block text-xs font-semibold text-fc-muted uppercase mb-1">{t('auth.email')}</label>
+            <label htmlFor={`${id}-email`} className="block text-xs font-semibold text-fc-muted uppercase mb-1">{t('auth.email')}</label>
             <input
+              id={`${id}-email`}
               type="email"
               value={email}
               onChange={e => setEmail(e.target.value)}
@@ -138,7 +143,7 @@ export default function RegisterPage() {
           </div>
           <div>
             <div className="flex items-center justify-between mb-1">
-              <label className="block text-xs font-semibold text-fc-muted uppercase">{t('auth.password')}</label>
+              <label htmlFor={`${id}-password`} className="block text-xs font-semibold text-fc-muted uppercase">{t('auth.password')}</label>
               {strength.label && (
                 <span className={`text-xs font-medium ${
                   strength.score <= 1 ? 'text-red-400' : strength.score <= 3 ? 'text-yellow-400' : 'text-green-400'
@@ -149,6 +154,7 @@ export default function RegisterPage() {
             </div>
             <div className="relative">
               <input
+                id={`${id}-password`}
                 type={showPassword ? 'text' : 'password'}
                 value={password}
                 onChange={e => setPassword(e.target.value)}
@@ -184,8 +190,9 @@ export default function RegisterPage() {
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-fc-muted uppercase mb-1">{t('auth.register.confirm')}</label>
+            <label htmlFor={`${id}-confirm`} className="block text-xs font-semibold text-fc-muted uppercase mb-1">{t('auth.register.confirm')}</label>
             <input
+              id={`${id}-confirm`}
               type="password"
               value={confirmPassword}
               onChange={e => setConfirmPassword(e.target.value)}

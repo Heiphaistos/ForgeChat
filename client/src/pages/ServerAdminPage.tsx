@@ -7,7 +7,7 @@ import api from '../api/client'
 import toast from 'react-hot-toast'
 import { confirm } from '../components/ui/ConfirmModal'
 import ServerStatsPage from './ServerStatsPage'
-import AuditLogPage from './AuditLogPage'
+import AuditLogTab from '../components/modals/AuditLogTab'
 import AutoModPage from './AutoModPage'
 import ServerEventsPage from './ServerEventsPage'
 import { intlLocale } from '../i18n'
@@ -301,7 +301,7 @@ export default function ServerAdminPage() {
       <div className="flex-1 overflow-y-auto overscroll-contain px-4 py-4">
         <TabErrorBoundary key={tab}>
           {tab === 'stats'      && <ServerStatsPage serverId={serverId} />}
-          {tab === 'audit'      && <AuditLogPage serverId={serverId} />}
+          {tab === 'audit'      && <AuditLogTab server={{ id: serverId }} />}
           {tab === 'automod'    && <AutoModPage serverId={serverId} />}
           {tab === 'events'     && <ServerEventsPage serverId={serverId} />}
           {tab === 'reports'    && <ReportsTab serverId={serverId} />}

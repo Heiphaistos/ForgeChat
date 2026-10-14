@@ -1,0 +1,17 @@
+/*
+ * Carte de profil (lib/profileCard.ts, components/ui/ProfileCardParts.tsx) : effets de bannière.
+ * --card-a / --card-b : couleurs du profil (« #rrggbb » calculés), posées sur la carte.
+ * L'image floutée de remplissage (.blur-xl, ProfileBanner) garde son propre filtre.
+ */
+.fc-bfx-blur img:not(.blur-xl) { filter: blur(3px); }
+.fc-bfx-dim img:not(.blur-xl) { filter: brightness(.55); }
+.fc-bfx-fade {
+  -webkit-mask-image: linear-gradient(#000 40%, transparent);
+  mask-image: linear-gradient(#000 40%, transparent);
+}
+.fc-bfx-duotone img:not(.blur-xl) { filter: grayscale(1) contrast(1.1); }
+.fc-bfx-duotone::after {
+  content: ''; position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(135deg, var(--card-a, #5865f2), var(--card-b, #eb459e));
+  mix-blend-mode: color;
+}

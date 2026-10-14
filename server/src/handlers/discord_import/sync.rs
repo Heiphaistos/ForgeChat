@@ -17,6 +17,7 @@
 //! stockage du propriétaire ; synchronisations simultanées bornées (sémaphore de
 //! `AppState`) ; limites de débit Redis sur les routes ; disjoncteur global (discord_api).
 
+use super::Att;
 use std::{
     collections::{HashMap, HashSet},
     time::{Duration, Instant},
@@ -323,7 +324,9 @@ fn parse_u64(s: &str) -> u64 {
 }
 
 async fn run(state: &AppState, server_id: Uuid, lock: &str) -> anyhow::Result<Report> {
-    let row: Option<(String, Option<String>, Vec<String>, bool, Uuid)> = sqlx::query_as(
+    // (guilde, jeton chiffré, catégories exclues, émojis synchronisés, propriétaire)
+    type ConfigRow = (String, Option<String>, Vec<String>, bool, Uuid);
+    let row: Option<ConfigRow> = sqlx::query_as(
         "SELECT c.guild_id, c.bot_token_enc, c.excluded_categories, c.sync_emojis, s.owner_id
          FROM discord_sync_configs c JOIN servers s ON s.id = c.server_id WHERE c.server_id=$1",
     )
@@ -723,7 +726,7 @@ impl Ctx<'_> {
             edited_at: Option<DateTime<Utc>>,
             pinned: bool,
             reply_to: Option<Uuid>,
-            atts: Vec<(String, String, i64, String)>,
+            atts: Vec<Att>,
             files: Vec<std::path::PathBuf>,
         }
         let mut rows: Vec<Row> = Vec::new();
@@ -886,7 +889,7 @@ impl Ctx<'_> {
                     .await?;
 
                     // Pièces jointes imputées au quota de stockage du propriétaire.
-                    let atts: Vec<(Uuid, DateTime<Utc>, &(String, String, i64, String))> =
+                    let atts: Vec<(Uuid, DateTime<Utc>, &Att)> =
                         keep.iter().flat_map(|r| r.atts.iter().map(move |a| (r.id, r.created_at, a))).collect();
                     if !atts.is_empty() {
                         sqlx::query(

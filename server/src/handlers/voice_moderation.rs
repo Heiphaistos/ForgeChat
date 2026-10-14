@@ -242,7 +242,7 @@ pub async fn moderate_voice(
         }
         state.broadcast_to_user(target, event).await;
         crate::handlers::audit::log_event(
-            &state, server_id, "MEMBER_VOICE_UPDATE", Some(actor), None, Some(target), None,
+            &state, server_id, "MEMBER_VOICE_UPDATE", Some(actor), Some(target), None,
             Some(serde_json::json!({ "mute": body.mute, "deafen": body.deafen })),
         ).await;
     }
@@ -264,7 +264,7 @@ pub async fn moderate_voice(
                 "channel_name": name,
             }).to_string()).await;
             crate::handlers::audit::log_event(
-                &state, server_id, "MEMBER_MOVE", Some(actor), None, Some(target), None,
+                &state, server_id, "MEMBER_MOVE", Some(actor), Some(target), None,
                 Some(serde_json::json!({ "from": from, "to": dest })),
             ).await;
         } else {
@@ -274,7 +274,7 @@ pub async fn moderate_voice(
                 "channel_id": from,
             }).to_string()).await;
             crate::handlers::audit::log_event(
-                &state, server_id, "MEMBER_DISCONNECT", Some(actor), None, Some(target), None,
+                &state, server_id, "MEMBER_DISCONNECT", Some(actor), Some(target), None,
                 Some(serde_json::json!({ "channel_id": from })),
             ).await;
         }

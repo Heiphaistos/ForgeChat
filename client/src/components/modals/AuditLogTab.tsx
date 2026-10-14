@@ -26,7 +26,8 @@ interface AuditEntry {
 }
 
 interface Props {
-  server: Server
+  // Seul l'identifiant sert : aussi utilisé par la page d'administration (ServerAdminPage).
+  server: Pick<Server, 'id'>
 }
 
 // Les clés DOIVENT matcher exactement les chaînes passées à log_event() côté backend

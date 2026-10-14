@@ -4,6 +4,7 @@
 import * as Crypto from 'expo-crypto'
 import { t } from '@/i18n'
 import { ApiError, http, path } from '@/lib/http'
+import { logger } from '@/lib/logger'
 import { useAccountKey } from './accountKey'
 import * as c from './crypto'
 import { indexMessage } from './searchIndex'
@@ -190,7 +191,8 @@ async function postBatches(kind: ConvKind, id: string, epoch: number, key: Uint8
   if (!priv || !me) return
   for (let i = 0; i < list.length; i += BATCH) {
     const envelopes = await wrapFor(priv, me, c.convName(kind, id), epoch, key, list.slice(i, i + BATCH))
-    await http.post(`${base(kind, id)}/keys`, { epoch, envelopes }).catch(() => undefined)
+    // Échec propagé : l'appelant journalise et le membre reste « missing » pour le prochain passage.
+    await http.post(`${base(kind, id)}/keys`, { epoch, envelopes })
   }
 }
 
@@ -228,7 +230,7 @@ async function createEpoch(kind: ConvKind, id: string, st: ConvState): Promise<n
     const server_envelope = st.serverKey ? await serverEnvelope(priv, me, conv, epoch, key, st.serverKey) : undefined
     if (server_envelope === null) throw new Error('E2E_SERVER_KEY_CHANGED')
     await postCreate({ epoch, create: true, envelopes: await wrapFor(priv, me, conv, epoch, key, first), server_envelope })
-    void postBatches(kind, id, epoch, key, others.slice(FIRST_BATCH - 1))
+    void postBatches(kind, id, epoch, key, others.slice(FIRST_BATCH - 1)).catch((e: unknown) => logger.warn('e2e', 'clés en lots non envoyées, reprise au prochain passage', e))
   }
   st.keys.set(epoch, key)
   st.current = epoch
@@ -400,7 +402,12 @@ export async function answerKeyRequest(d: Record<string, unknown>) {
   const target = (await trustedMembers(await getMembers(kind, convId, { member }).catch(() => [] as ConvMember[])))
     .find((m) => m.user_id === member)
   if (!target) return
-  for (const [epoch, key] of st.keys) await postBatches(kind, convId, epoch, key, [target])
+  try {
+    for (const [epoch, key] of st.keys) await postBatches(kind, convId, epoch, key, [target])
+  } catch (e) {
+    // Le demandeur renverra KEY_REQUEST ; la complétion périodique couvre aussi ce membre.
+    logger.warn('e2e', 'réponse KEY_REQUEST non envoyée', e)
+  }
 }
 
 /**
@@ -431,10 +438,14 @@ async function completeKeys(kind: ConvKind, id: string) {
         if (!key) continue
         const server_envelope = await serverEnvelope(priv, me, conv, epoch, key, sk)
         if (!server_envelope) break
-        await http.post(`${base('channel', channelId)}/keys`, { epoch, envelopes: [], server_envelope }).catch(() => undefined)
+        await http.post(`${base('channel', channelId)}/keys`, { epoch, envelopes: [], server_envelope })
       }
     }
-  } catch { /* hors ligne : au prochain passage */ }
+  } catch (e) {
+    // Hors ligne ou refus : levée du délai d'une minute pour réessayer au prochain passage.
+    completed.delete(name)
+    logger.warn('e2e', 'complétion des clés interrompue', e)
+  }
 }
 
 /**

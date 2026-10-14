@@ -88,7 +88,7 @@ export default function DisappearingControl({ kind, id, serverId, value, canEdit
         <>
           <div className="fixed inset-0 z-40" aria-hidden onClick={() => setOpen(false)} />
           <div role="menu" aria-label={t('disappear.title')}
-            className="absolute right-0 top-full mt-2 z-50 w-72 max-w-[calc(100vw-2rem)] bg-fc-channel border border-fc-hover rounded-xl shadow-2xl p-2">
+            className="fc-header-pop absolute right-0 top-full mt-2 z-50 w-72 max-w-[calc(100vw-2rem)] bg-fc-channel border border-fc-hover rounded-xl shadow-2xl p-2">
             <div className="px-2 py-1.5 text-sm font-semibold text-white">{t('disappear.title')}</div>
             {choices.map(o => (
               <button

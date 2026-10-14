@@ -11,15 +11,16 @@ export function Field({ label, hint, children }: { label: string; hint?: string;
 }
 
 /** Interrupteur ; `label` : nom lu par les lecteurs d'écran (WCAG 4.1.2, amélioration n° 41). */
-export function Toggle({ value, onChange, label }: { value: boolean; onChange: (v: boolean) => void; label?: string }) {
+export function Toggle({ value, onChange, label, disabled }: { value: boolean; onChange: (v: boolean) => void; label?: string; disabled?: boolean }) {
   return (
     <button
       type="button"
       role="switch"
       aria-checked={value}
       aria-label={label}
+      disabled={disabled}
       onClick={() => onChange(!value)}
-      className={`relative inline-flex h-5 w-9 rounded-full transition-colors ${value ? 'bg-fc-accent' : 'bg-fc-hover'}`}
+      className={`relative inline-flex h-5 w-9 shrink-0 rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${value ? 'bg-fc-accent' : 'bg-fc-hover'}`}
     >
       <span className={`inline-block h-4 w-4 mt-0.5 rounded-full bg-white shadow transition-transform ${value ? 'translate-x-[18px]' : 'translate-x-0.5'}`} />
     </button>

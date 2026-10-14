@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
-import { X, Hash, Volume2, Video, Radio, Megaphone, MessagesSquare, Lock, Shield, Settings, Plus, Trash2, ChevronDown, ChevronRight } from 'lucide-react'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { X, Hash, Volume2, Video, Radio, Megaphone, MessagesSquare, Lock, Shield, Settings, Plus, Trash2 } from 'lucide-react'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import api from '../../api/client'
 import toast from 'react-hot-toast'
 import { useEscapeKey } from '../../hooks/useEscapeKey'
@@ -10,28 +10,11 @@ import { deleteWithBackup } from '../../lib/deleteWithBackup'
 import ChannelFollowsSection from './ChannelFollowsSection'
 import ChannelMessagingSection from './ChannelMessagingSection'
 import { useT, type Key } from '../../i18n'
+import PermissionOverridesEditor, { type OverrideTarget } from './PermissionOverridesEditor'
+import ForumSettingsSection from './ForumSettingsSection'
 
 // Libellés : clés slowmode.<secondes>.
 const SLOWMODE_OPTIONS = [0, 5, 10, 15, 30, 60, 120, 300, 600, 3600] as const
-
-// Permissions affichables dans les overrides canal — mêmes bits que le serveur
-// (server/src/models/role.rs::Permissions), seuls appliqués. Libellés : clés chperm.<key>.
-const CHANNEL_PERMISSION_BITS = [
-  { key: 'VIEW_CHANNEL',     bit: Math.pow(2, 0) },
-  { key: 'SEND_MESSAGES',    bit: Math.pow(2, 1) },
-  { key: 'READ_HISTORY',     bit: Math.pow(2, 2) },
-  { key: 'MANAGE_MESSAGES',  bit: Math.pow(2, 3) },
-  { key: 'ATTACH_FILES',     bit: Math.pow(2, 10) },
-  { key: 'ADD_REACTIONS',    bit: Math.pow(2, 12) },
-  { key: 'EMBED_LINKS',      bit: Math.pow(2, 11) },
-  { key: 'MENTION_EVERYONE', bit: Math.pow(2, 9) },
-  { key: 'CONNECT_VOICE',    bit: Math.pow(2, 13) },
-  { key: 'SPEAK_VOICE',      bit: Math.pow(2, 14) },
-  { key: 'STREAM',           bit: Math.pow(2, 40) },
-  { key: 'MUTE_MEMBERS',     bit: Math.pow(2, 15) },
-  { key: 'DEAFEN_MEMBERS',   bit: Math.pow(2, 16) },
-  { key: 'MOVE_MEMBERS',     bit: Math.pow(2, 17) },
-] as const
 
 const FORUM_SORT_OPTIONS = ['latest_activity', 'creation_date', 'most_replies', 'most_reactions'] as const
 
@@ -56,9 +39,11 @@ interface Channel {
   position?: number
   disappear_seconds?: number | null
   auto_threads?: boolean
+  default_reaction_emoji?: string | null
+  post_guidelines?: string | null
 }
 
-type Target = { id: string; name: string; type: 'role' | 'member' }
+type Target = OverrideTarget
 
 interface Props {
   channel: Channel
@@ -80,192 +65,6 @@ function Toggle({ value, onChange, label }: { value: boolean; onChange: (v: bool
       className={`relative inline-flex h-6 w-11 rounded-full transition-colors flex-shrink-0 ${value ? 'bg-fc-accent' : 'bg-fc-hover'}`}>
       <span className={`inline-block h-[18px] w-[18px] mt-[3px] rounded-full bg-white shadow transition-transform ${value ? 'translate-x-[23px]' : 'translate-x-[3px]'}`} />
     </button>
-  )
-}
-
-// ─── Onglet Permissions ───────────────────────────────────────────────────────
-
-function PermissionsTab({ channel, serverId, initialTarget }: { channel: Channel; serverId: string; initialTarget?: Target }) {
-  const t = useT()
-  const qc = useQueryClient()
-  const [selectedTarget, setSelectedTarget] = useState<Target | null>(initialTarget ?? null)
-  const [editAllow, setEditAllow] = useState(0)
-  const [editDeny, setEditDeny] = useState(0)
-
-  const { data: roles = [] } = useQuery({
-    queryKey: ['roles', serverId],
-    queryFn: () => api.get(`/servers/${serverId}/roles`).then(r => r.data),
-    staleTime: 60_000,
-  })
-
-  const { data: overrides = [], refetch, isFetched } = useQuery({
-    queryKey: ['channel-permissions', channel.id],
-    queryFn: () => api.get(`/channels/${channel.id}/permissions`).then(r => r.data).catch(() => []),
-    staleTime: 30_000,
-  })
-  // Membre choisi depuis son menu : sa surcharge existante, une fois la liste chargée.
-  const [initialLoaded, setInitialLoaded] = useState(!initialTarget)
-  useEffect(() => {
-    if (initialLoaded || !isFetched || !initialTarget) return
-    const existing = (overrides as any[]).find((o: any) => o.target_id === initialTarget.id)
-    setEditAllow(existing?.allow ?? 0)
-    setEditDeny(existing?.deny ?? 0)
-    setInitialLoaded(true)
-  }, [initialLoaded, isFetched, initialTarget, overrides])
-
-  const saveOverride = useMutation({
-    mutationFn: () => api.put(`/channels/${channel.id}/permissions/${selectedTarget!.id}`, {
-      target_type: selectedTarget!.type,
-      allow: editAllow,
-      deny: editDeny,
-    }),
-    onSuccess: () => { refetch(); toast.success(t('chset.permsSaved')) },
-    onError: (e: any) => toast.error(e.response?.data?.error ?? t('common.error')),
-  })
-
-  const deleteOverride = useMutation({
-    mutationFn: (targetId: string) => api.delete(`/channels/${channel.id}/permissions/${targetId}`),
-    onSuccess: () => { refetch(); setSelectedTarget(null); toast.success(t('chset.overrideDeleted')) },
-    onError: (e: any) => toast.error(e.response?.data?.error ?? t('common.error')),
-  })
-
-  const selectTarget = (target: Target) => {
-    setSelectedTarget(target)
-    const existing = (overrides as any[]).find((o: any) => o.target_id === target.id)
-    setEditAllow(existing?.allow ?? 0)
-    setEditDeny(existing?.deny ?? 0)
-  }
-
-  const addRole = (role: any) => {
-    if (!(overrides as any[]).find((o: any) => o.target_id === role.id)) {
-      api.put(`/channels/${channel.id}/permissions/${role.id}`, {
-        target_type: 'role',
-        allow: 0,
-        deny: 0,
-      }).then(() => refetch()).catch(() => {})
-    }
-    selectTarget({ id: role.id, name: role.name, type: 'role' })
-  }
-
-  const getState = (bit: number): 'allow' | 'deny' | 'neutral' => {
-    const a = editAllow & bit
-    const d = editDeny & bit
-    if (a) return 'allow'
-    if (d) return 'deny'
-    return 'neutral'
-  }
-
-  const setState = (bit: number, state: 'allow' | 'deny' | 'neutral') => {
-    setEditAllow(a => {
-      let na = a
-      if (state === 'allow') na = na | bit
-      else na = na & ~bit
-      return na
-    })
-    setEditDeny(d => {
-      let nd = d
-      if (state === 'deny') nd = nd | bit
-      else nd = nd & ~bit
-      return nd
-    })
-  }
-
-  return (
-    <div className="flex gap-4 h-full min-h-0">
-      {/* Targets list */}
-      <div className="w-48 flex-shrink-0">
-        <p className="text-xs text-fc-muted uppercase tracking-wide font-semibold mb-2">{t('chset.targets')}</p>
-        <div className="space-y-0.5 mb-3">
-          {(overrides as any[]).map((o: any) => {
-            const role = (roles as any[]).find((r: any) => r.id === o.target_id)
-            const name = role?.name ?? (initialTarget && o.target_id === initialTarget.id ? initialTarget.name : o.target_id.slice(0, 8))
-            return (
-              <button key={o.target_id}
-                onClick={() => selectTarget({ id: o.target_id, name, type: o.target_type })}
-                className={`w-full text-left px-2.5 py-1.5 rounded-lg text-sm transition flex items-center gap-2
-                  ${selectedTarget?.id === o.target_id ? 'bg-fc-accent/20 text-white' : 'text-fc-muted hover:text-white hover:bg-fc-hover/50'}`}>
-                {o.target_type === 'role'
-                  ? <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: role?.color ? '#' + role.color.toString(16).padStart(6, '0') : '#99aab5' }} />
-                  : <Shield size={12} />
-                }
-                <span className="truncate">{name}</span>
-              </button>
-            )
-          })}
-        </div>
-
-        {/* Ajouter un rôle */}
-        <p className="text-xs text-fc-muted uppercase tracking-wide font-semibold mb-1">{t('chset.add')}</p>
-        <div className="space-y-0.5">
-          {(roles as any[]).filter((r: any) => !(overrides as any[]).find((o: any) => o.target_id === r.id)).map((r: any) => (
-            <button key={r.id}
-              onClick={() => addRole(r)}
-              className="w-full text-left px-2.5 py-1.5 rounded-lg text-xs text-fc-muted/60 hover:text-white hover:bg-fc-hover/30 transition flex items-center gap-1.5">
-              <Plus size={10} />
-              <span className="truncate">{r.name}</span>
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Permission editor */}
-      {selectedTarget ? (
-        <div className="flex-1 flex flex-col min-h-0">
-          <div className="flex items-center justify-between mb-3 flex-shrink-0">
-            <h4 className="font-semibold text-white text-sm">{selectedTarget.name}</h4>
-            <div className="flex items-center gap-2">
-              <button onClick={() => saveOverride.mutate()}
-                disabled={saveOverride.isPending}
-                className="px-3 py-1 bg-fc-accent hover:bg-indigo-500 text-white rounded-lg text-xs font-medium transition disabled:opacity-50">
-                {t('common.save')}
-              </button>
-              <button onClick={() => deleteOverride.mutate(selectedTarget.id)}
-                className="p-1 text-fc-muted hover:text-red-400 rounded transition" title={t('chset.deleteOverride')} aria-label={t('chset.deleteOverride')}>
-                <Trash2 size={14} />
-              </button>
-            </div>
-          </div>
-
-          {/* Légende */}
-          <div className="flex gap-3 text-xs text-fc-muted mb-3 flex-shrink-0">
-            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-full bg-green-500" /> {t('chset.allowed')}</span>
-            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-full bg-red-500" /> {t('chset.denied')}</span>
-            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-full bg-fc-muted/30" /> {t('chset.inherited')}</span>
-          </div>
-
-          <div className="flex-1 overflow-y-auto overscroll-contain space-y-1 pr-1">
-            {CHANNEL_PERMISSION_BITS.map(p => {
-              const state = getState(p.bit)
-              return (
-                <div key={p.key}
-                  className="flex items-center justify-between px-3 py-2 rounded-xl hover:bg-fc-hover/20 transition">
-                  <span className="text-sm text-white">{t(`chperm.${p.key}`)}</span>
-                  <div className="flex items-center gap-1">
-                    {/* Neutre */}
-                    <button onClick={() => setState(p.bit, 'neutral')} aria-label={`${t(`chperm.${p.key}`)} : ${t('chset.inherited')}`} aria-pressed={state === 'neutral'}
-                      className={`w-6 h-6 rounded-full transition border-2 ${state === 'neutral' ? 'bg-fc-muted/30 border-fc-muted' : 'border-transparent hover:border-fc-muted/50'}`} />
-                    {/* Autorisé */}
-                    <button onClick={() => setState(p.bit, 'allow')} aria-label={`${t(`chperm.${p.key}`)} : ${t('chset.allowed')}`} aria-pressed={state === 'allow'}
-                      className={`w-6 h-6 rounded-full transition flex items-center justify-center ${state === 'allow' ? 'bg-green-500' : 'hover:bg-green-500/20 border border-fc-hover'}`}>
-                      {state === 'allow' && <span className="text-white text-xs">✓</span>}
-                    </button>
-                    {/* Refusé */}
-                    <button onClick={() => setState(p.bit, 'deny')} aria-label={`${t(`chperm.${p.key}`)} : ${t('chset.denied')}`} aria-pressed={state === 'deny'}
-                      className={`w-6 h-6 rounded-full transition flex items-center justify-center ${state === 'deny' ? 'bg-red-500' : 'hover:bg-red-500/20 border border-fc-hover'}`}>
-                      {state === 'deny' && <span className="text-white text-xs">✕</span>}
-                    </button>
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        </div>
-      ) : (
-        <div className="flex-1 flex items-center justify-center text-fc-muted text-sm">
-          {t('chset.pickRole')}
-        </div>
-      )}
-    </div>
   )
 }
 
@@ -473,6 +272,10 @@ export default function ChannelSettingsModal({ channel, serverId, onClose, initi
                   disappearSeconds={channel.disappear_seconds} autoThreads={channel.auto_threads} />
               )}
 
+              {(channel.type === 'forum' || channel.type === 'media') && canEditChannels && (
+                <ForumSettingsSection serverId={serverId} channel={channel} />
+              )}
+
               {channel.type === 'forum' && (
                 <>
                   <div>
@@ -609,7 +412,8 @@ export default function ChannelSettingsModal({ channel, serverId, onClose, initi
           {/* ─── PERMISSIONS ─── */}
           {tab === 'permissions' && (
             <div className="h-[400px]">
-              <PermissionsTab channel={channel} serverId={serverId} initialTarget={initialTarget} />
+              <PermissionOverridesEditor basePath={`/channels/${channel.id}/permissions`} queryKey={['channel-permissions', channel.id]}
+                serverId={serverId} initialTarget={initialTarget} />
             </div>
           )}
 

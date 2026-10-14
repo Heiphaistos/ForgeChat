@@ -83,3 +83,31 @@ async fn dm_settings_mute_pin_close() {
     let c = user(&db).await;
     assert!(patch(&state, c, dm, serde_json::json!({ "pinned": true })).await.is_err());
 }
+
+async fn send(state: &AppState, me: Uuid, dm: Uuid) -> Result<()> {
+    send_dm(State(state.clone()), claims(me), Path(dm), Json(serde_json::json!({ "content": "salut" }))).await.map(|_| ())
+}
+
+#[tokio::test]
+#[ignore]
+async fn dm_send_blocked_both_ways_and_throttled() {
+    let (state, db) = setup().await;
+    let (a, b) = (user(&db).await, user(&db).await);
+    let Json(opened) = open_dm(State(state.clone()), claims(a), Path(b)).await.expect("open");
+    let dm: Uuid = serde_json::from_value(opened["dm_id"].clone()).expect("dm_id");
+
+    // Blocage dans un sens comme dans l'autre : ni le bloqué ni le bloqueur n'écrivent.
+    sqlx::query("INSERT INTO blocks (blocker_id, blocked_id) VALUES ($1, $2)").bind(a).bind(b).execute(&db).await.expect("block");
+    assert!(matches!(send(&state, b, dm).await, Err(AppError::Forbidden)));
+    assert!(matches!(send(&state, a, dm).await, Err(AppError::Forbidden)));
+    sqlx::query("DELETE FROM blocks").execute(&db).await.expect("unblock");
+    // Sans blocage la garde laisse passer (le clair est ensuite refusé : conversation chiffrée par défaut).
+    assert!(!matches!(send(&state, a, dm).await, Err(AppError::Forbidden | AppError::TooManyRequests)));
+
+    // Anti-spam : 5 messages par fenêtre de 3 s, le 6e est refusé.
+    let mut refused = false;
+    for _ in 0..6 {
+        refused |= matches!(send(&state, a, dm).await, Err(AppError::TooManyRequests));
+    }
+    assert!(refused, "le 6e message de la fenêtre doit être refusé");
+}

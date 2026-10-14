@@ -6,6 +6,7 @@ import { serversApi } from '@/api/servers'
 import { userRoute } from '@/features/servers/memberProfile'
 import { openUserMenu } from '@/features/userMenu/UserMenuHost'
 import { Avatar } from '@/components/Avatar'
+import { AvatarRing, effectiveRing } from '@/components/AvatarRing'
 import { UserName } from '@/components/UserName'
 import { ErrorState, Loading } from '@/components/ui'
 import { useT } from '@/i18n'
@@ -70,7 +71,10 @@ export default function MembersScreen() {
             accessibilityRole="button"
             accessibilityLabel={item.is_owner ? t('server.members.owner', { name: item.nickname || item.username }) : item.nickname || item.username}
           >
-            <Avatar uri={item.avatar} name={item.username} userId={item.user_id} status={item.status} showStatus size={38} decoration={item.avatar_decoration} decorationOpts={item.avatar_decoration_opts} />
+            {/* Anneau effectif : profil de serveur, sinon anneau global du compte. */}
+            <AvatarRing ring={effectiveRing(item)} size={38}>
+              <Avatar uri={item.avatar} name={item.username} userId={item.user_id} status={item.status} showStatus size={38} decoration={item.avatar_decoration} decorationOpts={item.avatar_decoration_opts} />
+            </AvatarRing>
             <View style={{ flex: 1 }}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.xs }}>
                 <UserName

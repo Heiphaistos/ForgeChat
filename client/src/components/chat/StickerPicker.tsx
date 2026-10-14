@@ -5,6 +5,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Upload, X, Loader2 } from 'lucide-react'
 import api, { mediaUrl } from '../../api/client'
 import toast from 'react-hot-toast'
+import { useT, type Key } from '../../i18n'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -53,6 +54,8 @@ const GLOBAL_STICKERS: Sticker[] = [
 ]
 
 const GLOBAL_CATEGORIES = [...new Set(GLOBAL_STICKERS.map(s => s.category))]
+// Catégorie = donnée (française) ; seul son libellé est traduit.
+const CATEGORY_LABEL: Record<string, Key> = { 'Réactions': 'stk.cat.reactions', 'Animaux': 'stk.cat.animals' }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -64,21 +67,22 @@ function UploadPanel({ serverId, onDone }: { serverId: string; onDone: () => voi
   const fileRef = useRef<HTMLInputElement>(null)
   const [name, setName] = useState('')
   const [file, setFile] = useState<File | null>(null)
+  const tr = useT()
 
   const upload = useMutation({
     mutationFn: () => {
-      if (!file || !name.trim()) throw new Error('Champs requis')
+      if (!file || !name.trim()) throw new Error(tr('stk.required'))
       const fd = new FormData()
       fd.append('name', name.trim())
       fd.append('file', file)
       return api.post(`/servers/${serverId}/stickers`, fd)
     },
     onSuccess: () => {
-      toast.success('Sticker ajouté')
+      toast.success(tr('stk.added'))
       qc.invalidateQueries({ queryKey: ['server_stickers', serverId] })
       setName(''); setFile(null); onDone()
     },
-    onError: (e: any) => toast.error(e.response?.data?.error ?? 'Erreur upload'),
+    onError: (e: any) => toast.error(e.response?.data?.error ?? tr('stk.uploadError')),
   })
 
   return (
@@ -86,28 +90,28 @@ function UploadPanel({ serverId, onDone }: { serverId: string; onDone: () => voi
       <input
         value={name}
         onChange={e => setName(e.target.value)}
-        placeholder="Nom du sticker"
+        placeholder={tr('stk.name')}
         maxLength={50}
         enterKeyHint="done"
         autoCapitalize="none"
-        aria-label="Nom du sticker"
+        aria-label={tr('stk.name')}
         className="w-full fc-input text-xs"
       />
       <div
         role="button"
         tabIndex={0}
-        aria-label={file ? `Fichier sélectionné : ${file.name}` : 'Sélectionner un fichier image (PNG, WEBP ou GIF, max 2 Mo)'}
+        aria-label={file ? tr('stk.fileSelected', { name: file.name }) : tr('stk.pickFile')}
         onClick={() => fileRef.current?.click()}
         onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') fileRef.current?.click() }}
         className="flex items-center gap-2 px-3 py-2 rounded-lg border border-dashed border-fc-hover
           text-fc-muted text-xs cursor-pointer hover:border-fc-accent hover:text-fc-accent transition"
       >
         <Upload size={13} aria-hidden />
-        <span className="truncate" aria-hidden>{file ? file.name : 'PNG / WEBP / GIF — max 2 Mo'}</span>
+        <span className="truncate" aria-hidden>{file ? file.name : tr('stk.formats')}</span>
         {file && (
           <button
             onClick={e => { e.stopPropagation(); setFile(null) }}
-            aria-label="Retirer le fichier sélectionné"
+            aria-label={tr('stk.removeFile')}
             className="ml-auto text-fc-muted hover:text-white"
           >
             <X size={11} aria-hidden />
@@ -128,7 +132,7 @@ function UploadPanel({ serverId, onDone }: { serverId: string; onDone: () => voi
         className="w-full btn-primary text-xs disabled:opacity-40 flex items-center justify-center gap-1"
       >
         {upload.isPending ? <Loader2 size={12} aria-hidden className="animate-spin" /> : null}
-        {upload.isPending ? 'Upload...' : 'Uploader'}
+        {upload.isPending ? tr('stk.uploading') : tr('stk.upload')}
       </button>
     </div>
   )
@@ -138,6 +142,7 @@ function UploadPanel({ serverId, onDone }: { serverId: string; onDone: () => voi
 
 export default function StickerPicker({ serverId, onPick, onClose }: Props) {
   useEscapeKey(onClose)
+  const tr = useT()
   const [tab, setTab] = useState<'server' | 'mine' | 'global'>(serverId ? 'server' : 'mine')
   const [globalCat, setGlobalCat] = useState(GLOBAL_CATEGORIES[0])
   const [hovered, setHovered] = useState<string | null>(null)
@@ -167,7 +172,7 @@ export default function StickerPicker({ serverId, onPick, onClose }: Props) {
       desktopClassName="absolute bottom-full right-0 mb-2 bg-fc-channel border border-fc-hover rounded-xl shadow-2xl w-72 z-50 overflow-hidden"
     >
       {/* Tabs */}
-      <div role="tablist" aria-label="Type de stickers" className="flex border-b border-fc-hover">
+      <div role="tablist" aria-label={tr('stk.tabs')} className="flex border-b border-fc-hover">
         {serverId && (
           <button
             role="tab"
@@ -176,7 +181,7 @@ export default function StickerPicker({ serverId, onPick, onClose }: Props) {
             className={`flex-1 py-2 text-xs font-semibold transition
               ${tab === 'server' ? 'text-white border-b-2 border-fc-accent' : 'text-fc-muted hover:text-white'}`}
           >
-            Serveur
+            {tr('stk.server')}
           </button>
         )}
         <button
@@ -186,7 +191,7 @@ export default function StickerPicker({ serverId, onPick, onClose }: Props) {
           className={`flex-1 py-2 text-xs font-semibold transition
             ${tab === 'mine' ? 'text-white border-b-2 border-fc-accent' : 'text-fc-muted hover:text-white'}`}
         >
-          Mes serveurs
+          {tr('stk.mine')}
         </button>
         <button
           role="tab"
@@ -195,14 +200,14 @@ export default function StickerPicker({ serverId, onPick, onClose }: Props) {
           className={`flex-1 py-2 text-xs font-semibold transition
             ${tab === 'global' ? 'text-white border-b-2 border-fc-accent' : 'text-fc-muted hover:text-white'}`}
         >
-          Global
+          {tr('stk.global')}
         </button>
       </div>
 
       {/* ── Stickers de mes autres serveurs ── */}
       {tab === 'mine' && (
         autres.length === 0 ? (
-          <div role="status" className="py-6 text-center text-xs text-fc-muted px-4">Aucun sticker dans tes autres serveurs.</div>
+          <div role="status" className="py-6 text-center text-xs text-fc-muted px-4">{tr('stk.noneMine')}</div>
         ) : (
           <div className="p-2 max-h-52 overflow-y-auto overscroll-contain space-y-2">
             {[...new Set(autres.map(s => s.server_id))].map(sid => {
@@ -230,12 +235,12 @@ export default function StickerPicker({ serverId, onPick, onClose }: Props) {
       {tab === 'server' && serverId && (
         <>
           {isLoading ? (
-            <div role="status" aria-label="Chargement des stickers" className="flex items-center justify-center py-8">
+            <div role="status" aria-label={tr('stk.loading')} className="flex items-center justify-center py-8">
               <Loader2 size={18} aria-hidden className="animate-spin text-fc-muted" />
             </div>
           ) : serverStickers.length === 0 ? (
             <div role="status" className="py-6 text-center text-xs text-fc-muted px-4">
-              Aucun sticker — les admins peuvent en ajouter via le bouton ci-dessous.
+              {tr('stk.noneServer')}
             </div>
           ) : (
             <div className="p-2 grid grid-cols-4 gap-1.5 max-h-52 overflow-y-auto overscroll-contain">
@@ -266,12 +271,12 @@ export default function StickerPicker({ serverId, onPick, onClose }: Props) {
             <button
               onClick={() => setShowUpload(p => !p)}
               aria-expanded={showUpload}
-              aria-label="Ajouter un sticker (admin/owner)"
+              aria-label={tr('stk.addA11y')}
               className={`flex items-center gap-1 text-xs px-2 py-1 rounded transition
                 ${showUpload ? 'text-fc-accent bg-fc-accent/10' : 'text-fc-muted hover:text-white hover:bg-fc-hover'}`}
             >
               <Upload size={12} aria-hidden />
-              <span aria-hidden>Ajouter</span>
+              <span aria-hidden>{tr('stk.add')}</span>
             </button>
             <span className="text-xs text-fc-muted ml-auto" aria-hidden>{serverStickers.length}/60</span>
           </div>
@@ -283,7 +288,7 @@ export default function StickerPicker({ serverId, onPick, onClose }: Props) {
       {/* ── Global tab ── */}
       {tab === 'global' && (
         <>
-          <div role="tablist" aria-label="Catégorie de stickers" className="flex border-b border-fc-hover overflow-x-auto">
+          <div role="tablist" aria-label={tr('stk.cats')} className="flex border-b border-fc-hover overflow-x-auto">
             {GLOBAL_CATEGORIES.map(cat => (
               <button
                 key={cat}
@@ -293,7 +298,7 @@ export default function StickerPicker({ serverId, onPick, onClose }: Props) {
                 className={`flex-shrink-0 px-3 py-1.5 text-xs font-medium transition
                   ${globalCat === cat ? 'text-white border-b-2 border-fc-accent' : 'text-fc-muted hover:text-white'}`}
               >
-                {cat}
+                {CATEGORY_LABEL[cat] ? tr(CATEGORY_LABEL[cat]) : cat}
               </button>
             ))}
           </div>

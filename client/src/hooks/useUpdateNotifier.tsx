@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react'
 import toast from 'react-hot-toast'
+import { t as tr } from '../i18n'
 import { showDesktopUpdateToast, type DesktopUpdateInfo } from '../components/DesktopUpdateToast'
 
 declare const __APP_VERSION__: string
@@ -75,13 +76,14 @@ export function useUpdateNotifier() {
           toast(
             (t) => (
               <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span onClick={() => { toast.dismiss(t.id); window.location.reload() }} style={{ cursor: 'pointer' }}>
-                  Nouvelle version disponible — <b>cliquer pour recharger</b>
-                </span>
+                <button type="button" onClick={() => { toast.dismiss(t.id); window.location.reload() }}
+                  style={{ cursor: 'pointer', background: 'none', border: 'none', color: 'inherit', padding: 0, textAlign: 'left' }}>
+                  {tr('upd.available')} — <b>{tr('upd.reload')}</b>
+                </button>
                 <button
                   onClick={(e) => { e.stopPropagation(); toast.dismiss(t.id) }}
-                  aria-label="Plus tard"
-                  title="Plus tard"
+                  aria-label={tr('upd.later')}
+                  title={tr('upd.later')}
                   style={{ background: 'none', border: 'none', color: '#72767d', cursor: 'pointer', fontSize: 16, lineHeight: 1, padding: 4 }}
                 >
                   ✕

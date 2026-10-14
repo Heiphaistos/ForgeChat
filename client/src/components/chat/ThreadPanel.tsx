@@ -215,7 +215,7 @@ export default function ThreadPanel({ serverId, channelId, parentMessageId, thre
     mutationFn: ({ msgId, emoji }: { msgId: string; emoji: string }) =>
       api.put(`/servers/${serverId}/channels/${channelId}/threads/${threadId}/messages/${msgId}/reactions/${encodeURIComponent(emoji)}`),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['thread-messages', threadId] }),
-    onError: () => toast.error('Impossible de réagir'),
+    onError: () => toast.error(tr('thr.reactError')),
   })
 
   const editMessage = useMutation({
@@ -227,9 +227,9 @@ export default function ThreadPanel({ serverId, channelId, parentMessageId, thre
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['thread-messages', threadId] })
       setEditingMsgId(null)
-      toast.success('Message modifié')
+      toast.success(tr('thr.edited'))
     },
-    onError: (e) => toast.error(channelSendError(e, 'Impossible de modifier')),
+    onError: (e) => toast.error(channelSendError(e, tr('thr.editError'))),
   })
 
   const deleteMessage = useMutation({
@@ -237,9 +237,9 @@ export default function ThreadPanel({ serverId, channelId, parentMessageId, thre
       api.delete(`/servers/${serverId}/channels/${channelId}/threads/${threadId}/messages/${msgId}`),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['thread-messages', threadId] })
-      toast.success('Message supprimé')
+      toast.success(tr('thr.deleted'))
     },
-    onError: () => toast.error('Impossible de supprimer'),
+    onError: () => toast.error(tr('thr.deleteError')),
   })
 
   // Défiler en bas quand un message arrive en fin de fil (pas au chargement de l'historique)
@@ -277,13 +277,13 @@ export default function ThreadPanel({ serverId, channelId, parentMessageId, thre
       pending.clear()
       if (tid) setThreadId(tid)
       qc.invalidateQueries({ queryKey: ['threads', channelId] })
-      toast.success('Thread créé !')
+      toast.success(tr('thr.created'))
       if (tid && res.data.first_message_id && res.prepared.count > 0) {
         await uploadPrepared(attachUrl(tid, res.data.first_message_id), res.prepared).catch(() => {})
         qc.invalidateQueries({ queryKey: ['thread-messages', tid] })
       }
     },
-    onError: (e: any) => toast.error(channelSendError(e, e.response?.data?.error ?? 'Erreur')),
+    onError: (e: any) => toast.error(channelSendError(e, e.response?.data?.error ?? tr('common.error'))),
   })
 
   const sendMessage = useMutation({
@@ -305,7 +305,7 @@ export default function ThreadPanel({ serverId, channelId, parentMessageId, thre
         qc.invalidateQueries({ queryKey: ['thread-messages', threadId] })
       }
     },
-    onError: (e: any) => toast.error(channelSendError(e, e.response?.data?.error ?? 'Erreur')),
+    onError: (e: any) => toast.error(channelSendError(e, e.response?.data?.error ?? tr('common.error'))),
   })
 
   // archive_thread (threads.rs) impose déjà côté serveur qu'un fil archivé/verrouillé
@@ -325,7 +325,7 @@ export default function ThreadPanel({ serverId, channelId, parentMessageId, thre
       setRenaming(null)
       qc.invalidateQueries({ queryKey: ['threads', channelId] })
     },
-    onError: (e: any) => toast.error(channelSendError(e, e.response?.data?.error ?? 'Erreur')),
+    onError: (e: any) => toast.error(channelSendError(e, e.response?.data?.error ?? tr('common.error'))),
   })
 
   const toggleArchive = useMutation({
@@ -335,9 +335,9 @@ export default function ThreadPanel({ serverId, channelId, parentMessageId, thre
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['threads', channelId] })
-      toast.success(thread?.archived ? 'Fil désarchivé' : 'Fil archivé')
+      toast.success(tr(thread?.archived ? 'thr.unarchived' : 'thr.archived'))
     },
-    onError: (e: any) => toast.error(e.response?.data?.error ?? 'Erreur'),
+    onError: (e: any) => toast.error(e.response?.data?.error ?? tr('common.error')),
   })
 
   const isLocked = !!thread?.locked || !!thread?.archived
@@ -347,7 +347,7 @@ export default function ThreadPanel({ serverId, channelId, parentMessageId, thre
     if (!canSend) return
     // Limite serveur : 4000 caractères
     if (input.trim().length > 4000) {
-      toast.error(`Message trop long : ${input.trim().length}/4000 caractères`)
+      toast.error(tr('thr.tooLong', { n: input.trim().length }))
       return
     }
     if (!threadId) {
@@ -361,14 +361,14 @@ export default function ThreadPanel({ serverId, channelId, parentMessageId, thre
     <div
       {...useSwipeRightToClose(onClose)}
       role="complementary"
-      aria-label="Fil de discussion"
+      aria-label={tr('thr.panel')}
       className="absolute inset-0 z-10 md:relative md:inset-auto md:z-auto md:w-80 bg-fc-channel border-l border-fc-bg flex flex-col flex-shrink-0 panel-slide-right"
     >
       {/* Header */}
       <div className="flex items-center gap-2 px-3 py-3 border-b border-fc-bg flex-shrink-0">
         <MessagesSquare size={16} className="text-fc-muted" aria-hidden />
-        <span className="font-semibold text-white text-sm flex-1">Fil de discussion</span>
-        <button onClick={onClose} className="text-fc-muted hover:text-white transition p-1 rounded hover:bg-fc-hover" title="Fermer" aria-label="Fermer le fil de discussion">
+        <span className="font-semibold text-white text-sm flex-1">{tr('thr.panel')}</span>
+        <button onClick={onClose} className="text-fc-muted hover:text-white transition p-1 rounded hover:bg-fc-hover" title={tr('common.close')} aria-label={tr('thr.closeA11y')}>
           <X size={16} />
         </button>
       </div>
@@ -381,19 +381,19 @@ export default function ThreadPanel({ serverId, channelId, parentMessageId, thre
               onClick={() => setCreating(true)}
               className="w-full text-center text-sm text-fc-accent hover:text-indigo-400 transition py-2"
             >
-              + Créer un thread depuis ce message
+              {tr('thr.createFrom')}
             </button>
           ) : (
             <div className="space-y-2">
               <input
                 value={newTitle}
                 onChange={e => setNewTitle(e.target.value)}
-                placeholder="Titre du thread (optionnel)"
+                placeholder={tr('thr.titlePh')}
                 enterKeyHint="next"
                 autoCapitalize="sentences"
                 className="w-full px-2 py-1.5 bg-fc-input rounded text-sm text-white outline-none focus:ring-1 focus:ring-fc-accent"
               />
-              <div className="text-xs text-fc-muted">Ou écrivez directement votre premier message ci-dessous</div>
+              <div className="text-xs text-fc-muted">{tr('thr.orWrite')}</div>
             </div>
           )}
         </div>
@@ -409,7 +409,7 @@ export default function ThreadPanel({ serverId, channelId, parentMessageId, thre
                 autoFocus
                 value={renaming}
                 maxLength={100}
-                aria-label="Nouveau titre du fil"
+                aria-label={tr('thr.newTitle')}
                 onChange={e => setRenaming(e.target.value)}
                 onKeyDown={e => {
                   if (e.key === 'Enter' && renaming.trim()) rename.mutate(renaming.trim())
@@ -424,29 +424,29 @@ export default function ThreadPanel({ serverId, channelId, parentMessageId, thre
             {thread.client_id && (
               <button
                 onClick={() => setRenaming(thread.title)}
-                title="Renommer le fil"
-                aria-label="Renommer le fil"
+                title={tr('thr.rename')}
+                aria-label={tr('thr.rename')}
                 className="p-1 text-fc-muted hover:text-fc-accent rounded hover:bg-fc-hover transition flex-shrink-0"
               >
                 <Pencil size={13} />
               </button>
             )}
-            {thread.locked && <Lock size={12} className="text-fc-muted flex-shrink-0" aria-label="Fil verrouillé" />}
+            {thread.locked && <Lock size={12} className="text-fc-muted flex-shrink-0" aria-label={tr('thr.locked')} />}
             <button
               onClick={() => toggleArchive.mutate()}
               disabled={toggleArchive.isPending}
-              title={thread.archived ? 'Désarchiver le fil' : 'Archiver le fil'}
-              aria-label={thread.archived ? 'Désarchiver le fil' : 'Archiver le fil'}
+              title={tr(thread.archived ? 'thr.unarchive' : 'thr.archive')}
+              aria-label={tr(thread.archived ? 'thr.unarchive' : 'thr.archive')}
               className="p-1 text-fc-muted hover:text-fc-accent rounded hover:bg-fc-hover transition disabled:opacity-50 flex-shrink-0"
             >
               {thread.archived ? <ArchiveRestore size={13} /> : <Archive size={13} />}
             </button>
           </div>
           <div className="text-xs text-fc-muted mt-0.5">
-            par {thread.creator_username} · {thread.message_count} messages
+            {tr('thr.byline', { name: thread.creator_username, n: thread.message_count })}
           </div>
           {thread.archived && (
-            <p className="text-xs text-fc-muted/80 mt-1 italic">Fil archivé — lecture seule.</p>
+            <p className="text-xs text-fc-muted/80 mt-1 italic">{tr('thr.archivedRo')}</p>
           )}
         </div>
       )}
@@ -517,7 +517,7 @@ export default function ThreadPanel({ serverId, channelId, parentMessageId, thre
               className="text-xs text-fc-accent hover:underline disabled:opacity-50 flex items-center gap-1"
             >
               {isFetchingNextPage && <Loader2 size={12} className="animate-spin" aria-hidden />}
-              Charger les messages précédents
+              {tr('thr.loadOlder')}
             </button>
           </div>
         )}
@@ -525,7 +525,7 @@ export default function ThreadPanel({ serverId, channelId, parentMessageId, thre
         {threadId && !isLoading && messages.length === 0 && (
           <div className="text-center text-fc-muted text-sm py-8">
             <MessagesSquare size={32} className="mx-auto mb-2 opacity-30" />
-            <p>Aucune réponse — soyez le premier !</p>
+            <p>{tr('thr.empty')}</p>
           </div>
         )}
 
@@ -591,23 +591,23 @@ export default function ThreadPanel({ serverId, channelId, parentMessageId, thre
                     {formatShort(msg.created_at)}
                   </span>
                   {msg.edited_at && (
-                    <span className="text-[9px] text-fc-muted/60" title="Message modifié">(modifié)</span>
+                    <span className="text-[9px] text-fc-muted/60" title={tr('thr.edited')}>{tr('thr.editedTag')}</span>
                   )}
                   {msg.unencrypted === true && <UnencryptedBadge />}
                   {editingMsgId !== msg.id && !isLocked && (
                     <button
                       onClick={() => setReplyTo({ id: msg.id, username: msg.author?.username ?? '', content: msg.content ?? '' })}
                       className={`opacity-100 md:opacity-0 md:group-hover:opacity-100 p-1.5 min-w-[44px] min-h-[44px] flex items-center justify-center rounded transition text-fc-muted hover:text-white ${isMe ? '' : 'ml-auto'}`}
-                      title="Répondre"
-                      aria-label="Répondre au message"
+                      title={tr('thr.reply')}
+                      aria-label={tr('thr.replyA11y')}
                     ><CornerUpLeft size={12} aria-hidden /></button>
                   )}
                   {editingMsgId !== msg.id && (
                     <button
                       onClick={() => setReactionPickerFor(cur => cur === msg.id ? null : msg.id)}
                       className={`opacity-100 md:opacity-0 md:group-hover:opacity-100 p-1.5 min-w-[44px] min-h-[44px] flex items-center justify-center rounded transition ${reactionPickerFor === msg.id ? 'text-fc-accent' : 'text-fc-muted hover:text-white'}`}
-                      title="Réagir"
-                      aria-label="Réagir au message"
+                      title={tr('thr.react')}
+                      aria-label={tr('thr.reactA11y')}
                     ><SmilePlus size={12} aria-hidden /></button>
                   )}
                   {isMe && editingMsgId !== msg.id && msg.e2e !== 'locked' && (
@@ -664,7 +664,7 @@ export default function ThreadPanel({ serverId, channelId, parentMessageId, thre
                         <CornerUpLeft size={10} className="flex-shrink-0" aria-hidden />
                         {msg.reply_to_username
                           ? <span className="truncate"><span className="font-semibold">{msg.reply_to_username}</span> {msg.reply_to_content}</span>
-                          : <span className="italic">Message supprimé</span>}
+                          : <span className="italic">{tr('thr.deleted')}</span>}
                       </div>
                     )}
                     <MediaContent text={msg.content ?? ''} className="text-sm text-fc-text leading-relaxed break-words" />
@@ -686,7 +686,7 @@ export default function ThreadPanel({ serverId, channelId, parentMessageId, thre
                               r.me ? 'bg-fc-accent/20 border-fc-accent/50 text-white' : 'bg-fc-hover/40 border-transparent text-fc-muted hover:border-fc-hover'
                             }`}
                             title={(r.users ?? []).join(', ')}
-                            aria-label={`${r.emoji} ${r.count} réaction${r.count > 1 ? 's' : ''}${r.users?.length ? ' — ' + r.users.join(', ') : ''}`}
+                            aria-label={`${tr(r.count > 1 ? 'thr.reaction.other' : 'thr.reaction.one', { emoji: r.emoji, n: r.count })}${r.users?.length ? ' — ' + r.users.join(', ') : ''}`}
                             aria-pressed={r.me}
                           >
                             <span aria-hidden>{r.emoji}</span>
@@ -718,20 +718,20 @@ export default function ThreadPanel({ serverId, channelId, parentMessageId, thre
       <div className="p-3 border-t border-fc-bg flex-shrink-0">
         {isLocked ? (
           <p className="text-xs text-fc-muted text-center py-2 italic">
-            {thread?.archived ? 'Ce fil est archivé.' : 'Ce fil est verrouillé.'}
+            {tr(thread?.archived ? 'thr.isArchived' : 'thr.isLocked')}
           </p>
         ) : (
         <>
         {Object.keys(typingUsers).length > 0 && (
           <div role="status" aria-live="polite" className="text-[11px] text-fc-muted italic mb-1 px-1 truncate">
-            {Object.values(typingUsers).map(t => t.username).join(', ')} {Object.keys(typingUsers).length > 1 ? 'écrivent' : 'écrit'}…
+            {tr(Object.keys(typingUsers).length > 1 ? 'thr.typing.other' : 'thr.typing.one', { names: Object.values(typingUsers).map(t => t.username).join(', ') })}
           </div>
         )}
         {replyTo && (
           <div className="flex items-center gap-1.5 text-[11px] text-fc-muted mb-1 px-1 min-w-0">
             <CornerUpLeft size={11} className="flex-shrink-0" aria-hidden />
-            <span className="truncate flex-1">Réponse à <span className="font-semibold text-fc-text">{replyTo.username}</span></span>
-            <button type="button" onClick={() => setReplyTo(null)} aria-label="Annuler la réponse" className="hover:text-white"><X size={12} aria-hidden /></button>
+            <span className="truncate flex-1">{tr('thr.replyTo')} <span className="font-semibold text-fc-text">{replyTo.username}</span></span>
+            <button type="button" onClick={() => setReplyTo(null)} aria-label={tr('thr.cancelReply')} className="hover:text-white"><X size={12} aria-hidden /></button>
           </div>
         )}
         <PendingFiles files={pending.files} onRemove={pending.remove} />
@@ -757,7 +757,7 @@ export default function ThreadPanel({ serverId, channelId, parentMessageId, thre
             onPaste={pending.onPaste}
             onDrop={pending.onDrop}
             onDragOver={pending.onDragOver}
-            placeholder={threadId ? 'Répondre au fil...' : 'Premier message du thread...'}
+            placeholder={tr(threadId ? 'thr.replyPh' : 'thr.firstPh')}
             enterKeyHint="send"
             autoCapitalize="sentences"
             rows={2}
@@ -766,8 +766,8 @@ export default function ThreadPanel({ serverId, channelId, parentMessageId, thre
           <button
             type="button"
             onClick={pending.pick}
-            title="Joindre des fichiers"
-            aria-label="Joindre des fichiers"
+            title={tr('thr.attach')}
+            aria-label={tr('thr.attach')}
             className="p-2 text-fc-muted hover:text-white rounded-lg hover:bg-fc-hover transition disabled:opacity-50 flex-shrink-0"
           >
             <Paperclip size={16} aria-hidden />
@@ -776,7 +776,7 @@ export default function ThreadPanel({ serverId, channelId, parentMessageId, thre
             onClick={handleSend}
             disabled={!canSend || createThread.isPending || sendMessage.isPending}
             className="p-2 bg-fc-accent hover:bg-indigo-500 text-white rounded-lg transition disabled:opacity-50 flex-shrink-0"
-            title="Envoyer"
+            title={tr('thr.send')} aria-label={tr('thr.send')}
           >
             <Send size={16} />
           </button>

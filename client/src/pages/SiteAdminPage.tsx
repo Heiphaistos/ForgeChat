@@ -8,11 +8,14 @@ import { passwordProof } from '../e2e/accountKey'
 import { useMobile } from '../contexts/MobileContext'
 import { useSiteAdmin, useSiteAdminInfo } from '../hooks/useSiteAdmin'
 import { HealthTab, SecurityTab } from '../components/admin/HealthTabs'
+import { t as tr, useT, intlLocale, type Key } from '../i18n'
+import { confirm } from '../components/ui/ConfirmModal'
+import TextPromptDialog from '../components/ui/TextPromptDialog'
 
 /** Administration du site : comptes, invitations, bannissements, réglages, journal. */
 
 type Tab = 'overview' | 'health' | 'security' | 'users' | 'servers' | 'invites' | 'settings' | 'audit'
-const TABS: [Tab, string][] = [['overview', 'Aperçu'], ['health', 'Santé'], ['security', 'Sécurité'], ['users', 'Comptes'], ['servers', 'Serveurs'], ['invites', 'Invitations'], ['settings', 'Réglages'], ['audit', 'Journal']]
+const TABS: Tab[] = ['overview', 'health', 'security', 'users', 'servers', 'invites', 'settings', 'audit']
 
 interface Overview {
   total_users: number; online_now: number; new_24h: number; new_7d: number; new_30d: number
@@ -34,19 +37,15 @@ interface Invite {
 }
 interface AuditEntry { id: number; action: string; detail: Record<string, unknown> | null; created_at: string; admin: string | null; target: string | null }
 
-const fmt = (iso: string | null) => (iso ? new Date(iso).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' }) : '—')
-const MODES: Record<Mode, string> = { invite: 'Sur invitation (code obligatoire)', closed: 'Fermées (personne ne peut s’inscrire)', open: 'Ouvertes à tous (déconseillé)' }
-const ACTIONS: Record<string, string> = {
-  grant_patron: 'a donné le rôle El Patron à', revoke_patron: 'a retiré le rôle El Patron à',
-  ban: 'a banni', unban: 'a débanni', force_logout: 'a déconnecté', create_invite: 'a créé une invitation',
-  revoke_invite: 'a révoqué une invitation',   set_registration_mode: 'a changé le mode d’inscription',
-  supervise_server: 'supervise le serveur', end_supervision: 'a terminé la supervision de', suspend_server: 'a suspendu le serveur',
-  unsuspend_server: 'a rétabli le serveur', delete_server: 'a supprimé le serveur',
-}
+const fmt = (iso: string | null) => (iso ? new Date(iso).toLocaleString(intlLocale(), { dateStyle: 'short', timeStyle: 'short' }) : '—')
+const MODES: Mode[] = ['invite', 'closed', 'open']
+// Actions du journal : libellé sadm.a.<action> (i18n/parts/siteAdmin.ts), sinon le code brut.
+const ACTIONS = new Set(['grant_patron', 'revoke_patron', 'ban', 'unban', 'force_logout', 'create_invite', 'revoke_invite',
+  'set_registration_mode', 'supervise_server', 'end_supervision', 'suspend_server', 'unsuspend_server', 'delete_server'])
 const inviteLink = (code: string) => `${SERVER_URL || window.location.origin}/register?code=${code}`
 
 async function copy(text: string, ok: string) {
-  try { await navigator.clipboard.writeText(text); toast.success(ok) } catch { toast.error('Copie impossible') }
+  try { await navigator.clipboard.writeText(text); toast.success(ok) } catch { toast.error(tr('sadm.copyFailed')) }
 }
 
 function Stat({ label, value, hint }: { label: string; value: number | string; hint?: string }) {
@@ -60,118 +59,128 @@ function Stat({ label, value, hint }: { label: string; value: number | string; h
 }
 
 function OverviewTab() {
+  const t = useT()
   const { data } = useQuery<Overview>({ queryKey: ['site-admin', 'overview'], queryFn: () => api.get('/admin/overview').then(r => r.data), refetchInterval: 30_000 })
-  if (!data) return <p className="text-fc-muted">Chargement…</p>
+  if (!data) return <p className="text-fc-muted">{t('common.loading')}</p>
   return (
     <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-      <Stat label="Comptes" value={data.total_users} />
-      <Stat label="Connectés maintenant" value={data.online_now} />
-      <Stat label="Actifs sur 24 h" value={data.active_24h} hint={`${data.active_7d} sur 7 jours`} />
-      <Stat label="Nouveaux (7 jours)" value={data.new_7d} hint={`${data.new_24h} en 24 h · ${data.new_30d} en 30 j`} />
-      <Stat label="Bannis" value={data.banned} />
-      <Stat label="El Patron" value={data.patrons + 1} hint="propriétaire inclus" />
-      <Stat label="Serveurs" value={data.servers} />
-      <Stat label="Messages" value={data.messages.toLocaleString('fr-FR')} />
-      <Stat label="Invitations actives" value={data.active_invites} />
-      <Stat label="Inscriptions" value={data.registration_mode === 'invite' ? 'Sur invitation' : data.registration_mode === 'closed' ? 'Fermées' : 'Ouvertes'} />
+      <Stat label={t('sadm.st.accounts')} value={data.total_users} />
+      <Stat label={t('sadm.st.onlineNow')} value={data.online_now} />
+      <Stat label={t('sadm.st.active24')} value={data.active_24h} hint={t('sadm.st.active7', { n: data.active_7d })} />
+      <Stat label={t('sadm.st.new7')} value={data.new_7d} hint={t('sadm.st.newHint', { d: data.new_24h, m: data.new_30d })} />
+      <Stat label={t('sadm.st.banned')} value={data.banned} />
+      <Stat label={t('sadm.st.patrons')} value={data.patrons + 1} hint={t('sadm.st.patronsHint')} />
+      <Stat label={t('sadm.st.servers')} value={data.servers} />
+      <Stat label={t('sadm.st.messages')} value={data.messages.toLocaleString(intlLocale())} />
+      <Stat label={t('sadm.st.invites')} value={data.active_invites} />
+      <Stat label={t('sadm.st.registrations')} value={t(`sadm.reg.${data.registration_mode}` as Key)} />
     </div>
   )
 }
 
 function UserDetail({ id }: { id: string }) {
+  const t = useT()
   const { data } = useQuery<{ sessions: { device: string | null; last_seen: string }[]; servers: { id: string; name: string; owner: boolean; joined_at: string }[]; invited: { id: string; username: string }[] }>({
     queryKey: ['site-admin', 'user', id], queryFn: () => api.get(`/admin/users/${id}`).then(r => r.data),
   })
-  if (!data) return <p className="text-xs text-fc-muted p-3">Chargement…</p>
+  if (!data) return <p className="text-xs text-fc-muted p-3">{t('common.loading')}</p>
   return (
     <div className="grid md:grid-cols-3 gap-4 p-3 text-xs text-fc-muted bg-fc-bg/60">
-      <div><div className="font-semibold text-white mb-1">Appareils ({data.sessions.length})</div>
-        {data.sessions.length === 0 ? '—' : data.sessions.map((s, i) => <div key={i} className="truncate">{s.device ?? 'Appareil inconnu'} · {fmt(s.last_seen)}</div>)}</div>
-      <div><div className="font-semibold text-white mb-1">Serveurs ({data.servers.length})</div>
-        {data.servers.length === 0 ? '—' : data.servers.map(s => <div key={s.id} className="truncate">{s.name}{s.owner ? ' (propriétaire)' : ''} · depuis le {fmt(s.joined_at)}</div>)}</div>
-      <div><div className="font-semibold text-white mb-1">A invité ({data.invited.length})</div>
+      <div><div className="font-semibold text-white mb-1">{t('sadm.devices', { n: data.sessions.length })}</div>
+        {data.sessions.length === 0 ? '—' : data.sessions.map((s, i) => <div key={i} className="truncate">{s.device ?? t('sadm.unknownDevice')} · {fmt(s.last_seen)}</div>)}</div>
+      <div><div className="font-semibold text-white mb-1">{t('sadm.serversN', { n: data.servers.length })}</div>
+        {data.servers.length === 0 ? '—' : data.servers.map(s => <div key={s.id} className="truncate">{s.name}{s.owner ? t('sadm.ownerTag') : ''} · {t('sadm.since', { date: fmt(s.joined_at) })}</div>)}</div>
+      <div><div className="font-semibold text-white mb-1">{t('sadm.invitedN', { n: data.invited.length })}</div>
         {data.invited.length === 0 ? '—' : data.invited.map(u => <div key={u.id}>{u.username}</div>)}</div>
     </div>
   )
 }
 
 function UsersTab() {
+  const t = useT()
   const { owner } = useSiteAdminInfo()
   const qc = useQueryClient()
   const [q, setQ] = useState('')
   const [filter, setFilter] = useState('all')
   const [open, setOpen] = useState<string | null>(null)
+  const [banning, setBanning] = useState<AdminUser | null>(null)
   const { data, isLoading } = useQuery<{ total: number; users: AdminUser[] }>({
     queryKey: ['site-admin', 'users', q, filter],
     queryFn: () => api.get('/admin/users', { params: { q, filter, limit: 100 } }).then(r => r.data),
     placeholderData: prev => prev,
   })
   const refresh = () => { qc.invalidateQueries({ queryKey: ['site-admin'] }) }
-  const fail = (e: any) => toast.error(e?.response?.data?.error ?? 'Action impossible')
-  const ban = useMutation({ mutationFn: ({ id, reason }: { id: string; reason: string }) => api.post(`/admin/users/${id}/ban`, { reason }), onSuccess: () => { toast.success('Compte banni'); refresh() }, onError: fail })
-  const unban = useMutation({ mutationFn: (id: string) => api.delete(`/admin/users/${id}/ban`), onSuccess: () => { toast.success('Compte débanni'); refresh() }, onError: fail })
-  const setPatron = useMutation({ mutationFn: ({ id, patron }: { id: string; patron: boolean }) => api.put(`/admin/users/${id}/patron`, { patron }), onSuccess: () => { toast.success('Rôle mis à jour'); refresh() }, onError: fail })
-  const logout = useMutation({ mutationFn: (id: string) => api.post(`/admin/users/${id}/logout`), onSuccess: () => { toast.success('Appareils déconnectés'); refresh() }, onError: fail })
+  const fail = (e: any) => toast.error(e?.response?.data?.error ?? tr('sadm.actionFailed'))
+  const ban = useMutation({ mutationFn: ({ id, reason }: { id: string; reason: string }) => api.post(`/admin/users/${id}/ban`, { reason }), onSuccess: () => { toast.success(tr('sadm.u.banned')); refresh() }, onError: fail })
+  const unban = useMutation({ mutationFn: (id: string) => api.delete(`/admin/users/${id}/ban`), onSuccess: () => { toast.success(tr('sadm.u.unbanned')); refresh() }, onError: fail })
+  const setPatron = useMutation({ mutationFn: ({ id, patron }: { id: string; patron: boolean }) => api.put(`/admin/users/${id}/patron`, { patron }), onSuccess: () => { toast.success(tr('sadm.u.roleUpdated')); refresh() }, onError: fail })
+  const logout = useMutation({ mutationFn: (id: string) => api.post(`/admin/users/${id}/logout`), onSuccess: () => { toast.success(tr('sadm.u.loggedOut')); refresh() }, onError: fail })
 
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap gap-2 items-center">
         <div className="relative flex-1 min-w-[200px]">
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-fc-muted" />
-          <input value={q} onChange={e => setQ(e.target.value)} placeholder="Pseudo, e-mail ou identifiant…" className="w-full pl-8 pr-3 py-2 bg-fc-input rounded text-white text-sm outline-none focus:ring-2 focus:ring-fc-accent" />
+          <input value={q} onChange={e => setQ(e.target.value)} placeholder={t('sadm.u.search')} className="w-full pl-8 pr-3 py-2 bg-fc-input rounded text-white text-sm outline-none focus:ring-2 focus:ring-fc-accent" />
         </div>
         <select value={filter} onChange={e => setFilter(e.target.value)} className="px-3 py-2 bg-fc-input rounded text-white text-sm outline-none">
-          <option value="all">Tous</option><option value="online">Connectés</option><option value="recent">Récents (7 j)</option>
-          <option value="banned">Bannis</option><option value="patrons">El Patron</option>
+          {(['all', 'online', 'recent', 'banned', 'patrons'] as const).map(f => <option key={f} value={f}>{t(`sadm.f.${f}`)}</option>)}
         </select>
-        <span className="text-sm text-fc-muted">{data?.total ?? 0} compte(s)</span>
+        <span className="text-sm text-fc-muted">{t('sadm.u.count', { n: data?.total ?? 0 })}</span>
       </div>
-      {isLoading && <p className="text-fc-muted">Chargement…</p>}
+      {isLoading && <p className="text-fc-muted">{t('common.loading')}</p>}
       <div className="rounded-lg border border-fc-hover overflow-hidden divide-y divide-fc-hover">
         {data?.users.map(u => (
           <div key={u.id}>
-            <div className="flex flex-wrap items-center gap-3 px-3 py-2.5 bg-fc-channel hover:bg-fc-hover/40 cursor-pointer" onClick={() => setOpen(open === u.id ? null : u.id)}>
-              <span className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${u.online ? 'bg-green-500' : 'bg-fc-muted/40'}`} title={u.online ? 'Connecté' : 'Hors ligne'} />
+            <div className="flex flex-wrap items-center gap-3 px-3 py-2.5 bg-fc-channel hover:bg-fc-hover/40 cursor-pointer" onClick={() => setOpen(open === u.id ? null : u.id)}
+              role="button" tabIndex={0} aria-expanded={open === u.id}
+              onKeyDown={e => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); setOpen(open === u.id ? null : u.id) } }}>
+              <span className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${u.online ? 'bg-green-500' : 'bg-fc-muted/40'}`} title={t(u.online ? 'sadm.u.online' : 'sadm.u.offline')} />
               <div className="min-w-0 flex-1 basis-48">
                 <div className="text-white text-sm font-medium truncate">
                   {u.username}
-                  {u.is_owner ? <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded bg-yellow-500/20 text-yellow-400">PROPRIÉTAIRE</span>
-                    : u.is_patron && <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded bg-fc-accent/20 text-fc-accent">EL PATRON</span>}
-                  {u.banned_at && <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded bg-red-500/20 text-red-400">BANNI</span>}
+                  {u.is_owner ? <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded bg-yellow-500/20 text-yellow-400">{t('sadm.tag.owner')}</span>
+                    : u.is_patron && <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded bg-fc-accent/20 text-fc-accent">{t('sadm.tag.patron')}</span>}
+                  {u.banned_at && <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded bg-red-500/20 text-red-400">{t('sadm.tag.banned')}</span>}
                   {u.is_bot && <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded bg-fc-hover text-fc-muted">BOT</span>}
                 </div>
                 <div className="text-xs text-fc-muted truncate">{u.email}</div>
               </div>
               <div className="text-xs text-fc-muted basis-44">
-                <div>Inscrit le {fmt(u.created_at)}</div>
-                <div>{u.invited_by ? `Invité par ${u.invited_by}` : 'Sans invitation'}{u.invite_note ? ` (« ${u.invite_note} »)` : ''}</div>
+                <div>{t('sadm.u.joined', { date: fmt(u.created_at) })}</div>
+                <div>{u.invited_by ? t('sadm.u.invitedBy', { name: u.invited_by }) : t('sadm.u.noInvite')}{u.invite_note ? ` (« ${u.invite_note} »)` : ''}</div>
               </div>
               <div className="text-xs text-fc-muted basis-36">
-                <div>Vu : {u.online ? 'en ligne' : fmt(u.last_seen)}</div>
-                <div>{u.server_count} serveur(s) · {u.message_count} msg</div>
+                <div>{t('sadm.u.seen', { when: u.online ? t('sadm.u.onlineNow') : fmt(u.last_seen) })}</div>
+                <div>{t('sadm.u.counts', { s: u.server_count, m: u.message_count })}</div>
               </div>
               <div className="flex gap-1" onClick={e => e.stopPropagation()}>
                 {u.banned_at ? (
-                  <button onClick={() => unban.mutate(u.id)} className="px-2 py-1 text-xs rounded bg-green-600/20 text-green-400 hover:bg-green-600/30">Débannir</button>
+                  <button onClick={() => unban.mutate(u.id)} className="px-2 py-1 text-xs rounded bg-green-600/20 text-green-400 hover:bg-green-600/30">{t('sadm.u.unban')}</button>
                 ) : !u.is_patron && (
-                  <button onClick={() => { const reason = window.prompt(`Bannir ${u.username} ? Motif (facultatif) :`); if (reason !== null) ban.mutate({ id: u.id, reason }) }}
-                    className="p-1.5 rounded text-red-400 hover:bg-red-500/20" title="Bannir" aria-label={`Bannir ${u.username}`}><Ban size={15} /></button>
+                  <button onClick={() => setBanning(u)}
+                    className="p-1.5 rounded text-red-400 hover:bg-red-500/20" title={t('sadm.u.ban')} aria-label={t('sadm.u.banA11y', { name: u.username })}><Ban size={15} /></button>
                 )}
                 {!u.is_bot && (
-                  <button onClick={() => { if (window.confirm(`Déconnecter ${u.username} de tous ses appareils ?`)) logout.mutate(u.id) }}
-                    className="p-1.5 rounded text-fc-muted hover:text-white hover:bg-fc-hover" title="Déconnecter partout" aria-label={`Déconnecter ${u.username}`}><LogOut size={15} /></button>
+                  <button onClick={() => { void confirm({ message: t('sadm.u.logoutConfirm', { name: u.username }), danger: true, confirmLabel: t('sadm.u.logoutAll') }).then(ok => { if (ok) logout.mutate(u.id) }) }}
+                    className="p-1.5 rounded text-fc-muted hover:text-white hover:bg-fc-hover" title={t('sadm.u.logoutAll')} aria-label={t('sadm.u.logoutA11y', { name: u.username })}><LogOut size={15} /></button>
                 )}
                 {owner && !u.is_owner && !u.is_bot && !u.banned_at && (
-                  <button onClick={() => { if (window.confirm(u.is_patron ? `Retirer le rôle El Patron à ${u.username} ?` : `Donner le rôle El Patron à ${u.username} ? Il aura accès à toute l’administration.`)) setPatron.mutate({ id: u.id, patron: !u.is_patron }) }}
-                    className={`p-1.5 rounded hover:bg-fc-hover ${u.is_patron ? 'text-yellow-400' : 'text-fc-muted hover:text-white'}`} title={u.is_patron ? 'Retirer le rôle El Patron' : 'Donner le rôle El Patron'} aria-label="Rôle El Patron"><Crown size={15} /></button>
+                  <button onClick={() => { void confirm({ message: t(u.is_patron ? 'sadm.u.patronRevokeConfirm' : 'sadm.u.patronGrantConfirm', { name: u.username }), danger: true, confirmLabel: t(u.is_patron ? 'sadm.u.patronRevoke' : 'sadm.u.patronGrant') }).then(ok => { if (ok) setPatron.mutate({ id: u.id, patron: !u.is_patron }) }) }}
+                    className={`p-1.5 rounded hover:bg-fc-hover ${u.is_patron ? 'text-yellow-400' : 'text-fc-muted hover:text-white'}`} title={t(u.is_patron ? 'sadm.u.patronRevoke' : 'sadm.u.patronGrant')} aria-label={t('sadm.u.patronA11y')}><Crown size={15} /></button>
                 )}
               </div>
             </div>
-            {u.banned_at && <div className="px-3 py-1.5 text-xs bg-red-500/10 text-red-300">Banni le {fmt(u.banned_at)}{u.ban_reason ? ` — ${u.ban_reason}` : ''}</div>}
+            {u.banned_at && <div className="px-3 py-1.5 text-xs bg-red-500/10 text-red-300">{t('sadm.u.bannedOn', { date: fmt(u.banned_at) })}{u.ban_reason ? ` — ${u.ban_reason}` : ''}</div>}
             {open === u.id && <UserDetail id={u.id} />}
           </div>
         ))}
       </div>
+      {banning && (
+        <TextPromptDialog title={t('sadm.u.banTitle', { name: banning.username })} label={t('sadm.reasonOptional')} maxLength={300} allowEmpty
+          submitLabel={t('sadm.u.ban')} danger
+          onSubmit={reason => { ban.mutate({ id: banning.id, reason }); setBanning(null) }} onClose={() => setBanning(null)} />
+      )}
     </div>
   )
 }
@@ -181,15 +190,17 @@ interface AdminServer {
   members: number; channels: number; messages: number; storage_bytes: number
   suspended_at: string | null; suspended_reason: string | null; joined: boolean; supervising: boolean
 }
-const sizeLabel = (n: number) => (n >= 1e9 ? `${(n / 1e9).toFixed(1)} Go` : n >= 1e6 ? `${(n / 1e6).toFixed(1)} Mo` : `${Math.round(n / 1e3)} Ko`)
+const sizeLabel = (n: number) => (n >= 1e9 ? tr('sadm.size.gb', { n: (n / 1e9).toFixed(1) }) : n >= 1e6 ? tr('sadm.size.mb', { n: (n / 1e6).toFixed(1) }) : tr('sadm.size.kb', { n: Math.round(n / 1e3) }))
 
 /** Modération de l'instance : tous les serveurs, avec supervision visible, suspension et suppression. */
 function ServersTab() {
+  const t = useT()
   const qc = useQueryClient()
   const nav = useNavigate()
   const [q, setQ] = useState('')
   const [filter, setFilter] = useState('all')
   const [del, setDel] = useState<AdminServer | null>(null)
+  const [suspending, setSuspending] = useState<AdminServer | null>(null)
   const [pw, setPw] = useState('')
   const { data, isLoading } = useQuery<{ total: number; servers: AdminServer[] }>({
     queryKey: ['site-admin', 'servers', q, filter],
@@ -197,33 +208,30 @@ function ServersTab() {
     placeholderData: prev => prev,
   })
   const refresh = () => { qc.invalidateQueries({ queryKey: ['site-admin'] }); qc.invalidateQueries({ queryKey: ['servers'] }) }
-  const fail = (e: any) => toast.error(e?.response?.data?.error ?? 'Action impossible')
+  const fail = (e: any) => toast.error(e?.response?.data?.error ?? tr('sadm.actionFailed'))
   const supervise = useMutation({ mutationFn: (id: string) => api.post(`/admin/servers/${id}/supervise`), onSuccess: (_r, id) => { refresh(); nav(`/servers/${id}`) }, onError: fail })
-  const endSup = useMutation({ mutationFn: (id: string) => api.delete(`/admin/servers/${id}/supervise`), onSuccess: () => { toast.success('Supervision terminée'); refresh() }, onError: fail })
-  const suspend = useMutation({ mutationFn: ({ id, reason }: { id: string; reason: string }) => api.post(`/admin/servers/${id}/suspend`, { reason }), onSuccess: () => { toast.success('Serveur suspendu'); refresh() }, onError: fail })
-  const resume = useMutation({ mutationFn: (id: string) => api.delete(`/admin/servers/${id}/suspend`), onSuccess: () => { toast.success('Serveur rétabli'); refresh() }, onError: fail })
+  const endSup = useMutation({ mutationFn: (id: string) => api.delete(`/admin/servers/${id}/supervise`), onSuccess: () => { toast.success(tr('sadm.s.supEnded')); refresh() }, onError: fail })
+  const suspend = useMutation({ mutationFn: ({ id, reason }: { id: string; reason: string }) => api.post(`/admin/servers/${id}/suspend`, { reason }), onSuccess: () => { toast.success(tr('sadm.s.suspended')); refresh() }, onError: fail })
+  const resume = useMutation({ mutationFn: (id: string) => api.delete(`/admin/servers/${id}/suspend`), onSuccess: () => { toast.success(tr('sadm.s.resumed')); refresh() }, onError: fail })
   const remove = useMutation({
     mutationFn: async ({ id, password }: { id: string; password: string }) => api.delete(`/admin/servers/${id}`, { data: await passwordProof(password) }),
-    onSuccess: () => { toast.success('Serveur supprimé'); setDel(null); setPw(''); refresh() }, onError: fail,
+    onSuccess: () => { toast.success(tr('sadm.s.deleted')); setDel(null); setPw(''); refresh() }, onError: fail,
   })
 
   return (
     <div className="space-y-3">
-      <p className="text-xs text-fc-muted">
-        La supervision t’ajoute comme membre visible du serveur (inscrit dans son journal d’audit et dans le tien). Les messages privés et les
-        salons chiffrés de bout en bout restent illisibles : tu ne reçois aucune clé.
-      </p>
+      <p className="text-xs text-fc-muted">{t('sadm.s.supInfo')}</p>
       <div className="flex flex-wrap gap-2 items-center">
         <div className="relative flex-1 min-w-[200px]">
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-fc-muted" />
-          <input value={q} onChange={e => setQ(e.target.value)} placeholder="Nom du serveur, propriétaire ou identifiant…" className="w-full pl-8 pr-3 py-2 bg-fc-input rounded text-white text-sm outline-none focus:ring-2 focus:ring-fc-accent" />
+          <input value={q} onChange={e => setQ(e.target.value)} placeholder={t('sadm.s.search')} className="w-full pl-8 pr-3 py-2 bg-fc-input rounded text-white text-sm outline-none focus:ring-2 focus:ring-fc-accent" />
         </div>
         <select value={filter} onChange={e => setFilter(e.target.value)} className="px-3 py-2 bg-fc-input rounded text-white text-sm outline-none">
-          <option value="all">Tous</option><option value="public">Publics</option><option value="suspended">Suspendus</option><option value="supervised">Supervisés</option>
+          {(['all', 'public', 'suspended', 'supervised'] as const).map(f => <option key={f} value={f}>{t(`sadm.f.${f}`)}</option>)}
         </select>
-        <span className="text-sm text-fc-muted">{data?.total ?? 0} serveur(s)</span>
+        <span className="text-sm text-fc-muted">{t('sadm.s.count', { n: data?.total ?? 0 })}</span>
       </div>
-      {isLoading && <p className="text-fc-muted">Chargement…</p>}
+      {isLoading && <p className="text-fc-muted">{t('common.loading')}</p>}
       <div className="rounded-lg border border-fc-hover overflow-hidden divide-y divide-fc-hover">
         {data?.servers.map(s => (
           <div key={s.id} className="bg-fc-channel">
@@ -231,42 +239,47 @@ function ServersTab() {
               <div className="min-w-0 flex-1 basis-48">
                 <div className="text-white text-sm font-medium truncate">
                   {s.name}
-                  {s.is_public && <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded bg-fc-hover text-fc-muted">PUBLIC</span>}
-                  {s.suspended_at && <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded bg-red-500/20 text-red-400">SUSPENDU</span>}
-                  {s.supervising && <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded bg-yellow-500/20 text-yellow-400">SUPERVISÉ</span>}
+                  {s.is_public && <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded bg-fc-hover text-fc-muted">{t('sadm.tag.public')}</span>}
+                  {s.suspended_at && <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded bg-red-500/20 text-red-400">{t('sadm.tag.suspended')}</span>}
+                  {s.supervising && <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded bg-yellow-500/20 text-yellow-400">{t('sadm.tag.supervised')}</span>}
                 </div>
-                <div className="text-xs text-fc-muted truncate">Propriétaire : {s.owner ?? '—'} · créé le {fmt(s.created_at)}</div>
+                <div className="text-xs text-fc-muted truncate">{t('sadm.s.ownerLine', { owner: s.owner ?? '—', date: fmt(s.created_at) })}</div>
               </div>
               <div className="text-xs text-fc-muted basis-56">
-                <div>{s.members} membre(s) · {s.channels} salon(s)</div>
-                <div>{s.messages.toLocaleString('fr-FR')} message(s) · {sizeLabel(s.storage_bytes)} de fichiers</div>
+                <div>{t('sadm.s.memberCounts', { m: s.members, c: s.channels })}</div>
+                <div>{t('sadm.s.msgCounts', { m: s.messages.toLocaleString(intlLocale()), size: sizeLabel(s.storage_bytes) })}</div>
               </div>
               <div className="flex flex-wrap gap-1.5">
                 {s.joined && !s.supervising ? (
-                  <button onClick={() => nav(`/servers/${s.id}`)} className="px-2 py-1 text-xs rounded bg-fc-hover text-white hover:bg-fc-accent/30">Ouvrir</button>
+                  <button onClick={() => nav(`/servers/${s.id}`)} className="px-2 py-1 text-xs rounded bg-fc-hover text-white hover:bg-fc-accent/30">{t('sadm.s.open')}</button>
                 ) : (
-                  <button onClick={() => supervise.mutate(s.id)} className="px-2 py-1 text-xs rounded bg-yellow-500/20 text-yellow-300 hover:bg-yellow-500/30">{s.supervising ? 'Ouvrir' : 'Superviser'}</button>
+                  <button onClick={() => supervise.mutate(s.id)} className="px-2 py-1 text-xs rounded bg-yellow-500/20 text-yellow-300 hover:bg-yellow-500/30">{t(s.supervising ? 'sadm.s.open' : 'sadm.s.supervise')}</button>
                 )}
-                {s.supervising && <button onClick={() => endSup.mutate(s.id)} className="px-2 py-1 text-xs rounded text-fc-muted hover:text-white hover:bg-fc-hover">Terminer</button>}
+                {s.supervising && <button onClick={() => endSup.mutate(s.id)} className="px-2 py-1 text-xs rounded text-fc-muted hover:text-white hover:bg-fc-hover">{t('sadm.s.end')}</button>}
                 {s.suspended_at
-                  ? <button onClick={() => resume.mutate(s.id)} className="px-2 py-1 text-xs rounded bg-green-600/20 text-green-400 hover:bg-green-600/30">Rétablir</button>
-                  : <button onClick={() => { const reason = window.prompt(`Suspendre « ${s.name} » ? Motif (affiché dans le journal) :`); if (reason !== null) suspend.mutate({ id: s.id, reason }) }} className="px-2 py-1 text-xs rounded text-orange-300 hover:bg-orange-500/20">Suspendre</button>}
-                <button onClick={() => setDel(s)} className="p-1.5 rounded text-red-400 hover:bg-red-500/20" title="Supprimer le serveur" aria-label={`Supprimer ${s.name}`}><Trash2 size={15} /></button>
+                  ? <button onClick={() => resume.mutate(s.id)} className="px-2 py-1 text-xs rounded bg-green-600/20 text-green-400 hover:bg-green-600/30">{t('sadm.s.resume')}</button>
+                  : <button onClick={() => setSuspending(s)} className="px-2 py-1 text-xs rounded text-orange-300 hover:bg-orange-500/20">{t('sadm.s.suspend')}</button>}
+                <button onClick={() => setDel(s)} className="p-1.5 rounded text-red-400 hover:bg-red-500/20" title={t('sadm.s.delete')} aria-label={t('sadm.s.deleteA11y', { name: s.name })}><Trash2 size={15} /></button>
               </div>
             </div>
-            {s.suspended_at && <div className="px-3 py-1.5 text-xs bg-red-500/10 text-red-300">Suspendu le {fmt(s.suspended_at)}{s.suspended_reason ? ` — ${s.suspended_reason}` : ''}</div>}
+            {s.suspended_at && <div className="px-3 py-1.5 text-xs bg-red-500/10 text-red-300">{t('sadm.s.suspendedOn', { date: fmt(s.suspended_at) })}{s.suspended_reason ? ` — ${s.suspended_reason}` : ''}</div>}
           </div>
         ))}
       </div>
+      {suspending && (
+        <TextPromptDialog title={t('sadm.s.suspendTitle', { name: suspending.name })} label={t('sadm.s.suspendReason')} maxLength={300} allowEmpty
+          submitLabel={t('sadm.s.suspend')} danger
+          onSubmit={reason => { suspend.mutate({ id: suspending.id, reason }); setSuspending(null) }} onClose={() => setSuspending(null)} />
+      )}
       {del && (
-        <div role="dialog" aria-modal="true" aria-label="Supprimer le serveur" className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/70 px-4">
+        <div role="dialog" aria-modal="true" aria-label={t('sadm.s.delete')} className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/70 px-4">
           <form onSubmit={e => { e.preventDefault(); remove.mutate({ id: del.id, password: pw }) }} className="bg-fc-channel rounded-lg p-5 w-full max-w-sm space-y-3 border border-fc-hover">
-            <h2 className="text-white font-semibold">Supprimer « {del.name} » ?</h2>
-            <p className="text-sm text-fc-muted">Suppression définitive : salons, messages et fichiers disparaissent. Confirme avec ton mot de passe.</p>
-            <input type="password" autoFocus value={pw} onChange={e => setPw(e.target.value)} autoComplete="current-password" placeholder="Ton mot de passe" className="w-full px-3 py-2 bg-fc-input rounded text-white text-sm outline-none focus:ring-2 focus:ring-fc-accent" />
+            <h2 className="text-white font-semibold">{t('sadm.s.deleteTitle', { name: del.name })}</h2>
+            <p className="text-sm text-fc-muted">{t('sadm.s.deleteWarn')}</p>
+            <input type="password" autoFocus value={pw} onChange={e => setPw(e.target.value)} autoComplete="current-password" placeholder={t('sadm.s.password')} className="w-full px-3 py-2 bg-fc-input rounded text-white text-sm outline-none focus:ring-2 focus:ring-fc-accent" />
             <div className="flex justify-end gap-2">
-              <button type="button" onClick={() => { setDel(null); setPw('') }} className="px-3 py-1.5 text-sm rounded text-fc-muted hover:text-white">Annuler</button>
-              <button type="submit" disabled={!pw || remove.isPending} className="px-3 py-1.5 text-sm rounded bg-red-600 hover:bg-red-500 text-white disabled:opacity-50">Supprimer définitivement</button>
+              <button type="button" onClick={() => { setDel(null); setPw('') }} className="px-3 py-1.5 text-sm rounded text-fc-muted hover:text-white">{t('common.cancel')}</button>
+              <button type="submit" disabled={!pw || remove.isPending} className="px-3 py-1.5 text-sm rounded bg-red-600 hover:bg-red-500 text-white disabled:opacity-50">{t('sadm.s.deleteForever')}</button>
             </div>
           </form>
         </div>
@@ -276,6 +289,7 @@ function ServersTab() {
 }
 
 function InvitesTab() {
+  const t = useT()
   const qc = useQueryClient()
   const [note, setNote] = useState('')
   const [maxUses, setMaxUses] = useState(1)
@@ -283,36 +297,36 @@ function InvitesTab() {
   const { data } = useQuery<{ invites: Invite[] }>({ queryKey: ['site-admin', 'invites'], queryFn: () => api.get('/admin/invites').then(r => r.data) })
   const create = useMutation({
     mutationFn: () => api.post('/admin/invites', { note, max_uses: maxUses, expires_in_days: days || undefined }).then(r => r.data as { code: string }),
-    onSuccess: r => { setNote(''); qc.invalidateQueries({ queryKey: ['site-admin'] }); void copy(inviteLink(r.code), 'Lien d’invitation copié — envoie-le à la personne') },
-    onError: (e: any) => toast.error(e?.response?.data?.error ?? 'Création impossible'),
+    onSuccess: r => { setNote(''); qc.invalidateQueries({ queryKey: ['site-admin'] }); void copy(inviteLink(r.code), tr('sadm.i.linkCopied')) },
+    onError: (e: any) => toast.error(e?.response?.data?.error ?? tr('sadm.i.createFailed')),
   })
   const revoke = useMutation({ mutationFn: (id: string) => api.delete(`/admin/invites/${id}`), onSuccess: () => qc.invalidateQueries({ queryKey: ['site-admin'] }) })
-  const STATUS = { active: ['Active', 'text-green-400'], used: ['Utilisée', 'text-fc-muted'], expired: ['Expirée', 'text-yellow-400'], revoked: ['Révoquée', 'text-red-400'] } as const
+  const STATUS = { active: 'text-green-400', used: 'text-fc-muted', expired: 'text-yellow-400', revoked: 'text-red-400' } as const
 
   return (
     <div className="space-y-4">
       <div className="bg-fc-channel border border-fc-hover rounded-lg p-4 space-y-3">
-        <h2 className="text-white font-semibold">Nouvelle invitation</h2>
+        <h2 className="text-white font-semibold">{t('sadm.i.new')}</h2>
         <div className="flex flex-wrap gap-3 items-end">
-          <label className="text-xs text-fc-muted flex-1 min-w-[180px]">Pour qui ? (note privée)
-            <input value={note} onChange={e => setNote(e.target.value)} maxLength={100} placeholder="ex. Cousine Léa" className="mt-1 w-full px-3 py-2 bg-fc-input rounded text-white text-sm outline-none focus:ring-2 focus:ring-fc-accent" /></label>
-          <label className="text-xs text-fc-muted">Utilisations
+          <label className="text-xs text-fc-muted flex-1 min-w-[180px]">{t('sadm.i.forWho')}
+            <input value={note} onChange={e => setNote(e.target.value)} maxLength={100} placeholder={t('sadm.i.forWhoPh')} className="mt-1 w-full px-3 py-2 bg-fc-input rounded text-white text-sm outline-none focus:ring-2 focus:ring-fc-accent" /></label>
+          <label className="text-xs text-fc-muted">{t('sadm.i.uses')}
             <input type="number" min={1} max={1000} value={maxUses} onChange={e => setMaxUses(Math.max(1, Number(e.target.value) || 1))} className="mt-1 w-24 px-3 py-2 bg-fc-input rounded text-white text-sm outline-none" /></label>
-          <label className="text-xs text-fc-muted">Valable (jours, 0 = illimité)
+          <label className="text-xs text-fc-muted">{t('sadm.i.days')}
             <input type="number" min={0} max={365} value={days} onChange={e => setDays(Math.max(0, Number(e.target.value) || 0))} className="mt-1 w-24 px-3 py-2 bg-fc-input rounded text-white text-sm outline-none" /></label>
-          <button onClick={() => create.mutate()} disabled={create.isPending} className="flex items-center gap-1.5 px-4 py-2 bg-fc-accent hover:bg-indigo-500 text-white rounded text-sm disabled:opacity-50"><Plus size={14} /> Générer et copier le lien</button>
+          <button onClick={() => create.mutate()} disabled={create.isPending} className="flex items-center gap-1.5 px-4 py-2 bg-fc-accent hover:bg-indigo-500 text-white rounded text-sm disabled:opacity-50"><Plus size={14} /> {t('sadm.i.generate')}</button>
         </div>
       </div>
       <div className="rounded-lg border border-fc-hover overflow-hidden divide-y divide-fc-hover">
-        {data?.invites.length === 0 && <p className="p-4 text-fc-muted text-sm">Aucune invitation pour le moment.</p>}
+        {data?.invites.length === 0 && <p className="p-4 text-fc-muted text-sm">{t('sadm.i.none')}</p>}
         {data?.invites.map(i => (
           <div key={i.id} className="flex flex-wrap items-center gap-3 px-3 py-2.5 bg-fc-channel">
             <code className="text-white font-mono tracking-wider text-sm">{i.code}</code>
-            <span className={`text-xs ${STATUS[i.status][1]}`}>{STATUS[i.status][0]}</span>
-            <span className="text-xs text-fc-muted">{i.uses}/{i.max_uses} utilisée(s)</span>
+            <span className={`text-xs ${STATUS[i.status]}`}>{t(`sadm.i.st.${i.status}`)}</span>
+            <span className="text-xs text-fc-muted">{t('sadm.i.usedCount', { u: i.uses, m: i.max_uses })}</span>
             <span className="text-xs text-fc-muted flex-1 min-w-[160px] truncate">{i.note ?? ''}{i.used_by.length ? ` → ${i.used_by.map(u => u.username).join(', ')}` : ''}</span>
-            <span className="text-xs text-fc-muted">{i.expires_at ? `expire le ${fmt(i.expires_at)}` : 'sans expiration'}</span>
-            {i.status === 'active' && <button onClick={() => { if (window.confirm('Révoquer cette invitation ?')) revoke.mutate(i.id) }} className="p-1.5 rounded text-red-400 hover:bg-red-500/20" title="Révoquer" aria-label="Révoquer"><Trash2 size={15} /></button>}
+            <span className="text-xs text-fc-muted">{i.expires_at ? t('sadm.i.expiresOn', { date: fmt(i.expires_at) }) : t('sadm.i.noExpiry')}</span>
+            {i.status === 'active' && <button onClick={() => { void confirm({ message: t('sadm.i.revokeConfirm'), danger: true, confirmLabel: t('sadm.i.revoke') }).then(ok => { if (ok) revoke.mutate(i.id) }) }} className="p-1.5 rounded text-red-400 hover:bg-red-500/20" title={t('sadm.i.revoke')} aria-label={t('sadm.i.revoke')}><Trash2 size={15} /></button>}
           </div>
         ))}
       </div>
@@ -321,36 +335,38 @@ function InvitesTab() {
 }
 
 function SettingsTab() {
+  const t = useT()
   const qc = useQueryClient()
   const { data } = useQuery<{ registration_mode: Mode }>({ queryKey: ['site-admin', 'settings'], queryFn: () => api.get('/admin/settings').then(r => r.data) })
   const save = useMutation({
     mutationFn: (registration_mode: Mode) => api.put('/admin/settings', { registration_mode }),
-    onSuccess: () => { toast.success('Réglage enregistré'); qc.invalidateQueries({ queryKey: ['site-admin'] }) },
-    onError: () => toast.error('Enregistrement impossible'),
+    onSuccess: () => { toast.success(tr('sadm.set.saved')); qc.invalidateQueries({ queryKey: ['site-admin'] }) },
+    onError: () => toast.error(tr('sadm.set.saveFailed')),
   })
   return (
     <div className="bg-fc-channel border border-fc-hover rounded-lg p-4 space-y-3 max-w-xl">
-      <h2 className="text-white font-semibold">Qui peut créer un compte ?</h2>
-      {(Object.keys(MODES) as Mode[]).map(m => (
+      <h2 className="text-white font-semibold">{t('sadm.set.who')}</h2>
+      {MODES.map(m => (
         <label key={m} className="flex items-center gap-2 text-sm text-fc-text cursor-pointer">
           <input type="radio" name="mode" checked={data?.registration_mode === m} onChange={() => save.mutate(m)} className="accent-indigo-500" />
-          {MODES[m]}
+          {t(`sadm.mode.${m}`)}
         </label>
       ))}
-      <p className="text-xs text-fc-muted">Les comptes existants ne sont pas affectés. Un code d’invitation ne fonctionne qu’en mode « sur invitation ».</p>
+      <p className="text-xs text-fc-muted">{t('sadm.set.hint')}</p>
     </div>
   )
 }
 
 function AuditTab() {
+  const t = useT()
   const { data } = useQuery<{ entries: AuditEntry[] }>({ queryKey: ['site-admin', 'audit'], queryFn: () => api.get('/admin/audit').then(r => r.data) })
   return (
     <div className="rounded-lg border border-fc-hover overflow-hidden divide-y divide-fc-hover">
-      {data?.entries.length === 0 && <p className="p-4 text-fc-muted text-sm">Aucune action enregistrée.</p>}
+      {data?.entries.length === 0 && <p className="p-4 text-fc-muted text-sm">{t('sadm.a.none')}</p>}
       {data?.entries.map(e => (
         <div key={e.id} className="px-3 py-2 bg-fc-channel text-sm text-fc-text flex flex-wrap gap-x-2">
           <span className="text-fc-muted w-36">{fmt(e.created_at)}</span>
-          <span><b className="text-white">{e.admin ?? 'Administrateur supprimé'}</b> {ACTIONS[e.action] ?? e.action}{e.target ? <> <b className="text-white">{e.target}</b></> : null}
+          <span><b className="text-white">{e.admin ?? t('sadm.a.deletedAdmin')}</b> {ACTIONS.has(e.action) ? t(`sadm.a.${e.action}` as Key) : e.action}{e.target ? <> <b className="text-white">{e.target}</b></> : null}
             {typeof e.detail?.server === 'string' ? <b className="text-white"> {e.detail.server}</b> : null}
             {typeof e.detail?.reason === 'string' && e.detail.reason ? <span className="text-fc-muted"> — {e.detail.reason}</span> : null}
             {typeof e.detail?.mode === 'string' ? <span className="text-fc-muted"> → {e.detail.mode}</span> : null}</span>
@@ -361,6 +377,7 @@ function AuditTab() {
 }
 
 export default function SiteAdminPage() {
+  const t = useT()
   const nav = useNavigate()
   const { openSidebar } = useMobile()
   const isAdmin = useSiteAdmin()
@@ -371,15 +388,15 @@ export default function SiteAdminPage() {
   return (
     <div className="flex-1 overflow-y-auto overscroll-contain bg-fc-bg">
       <div className="flex items-center gap-3 px-4 py-2.5 border-b border-fc-bg shadow-sm min-h-[48px] sticky top-0 bg-fc-bg z-10">
-        <button className="md:hidden min-w-[44px] min-h-[44px] flex items-center justify-center rounded hover:bg-fc-hover text-fc-muted hover:text-white transition flex-shrink-0" onClick={openSidebar} aria-label="Ouvrir le menu"><ChevronLeft size={20} /></button>
-        <h1 className="text-lg font-bold text-white truncate">Administration de ForgeChat</h1>
-        <button onClick={() => nav(-1)} className="ml-auto text-fc-muted hover:text-white text-sm transition">← Retour</button>
+        <button className="md:hidden min-w-[44px] min-h-[44px] flex items-center justify-center rounded hover:bg-fc-hover text-fc-muted hover:text-white transition flex-shrink-0" onClick={openSidebar} aria-label={t('sadm.openMenu')}><ChevronLeft size={20} /></button>
+        <h1 className="text-lg font-bold text-white truncate">{t('sadm.title')}</h1>
+        <button onClick={() => nav(-1)} className="ml-auto text-fc-muted hover:text-white text-sm transition">{t('sadm.back')}</button>
       </div>
       <div className="max-w-5xl mx-auto p-4 space-y-4">
         <div role="tablist" className="flex flex-wrap gap-1 border-b border-fc-hover">
-          {TABS.map(([id, label]) => (
+          {TABS.map(id => (
             <button key={id} role="tab" aria-selected={tab === id} onClick={() => setTab(id)}
-              className={`px-4 py-2 text-sm -mb-px border-b-2 transition ${tab === id ? 'border-fc-accent text-white' : 'border-transparent text-fc-muted hover:text-white'}`}>{label}</button>
+              className={`px-4 py-2 text-sm -mb-px border-b-2 transition ${tab === id ? 'border-fc-accent text-white' : 'border-transparent text-fc-muted hover:text-white'}`}>{t(`sadm.tab.${id}`)}</button>
           ))}
         </div>
         {tab === 'overview' && <OverviewTab />}

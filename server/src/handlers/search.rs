@@ -162,7 +162,12 @@ async fn search_messages(
     limit: i64,
 ) -> Result<(Vec<serde_json::Value>, Option<String>)> {
     use sqlx::Row;
-    let hidden: Vec<Uuid> = state.hidden_channels(uid, None, None).await?.into_iter().collect();
+    // Salons masqués ET salons sans READ_HISTORY : la recherche ne doit pas
+    // rouvrir un historique que la permission ferme.
+    let mut hidden: Vec<Uuid> = state.hidden_channels(uid, None, None).await?.into_iter().collect();
+    if matches!(scope, Scope::All | Scope::Servers | Scope::Channel(_)) {
+        hidden.extend(crate::handlers::channel_access::channels_without_history(state, uid).await?);
+    }
     let mut qb: QueryBuilder<Postgres> = QueryBuilder::new("SELECT * FROM (");
     let mut first = true;
     let mut union = |qb: &mut QueryBuilder<Postgres>| {

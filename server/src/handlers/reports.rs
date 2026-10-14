@@ -248,24 +248,24 @@ pub async fn report_action(
             .bind(report_id)
             .execute(&state.db)
             .await?;
-            crate::handlers::messages::delete_message(st, cl, Path((server_id, channel, message_id))).await?;
+            let _ = crate::handlers::messages::delete_message(st, cl, Path((server_id, channel, message_id))).await?;
             ("resolved", None)
         }
         "timeout" => {
             let author = author.ok_or_else(gone)?;
             let minutes = body.duration_minutes.unwrap_or(60).clamp(1, 40_320);
-            crate::handlers::moderation::create_timeout(cl, Path((server_id, author)), st,
+            let _ = crate::handlers::moderation::create_timeout(cl, Path((server_id, author)), st,
                 Json(crate::handlers::moderation::CreateTimeout { duration_minutes: minutes, reason: reason.clone() })).await?;
             ("resolved", Some(format!("{minutes} min")))
         }
         "kick" => {
             let author = author.ok_or_else(gone)?;
-            crate::handlers::servers::kick_member(st, cl, Path((server_id, author))).await?;
+            let _ = crate::handlers::servers::kick_member(st, cl, Path((server_id, author))).await?;
             ("resolved", None)
         }
         "ban" => {
             let author = author.ok_or_else(gone)?;
-            crate::handlers::servers::ban_member(st, cl, Path((server_id, author)), Json(serde_json::json!({ "reason": reason }))).await?;
+            let _ = crate::handlers::servers::ban_member(st, cl, Path((server_id, author)), Json(serde_json::json!({ "reason": reason }))).await?;
             ("resolved", None)
         }
         "resolve" => ("resolved", None),

@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { X } from 'lucide-react'
 import { useSwipeRightToClose } from '../../hooks/useSwipeClose'
-import api from '../../api/client'
+import { fetchAllMembers } from '../../api/members'
 import { usePresence } from '../../store/presence'
 import { userMenuProps } from '../userMenu/store'
 import UserPopup from '../UserPopup'
@@ -11,7 +11,7 @@ import AnimatedImg from '../ui/AnimatedImg'
 import UserName from '../ui/UserName'
 import RichStatus from '../ui/RichStatus'
 import { AvatarDecoration } from '../ui/ProfileDecor'
-import AvatarRing from '../ui/AvatarRing'
+import AvatarRing, { pickRing } from '../ui/AvatarRing'
 import { useT, type Key } from '../../i18n'
 
 interface Props {
@@ -46,7 +46,7 @@ const STATUS_LABELS: Record<string, Key> = {
   invisible: 'presence.invisible',
 }
 
-function MemberRow({ m, decor, serverId, onClick }: { m: any; decor?: RoleDecor; serverId: string; onClick: (e: React.MouseEvent) => void }) {
+function MemberRow({ m, decor, serverId, onOpen }: { m: any; decor?: RoleDecor; serverId: string; onOpen: (x: number, y: number) => void }) {
   const t = useT()
   const statusLabel = t(STATUS_LABELS[m.liveStatus] ?? 'presence.offline')
   return (
@@ -54,13 +54,22 @@ function MemberRow({ m, decor, serverId, onClick }: { m: any; decor?: RoleDecor;
       role="listitem"
       aria-label={`${m.nickname ?? m.username} — ${statusLabel}${m.is_owner ? t('members.owner') : ''}`}
       style={{ height: ROW_H }}
-      className="flex items-center gap-2 px-2 rounded hover:bg-fc-hover group cursor-pointer transition"
-      onClick={onClick}
+      // Atteignable au clavier : Entrée/Espace ouvrent la même fiche, ancrée sur la ligne.
+      tabIndex={0}
+      aria-haspopup="dialog"
+      className="flex items-center gap-2 px-2 rounded hover:bg-fc-hover focus-visible:bg-fc-hover group cursor-pointer transition"
+      onClick={e => onOpen(e.clientX, e.clientY)}
+      onKeyDown={e => {
+        if (e.target !== e.currentTarget || (e.key !== 'Enter' && e.key !== ' ')) return
+        e.preventDefault()
+        const r = e.currentTarget.getBoundingClientRect()
+        onOpen(r.left, r.top + r.height / 2)
+      }}
       {...userMenuProps({ userId: m.user_id, username: m.username, avatar: m.avatar, serverId })}
     >
       <div className="relative flex-shrink-0">
         <AvatarDecoration id={m.avatar_decoration} opts={m.avatar_decoration_opts} size={32}>
-        <AvatarRing ring={m.server_avatar_ring} size={32}>
+        <AvatarRing ring={pickRing(m.server_avatar_ring, m.avatar_ring)} size={32}>
         <div className="w-8 h-8 rounded-full bg-fc-accent flex items-center justify-center font-semibold text-sm text-white overflow-hidden">
           {m.avatar
             ? <AnimatedImg src={m.avatar} alt={m.nickname ?? m.username} loading="lazy" decoding="async" className="w-full h-full rounded-full object-cover" />
@@ -95,7 +104,7 @@ export default function MemberList({ serverId, onClose }: Props) {
   const t = useT()
   const { data: members = [] } = useQuery({
     queryKey: ['members', serverId],
-    queryFn: () => api.get(`/servers/${serverId}/members`).then(r => r.data),
+    queryFn: () => fetchAllMembers(serverId),
     // Plus de rechargement périodique : la présence arrive par WS (usePresence) et
     // App.tsx invalide ['members', serverId] sur MEMBER_JOIN/LEAVE/REMOVE/KICKED/
     // BANNED/UNBAN/ROLE_UPDATE/NICKNAME_UPDATE/TIMEOUT et USER_UPDATE.
@@ -225,7 +234,7 @@ export default function MemberList({ serverId, onClose }: Props) {
                   {it.label}
                 </div>
               ) : (
-                <MemberRow m={it.m} decor={roleDecor(it.m.user_id)} serverId={serverId} onClick={e => setPopup({ userId: it.m.user_id, x: e.clientX - 356, y: e.clientY })} />
+                <MemberRow m={it.m} decor={roleDecor(it.m.user_id)} serverId={serverId} onOpen={(x, y) => setPopup({ userId: it.m.user_id, x: x - 356, y })} />
               )}
             </div>
           )

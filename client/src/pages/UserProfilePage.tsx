@@ -6,12 +6,17 @@ import { MessageCircle, Users, ChevronDown, ChevronUp, ArrowLeft } from 'lucide-
 import api, { mediaUrl } from '../api/client'
 import { useAuth } from '../store/auth'
 import toast from 'react-hot-toast'
-import { AvatarDecoration, ProfileEffect, profileThemeBackground } from '../components/ui/ProfileDecor'
+import { AvatarDecoration, ProfileEffect } from '../components/ui/ProfileDecor'
+import AvatarRing from '../components/ui/AvatarRing'
+import { CardPatternLayer, cardView } from '../components/ui/ProfileCardParts'
+import UserSocialInfo from '../components/UserSocialInfo'
 import { useT, t as tr, intlLocale } from '../i18n'
+import { ACTIVITY_ICONS, activityLabel } from '../lib/activity'
 import AnimatedImg from '../components/ui/AnimatedImg'
 import ProfileBanner from '../components/ui/ProfileBanner'
 import UserName from '../components/ui/UserName'
 import ProfileLinks from '../components/ui/ProfileLinks'
+import ConnectedAccountsLinks from '../components/ui/ConnectedAccountsLinks'
 import { renderMarkdown } from '../utils/markdown'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -39,6 +44,10 @@ interface UserPublic {
   pronouns?: string | null
   custom_status_emoji?: string | null
   profile_links?: { label: string; url: string }[] | null
+  /** Anneau global du compte (lib/avatarRing.ts::cleanRing). */
+  avatar_ring?: unknown
+  /** Carte de profil (lib/profileCard.ts::cleanCard). */
+  profile_card?: unknown
 }
 
 interface MutualServer {
@@ -250,6 +259,7 @@ export default function UserProfilePage() {
   }
 
   const isSelf = me?.id === user.id
+  const { card, look, style: cardStyle } = cardView(user.profile_card, user.profile_color_primary, user.profile_color_accent)
 
   return (
     <div className="flex-1 bg-fc-chat overflow-y-auto overscroll-contain">
@@ -265,14 +275,17 @@ export default function UserProfilePage() {
         </button>
 
         {/* Carte profil */}
-        <div className="bg-fc-channel rounded-xl overflow-hidden mb-4 relative" style={{ background: profileThemeBackground(user.profile_color_primary, user.profile_color_accent) }}>
+        <div className="bg-fc-channel rounded-xl overflow-hidden mb-4 relative" style={cardStyle}>
+          <CardPatternLayer pattern={look.pattern} />
           <ProfileEffect id={user.profile_effect} intensity={user.profile_effect_intensity} />
-          {/* Banner */}
-          {/* Bannière entière, à ses proportions (bornées) : jamais rognée. */}
+          {/* Bannière entière, à ses proportions (bornées) ; rognée seulement en mise en page compacte ou large. */}
           <ProfileBanner
             src={user.banner}
             minHeight={120}
             maxHeight={420}
+            cover={look.banner.height ? { height: look.banner.height + 60 } : undefined}
+            focus={look.banner.focus}
+            className={look.banner.className}
             emptyClassName="h-48 bg-gradient-to-br from-indigo-700/60 via-purple-700/40 to-fc-accent/30"
           >
             {/* Gradient overlay */}
@@ -282,11 +295,12 @@ export default function UserProfilePage() {
           </ProfileBanner>
 
           {/* Avatar + infos */}
-          <div className="px-6 pb-6">
-            <div className="flex items-end gap-4 -mt-12 mb-4">
+          <div className="relative px-6 pb-6">
+            <div className={`flex gap-4 -mt-12 mb-4 ${look.centered ? 'flex-col items-center' : 'items-end'}`}>
               {/* Avatar */}
               <div className="relative flex-shrink-0">
                 <AvatarDecoration id={user.avatar_decoration} opts={user.avatar_decoration_opts} size={88}>
+                <AvatarRing ring={user.avatar_ring} size={96}>
                 <div className="w-24 h-24 rounded-full bg-fc-bg border-4 border-fc-channel overflow-hidden flex items-center justify-center font-bold text-3xl text-white">
                   {user.avatar ? (
                     <AnimatedImg src={user.avatar} alt={user.username} loading="lazy" decoding="async" className="w-full h-full object-cover" />
@@ -294,6 +308,7 @@ export default function UserProfilePage() {
                     <span aria-hidden>{user.username.charAt(0).toUpperCase()}</span>
                   )}
                 </div>
+                </AvatarRing>
                 </AvatarDecoration>
                 {/* Indicateur statut */}
                 <span
@@ -304,7 +319,7 @@ export default function UserProfilePage() {
               </div>
 
               {/* Actions */}
-              <div className="flex-1 pb-1 flex justify-end">
+              <div className={`pb-1 flex ${look.centered ? 'justify-center' : 'flex-1 justify-end'}`}>
                 {!isSelf && (
                   <button
                     onClick={handleOpenDm}
@@ -319,7 +334,7 @@ export default function UserProfilePage() {
             </div>
 
             {/* Nom + statut */}
-            <div className="mb-3">
+            <div className={`mb-3${look.nameCenter ? ' text-center' : ''}`}>
               <h1 className="text-xl font-bold text-white leading-tight">
                 <UserName userId={user.id} name={user.username} withTag />
                 <span aria-hidden className="text-fc-muted font-normal text-base">
@@ -331,8 +346,8 @@ export default function UserProfilePage() {
                 <p className="text-sm text-fc-muted mt-0.5">{user.custom_status_emoji} {user.custom_status}</p>
               )}
               {user.activity_type && user.activity_name && (
-                <p className="text-xs text-fc-muted mt-0.5 capitalize">
-                  {user.activity_type} {user.activity_name}
+                <p className="text-xs text-fc-muted mt-0.5">
+                  <span aria-hidden>{ACTIVITY_ICONS[user.activity_type] ?? '🎯'} </span>{t(activityLabel(user.activity_type))} {user.activity_name}
                   {user.activity_detail ? ` — ${user.activity_detail}` : ''}
                 </p>
               )}
@@ -350,7 +365,9 @@ export default function UserProfilePage() {
                 <BioSection bio={user.bio} />
               </section>
             )}
-            <ProfileLinks links={user.profile_links} />
+            {card.show_links && <ProfileLinks links={user.profile_links} />}
+            {card.show_links && <ConnectedAccountsLinks userId={user.id} />}
+            <UserSocialInfo userId={user.id} showBadges={card.show_badges} />
 
             {/* Membre depuis */}
             <section className="mb-4">

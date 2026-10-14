@@ -47,7 +47,7 @@ export default class ErrorBoundary extends Component<Props, State> {
             <pre
               tabIndex={0}
               aria-label={t('crash.technical')}
-              className="text-xs text-red-400 bg-red-900/20 rounded-lg p-3 max-w-lg overflow-auto text-left max-h-48"
+              className="text-xs text-red-400 bg-red-900/20 rounded-lg p-3 w-full max-w-lg overflow-auto text-left max-h-48"
             >
               {this.state.error.message}
             </pre>

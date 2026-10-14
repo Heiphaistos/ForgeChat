@@ -12,10 +12,12 @@ interface ConnectedAccount {
   platform_username: string
   platform_url: string | null
   verified: boolean
+  /** Affiché sur le profil public (PATCH /user/connected-accounts/:platform). */
+  visible?: boolean
 }
 
 // placeholder : clé i18n, ou identifiant (username, @username) que translate renvoie tel quel.
-const PLATFORMS: { id: string; label: string; icon: string; placeholder: string; urlTemplate?: string }[] = [
+export const PLATFORMS: { id: string; label: string; icon: string; placeholder: string; urlTemplate?: string }[] = [
   { id: 'github', label: 'GitHub', icon: '🐙', placeholder: 'username', urlTemplate: 'https://github.com/{username}' },
   { id: 'twitter', label: 'Twitter / X', icon: '𝕏', placeholder: '@username' },
   { id: 'steam', label: 'Steam', icon: '🎮', placeholder: 'settings.connected.steamPh' },
@@ -74,6 +76,13 @@ export default function ConnectedAccountsSection() {
     },
   })
 
+  const visibility = useMutation({
+    mutationFn: ({ platform, visible }: { platform: string; visible: boolean }) =>
+      api.patch(`/user/connected-accounts/${platform}`, { visible }).then(r => r.data as ConnectedAccount),
+    onSuccess: acc => qc.setQueryData<ConnectedAccount[]>(['connected-accounts'], old => old?.map(a => (a.platform === acc.platform ? { ...a, ...acc } : a))),
+    onError: (e: { response?: { data?: { error?: string } } }) => toast.error(e.response?.data?.error ?? t('dfeat.acc.visibleFailed')),
+  })
+
   const getConnected = (platformId: string) =>
     accounts.find(a => a.platform === platformId)
 
@@ -107,6 +116,14 @@ export default function ConnectedAccountsSection() {
               </div>
 
               <div className="flex items-center gap-2">
+                {connected && (
+                  <label className="flex items-center gap-1.5 text-xs text-fc-muted cursor-pointer" title={t('dfeat.acc.visible')}>
+                    <input type="checkbox" checked={!!connected.visible} disabled={visibility.isPending}
+                      onChange={e => visibility.mutate({ platform: platform.id, visible: e.target.checked })}
+                      aria-label={t('dfeat.acc.visibleOf', { name: platform.label })} className="accent-fc-accent" />
+                    <span className="hidden sm:inline">{t('dfeat.acc.visible')}</span>
+                  </label>
+                )}
                 {connected && safeHref(connected.platform_url) && (
                   <a
                     href={safeHref(connected.platform_url)}

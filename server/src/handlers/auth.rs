@@ -139,12 +139,7 @@ pub async fn register(
         }
         return Err(AppError::BadRequest("auth et kdf_salt requis".into()));
     };
-    if body.username.len() < 2 || body.username.len() > 32 {
-        return Err(AppError::BadRequest("Nom d'utilisateur 2-32 chars".into()));
-    }
-    if !body.username.chars().all(|c| c.is_alphanumeric() || c == '_' || c == '-') {
-        return Err(AppError::BadRequest("Nom : lettres, chiffres, _ ou - uniquement".into()));
-    }
+    crate::models::username::validate_username(&body.username).map_err(|e| AppError::BadRequest(e.into()))?;
     check_auth(auth)?;
     check_salt(kdf_salt)?;
     let kdf = auth_v2::check_kdf(body.kdf.as_deref())?;
@@ -237,6 +232,7 @@ pub async fn register(
 /// POST /api/auth/verify-email {email, code} : crée le compte (et consomme l'invitation).
 pub async fn verify_email(
     State(state): State<AppState>,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
     req_headers: HeaderMap,
     Json(body): Json<serde_json::Value>,
 ) -> Result<(HeaderMap, Json<AuthResponse>)> {
@@ -249,6 +245,8 @@ pub async fn verify_email(
         .map(str::trim)
         .ok_or_else(|| AppError::BadRequest("code requis".into()))?;
     hit(&state, &account_key("verify_attempts", &email), 5, 900).await?;
+    // Par IP aussi : sinon un même client essaie 5 codes sur chaque adresse en attente.
+    hit(&state, &format!("verify_ip:{}", crate::privacy::client_key(&req_headers, &addr)), 20, 900).await?;
 
     let bad = || AppError::BadRequest("Code incorrect ou expiré".into());
     let email_hmac = crate::email_crypto::hmac(&email);
@@ -356,6 +354,7 @@ async fn open_session(state: &AppState, user_id: Uuid, headers: &HeaderMap) -> R
     .bind(&device)
     .fetch_one(&state.db)
     .await
+    .map_err(|e| tracing::warn!(error = %e, %user_id, "user_sessions insert failed: token issued without sid"))
     .ok();
     let access_token = create_token(user_id, sid, &state.config.jwt_secret, &state.config.jwt_issuer)
         .map_err(AppError::Internal)?;

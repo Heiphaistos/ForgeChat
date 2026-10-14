@@ -5,6 +5,7 @@ import { router } from 'expo-router'
 import { useState } from 'react'
 import { Alert, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { forumApi } from '@/api/forum'
+import { serversApi } from '@/api/servers'
 import { e2eErrorText } from '@/e2e/conversations'
 import { Button, ErrorState, IconButton, TextField } from '@/components/ui'
 import { createPostBody, isVideoMedia, mediaExtension, MAX_TAGS, normalizeTag, toggleTag } from '@/features/forum/forum'
@@ -33,7 +34,10 @@ export default function NewPostScreen() {
   const [busy, setBusy] = useState(false)
   // Tags officiels : s'il y en a, le serveur n'accepte qu'eux → simple choix parmi la liste.
   const official = useQuery({ queryKey: qk.forumTags(ids.channelId ?? ''), queryFn: () => forumApi.tags(ids.channelId), enabled: valid })
+  // Consignes de publication du salon (réglages du forum), rappelées avant d'écrire.
+  const channels = useQuery({ queryKey: qk.channels(ids.serverId ?? ''), queryFn: () => serversApi.channels(ids.serverId), enabled: valid, staleTime: 60_000 })
   if (!valid) return <ErrorState message={t('conv.invalidChannel')} />
+  const guidelines = channels.data?.find((c) => c.id === ids.channelId)?.post_guidelines?.trim()
   const officialTags = official.data ?? []
 
   const body = media && !mediaUrl ? null : createPostBody(title, content, tags, mediaUrl)
@@ -73,6 +77,12 @@ export default function NewPostScreen() {
 
   return (
     <ScrollView style={{ backgroundColor: colors.bg }} contentContainerStyle={{ padding: spacing.lg, gap: spacing.md }} keyboardShouldPersistTaps="handled">
+      {guidelines ? (
+        <View style={styles.guidelines} accessibilityRole="summary">
+          <Text style={styles.label}>{t('df.forum.guidelines')}</Text>
+          <Text style={styles.guidelinesText}>{guidelines}</Text>
+        </View>
+      ) : null}
       {media ? (
         <>
           {mediaUrl && !isVideoMedia(mediaUrl) ? (
@@ -129,5 +139,7 @@ export default function NewPostScreen() {
 const styles = StyleSheet.create({
   label: { color: colors.textMuted, fontSize: font.sm, fontWeight: '600' },
   preview: { width: '100%', aspectRatio: 1, backgroundColor: '#000', borderRadius: 8 },
+  guidelines: { gap: spacing.xs, padding: spacing.md, borderRadius: 8, borderLeftWidth: 3, borderLeftColor: colors.primary, backgroundColor: colors.bgAlt },
+  guidelinesText: { color: colors.text, fontSize: font.sm },
   tagRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
 })

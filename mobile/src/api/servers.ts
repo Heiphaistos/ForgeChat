@@ -2,6 +2,36 @@ import { serverKeyForNewOwner } from '@/e2e/serverKey'
 import { passwordProof } from '@/e2e/accountKey'
 import { http, path } from '@/lib/http'
 import type { Ban, Category, Channel, Invite, InviteInfo, Member, Role, Server, ServerDetail } from '@/types/models'
+import type { AvatarRingData } from '@/components/avatarRingCore'
+import type { NameStyle } from '@/lib/nameStyle'
+
+export interface ServerProfilePatch {
+  bio?: string | null
+  avatar_ring?: AvatarRingData | Record<string, never>
+  name_style?: NameStyle | Record<string, never>
+}
+
+/** Taille de page maximale de GET /servers/:id/members (server/src/handlers/servers.rs). */
+export const MEMBERS_PAGE = 1000
+
+/**
+ * Tous les membres d'un serveur, page après page (comme client/src/api/members.ts) : le serveur
+ * pagine par curseur (`after` = dernier pseudo, ordre alphabétique, 1000 au plus), sans boucle
+ * un serveur de plus de 1000 membres serait tronqué. Arrêt aussi si le curseur n'avance plus
+ * (serveur ancien qui ignore `after`). ponytail: toutes les pages d'un coup ; chargement à la
+ * demande le jour où la liste des membres sera virtualisée.
+ */
+export async function fetchAllMembers(serverId: string): Promise<Member[]> {
+  const all: Member[] = []
+  let after: string | undefined
+  for (;;) {
+    const page = await http.get<Member[]>(path`/servers/${serverId}/members`, { query: { limit: MEMBERS_PAGE, after } })
+    all.push(...page)
+    const last = page[page.length - 1]?.username
+    if (page.length < MEMBERS_PAGE || !last || last === after) return all
+    after = last
+  }
+}
 
 /** Niveaux de notification acceptés par user_settings.rs. */
 export type NotifLevel = 'inherit' | 'all' | 'mentions' | 'nothing'
@@ -69,8 +99,9 @@ export const serversApi = {
   /** Pseudo d'un autre membre (« Gérer les pseudos ») ; null = retirer. */
   setMemberNickname: (id: string, userId: string, nickname: string | null) =>
     http.patch(path`/servers/${id}/members/${userId}/nickname`, { nickname }),
-  /** Profil propre à ce serveur : bio (null = celle du compte). */
-  setServerBio: (id: string, bio: string | null) => http.patch(path`/servers/${id}/profile`, { bio }),
+  /** Profil propre à ce serveur (handlers/member_profile.rs) : champ absent = inchangé ;
+   *  bio null = celle du compte ; anneau {} = anneau global ; style {} = style du compte. */
+  updateServerProfile: (id: string, body: ServerProfilePatch) => http.patch(path`/servers/${id}/profile`, body),
   /** Avatar ou bannière propre à ce serveur (8 / 10 Mo, PNG JPG GIF WEBP). */
   uploadServerProfileImage: (id: string, kind: 'avatar' | 'banner', file: { uri: string; name: string; type: string }) => {
     const fd = new FormData()
@@ -91,6 +122,9 @@ export const serversApi = {
   deleteChannel: (serverId: string, channelId: string) => http.delete(path`/servers/${serverId}/channels/${channelId}`),
   updateChannel: (serverId: string, channelId: string, patch: { name?: string; topic?: string }) =>
     http.patch<Channel>(path`/servers/${serverId}/channels/${channelId}`, patch),
+  /** Statut d'un salon vocal (connecté au salon ou droit de modifier) ; null = effacer. 10 changements / min. */
+  setVoiceStatus: (serverId: string, channelId: string, status: string | null) =>
+    http.put<{ id: string; server_id: string; voice_status: string | null }>(path`/servers/${serverId}/channels/${channelId}/voice-status`, { status }),
   /** `null` : sortir le salon de sa catégorie. */
   moveChannel: (channelId: string, categoryId: string | null) => http.patch(path`/channels/${channelId}/move`, { category_id: categoryId }),
   deleteCategory: (serverId: string, categoryId: string) => http.delete(path`/servers/${serverId}/categories/${categoryId}`),
@@ -134,7 +168,7 @@ export const serversApi = {
   templates: () => http.get<unknown>('/templates'),
   /** Crée un serveur depuis un modèle partagé (le serveur recrée catégories, salons et rôles). */
   useTemplate: (templateId: string, name: string) => http.post<Server>(path`/templates/${templateId}/use`, { name: name.trim() }),
-  members: (id: string) => http.get<Member[]>(path`/servers/${id}/members`),
+  members: (id: string) => fetchAllMembers(id),
   /** Emojis personnalisés (données brutes : filtrées par features/chat/customEmojis.buildEmojiMap). */
   emojis: (id: string) => http.get<unknown>(path`/servers/${id}/emojis`),
   /** Stickers image du serveur (données brutes, validées par features/composer/stickers). */

@@ -196,6 +196,32 @@ export function parseHex(input: string | null | undefined): number | null {
 
 const channels = (c: number) => [(c >> 16) & 255, (c >> 8) & 255, c & 255] as const
 
+/** 0xRRGGBB → [teinte 0-360, saturation 0-1, luminosité 0-1] (sélecteur de couleur libre). */
+export function toHsl(c: number): [number, number, number] {
+  const [r, g, b] = channels(c).map((v) => v / 255) as [number, number, number]
+  const max = Math.max(r, g, b)
+  const min = Math.min(r, g, b)
+  const d = max - min
+  const l = (max + min) / 2
+  const s = d === 0 ? 0 : d / (1 - Math.abs(2 * l - 1))
+  let h = 0
+  if (d) h = max === r ? ((g - b) / d) % 6 : max === g ? (b - r) / d + 2 : (r - g) / d + 4
+  return [((h * 60) % 360 + 360) % 360, s, l]
+}
+
+/** [teinte, saturation, luminosité] → 0xRRGGBB (bornes appliquées). */
+export function fromHsl(h: number, s: number, l: number): number {
+  const hh = ((h % 360) + 360) % 360
+  const ss = Math.min(1, Math.max(0, s))
+  const ll = Math.min(1, Math.max(0, l))
+  const C = (1 - Math.abs(2 * ll - 1)) * ss
+  const X = C * (1 - Math.abs(((hh / 60) % 2) - 1))
+  const m = ll - C / 2
+  const [r, g, b] = hh < 60 ? [C, X, 0] : hh < 120 ? [X, C, 0] : hh < 180 ? [0, C, X] : hh < 240 ? [0, X, C] : hh < 300 ? [X, 0, C] : [C, 0, X]
+  const to = (v: number) => Math.min(255, Math.max(0, Math.round((v + m) * 255)))
+  return (to(r) << 16) | (to(g) << 8) | to(b)
+}
+
 function luminance(c: number): number {
   const [r, g, b] = channels(c).map((v) => {
     const x = v / 255

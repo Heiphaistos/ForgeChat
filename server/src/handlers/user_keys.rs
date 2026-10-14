@@ -72,7 +72,9 @@ impl Wrapped {
 /// Vérifie la clé publique (point P-256 non compressé, 65 o) et rend son empreinte.
 pub fn public_fingerprint(public: &str) -> Result<String> {
     let raw = b64_exact(public, 65, "Clé publique")?;
-    if raw[0] != 4 {
+    // Un point hors courbe est refusé à l'import par WebCrypto : il bloquerait la création d'époque
+    // de toute conversation où le membre figure.
+    if raw[0] != 4 || p256::ecdsa::VerifyingKey::from_sec1_bytes(&raw).is_err() {
         return Err(AppError::BadRequest("Clé publique invalide".into()));
     }
     Ok(URL_SAFE_NO_PAD.encode(Sha256::digest(&raw)))
@@ -340,6 +342,13 @@ mod tests {
     // Valeurs de docs/e2e-vectors.json : le format du serveur suit celui des clients.
     const PUB: &str = "BOICWfpxS3xMFy1Hk9p-Od4Lx4J_0RTvujHlEL1uqLnjS1OXGYcw8PD4ah_Is1vmLjum1Xl-EcrukfhXNWmLIGE";
     const FP: &str = "8NZ0m7mf9YzfiPUaB20uTbeVS5wS2DkJ5V36XPlhLv4";
+
+    #[test]
+    fn point_hors_courbe_refuse() {
+        assert!(public_fingerprint(PUB).is_ok());
+        let off = URL_SAFE_NO_PAD.encode([&[4u8][..], &[7u8; 64][..]].concat());
+        assert!(public_fingerprint(&off).is_err());
+    }
 
     fn wrapped() -> Wrapped {
         Wrapped {

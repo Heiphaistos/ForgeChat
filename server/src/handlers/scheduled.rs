@@ -94,7 +94,7 @@ pub async fn create_scheduled(
     )
     .bind(channel_id)
     .bind(claims.sub)
-    .bind(Some(body.content.trim()).filter(|_| enc.is_none()))
+    .bind(enc.is_none().then_some(body.content.trim()))
     .bind(body.send_at)
     .bind(&enc)
     .bind(enc.as_ref().and(body.client_msg_id))

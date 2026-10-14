@@ -44,8 +44,10 @@ async function bench({ ua = WIN, tauri = null, mac = false } = {}) {
       transformCallback: () => 0,
       invoke: async (cmd, args) => {
         window.calls.push([cmd, args])
-        if (cmd === 'ghd_installed') return tauri.installed
-        if (cmd === 'plugin:shell|open' && args.path.startsWith('ghosthanddesk:') && !tauri.installed) throw new Error('no association')
+        // Appli de bureau : plateforme lue au système (son user-agent ne dit pas « Windows NT »).
+        if (cmd === 'system_get') return { platform: mac ? 'macos' : 'windows' }
+        // ghd_launch : true = lancé, false = annulé, erreur = GhostHandDesk absent.
+        if (cmd === 'ghd_launch') { if (!tauri.installed) throw new Error("GhostHandDesk n'est pas installé"); return true }
         return null
       },
     }
@@ -56,6 +58,7 @@ async function bench({ ua = WIN, tauri = null, mac = false } = {}) {
 }
 
 const shellOpens = page => page.evaluate(() => window.calls.filter(c => c[0] === 'plugin:shell|open').map(c => c[1].path))
+const ghdLaunches = page => page.evaluate(() => window.calls.filter(c => c[0] === 'ghd_launch').map(c => c[1]))
 const offer = page => page.getByTestId('offer')
 const invite = page => page.getByTestId('invite')
 
@@ -100,7 +103,7 @@ const cases = {
     await page.getByRole('status').filter({ hasText: /pas installé/ }).waitFor({ timeout: 2000 })
     await offer(page).getByRole('button', { name: /Télécharger GhostHandDesk/ }).click()
     // Retour dans ForgeChat après avoir lancé le téléchargement (> 5 s) : nouvelle tentative toute seule.
-    const checks = () => page.evaluate(() => window.calls.filter(c => c[0] === 'ghd_installed').length)
+    const checks = () => page.evaluate(() => window.calls.filter(c => c[0] === 'ghd_launch').length)
     const before = await checks()
     await page.evaluate(() => { const now = Date.now; Date.now = () => now() + 6000; window.dispatchEvent(new Event('focus')) })
     await page.waitForTimeout(200)
@@ -108,7 +111,7 @@ const cases = {
     await invite(page).getByRole('button', { name: 'Ouvrir dans GhostHandDesk' }).click()
     await page.waitForTimeout(300)
     const opened = await shellOpens(page)
-    assert.ok(!opened.some(u => u.startsWith('ghosthanddesk:')), `pas de lien d'appli absente : ${opened}`)
+    assert.ok(!opened.some(u => u.startsWith('ghosthanddesk:')), `jamais de lien ghosthanddesk: par le shell : ${opened}`)
     assert.ok(opened.some(u => /^https:\/\/ghd\.heiphaistos\.org\/download\/.+_portable_x64\.exe$/.test(u)), `téléchargement direct : ${opened}`)
     assert.ok(opened.includes('https://ghd.heiphaistos.org/app/#id=482915036&code=7K2MQ9XR4TVB'), `repli web : ${opened}`)
     await ctx.close()
@@ -118,9 +121,11 @@ const cases = {
     await acceptOffer(page)
     await invite(page).getByRole('button', { name: 'Ouvrir dans GhostHandDesk' }).click()
     await page.waitForTimeout(300)
-    const opened = await shellOpens(page)
-    assert.ok(opened.some(u => /^ghosthanddesk:\/\/share\?code=[0-9A-Z]{12}&ttl=600$/.test(u)), `partage armé : ${opened}`)
-    assert.ok(opened.includes('ghosthanddesk://connect?id=482915036&code=7K2MQ9XR4TVB'), `connexion : ${opened}`)
+    const launches = await ghdLaunches(page)
+    const seen = JSON.stringify(launches)
+    assert.ok(launches.some(a => a.action === 'share' && /^[0-9A-Z]{12}$/.test(a.code) && a.id === null && a.ttl === 600), `partage armé : ${seen}`)
+    assert.ok(launches.some(a => a.action === 'connect' && a.id === '482915036' && a.code === '7K2MQ9XR4TVB' && a.ttl === null), `connexion : ${seen}`)
+    assert.deepEqual((await shellOpens(page)).filter(u => u.startsWith('ghosthanddesk:')), [], 'plus de lien ghosthanddesk: par le shell')
     await ctx.close()
   },
   async 'macOS (bureau) : explication claire, aide possible par le web'() {

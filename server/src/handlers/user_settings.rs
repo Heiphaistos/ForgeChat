@@ -374,6 +374,8 @@ pub struct ConnectedAccount {
     pub platform_username: String,
     pub platform_url: Option<String>,
     pub verified: bool,
+    /// Affiché sur le profil public (137, défaut : non).
+    pub visible: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -393,7 +395,7 @@ pub async fn list_connected_accounts(
     State(state): State<AppState>,
 ) -> Result<Json<Vec<ConnectedAccount>>> {
     let accounts = sqlx::query_as::<_, ConnectedAccount>(
-        "SELECT id, platform, platform_username, platform_url, verified
+        "SELECT id, platform, platform_username, platform_url, verified, visible
          FROM connected_accounts WHERE user_id = $1 ORDER BY created_at"
     )
     .bind(claims.sub)
@@ -432,7 +434,7 @@ pub async fn add_connected_account(
            platform_username = EXCLUDED.platform_username,
            platform_url = EXCLUDED.platform_url,
            verified = FALSE
-         RETURNING id, platform, platform_username, platform_url, verified"
+         RETURNING id, platform, platform_username, platform_url, verified, visible"
     )
     .bind(claims.sub)
     .bind(&body.platform)

@@ -244,7 +244,7 @@ pub async fn update_server(
         }
         None => server,
     };
-    log_event(&state, server_id, "SERVER_UPDATE", Some(claims.sub), None, None, None, None).await;
+    log_event(&state, server_id, "SERVER_UPDATE", Some(claims.sub), None, None, None).await;
     let event = serde_json::json!({ "type": "SERVER_UPDATE", "server_id": server_id, "server": server });
     state.broadcast_to_server_members(server_id, event.to_string()).await;
 
@@ -433,6 +433,10 @@ pub async fn join_server(
         return Err(AppError::ForbiddenMsg("Ce serveur est verrouillé (anti-raid) : réessaie plus tard.".into()));
     }
 
+    // Usage de l'invitation, adhésion et compteur dans UNE transaction : un échec
+    // (ou une double requête concurrente) ne consomme plus d'usage pour rien ni
+    // ne laisse member_count décalé.
+    let mut tx = state.db.begin().await?;
     if invite.is_some() {
         // Réclamer atomiquement un "usage" de l'invitation dans le même UPDATE qui
         // revérifie expiration/max_uses -- l'ancien flux relisait `invite.uses` en
@@ -453,7 +457,7 @@ pub async fn join_server(
              RETURNING true"
         )
         .bind(&code)
-        .fetch_optional(&state.db)
+        .fetch_optional(&mut *tx)
         .await?
         .unwrap_or(false);
         if !claimed {
@@ -463,18 +467,25 @@ pub async fn join_server(
     // Sinon (repli servers.invite_code) : code permanent sans compteur
     // d'utilisation ni expiration, rien à réclamer.
 
-    sqlx::query(
-        "INSERT INTO server_members (user_id, server_id) VALUES ($1, $2)"
+    let joined = sqlx::query(
+        "INSERT INTO server_members (user_id, server_id, joined_via_invite) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING"
     )
     .bind(claims.sub)
     .bind(server_id)
-    .execute(&state.db)
+    // Suivi des invitations (137) : code de la table invites seulement (pas l'adresse publique).
+    .bind(invite.as_ref().map(|i| i.code.as_str()))
+    .execute(&mut *tx)
     .await?;
+    if joined.rows_affected() == 0 {
+        // Requête concurrente déjà passée : rollback (l'usage de l'invitation est rendu).
+        return Err(AppError::Conflict("Déjà membre".into()));
+    }
 
     sqlx::query("UPDATE servers SET member_count = member_count + 1 WHERE id=$1")
         .bind(server_id)
-        .execute(&state.db)
+        .execute(&mut *tx)
         .await?;
+    tx.commit().await?;
 
     let server = sqlx::query_as::<_, Server>("SELECT * FROM servers WHERE id=$1")
         .bind(server_id)
@@ -487,7 +498,7 @@ pub async fn join_server(
         .fetch_optional(&state.db)
         .await?;
     if let Some(u) = user {
-        log_event(&state, server_id, "MEMBER_JOIN", Some(claims.sub), Some(&u.username), None, None, None).await;
+        log_event(&state, server_id, "MEMBER_JOIN", Some(claims.sub), None, None, None).await;
         state.broadcast_to_server_members(server_id, serde_json::json!({
             "type": "MEMBER_JOIN",
             "server_id": server_id,
@@ -536,7 +547,7 @@ pub async fn leave_server(
         .execute(&state.db)
         .await?;
 
-    log_event(&state, server_id, "MEMBER_LEAVE", Some(claims.sub), None, None, None, None).await;
+    log_event(&state, server_id, "MEMBER_LEAVE", Some(claims.sub), None, None, None).await;
     state.broadcast_to_server_members(server_id, serde_json::json!({
         "type": "MEMBER_LEAVE",
         "server_id": server_id,
@@ -546,15 +557,31 @@ pub async fn leave_server(
     Ok(Json(serde_json::json!({ "ok": true })))
 }
 
+/// Membres par page, au plus.
+const MEMBERS_PAGE_MAX: i64 = 1000;
+
+#[derive(serde::Deserialize)]
+pub struct MembersPage {
+    pub after: Option<String>,
+    pub limit: Option<i64>,
+}
+
 pub async fn get_members(
     State(state): State<AppState>,
     Extension(claims): Extension<Claims>,
     Path(server_id): Path<Uuid>,
+    Query(page): Query<MembersPage>,
 ) -> Result<Json<Vec<serde_json::Value>>> {
     require_member(&state, claims.sub, server_id).await?;
+    // Pagination par curseur (pseudo unique, ordre alphabétique) : `?after=<pseudo>&limit=`.
+    // Sans paramètre : 1000 premiers membres (avant : tout le serveur d'un coup).
+    let limit = page
+        .limit
+        .unwrap_or(MEMBERS_PAGE_MAX)
+        .clamp(1, MEMBERS_PAGE_MAX);
 
     let members = sqlx::query(
-        "SELECT sm.*, u.username, u.discriminator, COALESCE(sm.server_avatar, u.avatar) AS avatar, u.avatar_decoration, u.avatar_decoration_opts, u.status, u.custom_status,
+        "SELECT sm.*, u.username, u.discriminator, COALESCE(sm.server_avatar, u.avatar) AS avatar, u.avatar_decoration, u.avatar_decoration_opts, u.avatar_ring, u.status, u.custom_status,
                 COALESCE((SELECT array_agg(mr.role_id) FROM member_roles mr
                           WHERE mr.user_id = sm.user_id AND mr.server_id = sm.server_id),
                          '{}'::uuid[]) AS role_ids,
@@ -562,10 +589,13 @@ pub async fn get_members(
                  WHERE t.server_id = sm.server_id AND t.user_id = sm.user_id AND t.expires_at > NOW()) AS timeout_until
          FROM server_members sm
          JOIN users u ON u.id = sm.user_id
-         WHERE sm.server_id=$1
-         ORDER BY u.username ASC"
+         WHERE sm.server_id=$1 AND ($2::text IS NULL OR u.username > $2)
+         ORDER BY u.username ASC
+         LIMIT $3"
     )
     .bind(server_id)
+    .bind(page.after.as_deref())
+    .bind(limit)
     .fetch_all(&state.db)
     .await?;
     // Marques de clan, affichées à côté des pseudos.
@@ -590,6 +620,8 @@ pub async fn get_members(
                 "server_bio": r.get::<Option<String>, _>("server_bio"),
                 // Profil de serveur (129) : anneau d'avatar et style du pseudo, JSON validé.
                 "server_avatar_ring": r.get::<Option<serde_json::Value>, _>("server_avatar_ring"),
+                // Anneau global du compte : affiché quand le membre n'a pas d'anneau de serveur.
+                "avatar_ring": r.get::<Option<serde_json::Value>, _>("avatar_ring"),
                 "server_name_style": r.get::<Option<serde_json::Value>, _>("server_name_style"),
                 "tags": tags.get(&r.get::<Uuid, _>("user_id")).cloned().unwrap_or_default(),
                 "status": r.get::<String, _>("status"),
@@ -706,7 +738,7 @@ pub async fn kick_member(
 
     log_event(
         &state, server_id, "MEMBER_KICK",
-        Some(claims.sub), None,
+        Some(claims.sub),
         Some(user_id), None, None,
     ).await;
 
@@ -807,7 +839,7 @@ pub async fn ban_member(
 
     log_event(
         &state, server_id, "MEMBER_BAN",
-        Some(claims.sub), None,
+        Some(claims.sub),
         Some(user_id), None,
         Some(serde_json::json!({ "reason": reason })),
     ).await;
@@ -1072,7 +1104,6 @@ pub async fn can_read_history(state: &AppState, user_id: Uuid, channel_id: Uuid)
         .is_some_and(|(_, p)| p & crate::models::role::Permissions::READ_HISTORY != 0)
 }
 
-/// Vérifie qu'un canal appartient bien au serveur (protection IDOR).
 // ─── Hiérarchie des rôles (comme Discord) ─────────────────────────────────────
 
 /// Position du rôle le plus haut d'un membre ; -1 s'il n'a que @everyone.
@@ -1575,7 +1606,7 @@ pub async fn discover_servers(
         .bind(offset)
         .fetch_all(&state.db)
         .await
-        .map_err(|e| AppError::Database(e))?;
+        .map_err(AppError::Database)?;
 
     let result: Vec<serde_json::Value> = rows.iter().map(|r| serde_json::json!({
         "id":           r.get::<uuid::Uuid, _>("id"),

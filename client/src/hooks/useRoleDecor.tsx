@@ -1,9 +1,11 @@
 import { useCallback, useMemo, type CSSProperties } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import api, { mediaUrl } from '../api/client'
+import { fetchAllMembers } from '../api/members'
 import { useUxPrefs } from '../lib/uxPrefs'
 import type { MemberClanTag } from '../components/ui/UserName'
 import { useServerAppearance } from './useServerAppearance'
+import { pickRing } from '../lib/avatarRing'
 
 interface DecorRole {
   id: string
@@ -22,7 +24,7 @@ export interface RoleDecor {
   iconTitle?: string
   /** Réglage du serveur : la couleur du rôle remplace la couleur perso du pseudo. */
   overridesName?: boolean
-  /** Profil de serveur : anneau d'avatar (components/ui/AvatarRing.tsx). */
+  /** Anneau d'avatar affiché : profil de serveur, sinon anneau global (components/ui/AvatarRing.tsx). */
   ring?: unknown
   /** Profil de serveur : style du pseudo propre au serveur. */
   nameStyle?: unknown
@@ -59,9 +61,9 @@ export function useRoleDecor(serverId?: string) {
     enabled,
     staleTime: 60_000,
   })
-  const { data: members = [] } = useQuery<{ user_id: string; role_ids?: string[]; server_avatar_ring?: unknown; server_name_style?: unknown; tags?: MemberClanTag[] }[]>({
+  const { data: members = [] } = useQuery<{ user_id: string; role_ids?: string[]; server_avatar_ring?: unknown; avatar_ring?: unknown; server_name_style?: unknown; tags?: MemberClanTag[] }[]>({
     queryKey: ['members', serverId],
-    queryFn: () => api.get(`/servers/${serverId}/members`).then(r => r.data),
+    queryFn: () => fetchAllMembers(serverId!),
     enabled,
     staleTime: 5 * 60_000,
   })
@@ -93,7 +95,9 @@ export function useRoleDecor(serverId?: string) {
       const colored = mine.find(r => r.color)
       const withIcon = mine.find(r => r.icon)
       const tags = Array.isArray(m.tags) && m.tags.length ? m.tags : undefined
-      if (!colored && !withIcon && !m.server_avatar_ring && !m.server_name_style && !tags) continue
+      // Anneau affiché : celui du serveur, sinon l'anneau global du compte.
+      const ring = pickRing(m.server_avatar_ring, m.avatar_ring)
+      if (!colored && !withIcon && !ring && !m.server_name_style && !tags) continue
       const asMark = roleDisplay !== 'name' && showColors && !!colored
       out.set(m.user_id, {
         style: showColors && colored && !asMark ? roleNameStyle(colored.color, colored.secondary_color) : undefined,
@@ -101,7 +105,7 @@ export function useRoleDecor(serverId?: string) {
         icon: withIcon?.icon ?? undefined,
         iconTitle: withIcon?.name,
         overridesName,
-        ring: m.server_avatar_ring ?? undefined,
+        ring,
         nameStyle: m.server_name_style ?? undefined,
         tags,
       })

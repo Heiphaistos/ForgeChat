@@ -123,7 +123,7 @@ pub fn normalize_role_emoji(raw: &str) -> Option<String> {
     let n = s.chars().count();
     let ascii_ok = |c: char| !c.is_ascii() || c.is_ascii_digit() || c == '#' || c == '*';
     let ok = (1..=8).contains(&n)
-        && s.chars().any(|c| !c.is_ascii())
+        && !s.is_ascii()
         && s.chars().all(|c| ascii_ok(c) && !c.is_control() && !c.is_whitespace());
     ok.then(|| s.to_string())
 }

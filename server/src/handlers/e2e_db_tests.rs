@@ -297,7 +297,7 @@ async fn e2e_channels() {
 
     // Clé de récupération du serveur : créée par le propriétaire seul, lue en entier par lui seul.
     let key: sk::CreateServerKey = serde_json::from_value(json!({
-        "public": URL_SAFE_NO_PAD.encode([4u8; 65]),
+        "public": "BOICWfpxS3xMFy1Hk9p-Od4Lx4J_0RTvujHlEL1uqLnjS1OXGYcw8PD4ah_Is1vmLjum1Xl-EcrukfhXNWmLIGE", // point P-256 valide (docs/e2e-vectors.json)
         "recovery": { "v": 1, "salt": URL_SAFE_NO_PAD.encode([5u8; 16]), "iv": URL_SAFE_NO_PAD.encode([5u8; 12]), "ct": URL_SAFE_NO_PAD.encode([5u8; 48]) },
         "owner_wrapped": wrap(6),
     })).unwrap();

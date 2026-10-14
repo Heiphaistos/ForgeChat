@@ -105,7 +105,11 @@ async fn write_field(
             return Err(AppError::Internal(e.into()));
         }
     }
-    file.flush().await.map_err(|e| AppError::Internal(e.into()))?;
+    if let Err(e) = file.flush().await {
+        drop(file);
+        let _ = tokio::fs::remove_file(path).await;
+        return Err(AppError::Internal(e.into()));
+    }
     Ok(total)
 }
 
@@ -266,6 +270,35 @@ pub async fn store_attachments(
     user_id: Uuid,
     encrypted: bool,
 ) -> Result<Vec<serde_json::Value>> {
+    // Tout ou rien : si un fichier est refusé (extension, taille, quota), ceux déjà enregistrés
+    // par cet appel sont retirés, sinon le nouvel essai du client créait des doublons.
+    let mut stored: Vec<(PathBuf, Uuid)> = Vec::new();
+    match store_attachments_inner(state, multipart, privileged, owner, user_id, encrypted, &mut stored).await {
+        Ok(v) => Ok(v),
+        Err(e) => {
+            let ids: Vec<Uuid> = stored.iter().map(|(_, id)| *id).collect();
+            if let Err(db_err) = sqlx::query("DELETE FROM attachments WHERE id = ANY($1)").bind(&ids).execute(&state.db).await {
+                tracing::warn!("Pièces jointes d'un envoi refusé non retirées : {db_err}");
+            }
+            for (path, _) in &stored {
+                if let Err(fs_err) = tokio::fs::remove_file(path).await {
+                    tracing::warn!("Fichier {} non supprimé après envoi refusé : {fs_err}", path.display());
+                }
+            }
+            Err(e)
+        }
+    }
+}
+
+async fn store_attachments_inner(
+    state: &AppState,
+    multipart: &mut Multipart,
+    privileged: bool,
+    owner: AttachmentOwner,
+    user_id: Uuid,
+    encrypted: bool,
+    stored: &mut Vec<(PathBuf, Uuid)>,
+) -> Result<Vec<serde_json::Value>> {
     let mut budget = UploadBudget::open(state, user_id).await?;
     let upload_dir = PathBuf::from(&state.config.upload_dir);
     tokio::fs::create_dir_all(&upload_dir).await
@@ -297,9 +330,13 @@ pub async fn store_attachments(
             let name = encrypted_blob_name(&original_name)
                 .ok_or_else(|| AppError::BadRequest(crate::handlers::e2e_conv::PLAINTEXT_REFUSED.into()))?;
             let filename = format!("{}.enc", Uuid::new_v4());
-            let size = budget.save(state, field, &upload_dir.join(&filename)).await?;
+            let path = upload_dir.join(&filename);
+            let size = budget.save(state, field, &path).await?;
             let url = format!("/uploads/{filename}");
-            uploaded.push(insert_attachment(state, owner, &name, "application/octet-stream", size, &url, expires_at, user_id).await?);
+            let row = insert_attachment(state, owner, &name, "application/octet-stream", size, &url, expires_at, user_id).await;
+            let item = unlink_on_err(&path, row).await?;
+            if let Some(id) = item["id"].as_str().and_then(|v| v.parse().ok()) { stored.push((path.clone(), id)); }
+            uploaded.push(item);
             continue;
         }
 
@@ -330,13 +367,28 @@ pub async fn store_attachments(
             .replace(['/', '\\', '\0', ':', '*', '?', '"', '<', '>', '|'], "_");
 
         let filename = format!("{}.{}", Uuid::new_v4(), ext);
-        let size = budget.save(state, field, &upload_dir.join(&filename)).await?;
+        let path = upload_dir.join(&filename);
+        let size = budget.save(state, field, &path).await?;
 
         let url = format!("/uploads/{}", filename);
-        uploaded.push(insert_attachment(state, owner, &safe_name, &content_type, size, &url, expires_at, user_id).await?);
+        let row = insert_attachment(state, owner, &safe_name, &content_type, size, &url, expires_at, user_id).await;
+        let item = unlink_on_err(&path, row).await?;
+        if let Some(id) = item["id"].as_str().and_then(|v| v.parse().ok()) { stored.push((path.clone(), id)); }
+        uploaded.push(item);
     }
 
     Ok(uploaded)
+}
+
+/// Ligne `attachments` refusée (base indisponible, message supprimé entre-temps) : le fichier
+/// déjà écrit est effacé, sinon il resterait orphelin sur le disque (S6).
+async fn unlink_on_err<T>(path: &std::path::Path, res: Result<T>) -> Result<T> {
+    if res.is_err() {
+        if let Err(e) = tokio::fs::remove_file(path).await {
+            tracing::warn!("Fichier {} non supprimé après échec d'insertion : {e}", path.display());
+        }
+    }
+    res
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -409,76 +461,7 @@ pub async fn attachments_by_owner(
     map
 }
 
-/// Supprime du disque les fichiers `/uploads/<nom>` (en tâche de fond, échec
-/// silencieux : la base est la source de vérité).
-pub fn remove_upload_files(state: &AppState, urls: Vec<String>) {
-    if urls.is_empty() { return; }
-    let upload_dir = state.config.upload_dir.clone();
-    tokio::spawn(async move {
-        for url in urls {
-            if let Some(rel) = url.strip_prefix("/uploads/") {
-                if rel.contains("..") || rel.contains('/') || rel.contains('\\') { continue; }
-                let _ = tokio::fs::remove_file(std::path::Path::new(&upload_dir).join(rel)).await;
-            }
-        }
-    });
-}
-
-/// Fichiers d'un serveur (pièces jointes de ses salons, icône, bannière, émojis, autocollants,
-/// sons), relevés AVANT sa suppression : la cascade efface les lignes, pas les fichiers.
-pub async fn server_upload_candidates(db: &sqlx::PgPool, server_id: Uuid) -> Vec<String> {
-    sqlx::query_scalar(
-        "SELECT a.url FROM attachments a JOIN messages m ON m.id = a.message_id
-           JOIN channels c ON c.id = m.channel_id WHERE c.server_id = $1
-         UNION SELECT icon FROM servers WHERE id = $1 AND icon IS NOT NULL
-         UNION SELECT banner FROM servers WHERE id = $1 AND banner IS NOT NULL
-         UNION SELECT look->'sidebar_bg'->>'image' FROM servers WHERE id = $1 AND look->'sidebar_bg'->>'image' IS NOT NULL
-         UNION SELECT look->'message_bg'->>'image' FROM servers WHERE id = $1 AND look->'message_bg'->>'image' IS NOT NULL
-         UNION SELECT url FROM custom_emojis WHERE server_id = $1
-         UNION SELECT url FROM server_stickers WHERE server_id = $1
-         UNION SELECT file_url FROM soundboard WHERE server_id = $1",
-    )
-    .bind(server_id)
-    .fetch_all(db)
-    .await
-    .unwrap_or_default()
-}
-
-/// Fichiers d'un compte (pièces jointes envoyées, avatar, bannière), relevés AVANT sa suppression.
-pub async fn user_upload_candidates(db: &sqlx::PgPool, user_id: Uuid) -> Vec<String> {
-    sqlx::query_scalar(
-        "SELECT url FROM attachments WHERE uploader_id = $1
-         UNION SELECT avatar FROM users WHERE id = $1 AND avatar IS NOT NULL
-         UNION SELECT banner FROM users WHERE id = $1 AND banner IS NOT NULL",
-    )
-    .bind(user_id)
-    .fetch_all(db)
-    .await
-    .unwrap_or_default()
-}
-
-/// Après une suppression en cascade : efface du disque les fichiers candidats que plus aucune
-/// ligne ne référence (un fichier encore utilisé ailleurs reste en place).
-pub async fn remove_unreferenced(state: &AppState, candidates: Vec<String>) {
-    if candidates.is_empty() {
-        return;
-    }
-    let gone: Vec<String> = sqlx::query_scalar(
-        "SELECT u FROM unnest($1::text[]) AS u
-         WHERE NOT EXISTS (SELECT 1 FROM attachments WHERE url = u)
-           AND NOT EXISTS (SELECT 1 FROM users WHERE avatar = u OR banner = u)
-           AND NOT EXISTS (SELECT 1 FROM servers WHERE icon = u OR banner = u
-                           OR look->'sidebar_bg'->>'image' = u OR look->'message_bg'->>'image' = u)
-           AND NOT EXISTS (SELECT 1 FROM custom_emojis WHERE url = u)
-           AND NOT EXISTS (SELECT 1 FROM server_stickers WHERE url = u)
-           AND NOT EXISTS (SELECT 1 FROM soundboard WHERE file_url = u)",
-    )
-    .bind(&candidates)
-    .fetch_all(&state.db)
-    .await
-    .unwrap_or_default();
-    remove_upload_files(state, gone);
-}
+pub use super::upload_gc::{remove_unreferenced, remove_upload_files, server_upload_candidates, user_upload_candidates};
 
 pub async fn upload_file(
     State(state): State<AppState>,
@@ -615,13 +598,15 @@ pub async fn forum_upload(
             let name = encrypted_blob_name(&original_name)
                 .ok_or_else(|| AppError::BadRequest(crate::handlers::e2e_conv::PLAINTEXT_REFUSED.into()))?;
             let filename = format!("{}.enc", Uuid::new_v4());
-            let size = budget.save(&state, field, &upload_dir.join(&filename)).await?;
+            let path = upload_dir.join(&filename);
+            let size = budget.save(&state, field, &path).await?;
             let url = format!("/uploads/{filename}");
-            sqlx::query(
+            let row = sqlx::query(
                 "INSERT INTO attachments (filename, content_type, size, url, uploader_id, channel_id) VALUES ($1, 'application/octet-stream', $2, $3, $4, $5)"
             )
             .bind(&name).bind(size).bind(&url).bind(claims.sub).bind(channel_id)
-            .execute(&state.db).await?;
+            .execute(&state.db).await.map_err(AppError::from);
+            unlink_on_err(&path, row).await?;
             return Ok(Json(serde_json::json!({ "url": url, "signed_url": crate::upload_sign::sign_url(&url) })));
         }
 
@@ -632,11 +617,12 @@ pub async fn forum_upload(
         }
 
         let filename = format!("{}.{}", Uuid::new_v4(), ext);
-        let size = budget.save(&state, field, &upload_dir.join(&filename)).await?;
+        let path = upload_dir.join(&filename);
+        let size = budget.save(&state, field, &path).await?;
         let url = format!("/uploads/{}", filename);
         // Ligne sans message propriétaire, seulement pour compter le fichier dans le quota
         // (l'URL est collée dans le contenu du post).
-        sqlx::query(
+        let row = sqlx::query(
             "INSERT INTO attachments (filename, content_type, size, url, uploader_id, channel_id) VALUES ($1, $2, $3, $4, $5, $6)"
         )
         .bind(filename.as_str())
@@ -646,7 +632,9 @@ pub async fn forum_upload(
         .bind(claims.sub)
         .bind(channel_id)
         .execute(&state.db)
-        .await?;
+        .await
+        .map_err(AppError::from);
+        unlink_on_err(&path, row).await?;
 
         return Ok(Json(serde_json::json!({ "url": url, "signed_url": crate::upload_sign::sign_url(&url) })));
     }

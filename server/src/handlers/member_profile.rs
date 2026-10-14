@@ -39,8 +39,10 @@ pub fn normalize_bio(bio: Option<String>) -> Result<Option<String>> {
 /// Relit le profil de serveur du membre et le diffuse aux membres du serveur.
 async fn publish(state: &AppState, server_id: Uuid, user_id: Uuid) -> Result<Json<serde_json::Value>> {
     let row = sqlx::query(
-        "SELECT server_avatar, server_banner, server_bio, server_avatar_ring, server_name_style
-         FROM server_members WHERE server_id=$1 AND user_id=$2"
+        "SELECT sm.server_avatar, sm.server_banner, sm.server_bio, sm.server_avatar_ring, sm.server_name_style,
+                u.avatar_ring
+         FROM server_members sm JOIN users u ON u.id = sm.user_id
+         WHERE sm.server_id=$1 AND sm.user_id=$2"
     ).bind(server_id).bind(user_id).fetch_one(&state.db).await?;
     let profile = serde_json::json!({
         "server_id": server_id,
@@ -50,6 +52,8 @@ async fn publish(state: &AppState, server_id: Uuid, user_id: Uuid) -> Result<Jso
         "server_bio": row.get::<Option<String>, _>("server_bio"),
         "server_avatar_ring": row.get::<Option<serde_json::Value>, _>("server_avatar_ring"),
         "server_name_style": row.get::<Option<serde_json::Value>, _>("server_name_style"),
+        // Anneau global : repli du client quand server_avatar_ring est null.
+        "avatar_ring": row.get::<Option<serde_json::Value>, _>("avatar_ring"),
     });
     let mut event = profile.clone();
     event["type"] = "MEMBER_PROFILE_UPDATE".into();
@@ -62,7 +66,7 @@ pub struct ProfileBody {
     /// Absent = inchangée ; null ou vide = bio du compte.
     #[serde(default, deserialize_with = "crate::models::serde_helpers::deserialize_double_option")]
     pub bio: Option<Option<String>>,
-    /// Absent = inchangé ; `{}` = pas d'anneau (models/profile_style::parse_avatar_ring).
+    /// Absent = inchangé ; `{}` = pas d'anneau (models/avatar_ring::parse_avatar_ring).
     #[serde(default)]
     pub avatar_ring: Option<serde_json::Value>,
     /// Absent = inchangé ; `{}` = style du compte (models/profile_style::parse_name_style).
@@ -93,6 +97,11 @@ pub async fn update_profile(
 ) -> Result<Json<serde_json::Value>> {
     require_member(&state, claims.sub, server_id).await?;
     let (ring, style) = parse_styles(&body)?;
+    // Chaque PATCH diffuse à tout le serveur : sans frein, amplification facile.
+    let key = format!("member_profile:{}", claims.sub);
+    if crate::handlers::password_reset::over_limit(&state, &key, 30, 600).await {
+        return Err(AppError::TooManyRequests);
+    }
     let has_bio = body.bio.is_some();
     let bio = normalize_bio(body.bio.flatten())?;
     sqlx::query(
@@ -123,10 +132,28 @@ pub async fn upload_profile_image(
     let data = crate::handlers::profile_custom::read_image_field(&mut multipart, "file", max as usize).await?;
     let url = crate::handlers::profile_custom::store_image(&state, "member_profiles", &data).await?;
     // `column` vient de la liste blanche image_column, jamais de l'utilisateur.
-    sqlx::query(&format!("UPDATE server_members SET {column}=$1 WHERE server_id=$2 AND user_id=$3"))
-        .bind(url).bind(server_id).bind(claims.sub)
-        .execute(&state.db).await?;
+    set_image(&state, server_id, claims.sub, column, Some(url)).await?;
     publish(&state, server_id, claims.sub).await
+}
+
+/// Pose (ou retire) l'image et efface l'ancienne du disque si plus rien ne la référence.
+/// `column` vient toujours de la liste blanche `image_column`.
+async fn set_image(
+    state: &AppState,
+    server_id: Uuid,
+    user: Uuid,
+    column: &str,
+    url: Option<String>,
+) -> Result<()> {
+    let old: Option<Option<String>> = sqlx::query_scalar(&format!(
+        "UPDATE server_members sm SET {column}=$1 FROM server_members prev
+         WHERE sm.server_id=$2 AND sm.user_id=$3 AND prev.server_id=sm.server_id AND prev.user_id=sm.user_id
+         RETURNING prev.{column}"
+    ))
+    .bind(url).bind(server_id).bind(user)
+    .fetch_optional(&state.db).await?;
+    crate::handlers::upload_gc::drop_replaced(state, old.flatten()).await;
+    Ok(())
 }
 
 /// DELETE /servers/:server_id/profile/:kind — retour à l'image du compte.
@@ -137,8 +164,7 @@ pub async fn delete_profile_image(
 ) -> Result<Json<serde_json::Value>> {
     let (column, _) = image_column(&kind)?;
     require_member(&state, claims.sub, server_id).await?;
-    sqlx::query(&format!("UPDATE server_members SET {column}=NULL WHERE server_id=$1 AND user_id=$2"))
-        .bind(server_id).bind(claims.sub).execute(&state.db).await?;
+    set_image(&state, server_id, claims.sub, column, None).await?;
     publish(&state, server_id, claims.sub).await
 }
 

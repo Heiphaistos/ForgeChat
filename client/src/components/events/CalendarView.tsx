@@ -223,10 +223,17 @@ export default function CalendarView({ serverId, onCreateEvent }: CalendarViewPr
           const visible = dayEvents.slice(0, 3)
           const overflow = dayEvents.length - 3
 
+          // Jour vide cliquable : aussi au clavier (Entrée / Espace), avec un nom lisible.
+          const canCreate = !!onCreateEvent && dayEvents.length === 0
           return (
             <div
               key={i}
-              onClick={() => onCreateEvent && dayEvents.length === 0 && onCreateEvent(day)}
+              onClick={() => canCreate && onCreateEvent!(day)}
+              {...(canCreate ? {
+                role: 'button', tabIndex: 0,
+                'aria-label': t('cal.createOn', { date: day.toLocaleDateString(intlLocale(), { dateStyle: 'full' }) }),
+                onKeyDown: (e: React.KeyboardEvent) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onCreateEvent!(day) } },
+              } : {})}
               className={`bg-fc-bg min-h-[72px] p-1.5 flex flex-col gap-1 ${
                 onCreateEvent && dayEvents.length === 0
                   ? 'cursor-pointer hover:bg-fc-hover/30 transition'

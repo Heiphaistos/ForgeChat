@@ -6,15 +6,20 @@ import { readFileSync } from 'node:fs'
 import {
   PRESETS, COLOR_KEYS, contrast, contrastReport, decodeTheme, encodeTheme, findTheme, fixContrast,
   isSafeImageUrl, MAX_CUSTOM_THEMES, sanitizeCustomList, sanitizeTheme, toExport, withAccent,
-  FAMILIES, HUES, PRESET_GROUPS, familyTheme, tuneTheme, hsl, toHsl,
+  FAMILIES, HUES, PRESET_GROUPS, familyTheme, tuneTheme, hsl, toHsl, findPreset,
 } from '../src/theme/themeCore.ts'
 
 const HEX = /^#[0-9a-f]{6}$/
 
-test('catalogue : 4 thèmes de base, au moins 25 dégradés, identifiants uniques', () => {
+test('catalogue : 4 thèmes de base historiques en tête, au moins 25 dégradés, identifiants uniques', () => {
   const ids = PRESETS.map(p => p.id)
   assert.equal(new Set(ids).size, ids.length)
-  assert.deepEqual(PRESETS.filter(p => p.group === 'base').map(p => p.id), ['dark', 'onyx', 'darker', 'light'])
+  const base = PRESETS.filter(p => p.group === 'base')
+  assert.deepEqual(base.slice(0, 4).map(p => p.id), ['dark', 'onyx', 'darker', 'light'])
+  assert.deepEqual(PRESETS.slice(0, 4).map(p => p.id), ['dark', 'onyx', 'darker', 'light'])
+  assert.ok(base.length >= 44, `${base.length} thèmes de base`)
+  assert.ok(base.filter(p => p.spec.scheme === 'light').length >= 15, 'thèmes de base clairs')
+  assert.equal(new Set(base.map(p => `${p.spec.colors.bg}/${p.spec.colors.accent}`)).size, base.length, 'base : toutes différentes')
   const grads = PRESETS.filter(p => p.group === 'gradient')
   assert.ok(grads.length >= 25, `${grads.length} dégradés`)
   for (const g of grads) {
@@ -24,6 +29,25 @@ test('catalogue : 4 thèmes de base, au moins 25 dégradés, identifiants unique
   // Les anciens identifiants restent valides (thème déjà choisi par les utilisateurs).
   for (const id of ['dracula', 'nord', 'catppuccin', 'retro', 'winter', 'matrix']) assert.ok(findTheme(id), id)
   for (const p of PRESETS) for (const k of COLOR_KEYS) assert.match(p.spec.colors[k], HEX, `${p.id}.${k}`)
+})
+
+test('identifiants historiques : un échantillon de chaque groupe existe toujours', () => {
+  for (const id of [
+    'dark', 'onyx', 'darker', 'light', 'g-aurora', 'g-abyss', 'g-lofi', 'dracula', 'nord', 'smithy', 'blueprint', 'abyss',
+    'tn-ruby', 'dm-carmine', 'nt-indigo', 'am-cyan', 'ag-ruby', 'lt-sky', 'pp-olive', 'ps-mint', 'pn-violet', 'ne-cyan',
+    'sw-magenta', 'rt-amber', 'tm-emerald', 'vt-coral', 'ir-jade', 'nc-iris', 'au-azure', 'du-lime', 'vr-sapphire',
+    'gv-cobalt', 'hc-lemon', 'hl-cherry', 'ab-peony', 'cr-amethyst', 'n-taiga', 'n-olive-grove', 's-spring', 's-funfair',
+  ]) assert.ok(findPreset(id), id)
+})
+
+test('collections écrites à la main : au moins 10 ajouts par groupe, sans doublon de palette', () => {
+  const min = { pastel: 10, neon: 10, retro: 10, glass: 10, nature: 42, seasonal: 42, gradient: 40, classic: 200 }
+  for (const [g, n] of Object.entries(min)) {
+    const curated = PRESETS.filter(p => p.group === g && !p.family)
+    assert.ok(curated.length >= n, `${g} : ${curated.length}`)
+    const pairs = new Set(curated.map(p => `${p.spec.colors.bg}/${p.spec.colors.accent}/${p.spec.gradient?.stops.join() ?? ''}`))
+    assert.equal(pairs.size, curated.length, `${g} : toutes différentes`)
+  }
 })
 
 test('catalogue étendu : au moins 20 fois les 59 thèmes d\'origine, familles × 48 teintes', () => {
@@ -197,8 +221,11 @@ test("accent du compte : appliqué seulement s'il est valide", () => {
   assert.equal(withAccent(nord, null), nord)
 })
 
-test('le mobile embarque exactement le même module de thèmes', () => {
-  const web = readFileSync(new URL('../src/theme/themeCore.ts', import.meta.url), 'utf8')
-  const mobile = readFileSync(new URL('../../mobile/src/theme/themeCore.ts', import.meta.url), 'utf8')
-  assert.equal(mobile, web, 'copier client/src/theme/themeCore.ts vers mobile/src/theme/themeCore.ts')
+test('le mobile embarque exactement les mêmes modules de thèmes', () => {
+  for (const f of ['themeCore.ts', 'themeModel.ts', 'themeBase.ts', 'themeClassic.ts', 'themeCurated.ts', 'themeFamilies.ts']) {
+    const web = readFileSync(new URL(`../src/theme/${f}`, import.meta.url), 'utf8')
+    const mobile = readFileSync(new URL(`../../mobile/src/theme/${f}`, import.meta.url), 'utf8')
+    assert.equal(mobile, web, `copier client/src/theme/${f} vers mobile/src/theme/${f}`)
+    assert.ok(web.split('\n').length <= 800, `${f} : 800 lignes au plus`)
+  }
 })

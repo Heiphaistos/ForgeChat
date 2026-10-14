@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Trash2 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../../api/client'
+import { fetchAllMembers } from '../../api/members'
 import { useVoice } from '../../store/voice'
 import { useServerPerms, PERM } from '../../hooks/useServerPerms'
 import { useEscapeKey } from '../../hooks/useEscapeKey'
@@ -10,7 +11,7 @@ import { confirm } from '../ui/ConfirmModal'
 import type { ContextMenuEntry } from '../ui/ContextMenu'
 import { buildModMenu, canRenameMember } from '../userMenu/model'
 import ChannelSettingsModal from '../modals/ChannelSettingsModal'
-import { t as tr, intlLocale } from '../../i18n'
+import { t as tr, intlLocale, type Key } from '../../i18n'
 
 /**
  * Actions de modération sur un membre (audit P1-9 / P2-2) : rôles, modération
@@ -35,12 +36,12 @@ type Dialog = { kind: 'ban' | 'timeout' | 'notes' | 'nick'; member: Member }
 
 const errorOf = (e: any, fallback: string) => e?.response?.data?.error ?? fallback
 
-const TIMEOUTS: Array<[string, number]> = [
-  ['60 secondes', 1], ['5 minutes', 5], ['10 minutes', 10],
-  ['1 heure', 60], ['1 jour', 1440], ['1 semaine', 10080],
+const TIMEOUTS: Array<[Key, number]> = [
+  ['modx.d.60s', 1], ['modx.d.5m', 5], ['modx.d.10m', 10],
+  ['modx.d.1h', 60], ['modx.d.1d', 1440], ['modx.d.1w', 10080],
 ]
-const BANS: Array<[string, number | null]> = [
-  ['Définitif', null], ['1 heure', 1], ['1 jour', 24], ['7 jours', 168], ['30 jours', 720],
+const BANS: Array<[Key, number | null]> = [
+  ['modx.d.forever', null], ['modx.d.1h', 1], ['modx.d.1d', 24], ['modx.d.7d', 168], ['modx.d.30d', 720],
 ]
 
 function Shell({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
@@ -77,43 +78,41 @@ function SanctionDialog({ serverId, dialog, canBanForever, onClose, onDone }: {
           reason: reason.trim() || null,
           ...(value !== null ? { duration_hours: value } : {}),
         })
-        toast.success(`${name} a été banni`)
+        toast.success(tr('modx.banned', { name }))
       } else {
         await api.post(`/servers/${serverId}/members/${member.user_id}/timeout`, {
           duration_minutes: value,
           reason: reason.trim() || null,
         })
-        toast.success(`${name} est en timeout (${choices[choice][0]})`)
+        toast.success(tr('modx.timedOut', { name, d: tr(choices[choice][0]) }))
       }
       onDone()
       onClose()
     } catch (e) {
-      toast.error(errorOf(e, 'Action refusée'))
+      toast.error(errorOf(e, tr('mod.refused')))
     } finally {
       setBusy(false)
     }
   }
 
   return (
-    <Shell title={kind === 'ban' ? `Bannir ${name}` : `Timeout pour ${name}`} onClose={onClose}>
+    <Shell title={tr(kind === 'ban' ? 'modx.banTitle' : 'modx.timeoutTitle', { name })} onClose={onClose}>
       <p className="text-xs text-fc-muted mb-2">
-        {kind === 'ban'
-          ? 'Le membre est retiré du serveur et ne peut plus le rejoindre pendant la durée choisie.'
-          : 'Le membre peut lire et écouter, mais ne peut ni écrire, ni réagir, ni parler en vocal.'}
+        {tr(kind === 'ban' ? 'modx.banDesc' : 'modx.timeoutDesc')}
       </p>
-      <label className="text-[11px] uppercase font-semibold text-fc-muted" htmlFor="mod-duration">Durée</label>
+      <label className="text-[11px] uppercase font-semibold text-fc-muted" htmlFor="mod-duration">{tr('modx.duration')}</label>
       <select id="mod-duration" value={choice} onChange={e => setChoice(Number(e.target.value))}
         className="w-full fc-input text-sm mt-1 mb-3">
-        {choices.map(([label], i) => <option key={label} value={i}>{label}</option>)}
+        {choices.map(([label], i) => <option key={label} value={i}>{tr(label)}</option>)}
       </select>
-      <label className="text-[11px] uppercase font-semibold text-fc-muted" htmlFor="mod-reason">Raison (facultatif)</label>
+      <label className="text-[11px] uppercase font-semibold text-fc-muted" htmlFor="mod-reason">{tr('modx.reason')}</label>
       <textarea id="mod-reason" value={reason} onChange={e => setReason(e.target.value)} maxLength={512} rows={3}
         className="w-full fc-input text-sm mt-1 mb-4 resize-none" />
       <div className="flex gap-2">
-        <button onClick={onClose} className="flex-1 px-3 py-2 rounded-lg bg-fc-hover text-fc-text text-sm">Annuler</button>
+        <button onClick={onClose} className="flex-1 px-3 py-2 rounded-lg bg-fc-hover text-fc-text text-sm">{tr('common.cancel')}</button>
         <button onClick={() => void submit()} disabled={busy}
           className="flex-1 px-3 py-2 rounded-lg bg-red-600 hover:bg-red-500 text-white text-sm font-medium disabled:opacity-50">
-          {kind === 'ban' ? 'Bannir' : 'Appliquer'}
+          {tr(kind === 'ban' ? 'modx.ban' : 'modx.apply')}
         </button>
       </div>
     </Shell>
@@ -174,7 +173,7 @@ function NotesDialog({ serverId, member, onClose }: { serverId: string; member: 
       setText('')
       void qc.invalidateQueries({ queryKey: key })
     } catch (e) {
-      toast.error(errorOf(e, "Impossible d'ajouter la note"))
+      toast.error(errorOf(e, tr('modx.noteAddError')))
     }
   }
   const remove = async (id: string) => {
@@ -182,22 +181,22 @@ function NotesDialog({ serverId, member, onClose }: { serverId: string; member: 
       await api.delete(`/servers/${serverId}/notes/${id}`)
       void qc.invalidateQueries({ queryKey: key })
     } catch (e) {
-      toast.error(errorOf(e, 'Suppression refusée'))
+      toast.error(errorOf(e, tr('modx.deleteRefused')))
     }
   }
   return (
-    <Shell title={`Notes de modération : ${member.nickname ?? member.username}`} onClose={onClose}>
-      <p className="text-xs text-fc-muted mb-2">Visibles des seuls modérateurs du serveur.</p>
+    <Shell title={tr('modx.notesTitle', { name: member.nickname ?? member.username })} onClose={onClose}>
+      <p className="text-xs text-fc-muted mb-2">{tr('modx.notesHint')}</p>
       <div className="space-y-2 mb-3">
-        {isLoading && <p className="text-xs text-fc-muted">Chargement…</p>}
-        {!isLoading && notes.length === 0 && <p className="text-xs text-fc-muted">Aucune note.</p>}
+        {isLoading && <p className="text-xs text-fc-muted">{tr('common.loading')}</p>}
+        {!isLoading && notes.length === 0 && <p className="text-xs text-fc-muted">{tr('modx.noNotes')}</p>}
         {notes.map((n: any) => (
           <div key={n.id} className="bg-fc-bg/60 rounded-lg px-3 py-2 text-sm text-fc-text flex gap-2">
             <div className="flex-1 min-w-0">
               <p className="whitespace-pre-wrap break-words">{n.note}</p>
               <p className="text-[10px] text-fc-muted mt-1">{new Date(n.created_at).toLocaleString(intlLocale())}</p>
             </div>
-            <button onClick={() => void remove(n.id)} aria-label="Supprimer la note"
+            <button onClick={() => void remove(n.id)} aria-label={tr('modx.deleteNote')}
               className="self-start p-1 rounded text-fc-muted hover:text-red-400 hover:bg-fc-hover">
               <Trash2 size={13} />
             </button>
@@ -205,11 +204,11 @@ function NotesDialog({ serverId, member, onClose }: { serverId: string; member: 
         ))}
       </div>
       <textarea value={text} onChange={e => setText(e.target.value)} maxLength={2000} rows={3}
-        placeholder="Nouvelle note…" aria-label="Nouvelle note" className="w-full fc-input text-sm resize-none mb-2" />
+        placeholder={tr('modx.newNote')} aria-label={tr('modx.newNoteA11y')} className="w-full fc-input text-sm resize-none mb-2" />
       <div className="flex gap-2">
-        <button onClick={onClose} className="flex-1 px-3 py-2 rounded-lg bg-fc-hover text-fc-text text-sm">Fermer</button>
+        <button onClick={onClose} className="flex-1 px-3 py-2 rounded-lg bg-fc-hover text-fc-text text-sm">{tr('common.close')}</button>
         <button onClick={() => void add()} disabled={!text.trim()}
-          className="flex-1 btn-primary text-sm py-2 disabled:opacity-50">Ajouter</button>
+          className="flex-1 btn-primary text-sm py-2 disabled:opacity-50">{tr('modx.add')}</button>
       </div>
     </Shell>
   )
@@ -223,7 +222,7 @@ export function useMemberModeration(serverId?: string) {
   const roomParticipants = useVoice(s => s.roomParticipants)
   const { data: members = [] } = useQuery<Member[]>({
     queryKey: ['members', serverId],
-    queryFn: () => api.get(`/servers/${serverId}/members`).then(r => r.data),
+    queryFn: () => fetchAllMembers<Member>(serverId!),
     enabled: !!serverId,
     staleTime: 30_000,
   })

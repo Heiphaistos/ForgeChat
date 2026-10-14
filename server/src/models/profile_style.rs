@@ -47,13 +47,8 @@ pub const TAG_ICONS: &[&str] = &[
     "", "star", "crown", "shield", "flame", "bolt", "heart", "skull", "leaf", "diamond",
     "moon", "sword", "gem", "paw", "music", "gamepad",
 ];
-/// Anneau d'avatar du profil de serveur (rendu web : components/ui/AvatarRing.tsx ;
-/// mobile : components/AvatarRing.tsx, même liste).
-pub const RING_STYLES: &[&str] = &[
-    "solid", "dashed", "dotted", "double", "glow", "spin", "pulse",
-    "gradient_spin", "rainbow", "dashed_spin", "neon_pulse", "comet", "segmented", "breathe",
-];
-pub const RING_WIDTH_MAX: u8 = 8;
+/// Anneau d'avatar : models/avatar_ring.rs (ré-exporté ici pour les appelants existants).
+pub use super::avatar_ring::parse_avatar_ring;
 /// Sens de rotation (anneau et décoration d'avatar).
 pub const DIRECTIONS: &[&str] = &["cw", "ccw"];
 /// Bornes des réglages en % (ou en degrés pour la teinte), partagées par l'anneau et la décoration.
@@ -72,7 +67,7 @@ pub const LINK_URL_MAX: usize = 256;
 /// Durées proposées pour effacer le statut personnalisé (minutes ; 0 = jamais).
 pub const STATUS_CLEAR_AFTER: &[i64] = &[0, 30, 60, 240, 1440, 4320, 10080];
 
-const COLOR_MAX: u32 = 0xFF_FFFF;
+pub(super) const COLOR_MAX: u32 = 0xFF_FFFF;
 
 fn is_zero(v: &u8) -> bool {
     *v == 0
@@ -86,13 +81,13 @@ fn is_default_level(v: &u8) -> bool {
     *v == LEVEL_DEFAULT
 }
 
-fn hundred() -> u16 {
+pub(super) fn hundred() -> u16 {
     100
 }
-fn is_hundred(v: &u16) -> bool {
+pub(super) fn is_hundred(v: &u16) -> bool {
     *v == 100
 }
-fn is_zero16(v: &u16) -> bool {
+pub(super) fn is_zero16(v: &u16) -> bool {
     *v == 0
 }
 fn yes() -> bool {
@@ -104,10 +99,10 @@ fn is_true(v: &bool) -> bool {
 fn is_false(v: &bool) -> bool {
     !*v
 }
-fn cw() -> String {
+pub(super) fn cw() -> String {
     "cw".into()
 }
-fn is_cw(v: &String) -> bool {
+pub(super) fn is_cw(v: &String) -> bool {
     v == "cw"
 }
 
@@ -275,35 +270,6 @@ pub fn parse_name_style(v: &serde_json::Value) -> Result<Option<serde_json::Valu
     Ok(Some(serde_json::to_value(s).map_err(|_| "Style du pseudo invalide")?))
 }
 
-/// Anneau autour de l'avatar dans un serveur (profil de serveur).
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct AvatarRing {
-    /// 1 couleur = unie, 2-3 = dégradé ; aucune = pas d'anneau.
-    #[serde(default)]
-    pub colors: Vec<u32>,
-    #[serde(default = "default_ring_width")]
-    pub width: u8,
-    #[serde(default)]
-    pub style: String,
-    /// Vitesse des animations en % (SPEED_RANGE).
-    #[serde(default = "hundred", skip_serializing_if = "is_hundred")]
-    pub speed: u16,
-    /// "cw" (horaire) ou "ccw".
-    #[serde(default = "cw", skip_serializing_if = "is_cw")]
-    pub direction: String,
-    /// Luminosité en % (BRIGHTNESS_RANGE).
-    #[serde(default = "hundred", skip_serializing_if = "is_hundred")]
-    pub brightness: u16,
-    /// Intensité de la lueur en % (GLOW_RANGE).
-    #[serde(default = "hundred", skip_serializing_if = "is_hundred")]
-    pub glow: u16,
-}
-
-fn default_ring_width() -> u8 {
-    3
-}
-
 /// Réglages de la décoration d'avatar (`users.avatar_decoration_opts`). Seulement des
 /// nombres bornés, des booléens et un sens connu : le client en tire des variables CSS
 /// numériques (jamais une chaîne de l'utilisateur dans le CSS). Les valeurs par défaut ne
@@ -385,42 +351,6 @@ pub fn parse_decoration_opts(v: &serde_json::Value) -> Result<Option<serde_json:
         return Err("Réglages de décoration trop longs");
     }
     Ok(Some(out))
-}
-
-/// `null`, `{}` ou aucune couleur → None (pas d'anneau) ; sinon l'anneau normalisé.
-pub fn parse_avatar_ring(v: &serde_json::Value) -> Result<Option<serde_json::Value>, &'static str> {
-    if v.is_null() {
-        return Ok(None);
-    }
-    let mut r: AvatarRing = serde_json::from_value(v.clone()).map_err(|_| "Anneau d'avatar invalide")?;
-    if r.colors.len() > 3 || r.colors.iter().any(|&c| c > COLOR_MAX) {
-        return Err("Anneau d'avatar : 3 couleurs 0xRRGGBB au plus");
-    }
-    if r.width == 0 || r.width > RING_WIDTH_MAX {
-        return Err("Anneau d'avatar : épaisseur 1-8");
-    }
-    if r.style.is_empty() {
-        r.style = "solid".into();
-    }
-    if !RING_STYLES.contains(&r.style.as_str()) {
-        return Err("Anneau d'avatar : style inconnu");
-    }
-    if !DIRECTIONS.contains(&r.direction.as_str()) {
-        return Err("Anneau d'avatar : sens cw ou ccw");
-    }
-    if !SPEED_RANGE.contains(&r.speed) {
-        return Err("Anneau d'avatar : vitesse 25-400 %");
-    }
-    if !BRIGHTNESS_RANGE.contains(&r.brightness) {
-        return Err("Anneau d'avatar : luminosité 50-200 %");
-    }
-    if !GLOW_RANGE.contains(&r.glow) {
-        return Err("Anneau d'avatar : lueur 0-300 %");
-    }
-    if r.colors.is_empty() {
-        return Ok(None);
-    }
-    serde_json::to_value(r).map(Some).map_err(|_| "Anneau d'avatar invalide")
 }
 
 /// Caractères refusés dans un nom visible : contrôle, invisibles (largeur nulle) et
@@ -611,46 +541,6 @@ mod tests {
         assert!(parse_tag_style(&json!({ "color": 0x123456 })).is_err());
         assert!(parse_tag_style(&json!({ "font": "Arial" })).is_err());
         assert!(parse_tag_style(&json!("solid")).is_err());
-    }
-
-    #[test]
-    fn anneau_d_avatar() {
-        assert_eq!(parse_avatar_ring(&json!(null)).unwrap(), None);
-        assert_eq!(parse_avatar_ring(&json!({})).unwrap(), None);
-        let r = parse_avatar_ring(&json!({ "colors": [0xff00ff, 0x00ffff], "width": 4 })).unwrap().unwrap();
-        assert_eq!(r["style"], "solid");
-        assert_eq!(parse_avatar_ring(&json!({ "colors": [1], "style": "spin" })).unwrap().unwrap()["width"], 3);
-        assert!(parse_avatar_ring(&json!({ "colors": [1], "width": 0 })).is_err());
-        assert!(parse_avatar_ring(&json!({ "colors": [1], "width": 9 })).is_err());
-        assert!(parse_avatar_ring(&json!({ "colors": [1, 2, 3, 4] })).is_err());
-        assert!(parse_avatar_ring(&json!({ "colors": [0x1000000] })).is_err());
-        assert!(parse_avatar_ring(&json!({ "colors": [1], "style": "solid;background:url(x)" })).is_err());
-        assert!(parse_avatar_ring(&json!({ "colors": [1], "css": "x" })).is_err());
-    }
-
-    #[test]
-    fn anneau_styles_et_reglages() {
-        for s in RING_STYLES {
-            assert_eq!(parse_avatar_ring(&json!({ "colors": [1], "style": s })).unwrap().unwrap()["style"], *s);
-        }
-        let r = parse_avatar_ring(&json!({ "colors": [1, 2], "style": "comet", "speed": 250, "direction": "ccw", "brightness": 150, "glow": 0 })).unwrap().unwrap();
-        assert_eq!((r["speed"].as_u64(), r["direction"].as_str(), r["brightness"].as_u64(), r["glow"].as_u64()), (Some(250), Some("ccw"), Some(150), Some(0)));
-        // Valeurs par défaut non stockées.
-        let d = parse_avatar_ring(&json!({ "colors": [1], "speed": 100, "direction": "cw", "brightness": 100, "glow": 100 })).unwrap().unwrap();
-        assert!(d.get("speed").is_none() && d.get("direction").is_none() && d.get("brightness").is_none() && d.get("glow").is_none());
-        for bad in [
-            json!({ "colors": [1], "speed": 24 }), json!({ "colors": [1], "speed": 401 }),
-            json!({ "colors": [1], "speed": 1.5 }), json!({ "colors": [1], "speed": "fast" }),
-            json!({ "colors": [1], "direction": "left" }), json!({ "colors": [1], "direction": "" }),
-            json!({ "colors": [1], "brightness": 49 }), json!({ "colors": [1], "brightness": 201 }),
-            json!({ "colors": [1], "glow": 301 }), json!({ "colors": [1], "glow": -1 }),
-            json!({ "colors": [1], "style": "gradient-spin" }),
-        ] {
-            assert!(parse_avatar_ring(&bad).is_err(), "{bad}");
-        }
-        // Pire cas sous la contrainte server_members_ring_size (256 octets).
-        let max = parse_avatar_ring(&json!({ "colors": [0xffffff, 0xffffff, 0xffffff], "width": 8, "style": "gradient_spin", "speed": 400, "direction": "ccw", "brightness": 200, "glow": 300 })).unwrap().unwrap();
-        assert!(max.to_string().len() <= 256, "{}", max.to_string().len());
     }
 
     #[test]

@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import api from '../api/client'
+import { applyUnreadPatch, parseUnreadEvent } from '../lib/discordFeatures'
 
 // Non-lus (point blanc) et mentions (pastille rouge chiffrée) séparés, comme
 // Discord. Un message privé non lu compte comme une mention.
@@ -14,6 +15,9 @@ interface UnreadState {
   addMention: (channelId: string, serverId?: string) => void
   reset: (channelId: string, serverId?: string) => void
   resetServer: (serverId: string) => void
+  /** « Marquer comme non lu » (READ_STATE_UPDATE `unread: true` ou réponse HTTP) : compteurs posés tels quels.
+   *  Renvoie `false` si l'objet n'est pas un retour en non-lu (rien n'est modifié). */
+  applyUnread: (raw: unknown) => boolean
   fetchAll: () => Promise<void>
   markRead: (channelId: string, serverId?: string, messageId?: string) => Promise<void>
   /** Lecture continue : efface tout de suite, prévient le serveur avec anti-rebond. */
@@ -86,6 +90,13 @@ export const useUnread = create<UnreadState>((set, get) => ({
       delete serverMentionCounts[serverId]
       return { counts, mentionCounts, serverCounts, serverMentionCounts }
     }),
+
+  applyUnread: (raw) => {
+    const patch = parseUnreadEvent(raw)
+    if (!patch) return false
+    set(s => applyUnreadPatch(s, patch))
+    return true
+  },
 
   fetchAll: async () => {
     try {

@@ -1,3 +1,5 @@
+import { readFileSync } from 'fs'
+import { join } from 'path'
 import { serverAppearancePatch, serverThemePatch } from '@/features/appearance/sync'
 import { formatTime } from '@/lib/format'
 import { colors, outlined } from '@/theme'
@@ -14,6 +16,13 @@ describe('palettes', () => {
     expect(resolvePalette('')).toEqual(dark)
     expect(dark.bg).toBe('#313338')
     expect(isLightTheme('nimporte-quoi')).toBe(false)
+  })
+
+  it('fichiers de thème identiques au web (copie client/src/theme/*, fins de ligne ignorées)', () => {
+    const read = (dir: string, f: string) => readFileSync(join(__dirname, '..', '..', dir, 'src', 'theme', f), 'utf8').replace(/\r\n/g, '\n')
+    for (const f of ['themeCore.ts', 'themeModel.ts', 'themeBase.ts', 'themeClassic.ts', 'themeCurated.ts', 'themeFamilies.ts']) {
+      expect({ f, src: read('mobile', f) }).toEqual({ f, src: read('client', f) })
+    }
   })
 
   it('reprend tous les thèmes du web avec des couleurs complètes', () => {

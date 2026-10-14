@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
 import api from '../../api/client'
 import { useT, intlLocale } from '../../i18n'
+import { confirm } from '../ui/ConfirmModal'
 
 // Synchronisation périodique Discord -> ForgeChat (serveur : handlers/discord_import/sync.rs).
 // Le jeton du bot n'est jamais renvoyé par l'API : seul `has_token` indique sa présence.
@@ -276,7 +277,7 @@ export default function DiscordSyncTab({ serverId }: { serverId: string }) {
             </button>
           )}
           {cfg.configured && (
-            <button type="button" onClick={() => { if (window.confirm(t('dsync.unlinkConfirm'))) unlink.mutate() }}
+            <button type="button" onClick={() => { void confirm({ message: t('dsync.unlinkConfirm'), danger: true, confirmLabel: t('dsync.unlink') }).then(ok => { if (ok) unlink.mutate() }) }}
               disabled={unlink.isPending}
               className="flex items-center gap-2 px-4 py-2 text-red-400 hover:bg-red-500/10 rounded text-sm font-medium transition disabled:opacity-50">
               <Unlink size={14} aria-hidden /> {t('dsync.unlink')}

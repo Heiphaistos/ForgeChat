@@ -122,8 +122,12 @@ pub fn app_ready() {
 /// La session et les réglages (`localstorage`, `storage`) sont conservés.
 #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
 pub fn purger_caches_si_nouvelle_version() {
-    let Some(home) = std::env::var_os("HOME").map(PathBuf::from) else { return };
-    let Some(donnees) = dossier_donnees() else { return };
+    let Some(home) = std::env::var_os("HOME").map(PathBuf::from) else {
+        return;
+    };
+    let Some(donnees) = dossier_donnees() else {
+        return;
+    };
     let caches = std::env::var_os("XDG_CACHE_HOME")
         .map(PathBuf::from)
         .unwrap_or_else(|| home.join(".cache"))
@@ -164,12 +168,17 @@ pub fn journal_si_pas_de_terminal() {
     }
     let Some(dir) = dossier_donnees() else { return };
     let _ = std::fs::create_dir_all(&dir);
-    let Ok(f) = std::fs::File::create(dir.join("forgechat.log")) else { return };
+    let Ok(f) = std::fs::File::create(dir.join("forgechat.log")) else {
+        return;
+    };
     // SAFETY: dup2 remplace stdout/stderr par un fichier ouvert, possédé par `f`
     // jusqu'ici ; les descripteurs 1 et 2 restent valides après sa fermeture.
     unsafe {
         libc::dup2(f.as_raw_fd(), 1);
         libc::dup2(f.as_raw_fd(), 2);
     }
-    eprintln!("[ForgeChat] {} — journal de démarrage", env!("CARGO_PKG_VERSION"));
+    eprintln!(
+        "[ForgeChat] {} — journal de démarrage",
+        env!("CARGO_PKG_VERSION")
+    );
 }

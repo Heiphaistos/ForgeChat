@@ -34,12 +34,16 @@ impl FileStore {
 
     /// Fichier absent, illisible ou d'une autre machine : vide.
     fn load(&self) -> BTreeMap<String, String> {
-        let Ok(mut buf) = std::fs::read(&self.path) else { return BTreeMap::new() };
+        let Ok(mut buf) = std::fs::read(&self.path) else {
+            return BTreeMap::new();
+        };
         if buf.len() < NONCE_LEN {
             return BTreeMap::new();
         }
         let mut body = buf.split_off(NONCE_LEN);
-        let Ok(nonce) = Nonce::try_assume_unique_for_key(&buf) else { return BTreeMap::new() };
+        let Ok(nonce) = Nonce::try_assume_unique_for_key(&buf) else {
+            return BTreeMap::new();
+        };
         self.cipher()
             .open_in_place(nonce, Aad::from(b"forgechat-session-v1"), &mut body)
             .ok()
@@ -55,10 +59,16 @@ impl FileStore {
             };
         }
         let mut nonce = [0u8; NONCE_LEN];
-        SystemRandom::new().fill(&mut nonce).map_err(|_| "aléa indisponible")?;
+        SystemRandom::new()
+            .fill(&mut nonce)
+            .map_err(|_| "aléa indisponible")?;
         let mut body = serde_json::to_vec(map).map_err(|e| e.to_string())?;
         self.cipher()
-            .seal_in_place_append_tag(Nonce::assume_unique_for_key(nonce), Aad::from(b"forgechat-session-v1"), &mut body)
+            .seal_in_place_append_tag(
+                Nonce::assume_unique_for_key(nonce),
+                Aad::from(b"forgechat-session-v1"),
+                &mut body,
+            )
             .map_err(|_| "chiffrement impossible")?;
         if let Some(dir) = self.path.parent() {
             std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
@@ -71,7 +81,8 @@ impl FileStore {
         #[cfg(unix)]
         std::os::unix::fs::OpenOptionsExt::mode(&mut opts, 0o600);
         let mut f = opts.open(&tmp).map_err(|e| e.to_string())?;
-        std::io::Write::write_all(&mut f, &[&nonce[..], &body].concat()).map_err(|e| e.to_string())?;
+        std::io::Write::write_all(&mut f, &[&nonce[..], &body].concat())
+            .map_err(|e| e.to_string())?;
         f.sync_all().map_err(|e| e.to_string())?;
         std::fs::rename(&tmp, &self.path).map_err(|e| e.to_string())
     }
@@ -109,8 +120,12 @@ pub fn machine() -> Option<FileStore> {
             .ok()?;
         let home = std::env::var_os("HOME")?;
         let uid = std::fs::metadata(home).ok()?.uid();
-        let key: [u8; 32] = Sha256::digest(format!("forgechat-session-v1\0{}\0{uid}", id.trim())).into();
-        Some(FileStore::new(crate::compat::dossier_donnees()?.join("session.bin"), key))
+        let key: [u8; 32] =
+            Sha256::digest(format!("forgechat-session-v1\0{}\0{uid}", id.trim())).into();
+        Some(FileStore::new(
+            crate::compat::dossier_donnees()?.join("session.bin"),
+            key,
+        ))
     }
     #[cfg(not(target_os = "linux"))]
     None
@@ -138,7 +153,10 @@ mod tests {
         s.set("refresh:abc", "autre").unwrap();
         assert_eq!(s.get("refresh:active").as_deref(), Some("jeton-secret-123"));
         let raw = std::fs::read(d.join("session.bin")).unwrap();
-        assert!(!raw.windows(5).any(|w| w == b"jeton"), "jeton en clair dans le fichier");
+        assert!(
+            !raw.windows(5).any(|w| w == b"jeton"),
+            "jeton en clair dans le fichier"
+        );
         s.del("refresh:active").unwrap();
         assert_eq!(s.get("refresh:active"), None);
         assert_eq!(s.get("refresh:abc").as_deref(), Some("autre"));
@@ -161,7 +179,10 @@ mod tests {
         use std::os::unix::fs::PermissionsExt;
         let d = tmp_dir("perm");
         store(&d, 3).set("refresh:active", "t").unwrap();
-        let mode = std::fs::metadata(d.join("session.bin")).unwrap().permissions().mode();
+        let mode = std::fs::metadata(d.join("session.bin"))
+            .unwrap()
+            .permissions()
+            .mode();
         assert_eq!(mode & 0o777, 0o600);
         let _ = std::fs::remove_dir_all(&d);
     }

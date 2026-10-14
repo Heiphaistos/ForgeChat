@@ -110,7 +110,7 @@ pub async fn put_settings(
             .bind(server_id).bind(r.level).bind(r.role_id).execute(&mut *tx).await?;
     }
     tx.commit().await?;
-    crate::handlers::audit::log_event(&state, server_id, "LEVELS_UPDATE", Some(claims.sub), None, None, None,
+    crate::handlers::audit::log_event(&state, server_id, "LEVELS_UPDATE", Some(claims.sub), None, None,
         Some(serde_json::json!({ "enabled": body.enabled }))).await;
     Ok(Json(serde_json::json!({ "ok": true })))
 }

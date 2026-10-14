@@ -41,14 +41,19 @@ pub struct MediaKey {
 
 /// Comme le fournisseur de clé du web : clé partagée, jamais de ratchet automatique.
 fn key_options() -> KeyProviderOptions {
-    KeyProviderOptions { ratchet_window_size: 0, ..Default::default() }
+    KeyProviderOptions {
+        ratchet_window_size: 0,
+        ..Default::default()
+    }
 }
 
 /// Le SDK crée les chiffreurs d'émission à l'index 0 : on leur donne l'index de
 /// la clé courante (après chaque publication et à chaque nouvelle époque).
 fn sync_key_index(room: &Room) {
     let manager = room.e2ee_manager();
-    let Some(provider) = manager.key_provider() else { return };
+    let Some(provider) = manager.key_provider() else {
+        return;
+    };
     let me = room.local_participant().identity();
     for ((identity, _), cryptor) in manager.frame_cryptors() {
         if identity == me {
@@ -125,8 +130,20 @@ fn source_name(s: TrackSource) -> &'static str {
     }
 }
 
-fn state(app: &AppHandle, status: &'static str, quality: Option<&'static str>, reason: Option<String>) {
-    let _ = app.emit("nv:state", StateEvent { status, quality, reason });
+fn state(
+    app: &AppHandle,
+    status: &'static str,
+    quality: Option<&'static str>,
+    reason: Option<String>,
+) {
+    let _ = app.emit(
+        "nv:state",
+        StateEvent {
+            status,
+            quality,
+            reason,
+        },
+    );
 }
 
 /// `ice_servers` de `/api/voice/ice-config` : `urls` est une chaîne ou une liste.
@@ -135,7 +152,10 @@ fn ice_servers(ice: &[Value]) -> Vec<IceServer> {
         .filter_map(|s| {
             let urls = match &s["urls"] {
                 Value::String(u) => vec![u.clone()],
-                Value::Array(a) => a.iter().filter_map(|u| u.as_str().map(String::from)).collect(),
+                Value::Array(a) => a
+                    .iter()
+                    .filter_map(|u| u.as_str().map(String::from))
+                    .collect(),
                 _ => return None,
             };
             Some(IceServer {
@@ -149,7 +169,7 @@ fn ice_servers(ice: &[Value]) -> Vec<IceServer> {
 
 /// Applique sourdine globale et coupures individuelles à une piste audio reçue.
 fn apply_audio(identity: &str, publication: &RemoteTrackPublication) {
-    let p = prefs().lock().unwrap();
+    let p = prefs().lock().unwrap_or_else(|e| e.into_inner());
     publication.set_enabled(!p.deafened && !p.muted_peers.contains(identity));
 }
 
@@ -192,10 +212,19 @@ fn pump_video(server: Arc<VideoServer>, key: String, track: RemoteVideoTrack) {
     });
 }
 
-async fn run_events(app: AppHandle, room: Arc<Room>, server: Arc<VideoServer>, mut rx: tokio::sync::mpsc::UnboundedReceiver<RoomEvent>) {
+async fn run_events(
+    app: AppHandle,
+    room: Arc<Room>,
+    server: Arc<VideoServer>,
+    mut rx: tokio::sync::mpsc::UnboundedReceiver<RoomEvent>,
+) {
     while let Some(ev) = rx.recv().await {
         match ev {
-            RoomEvent::TrackSubscribed { track, publication, participant } => {
+            RoomEvent::TrackSubscribed {
+                track,
+                publication,
+                participant,
+            } => {
                 let identity = participant.identity().to_string();
                 let source = source_name(publication.source());
                 let url = match track {
@@ -209,19 +238,42 @@ async fn run_events(app: AppHandle, room: Arc<Room>, server: Arc<VideoServer>, m
                         None
                     }
                 };
-                let _ = app.emit("nv:track", TrackEvent { identity, source, active: true, url });
+                let _ = app.emit(
+                    "nv:track",
+                    TrackEvent {
+                        identity,
+                        source,
+                        active: true,
+                        url,
+                    },
+                );
             }
-            RoomEvent::TrackUnsubscribed { publication, participant, .. } => {
+            RoomEvent::TrackUnsubscribed {
+                publication,
+                participant,
+                ..
+            } => {
                 let identity = participant.identity().to_string();
                 let source = source_name(publication.source());
                 server.remove(&format!("{}-{}", identity, source));
-                let _ = app.emit("nv:track", TrackEvent { identity, source, active: false, url: None });
+                let _ = app.emit(
+                    "nv:track",
+                    TrackEvent {
+                        identity,
+                        source,
+                        active: false,
+                        url: None,
+                    },
+                );
             }
             RoomEvent::ActiveSpeakersChanged { speakers } => {
                 let ids: Vec<String> = speakers.iter().map(|p| p.identity().to_string()).collect();
                 let _ = app.emit("nv:speakers", ids);
             }
-            RoomEvent::ConnectionQualityChanged { quality, participant } => {
+            RoomEvent::ConnectionQualityChanged {
+                quality,
+                participant,
+            } => {
                 if participant.identity() == room.local_participant().identity() {
                     let q = match quality {
                         ConnectionQuality::Excellent => "excellent",
@@ -243,7 +295,15 @@ async fn run_events(app: AppHandle, room: Arc<Room>, server: Arc<VideoServer>, m
     }
 }
 
-pub async fn connect(app: AppHandle, url: String, token: String, ice: Vec<Value>, mic: bool, mic_open: bool, e2ee: Option<MediaKey>) -> Result<(), String> {
+pub async fn connect(
+    app: AppHandle,
+    url: String,
+    token: String,
+    ice: Vec<Value>,
+    mic: bool,
+    mic_open: bool,
+    e2ee: Option<MediaKey>,
+) -> Result<(), String> {
     // Mesuré : sans fournisseur installé, rustls panique dans le thread tokio et
     // la commande ne répond jamais (le front restait sur « Connexion… »).
     let _ = rustls::crypto::ring::default_provider().install_default();
@@ -252,7 +312,7 @@ pub async fn connect(app: AppHandle, url: String, token: String, ice: Vec<Value>
     let audio = PlatformAudio::new().map_err(|e| format!("audio du système indisponible : {e}"))?;
     // Même traitement qu'un navigateur (tout actif par défaut) : sans annulation
     // d'écho, un casque non utilisé renvoie la voix des autres dans le micro.
-    let p = *processing().lock().unwrap();
+    let p = *processing().lock().unwrap_or_else(|e| e.into_inner());
     apply_processing(&audio, p);
 
     let video = VideoServer::start().map_err(|e| format!("serveur vidéo local : {e}"))?;
@@ -268,7 +328,10 @@ pub async fn connect(app: AppHandle, url: String, token: String, ice: Vec<Value>
     if let Some(k) = &e2ee {
         let provider = KeyProvider::with_shared_key(key_options(), k.key.clone().into_bytes());
         provider.set_shared_key(k.key.clone().into_bytes(), k.index);
-        options.encryption = Some(E2eeOptions { encryption_type: EncryptionType::Gcm, key_provider: provider });
+        options.encryption = Some(E2eeOptions {
+            encryption_type: EncryptionType::Gcm,
+            key_provider: provider,
+        });
     }
     state(&app, "connecting", None, None);
     let (room, rx) = Room::connect(&url, &token, options).await.map_err(|e| {
@@ -283,7 +346,13 @@ pub async fn connect(app: AppHandle, url: String, token: String, ice: Vec<Value>
         let track = LocalAudioTrack::create_audio_track("microphone", audio.rtc_source());
         match room
             .local_participant()
-            .publish_track(LocalTrack::Audio(track), TrackPublishOptions { source: TrackSource::Microphone, ..Default::default() })
+            .publish_track(
+                LocalTrack::Audio(track),
+                TrackPublishOptions {
+                    source: TrackSource::Microphone,
+                    ..Default::default()
+                },
+            )
             .await
         {
             Ok(publication) => {
@@ -305,14 +374,26 @@ pub async fn connect(app: AppHandle, url: String, token: String, ice: Vec<Value>
 
     // Pistes déjà publiées avant notre arrivée : l'abonnement automatique les
     // livre en `TrackSubscribed`, traité par la boucle d'événements.
-    let events = tauri::async_runtime::spawn(run_events(app.clone(), room.clone(), video.clone(), rx));
+    let events =
+        tauri::async_runtime::spawn(run_events(app.clone(), room.clone(), video.clone(), rx));
     state(&app, "connected", None, None);
-    *session().lock().await = Some(Session { room, audio, mic: mic_pub, camera: None, screen: None, video, events, app });
+    *session().lock().await = Some(Session {
+        room,
+        audio,
+        mic: mic_pub,
+        camera: None,
+        screen: None,
+        video,
+        events,
+        app,
+    });
     Ok(())
 }
 
 pub async fn disconnect() {
-    let Some(s) = session().lock().await.take() else { return };
+    let Some(s) = session().lock().await.take() else {
+        return;
+    };
     // Les captures s'arrêtent en premier (threads joints à la libération).
     drop(s.camera);
     drop(s.screen);
@@ -320,14 +401,18 @@ pub async fn disconnect() {
     // arrivait aux écouteurs de la session suivante (appel coupé à peine ouvert).
     s.events.abort();
     let _ = s.room.close().await;
-    *prefs().lock().unwrap() = AudioPrefs::default();
+    *prefs().lock().unwrap_or_else(|e| e.into_inner()) = AudioPrefs::default();
 }
 
 /// Nouvelle époque pendant l'appel : nouvelle clé, émise aussitôt à son index.
 pub async fn set_key(key: MediaKey) -> Result<(), String> {
     let guard = session().lock().await;
-    let Some(s) = guard.as_ref() else { return Ok(()) };
-    let Some(provider) = s.room.e2ee_manager().key_provider() else { return Err("appel non chiffré".into()) };
+    let Some(s) = guard.as_ref() else {
+        return Ok(());
+    };
+    let Some(provider) = s.room.e2ee_manager().key_provider() else {
+        return Err("appel non chiffré".into());
+    };
     provider.set_shared_key(key.key.into_bytes(), key.index);
     sync_key_index(&s.room);
     Ok(())
@@ -335,9 +420,15 @@ pub async fn set_key(key: MediaKey) -> Result<(), String> {
 
 pub async fn set_mic(open: bool) -> Result<(), String> {
     let guard = session().lock().await;
-    let Some(s) = guard.as_ref() else { return Ok(()) };
+    let Some(s) = guard.as_ref() else {
+        return Ok(());
+    };
     if let Some(p) = &s.mic {
-        if open { p.unmute() } else { p.mute() }
+        if open {
+            p.unmute()
+        } else {
+            p.mute()
+        }
     }
     Ok(())
 }
@@ -345,7 +436,7 @@ pub async fn set_mic(open: bool) -> Result<(), String> {
 /// Réglages > Voix : appliqué tout de suite à l'appel en cours, et aux suivants.
 pub async fn set_audio_processing(aec: bool, ns: bool, agc: bool) -> Result<(), String> {
     let p = Processing { aec, ns, agc };
-    *processing().lock().unwrap() = p;
+    *processing().lock().unwrap_or_else(|e| e.into_inner()) = p;
     if let Some(s) = session().lock().await.as_ref() {
         apply_processing(&s.audio, p);
     }
@@ -353,7 +444,7 @@ pub async fn set_audio_processing(aec: bool, ns: bool, agc: bool) -> Result<(), 
 }
 
 pub async fn set_deafen(deafened: bool) -> Result<(), String> {
-    prefs().lock().unwrap().deafened = deafened;
+    prefs().lock().unwrap_or_else(|e| e.into_inner()).deafened = deafened;
     if let Some(s) = session().lock().await.as_ref() {
         apply_audio_all(&s.room);
     }
@@ -362,8 +453,12 @@ pub async fn set_deafen(deafened: bool) -> Result<(), String> {
 
 pub async fn set_peer_audio(identity: String, enabled: bool) -> Result<(), String> {
     {
-        let mut p = prefs().lock().unwrap();
-        if enabled { p.muted_peers.remove(&identity); } else { p.muted_peers.insert(identity); }
+        let mut p = prefs().lock().unwrap_or_else(|e| e.into_inner());
+        if enabled {
+            p.muted_peers.remove(&identity);
+        } else {
+            p.muted_peers.insert(identity);
+        }
     }
     if let Some(s) = session().lock().await.as_ref() {
         apply_audio_all(&s.room);
@@ -371,19 +466,32 @@ pub async fn set_peer_audio(identity: String, enabled: bool) -> Result<(), Strin
     Ok(())
 }
 
-async fn publish_video(room: &Room, name: &str, source: livekit::webrtc::video_source::native::NativeVideoSource, kind: TrackSource) -> Result<LocalTrackPublication, String> {
+async fn publish_video(
+    room: &Room,
+    name: &str,
+    source: livekit::webrtc::video_source::native::NativeVideoSource,
+    kind: TrackSource,
+) -> Result<LocalTrackPublication, String> {
     let track = LocalVideoTrack::create_video_track(name, RtcVideoSource::Native(source));
     room.local_participant()
         .publish_track(
             LocalTrack::Video(track),
-            TrackPublishOptions { source: kind, simulcast: kind == TrackSource::Camera, ..Default::default() },
+            TrackPublishOptions {
+                source: kind,
+                simulcast: kind == TrackSource::Camera,
+                ..Default::default()
+            },
         )
         .await
         .map_err(|e| e.to_string())
 }
 
 fn video_slot(s: &mut Session, screen: bool) -> &mut Option<(LocalTrackPublication, Capture)> {
-    if screen { &mut s.screen } else { &mut s.camera }
+    if screen {
+        &mut s.screen
+    } else {
+        &mut s.camera
+    }
 }
 
 /// Caméra ou partage d'écran. La capture démarre SANS le verrou de session : le
@@ -392,9 +500,15 @@ fn video_slot(s: &mut Session, screen: bool) -> &mut Option<(LocalTrackPublicati
 async fn set_video(on: bool, screen: bool) -> Result<Option<String>, String> {
     let (room, server, app) = {
         let mut guard = session().lock().await;
-        let Some(s) = guard.as_mut() else { return Err("pas d'appel en cours".into()) };
+        let Some(s) = guard.as_mut() else {
+            return Err("pas d'appel en cours".into());
+        };
         if let Some((publication, capture)) = video_slot(s, screen).take() {
-            let _ = s.room.local_participant().unpublish_track(&publication.sid()).await;
+            let _ = s
+                .room
+                .local_participant()
+                .unpublish_track(&publication.sid())
+                .await;
             drop(capture);
         }
         if !on {
@@ -402,13 +516,20 @@ async fn set_video(on: bool, screen: bool) -> Result<Option<String>, String> {
         }
         (s.room.clone(), s.video.clone(), s.app.clone())
     };
-    let key = if screen { "local-screen" } else { "local-camera" }.to_string();
+    let key = if screen {
+        "local-screen"
+    } else {
+        "local-camera"
+    }
+    .to_string();
     let (capture, source) = {
         let (v, k) = (server.clone(), key.clone());
         tauri::async_runtime::spawn_blocking(move || {
             if screen {
                 // Partage arrêté par le système (portail fermé) : le front coupe le partage.
-                video::start_screen(v, k, move || { let _ = app.emit("nv:local_ended", "screen"); })
+                video::start_screen(v, k, move || {
+                    let _ = app.emit("nv:local_ended", "screen");
+                })
             } else {
                 video::start_camera(v, k)
             }
@@ -416,14 +537,19 @@ async fn set_video(on: bool, screen: bool) -> Result<Option<String>, String> {
         .await
         .map_err(|e| e.to_string())??
     };
-    let (name, kind) = if screen { ("screen", TrackSource::Screenshare) } else { ("camera", TrackSource::Camera) };
+    let (name, kind) = if screen {
+        ("screen", TrackSource::Screenshare)
+    } else {
+        ("camera", TrackSource::Camera)
+    };
     let publication = publish_video(&room, name, source, kind).await?;
     sync_key_index(&room);
     let mut guard = session().lock().await;
     match guard.as_mut() {
         Some(s) if Arc::ptr_eq(&s.room, &room) => {
             // Une capture lancée en parallèle (double clic) est remplacée.
-            if let Some((old, old_capture)) = video_slot(s, screen).replace((publication, capture)) {
+            if let Some((old, old_capture)) = video_slot(s, screen).replace((publication, capture))
+            {
                 let _ = s.room.local_participant().unpublish_track(&old.sid()).await;
                 drop(old_capture);
             }
@@ -431,7 +557,10 @@ async fn set_video(on: bool, screen: bool) -> Result<Option<String>, String> {
         }
         _ => {
             // Appel quitté pendant la capture.
-            let _ = room.local_participant().unpublish_track(&publication.sid()).await;
+            let _ = room
+                .local_participant()
+                .unpublish_track(&publication.sid())
+                .await;
             drop(capture);
             Err("pas d'appel en cours".into())
         }

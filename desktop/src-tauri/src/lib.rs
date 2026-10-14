@@ -20,26 +20,28 @@ window.addEventListener('load', () => {
 });
 "#;
 
-/// Mise à jour automatique (version installée ET version portable).
-pub mod updater;
 mod compat;
 mod diagnostic;
+/// Navigation, liens externes et permissions média de la vue web.
+mod garde_web;
+/// Support à distance GhostHandDesk (lien confirmé côté Rust).
+mod ghd;
 mod presence;
 /// Jetons de session dans le trousseau de l'OS (audit M10).
 mod session;
+mod session_file;
 /// Réglages « Système » : démarrage, fermeture, GPU, téléchargements, icône.
 mod systeme;
-mod session_file;
-/// Navigation, liens externes et permissions média de la vue web.
-mod garde_web;
+/// Mise à jour automatique (version installée ET version portable).
+pub mod updater;
 
 /// Vocal natif de l'application Linux (WebKitGTK sans WebRTC).
 pub mod native_voice;
 
 use tauri::{
-    Manager,
     menu::{Menu, MenuItem},
-    tray::{TrayIconBuilder, MouseButton, TrayIconEvent},
+    tray::{MouseButton, TrayIconBuilder, TrayIconEvent},
+    Manager,
 };
 
 #[cfg(not(target_os = "linux"))]
@@ -60,7 +62,6 @@ const TRAY_FRAMES: [&[u8]; TRAY_FRAME_COUNT] = [
     include_bytes!("../icons/tray-frames/f6.png"),
     include_bytes!("../icons/tray-frames/f7.png"),
 ];
-
 
 /// L'exe portable ne passe par aucun installeur : si le WebView2 Runtime n'est
 /// pas déjà présent sur la machine, Tauri ne peut pas peupler la fenêtre
@@ -117,9 +118,8 @@ mod webview2_check {
     const CLIENT_GUID: &str = "{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}";
 
     pub fn runtime_missing() -> bool {
-        let machine_key = format!(
-            "SOFTWARE\\WOW6432Node\\Microsoft\\EdgeUpdate\\Clients\\{CLIENT_GUID}"
-        );
+        let machine_key =
+            format!("SOFTWARE\\WOW6432Node\\Microsoft\\EdgeUpdate\\Clients\\{CLIENT_GUID}");
         let user_key = format!("SOFTWARE\\Microsoft\\EdgeUpdate\\Clients\\{CLIENT_GUID}");
         read_pv(HKEY_LOCAL_MACHINE, &machine_key)
             .or_else(|| read_pv(HKEY_CURRENT_USER, &user_key))
@@ -219,11 +219,76 @@ fn animate_tray_icon(app: &tauri::AppHandle) -> tauri::Result<()> {
 #[tauri::command]
 fn register_ptt_shortcut(app: tauri::AppHandle, accelerator: String) -> Result<(), String> {
     use tauri_plugin_global_shortcut::GlobalShortcutExt;
+    let raccourci = raccourci_ptt(&accelerator)?;
     let gs = app.global_shortcut();
     // Un seul PTT à la fois : repartir d'une table vide évite d'accumuler des
     // raccourcis orphelins à chaque changement de touche dans les Réglages.
     gs.unregister_all().map_err(|e| e.to_string())?;
-    gs.register(accelerator.as_str()).map_err(|e| e.to_string())
+    gs.register(raccourci).map_err(|e| e.to_string())
+}
+
+/// Audit D4 : un raccourci global sur une simple lettre avalerait cette touche dans
+/// toutes les applications (saisie interceptée). Seuls sont acceptés un raccourci
+/// avec modificateur (Ctrl, Alt, Maj, Super) ou une touche F1 à F24 seule.
+#[cfg(desktop)]
+fn raccourci_ptt(accelerator: &str) -> Result<tauri_plugin_global_shortcut::Shortcut, String> {
+    use tauri_plugin_global_shortcut::{Code, Shortcut};
+    const TOUCHES_F: [Code; 24] = [
+        Code::F1,
+        Code::F2,
+        Code::F3,
+        Code::F4,
+        Code::F5,
+        Code::F6,
+        Code::F7,
+        Code::F8,
+        Code::F9,
+        Code::F10,
+        Code::F11,
+        Code::F12,
+        Code::F13,
+        Code::F14,
+        Code::F15,
+        Code::F16,
+        Code::F17,
+        Code::F18,
+        Code::F19,
+        Code::F20,
+        Code::F21,
+        Code::F22,
+        Code::F23,
+        Code::F24,
+    ];
+    if accelerator.is_empty() || accelerator.len() > 64 {
+        return Err("raccourci push-to-talk invalide".into());
+    }
+    let raccourci: Shortcut = accelerator
+        .parse()
+        .map_err(|e| format!("raccourci push-to-talk invalide : {e}"))?;
+    if raccourci.mods.is_empty() && !TOUCHES_F.contains(&raccourci.key) {
+        return Err("raccourci push-to-talk refusé : ajoutez Ctrl, Alt, Maj ou Super, ou choisissez une touche F1 à F24".into());
+    }
+    Ok(raccourci)
+}
+
+#[cfg(all(test, desktop))]
+mod tests_ptt {
+    #[test]
+    fn raccourcis_ptt() {
+        for ok in [
+            "Control+Shift+Space",
+            "alt+KeyV",
+            "F13",
+            "Shift+F1",
+            "Super+KeyB",
+        ] {
+            assert!(super::raccourci_ptt(ok).is_ok(), "{ok}");
+        }
+        let long = format!("Control+{}", "A".repeat(80));
+        for ko in ["", "KeyV", "Space", "Alt", "n'importe quoi", long.as_str()] {
+            assert!(super::raccourci_ptt(ko).is_err(), "{ko}");
+        }
+    }
 }
 
 #[cfg(desktop)]
@@ -305,7 +370,10 @@ fn enable_linux_media_capture(app: &tauri::AppHandle) {
             eprintln!("[ForgeChat] Processus d'affichage WebKit arrêté : {raison:?}");
         });
         webview.connect_load_changed(|wv, ev| {
-            eprintln!("[ForgeChat] Chargement : {ev:?} {}", wv.uri().unwrap_or_default());
+            eprintln!(
+                "[ForgeChat] Chargement : {ev:?} {}",
+                wv.uri().unwrap_or_default()
+            );
         });
         webview.connect_permission_request(|_, request| {
             match request.downcast_ref::<UserMediaPermissionRequest>() {
@@ -331,7 +399,9 @@ fn enable_linux_media_capture(app: &tauri::AppHandle) {
 /// À faire AVANT la création du webview (le profil n'est pas encore ouvert).
 #[cfg(windows)]
 fn purger_service_worker_webview2() {
-    let Some(local) = std::env::var_os("LOCALAPPDATA") else { return };
+    let Some(local) = std::env::var_os("LOCALAPPDATA") else {
+        return;
+    };
     let dir = std::path::PathBuf::from(local)
         .join("org.heiphaistos.forgechat")
         .join("EBWebView")
@@ -390,7 +460,9 @@ pub fn run() {
         }
         // Réglage « Accélération matérielle » coupé : WebKitGTK compose déjà en
         // logiciel (ci-dessus), il reste le rendu GL de Mesa.
-        if !systeme::config().hardware_acceleration && std::env::var_os("LIBGL_ALWAYS_SOFTWARE").is_none() {
+        if !systeme::config().hardware_acceleration
+            && std::env::var_os("LIBGL_ALWAYS_SOFTWARE").is_none()
+        {
             std::env::set_var("LIBGL_ALWAYS_SOFTWARE", "1");
         }
     }
@@ -453,48 +525,50 @@ pub fn run() {
 
     // Push-to-talk global : plugin + commandes exposées au front (correctif A9).
     #[cfg(desktop)]
-    let builder = builder
-        .plugin(global_shortcut_plugin())
-        .invoke_handler(tauri::generate_handler![
-            register_ptt_shortcut,
-            unregister_ptt_shortcut,
-            presence::current_game,
-            updater::update_check,
-            updater::update_install,
-            updater::update_restart,
-            native_voice::nv_connect,
-            native_voice::nv_disconnect,
-            native_voice::nv_set_key,
-            native_voice::nv_set_mic,
-            native_voice::nv_set_deafen,
-            native_voice::nv_set_peer_audio,
-            native_voice::nv_set_audio_processing,
-            native_voice::nv_set_camera,
-            native_voice::nv_set_screen,
-            native_voice::nv_popout,
-            compat::app_ready,
-            diagnostic::read_desktop_log,
-            session::session_store,
-            session::session_access,
-            session::session_refresh,
-            session::session_clear,
-            session::session_stash,
-            session::session_switch,
-            session::session_forget,
-            session::session_import_account,
-            session::session_storage_status,
-            systeme::system_get,
-            systeme::system_set,
-            systeme::system_set_autostart,
-            systeme::restart_app,
-            systeme::save_file,
-            systeme::reveal_saved,
-            systeme::pick_download_dir,
-            systeme::clear_download_dir,
-            systeme::set_app_icon,
-            systeme::streaming_software_running,
-            systeme::ghd_installed
-        ]);
+    let builder =
+        builder
+            .plugin(global_shortcut_plugin())
+            .invoke_handler(tauri::generate_handler![
+                register_ptt_shortcut,
+                unregister_ptt_shortcut,
+                presence::current_game,
+                updater::update_check,
+                updater::update_install,
+                updater::update_restart,
+                native_voice::nv_connect,
+                native_voice::nv_disconnect,
+                native_voice::nv_set_key,
+                native_voice::nv_set_mic,
+                native_voice::nv_set_deafen,
+                native_voice::nv_set_peer_audio,
+                native_voice::nv_set_audio_processing,
+                native_voice::nv_set_camera,
+                native_voice::nv_set_screen,
+                native_voice::nv_popout,
+                compat::app_ready,
+                diagnostic::read_desktop_log,
+                session::session_store,
+                session::session_access,
+                session::session_refresh,
+                session::session_clear,
+                session::session_stash,
+                session::session_switch,
+                session::session_forget,
+                session::session_import_account,
+                session::session_storage_status,
+                systeme::system_get,
+                systeme::system_set,
+                systeme::system_set_autostart,
+                systeme::restart_app,
+                systeme::save_file,
+                systeme::reveal_saved,
+                systeme::pick_download_dir,
+                systeme::clear_download_dir,
+                systeme::set_app_icon,
+                systeme::streaming_software_running,
+                ghd::ghd_installed,
+                ghd::ghd_launch
+            ]);
 
     builder
         .setup(move |app| {
@@ -528,6 +602,13 @@ pub fn run() {
                 main_builder = main_builder.additional_browser_args(&browser_args);
             }
             main_builder
+                // Audit D8 : version lue à la compilation (Cargo.toml, aligné sur tauri.conf.json),
+                // jamais figée dans la config. Préfixe `ForgeChat/` attendu par le serveur.
+                .user_agent(concat!(
+                    "ForgeChat/",
+                    env!("CARGO_PKG_VERSION"),
+                    " (Desktop)"
+                ))
                 .visible(!demarrer_reduit)
                 // La fenêtre principale n'affiche que l'appli (garde_web::navigation_interne).
                 .on_navigation(garde_web::filtrer_navigation)
@@ -571,7 +652,13 @@ pub fn run() {
             } else {
                 "Redémarrer en mode compatibilité (écran blanc)"
             };
-            let compat_item = MenuItem::with_id(app, "compat", compat_label, cfg!(target_os = "linux"), None::<&str>)?;
+            let compat_item = MenuItem::with_id(
+                app,
+                "compat",
+                compat_label,
+                cfg!(target_os = "linux"),
+                None::<&str>,
+            )?;
             let menu = if cfg!(target_os = "linux") {
                 Menu::with_items(app, &[&show, &compat_item, &quit])?
             } else {
@@ -583,7 +670,11 @@ pub fn run() {
                 .menu(&menu)
                 .tooltip("ForgeChat")
                 .on_tray_icon_event(|tray, event| {
-                    if let TrayIconEvent::Click { button: MouseButton::Left, .. } = event {
+                    if let TrayIconEvent::Click {
+                        button: MouseButton::Left,
+                        ..
+                    } = event
+                    {
                         let app = tray.app_handle();
                         if let Some(w) = app.get_webview_window("main") {
                             let _ = w.show();
@@ -611,7 +702,9 @@ pub fn run() {
             // partagée (fenêtre noire), voir la doc de animate_tray_icon().
             #[cfg(not(target_os = "linux"))]
             if let Err(e) = animate_tray_icon(app.handle()) {
-                eprintln!("[ForgeChat] Animation icône tray désactivée (chargement frames échoué) : {e}");
+                eprintln!(
+                    "[ForgeChat] Animation icône tray désactivée (chargement frames échoué) : {e}"
+                );
             }
             // Icône choisie dans Apparence (fenêtre, barre des tâches, zone de notification).
             systeme::restaurer_icone(app.handle());

@@ -120,7 +120,7 @@ pub async fn put_starboard(
         "INSERT INTO starboard_settings (server_id, enabled, channel_id, emoji, threshold) VALUES ($1, $2, $3, $4, $5)
          ON CONFLICT (server_id) DO UPDATE SET enabled=$2, channel_id=$3, emoji=$4, threshold=$5"
     ).bind(server_id).bind(b.enabled).bind(b.channel_id).bind(emoji).bind(b.threshold).execute(&state.db).await?;
-    crate::handlers::audit::log_event(&state, server_id, "STARBOARD_UPDATE", Some(claims.sub), None, None, None, None).await;
+    crate::handlers::audit::log_event(&state, server_id, "STARBOARD_UPDATE", Some(claims.sub), None, None, None).await;
     Ok(Json(serde_json::json!({ "ok": true })))
 }
 
@@ -212,7 +212,7 @@ pub async fn put_welcome(
         "INSERT INTO welcome_settings (server_id, enabled, channel_id, text) VALUES ($1, $2, $3, $4)
          ON CONFLICT (server_id) DO UPDATE SET enabled=$2, channel_id=$3, text=$4"
     ).bind(server_id).bind(b.enabled).bind(b.channel_id).bind(text).execute(&state.db).await?;
-    crate::handlers::audit::log_event(&state, server_id, "WELCOME_UPDATE", Some(claims.sub), None, None, None, None).await;
+    crate::handlers::audit::log_event(&state, server_id, "WELCOME_UPDATE", Some(claims.sub), None, None, None).await;
     Ok(Json(serde_json::json!({ "ok": true })))
 }
 

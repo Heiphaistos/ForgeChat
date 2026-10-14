@@ -82,11 +82,11 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
   const typingUsers = useChat(useShallow(s => Object.values(s.typing[channelId ?? ''] ?? {})))
   // Recherche dans un salon chiffré : sur les messages déjà chargés et déchiffrés.
   const loadedMessages = useChat(s => s.messagesByChannel[channelId ?? ''])
-  const { on, onOpen, subscribeChannel } = useWs()
+  const { on } = useWs()
   const meId = useAuth(s => s.user?.id)
   const markRead = useUnread(s => s.markRead)
   const qc = useQueryClient()
-  const [showMembers, setShowMembers] = useState(() => window.innerWidth >= 768)
+  const [showMembers, setShowMembers] = useState(() => window.innerWidth >= 1024)
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null)
   const [activeDirectThreadId, setActiveDirectThreadId] = useState<string | null>(null)
   // Lien ?thread=<id> (notification de fil) : ouvre ce fil directement
@@ -184,15 +184,8 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
     if (highlightMessageId) setHasMore(true)
   }, [highlightMessageId])
 
-  // Re-subscribe après reconnexion WS (sinon les messages du canal n'arrivent plus)
   useEffect(() => {
     if (!channelId) return
-    return onOpen(() => subscribeChannel(channelId))
-  }, [channelId])
-
-  useEffect(() => {
-    if (!channelId) return
-    subscribeChannel(channelId)
     const offs = [
       on('MESSAGE_CREATE', async (d: any) => {
         if (d.message.channel_id === channelId && !d.pending_attachments) addMessage(await openMessage('channel', channelId, d.message))

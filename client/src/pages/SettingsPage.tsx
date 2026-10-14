@@ -31,6 +31,7 @@ import ExtrasSection from '../components/settings/ExtrasSection'
 import SystemSection from '../components/settings/SystemSection'
 import { isDesktop } from '../lib/desktop'
 import { useT, type Key } from '../i18n'
+import { confirmLeave } from '../components/settings/profileDraft'
 
 type Section =
   | 'account' | 'profile' | 'appearance' | 'text_display'
@@ -74,6 +75,9 @@ const norm = (s: string) => s.toLowerCase().normalize('NFD').replace(new RegExp(
 
 import React from 'react'
 
+// Modifications de profil non enregistrées : confirmation avant de quitter (profileDraft.ts).
+const leave = async (go: () => void | Promise<void>) => { if (await confirmLeave()) await go() }
+
 export default function SettingsPage() {
   const t = useT()
   usePageTitle(t('settings.title'))
@@ -99,7 +103,7 @@ export default function SettingsPage() {
         setQuery('')
         return
       }
-      nav(-1)
+      void leave(() => nav(-1))
     }
     document.addEventListener('keydown', handler)
     return () => document.removeEventListener('keydown', handler)
@@ -116,13 +120,17 @@ export default function SettingsPage() {
   const currentLabel = currentKey ? t(currentKey) : ''
 
   const handleSelectSection = (id: Section) => {
+    if (id !== section) { void leave(() => selectSection(id)); return }
+    selectSection(id)
+  }
+  const selectSection = (id: Section) => {
     setSection(id)
     setMobileShowContent(true)
     setSearchParams({ section: id }, { replace: true })
   }
 
   return (
-    <div className="fixed inset-0 bg-fc-bg z-50 flex">
+    <div className="fc-settings-page fixed inset-0 bg-fc-bg z-50 flex">
       {/* Sidebar nav — masquée sur mobile quand contenu affiché */}
       <div className={`
         flex flex-col flex-shrink-0 bg-fc-channel border-r border-fc-hover
@@ -132,7 +140,7 @@ export default function SettingsPage() {
         <div className="p-4 border-b border-fc-hover flex items-center justify-between">
           <h1 className="text-sm font-semibold text-fc-muted uppercase tracking-wide">{t('settings.title')}</h1>
           <button
-            onClick={() => nav(-1)}
+            onClick={() => void leave(() => nav(-1))}
             aria-label={t('settings.close')}
             className="p-1.5 text-fc-muted hover:text-white rounded-lg hover:bg-fc-hover transition"
           >
@@ -198,7 +206,7 @@ export default function SettingsPage() {
 
           <div className="border-t border-fc-hover my-2" aria-hidden />
           <button
-            onClick={async () => { await logout(); nav('/login') }}
+            onClick={() => void leave(async () => { await logout(); nav('/login') })}
             className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-fc-red hover:bg-fc-red/10 transition"
           >
             <LogOut size={16} aria-hidden /> {t('settings.logout')}
@@ -231,7 +239,7 @@ export default function SettingsPage() {
               <h2 className="text-xl font-bold text-white">{currentLabel}</h2>
             </div>
             <button
-              onClick={() => nav(-1)}
+              onClick={() => void leave(() => nav(-1))}
               aria-label={t('settings.close')}
               className="p-2 text-fc-muted hover:text-white rounded-lg hover:bg-fc-hover transition"
             >

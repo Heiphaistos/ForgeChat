@@ -45,6 +45,7 @@ export function ReplyThreadView({
   header,
   disabledReason,
   placeholder,
+  quickReactions = QUICK_REACTIONS,
 }: {
   messages: ChatMessage[]
   isLoading: boolean
@@ -63,6 +64,8 @@ export function ReplyThreadView({
   header?: ReactElement
   disabledReason?: string | null
   placeholder: string
+  /** Réactions de l'appui long (forum : réaction par défaut du salon en tête). */
+  quickReactions?: readonly string[]
 }) {
   const t = useT()
   const me = useAuth((s) => s.user)
@@ -240,7 +243,7 @@ export function ReplyThreadView({
         onClose={() => setSelected(null)}
         header={
           <View style={styles.quickRow}>
-            {QUICK_REACTIONS.map((e) => (
+            {quickReactions.map((e) => (
               <Pressable
                 key={e}
                 style={styles.quick}

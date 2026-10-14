@@ -146,15 +146,22 @@ async fn handle_socket(socket: WebSocket, state: AppState, user_id: Uuid, sid: O
     // puis compteur) que la déconnexion : sinon, pendant un rechargement, la socket
     // qui se ferme pouvait retirer l'émetteur que celle qui s'ouvre venait de
     // récupérer, et ce nouvel onglet ne recevait plus aucun événement.
+    // Plafond par compte vérifié ICI, sous le verrou d'écriture qui incrémente :
+    // le contrôle de `ws_handler` (lecture puis incrément bien plus tard) laissait
+    // N connexions simultanées le passer toutes. Refus = socket refermée aussitôt.
     let tx = {
         let mut clients = state.clients.write().await;
         let mut counts = state.conn_counts.write().await;
-        let tx = clients.entry(user_id).or_insert_with(|| {
+        let count = counts.entry(user_id).or_insert(0);
+        if *count >= WS_MAX_PER_USER {
+            tracing::warn!("WebSocket: plafond de {WS_MAX_PER_USER} connexions atteint pour {user_id}");
+            return;
+        }
+        *count += 1;
+        clients.entry(user_id).or_insert_with(|| {
             let (tx, _) = broadcast::channel::<String>(512);
             tx
-        }).clone();
-        *counts.entry(user_id).or_insert(0) += 1;
-        tx
+        }).clone()
     };
 
     // S'abonner AVANT tout envoi : un `send` sans récepteur est perdu, et le
@@ -419,6 +426,7 @@ pub(crate) async fn cleanup_voice(state: &AppState, user_id: Uuid, session: Opti
         if remaining.is_empty() {
             // « Regarder ensemble » : plus personne pour regarder.
             state.watch.lock().await.purge(channel_id);
+            crate::handlers::channel_extras::clear_voice_status(state, channel_id).await;
             // N1 — fenêtre de grâce : un canal auto-create vient peut-être
             // d'être créé et le VOICE_JOIN de redirection n'est pas encore
             // arrivé. Le supprimer ici détruit le canal avant son premier
@@ -1358,6 +1366,12 @@ async fn handle_ws_message(
                 return;
             };
             let Some((server_id, _)) = visible_channel(state, user_id, channel_id).await else { return; };
+            // Scène uniquement, et débit borné : chaque appel diffuse à tout le salon.
+            let is_stage = sqlx::query_scalar::<_, String>("SELECT type FROM channels WHERE id=$1")
+                .bind(channel_id).fetch_optional(&state.db).await.ok().flatten().as_deref() == Some("stage");
+            if !is_stage || crate::handlers::password_reset::over_limit(state, &format!("stage_hand:{user_id}"), 10, 60).await {
+                return;
+            }
             // Un membre en timeout ne demande pas la parole (il peut toujours baisser la main).
             let lowering = msg["type"].as_str() == Some("STAGE_HAND_RAISE") && msg["raised"].as_bool() != Some(true);
             if !lowering && crate::handlers::servers::require_not_timed_out(state, user_id, server_id).await.is_err() {
@@ -1557,10 +1571,10 @@ async fn handle_ws_message(
             }
             // Vérifier que les deux utilisateurs ont un canal DM ouvert (anti-spam)
             if !users_share_dm(state, user_id, to).await { return; }
-            // Vérifier que le destinataire n'a pas bloqué l'appelant
+            // Blocage dans un sens ou dans l'autre ; erreur DB = refus.
             let is_blocked: bool = sqlx::query_scalar(
-                "SELECT EXISTS(SELECT 1 FROM blocks WHERE blocker_id=$1 AND blocked_id=$2)"
-            ).bind(to).bind(user_id).fetch_one(&state.db).await.unwrap_or(false);
+                "SELECT EXISTS(SELECT 1 FROM blocks WHERE (blocker_id=$1 AND blocked_id=$2) OR (blocker_id=$2 AND blocked_id=$1))"
+            ).bind(to).bind(user_id).fetch_one(&state.db).await.unwrap_or(true);
             if is_blocked { return; }
             // Appels croisés : `to` nous appelle déjà. Décrocher son appel plutôt que
             // d'en ouvrir un second, sinon chacun sonnait chez l'autre sans jamais

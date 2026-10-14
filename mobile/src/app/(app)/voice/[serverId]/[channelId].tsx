@@ -32,6 +32,7 @@ import { useT, type Key } from '@/i18n'
 import { colors, font, radius, spacing } from '@/theme'
 import { E2ECallBadge } from '@/e2e/E2ECallBadge'
 import { VoiceLotBanners } from '@/features/voice/VoiceLotBanners'
+import { openVoiceStatus } from '@/features/voice/voiceStatus'
 
 const REACTIONS = ['👍', '😂', '🎉', '❤️', '😮', '👏']
 const QUALITY_LABEL: Record<string, Key> = { poor: 'voice.weak', lost: 'voice.lost' }
@@ -168,6 +169,8 @@ export default function VoiceScreen() {
     ...(screenShareSupported && !v.listenOnly
       ? [{ label: t(v.screenSharing ? 'voice.stopShare' : 'voice.share'), icon: 'tv-outline' as IconName, onPress: () => void toggleShare() }]
       : []),
+    // Statut du salon (ligne sous le salon dans la liste) : salon où je suis connecté.
+    ...(v.channelId && v.serverId ? [{ label: t('df.voice.set'), icon: 'chatbubble-ellipses-outline' as IconName, onPress: openVoiceStatus.bind(null, v.serverId, v.channelId) }] : []),
   ]
 
   const leave = () => {

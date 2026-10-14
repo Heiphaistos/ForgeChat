@@ -18,7 +18,6 @@ interface WsState {
   send: (msg: object) => void
   on: (type: string, handler: WsHandler) => () => void
   onOpen: (cb: () => void) => () => void
-  subscribeChannel: (channelId: string) => void
 }
 
 const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
@@ -201,9 +200,5 @@ export const useWs = create<WsState>((set, get) => ({
   onOpen: (cb) => {
     get()._openCallbacks.add(cb)
     return () => { get()._openCallbacks.delete(cb) }
-  },
-
-  subscribeChannel: (channelId) => {
-    get().send({ type: 'SUBSCRIBE_CHANNEL', channel_id: channelId })
   },
 }))

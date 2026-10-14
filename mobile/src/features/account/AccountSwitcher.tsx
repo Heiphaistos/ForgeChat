@@ -5,13 +5,21 @@ import { Button, Row, Section } from '@/components/ui'
 import { useT } from '@/i18n'
 import { forgetAccount, listAccounts, MAX_OTHER_ACCOUNTS, type SavedAccount } from '@/lib/accounts'
 import { errorMessage } from '@/lib/http'
+import { logger } from '@/lib/logger'
 import { useAuth } from '@/stores/auth'
 import { spacing } from '@/theme'
 
 function useSavedAccounts() {
   const [list, setList] = useState<SavedAccount[]>([])
   useEffect(() => {
-    void listAccounts().then(setList)
+    // Garde de montage : la lecture du trousseau peut finir après le démontage de l'écran.
+    let alive = true
+    listAccounts()
+      .then((l) => alive && setList(l))
+      .catch((e: unknown) => logger.warn('accounts', 'liste des comptes illisible', e))
+    return () => {
+      alive = false
+    }
   }, [])
   return [list, setList] as const
 }

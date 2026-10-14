@@ -234,30 +234,7 @@ pub async fn bot_send_message(
     // limite : un token bot volé ou un bot mal codé pouvait flooder un canal sans passer
     // par la moindre protection anti-abus, contrairement à TOUS les autres utilisateurs.
     // Même garde atomique (UPSERT), réutilisée telle quelle.
-    {
-        let new_count: i32 = sqlx::query_scalar(
-            "INSERT INTO message_spam_track (user_id, channel_id, count, window_start)
-             VALUES ($1, $2, 1, NOW())
-             ON CONFLICT (user_id, channel_id) DO UPDATE
-             SET count = CASE
-                     WHEN NOW() - message_spam_track.window_start >= INTERVAL '3 seconds' THEN 1
-                     ELSE message_spam_track.count + 1
-                 END,
-                 window_start = CASE
-                     WHEN NOW() - message_spam_track.window_start >= INTERVAL '3 seconds' THEN NOW()
-                     ELSE message_spam_track.window_start
-                 END
-             RETURNING count"
-        )
-        .bind(bot_id)
-        .bind(body.channel_id)
-        .fetch_one(&state.db)
-        .await?;
-
-        if new_count > 5 {
-            return Err(AppError::TooManyRequests);
-        }
-    }
+    crate::handlers::post_guard::check_spam(&state.db, bot_id, body.channel_id).await?;
 
     // AutoMod n'était jamais consulté sur ce chemin -- un bot (créé par n'importe
     // quel MANAGE_SERVER) pouvait poster exactement le contenu que le filtre de mots/

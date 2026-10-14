@@ -1,0 +1,121 @@
+/*
+ * Anneau d'avatar v2 (components/ui/AvatarRing.tsx, lib/avatarRing.ts).
+ * Réglages lus en variables (nombres et « #rrggbb » calculés seulement) :
+ *   --ring-speed (durées divisées), --deco-turn (sens), --ring-bright, --ring-glow-r/-c,
+ *   --ring-op (opacité), --ring-int (amplitude des animations : pulsation, scintillement…).
+ * « Réduire les animations » (système ou réglage de l'app) : profileStyles.css coupe toute
+ * animation sous .fc-ring ; chaque style reste lisible à l'arrêt.
+ */
+.fc-ring { opacity: var(--ring-op, 1); }
+.fc-ring.fc-ring-fx { filter: brightness(var(--ring-bright, 1)) drop-shadow(0 0 var(--ring-glow-r, 0px) var(--ring-glow-c, transparent)); }
+
+/* Rotations */
+.fc-ring:is(.fc-ring-spin, .fc-ring-gradient_spin, .fc-ring-dashed_spin, .fc-ring-comet, .fc-ring-orbit, .fc-ring-double_orbit,
+  .fc-ring-radar, .fc-ring-twin_comet, .fc-ring-chase, .fc-ring-rainbow) {
+  animation: fc-deco-spin calc(4s / var(--ring-speed, 1)) linear infinite;
+}
+.fc-ring.fc-ring-gradient_spin { animation-duration: calc(2.6s / var(--ring-speed, 1)); }
+.fc-ring:is(.fc-ring-comet, .fc-ring-twin_comet) { animation-duration: calc(1.8s / var(--ring-speed, 1)); }
+.fc-ring:is(.fc-ring-orbit, .fc-ring-double_orbit) { animation-duration: calc(3s / var(--ring-speed, 1)); }
+.fc-ring.fc-ring-radar { animation-duration: calc(2.4s / var(--ring-speed, 1)); }
+.fc-ring.fc-ring-chase { animation-duration: calc(2.2s / var(--ring-speed, 1)); }
+.fc-ring.fc-ring-rainbow { animation-duration: calc(6s / var(--ring-speed, 1)); }
+.fc-ring.fc-ring-matrix { animation: fc-deco-spin calc(8s / var(--ring-speed, 1)) steps(24) infinite, fc-ring-flicker calc(2.6s / var(--ring-speed, 1)) linear infinite; }
+.fc-ring.fc-ring-vortex { animation: fc-deco-spin calc(1.4s / var(--ring-speed, 1)) ease-in-out infinite, fc-ring-swell calc(2.8s / var(--ring-speed, 1)) ease-in-out infinite; }
+.fc-ring.fc-ring-sunburst { animation: fc-deco-spin calc(14s / var(--ring-speed, 1)) linear infinite, fc-ring-swell calc(2.4s / var(--ring-speed, 1)) ease-in-out infinite; }
+.fc-ring.fc-ring-sparkle { animation: fc-deco-spin calc(10s / var(--ring-speed, 1)) linear infinite, fc-ring-twinkle calc(1.6s / var(--ring-speed, 1)) linear infinite; }
+.fc-ring.fc-ring-prism { animation: fc-deco-spin calc(5s / var(--ring-speed, 1)) linear infinite, fc-ring-hue calc(4s / var(--ring-speed, 1)) linear infinite; }
+.fc-ring.fc-ring-aurora { animation: fc-ring-aurora calc(6s / var(--ring-speed, 1)) ease-in-out infinite alternate, fc-ring-swell calc(4s / var(--ring-speed, 1)) ease-in-out infinite; }
+
+/* Battements, scintillements, ondes */
+.fc-ring.fc-ring-pulse { animation: fc-ring-pulse calc(2.4s / var(--ring-speed, 1)) ease-in-out infinite; }
+.fc-ring.fc-ring-neon_pulse { animation: fc-ring-neon calc(2s / var(--ring-speed, 1)) ease-in-out infinite; }
+.fc-ring.fc-ring-breathe { animation: fc-ring-breathe calc(3.2s / var(--ring-speed, 1)) ease-in-out infinite; }
+.fc-ring.fc-ring-fire { animation: fc-ring-fire calc(1.2s / var(--ring-speed, 1)) ease-in-out infinite; }
+.fc-ring.fc-ring-electric { animation: fc-ring-electric calc(.9s / var(--ring-speed, 1)) linear infinite; }
+.fc-ring.fc-ring-wave { animation: fc-ring-wave calc(2s / var(--ring-speed, 1)) ease-in-out infinite; }
+.fc-ring.fc-ring-heartbeat { animation: fc-ring-heartbeat calc(1.3s / var(--ring-speed, 1)) ease-in-out infinite; }
+.fc-ring.fc-ring-glitch { animation: fc-ring-glitch calc(1.8s / var(--ring-speed, 1)) linear infinite; }
+.fc-ring.fc-ring-flicker { animation: fc-ring-flicker calc(3s / var(--ring-speed, 1)) linear infinite; }
+/* Onde : l'anneau reste en place, son écho s'éloigne et s'efface. */
+.fc-ring.fc-ring-ripple.fc-ring-echo { animation: fc-ring-ripple calc(2s / var(--ring-speed, 1)) ease-out infinite; }
+
+@keyframes fc-ring-pulse {
+  0%, 100% { opacity: var(--ring-op, 1); transform: scale(1); }
+  50% { opacity: calc(var(--ring-op, 1) * (1 - .35 * var(--ring-int, 1))); transform: scale(calc(1 + .06 * var(--ring-int, 1))); }
+}
+@keyframes fc-ring-neon {
+  0%, 100% { opacity: var(--ring-op, 1); }
+  45% { opacity: calc(var(--ring-op, 1) * (1 - .45 * var(--ring-int, 1))); }
+  50% { opacity: var(--ring-op, 1); }
+  55% { opacity: calc(var(--ring-op, 1) * (1 - .3 * var(--ring-int, 1))); }
+}
+@keyframes fc-ring-breathe {
+  0%, 100% { filter: brightness(var(--ring-bright, 1)) drop-shadow(0 0 calc(var(--ring-glow-r, 0px) * .3) var(--ring-glow-c, transparent)); }
+  50% { filter: brightness(var(--ring-bright, 1)) drop-shadow(0 0 calc(var(--ring-glow-r, 0px) * (1 + .6 * var(--ring-int, 1))) var(--ring-glow-c, transparent)); }
+}
+@keyframes fc-ring-swell { 0%, 100% { scale: 1; } 50% { scale: calc(1 + .05 * var(--ring-int, 1)); } }
+@keyframes fc-ring-twinkle {
+  0%, 100% { opacity: var(--ring-op, 1); }
+  20% { opacity: calc(var(--ring-op, 1) * (1 - .5 * var(--ring-int, 1))); }
+  23% { opacity: var(--ring-op, 1); }
+  58% { opacity: calc(var(--ring-op, 1) * (1 - .35 * var(--ring-int, 1))); }
+  61% { opacity: var(--ring-op, 1); }
+}
+@keyframes fc-ring-hue {
+  from { filter: brightness(var(--ring-bright, 1)) drop-shadow(0 0 var(--ring-glow-r, 0px) var(--ring-glow-c, transparent)) hue-rotate(0deg); }
+  to   { filter: brightness(var(--ring-bright, 1)) drop-shadow(0 0 var(--ring-glow-r, 0px) var(--ring-glow-c, transparent)) hue-rotate(360deg); }
+}
+@keyframes fc-ring-aurora {
+  from { rotate: 0deg; filter: brightness(var(--ring-bright, 1)) drop-shadow(0 0 var(--ring-glow-r, 0px) var(--ring-glow-c, transparent)) hue-rotate(0deg); }
+  to   { rotate: calc(180deg * var(--deco-turn, 1)); filter: brightness(var(--ring-bright, 1)) drop-shadow(0 0 var(--ring-glow-r, 0px) var(--ring-glow-c, transparent)) hue-rotate(calc(70deg * var(--ring-int, 1))); }
+}
+@keyframes fc-ring-fire {
+  0%, 100% { transform: scale(1); opacity: var(--ring-op, 1); }
+  25% { transform: scale(calc(1 + .03 * var(--ring-int, 1))); }
+  50% { transform: scale(calc(1 - .015 * var(--ring-int, 1))); opacity: calc(var(--ring-op, 1) * (1 - .18 * var(--ring-int, 1))); }
+  75% { transform: scale(calc(1 + .045 * var(--ring-int, 1))); }
+}
+@keyframes fc-ring-electric {
+  0%, 100% { opacity: var(--ring-op, 1); transform: rotate(0); }
+  10% { opacity: calc(var(--ring-op, 1) * (1 - .6 * var(--ring-int, 1))); }
+  12% { opacity: var(--ring-op, 1); }
+  40% { transform: rotate(calc(8deg * var(--ring-int, 1))); }
+  42% { transform: rotate(calc(-6deg * var(--ring-int, 1))); }
+  60% { opacity: calc(var(--ring-op, 1) * (1 - .7 * var(--ring-int, 1))); }
+  62% { opacity: var(--ring-op, 1); }
+}
+@keyframes fc-ring-wave {
+  0%, 100% { transform: scale(1, 1); }
+  25% { transform: scale(calc(1 + .05 * var(--ring-int, 1)), calc(1 - .05 * var(--ring-int, 1))); }
+  75% { transform: scale(calc(1 - .05 * var(--ring-int, 1)), calc(1 + .05 * var(--ring-int, 1))); }
+}
+@keyframes fc-ring-heartbeat {
+  0%, 28%, 70%, 100% { transform: scale(1); }
+  14%, 42% { transform: scale(calc(1 + .08 * var(--ring-int, 1))); }
+}
+@keyframes fc-ring-glitch {
+  0%, 19%, 22%, 49%, 52%, 79%, 82%, 100% { transform: translate(0, 0); }
+  20% { transform: translate(calc(1.5px * var(--ring-int, 1)), calc(-1px * var(--ring-int, 1))); }
+  50% { transform: translate(calc(-2px * var(--ring-int, 1)), calc(1px * var(--ring-int, 1))); }
+  80% { transform: translate(calc(1px * var(--ring-int, 1)), calc(1.5px * var(--ring-int, 1))); }
+}
+@keyframes fc-ring-flicker {
+  0%, 17%, 21%, 60%, 65%, 100% { opacity: var(--ring-op, 1); }
+  18%, 20% { opacity: calc(var(--ring-op, 1) * (1 - .55 * var(--ring-int, 1))); }
+  62% { opacity: calc(var(--ring-op, 1) * (1 - .4 * var(--ring-int, 1))); }
+}
+@keyframes fc-ring-ripple {
+  0% { transform: scale(1); opacity: var(--ring-op, 1); }
+  80%, 100% { transform: scale(calc(1 + .25 * var(--ring-int, 1))); opacity: 0; }
+}
+/* À l'arrêt, l'écho se confond avec l'anneau. */
+@media (prefers-reduced-motion: reduce) { .fc-ring-echo { display: none; } }
+[data-reduce-motion="true"] .fc-ring-echo { display: none; }
+
+/* Tête de la comète : point lumineux au bout de la traînée. */
+.fc-ring-head {
+  position: absolute; left: 50%; top: 0;
+  border-radius: 9999px;
+  transform: translate(-50%, -50%);
+}

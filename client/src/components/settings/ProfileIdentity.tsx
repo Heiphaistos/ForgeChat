@@ -1,21 +1,19 @@
 import { useState } from 'react'
-import { useMutation } from '@tanstack/react-query'
-import toast from 'react-hot-toast'
 import { Plus, Trash2 } from 'lucide-react'
-import api from '../../api/client'
 import { Field } from './shared'
 import { useT } from '../../i18n'
 import { cleanStyle, type NameStyle, type TagStyle } from '../../lib/nameStyle'
-import { useNameStyles } from '../../store/nameStyles'
 import NameStyleFields, { EMPTY_STYLE } from './NameStyleFields'
 import TagStyleFields from './TagStyleFields'
 import StyledNameText from '../ui/StyledNameText'
 import ClanTag from '../ui/ClanTag'
 import type { ProfileLink } from '../ui/ProfileLinks'
+import { useDraft, type DraftReport } from './profileDraft'
 
 interface Props {
   user: any
-  updateMe: (d: any) => void
+  /** Brouillon remonté à ProfileSection (enregistrement unique, profileDraft.ts). */
+  report: DraftReport
 }
 
 const MAX_LINKS = 5
@@ -27,7 +25,7 @@ const isHttps = (u: string) => /^https:\/\/[^\s/?#]+\.[^\s]+$/i.test(u.trim())
  * perso et son style de marque (TagStyleFields.tsx) et liens. Le serveur revalide tout
  * (server/src/models/profile_style.rs).
  */
-export default function ProfileIdentity({ user, updateMe }: Props) {
+export default function ProfileIdentity({ user, report }: Props) {
   const t = useT()
   const [displayName, setDisplayName] = useState<string>(user.display_name ?? '')
   const [style, setStyle] = useState<NameStyle>(cleanStyle(user.name_style) ?? EMPTY_STYLE)
@@ -36,22 +34,13 @@ export default function ProfileIdentity({ user, updateMe }: Props) {
 
   const badLink = links.some(l => !l.label.trim() || !isHttps(l.url))
 
-  const save = useMutation({
-    mutationFn: () => api.patch('/users/me', {
-      display_name: displayName.trim(),
-      // {} = style par défaut ; [] = aucun lien ; "" = retirer.
-      name_style: cleanStyle(style) ?? {},
-      profile_tag: tag.trim(),
-      profile_links: links.map(l => ({ label: l.label.trim(), url: l.url.trim() })),
-    }),
-    onSuccess: r => {
-      updateMe(r.data)
-      // Pseudo stylé partout tout de suite (sans attendre le USER_UPDATE).
-      useNameStyles.getState().set(user.id, r.data)
-      toast.success(t('profileId.saved'))
-    },
-    onError: (e: any) => toast.error(e.response?.data?.error ?? t('common.error')),
-  })
+  useDraft('identity', {
+    display_name: displayName.trim(),
+    // {} = style par défaut ; [] = aucun lien ; "" = retirer.
+    name_style: cleanStyle(style) ?? {},
+    profile_tag: tag.trim(),
+    profile_links: links.map(l => ({ label: l.label.trim(), url: l.url.trim() })),
+  }, report, badLink)
 
   const tagStyle: TagStyle = style.tag ?? {}
   const tagRest: Omit<TagStyle, 'color'> = { color2: tagStyle.color2, font: tagStyle.font, badge: tagStyle.badge, icon: tagStyle.icon }
@@ -118,14 +107,6 @@ export default function ProfileIdentity({ user, updateMe }: Props) {
           {badLink && <p className="text-xs text-fc-red">{t('profileId.linkInvalid')}</p>}
         </div>
       </Field>
-
-      <button
-        onClick={() => save.mutate()}
-        disabled={save.isPending || badLink}
-        className="px-5 py-2 bg-fc-accent hover:bg-fc-accent/80 text-white rounded-lg text-sm font-medium disabled:opacity-50 transition"
-      >
-        {save.isPending ? t('common.saving') : t('profileId.save')}
-      </button>
     </div>
   )
 }

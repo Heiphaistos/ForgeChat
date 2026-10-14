@@ -39,6 +39,7 @@ import { categoryAttrs } from '../../theme/serverLook'
 import DmList, { TypingDots } from './DmList'
 import VoicePeople, { VOICE_MEMBER_MIME } from './VoicePeople'
 import { useMyUxPrefs } from '../../store/uxPrefs'
+import { useSidebarExtras } from './CategoryTools'
 
 function ChannelIcon({ type, size = 16 }: { type: string; size?: number }) {
   switch (type) {
@@ -305,6 +306,7 @@ export default function ChannelSidebar() {
   }, [allChannels, data, server, currentUser?.id])
   // Droits fins sur les salons (créer / modifier / supprimer), voir useServerPerms.
   const { canCreateChannels: canCreate, canEditChannels: canEdit, canDeleteChannel } = useServerPerms(serverId ?? undefined)
+  const extras = useSidebarExtras(serverId, categories, canEdit, voiceChannelId) // catégories (nom, ordre, permissions), statut vocal
   const removeWithBackup = async (kind: 'channel' | 'category', id: string, name: string) => {
     if (!serverId) return
     if (await deleteWithBackup({ kind, serverId, serverName: server?.name, id, name })) {
@@ -383,11 +385,14 @@ export default function ChannelSidebar() {
       { label: channelMuted ? t('channels.notifOn') : t('channels.notifOff'), onClick: () => {
         const next = !channelMuted
         setChannelMuted(ch.id, next)
+        // Optimiste : retour arrière + message si le serveur refuse.
         api.post(`/user/channel-notif/${ch.id}`, { level: next ? 'nothing' : 'inherit', muted: next })
+          .catch(() => { setChannelMuted(ch.id, channelMuted); toast.error(t('chnotif.muteFailed')) })
       }},
       { label: t('channels.copyLink'), onClick: () => navigator.clipboard.writeText(`${window.location.origin}/servers/${serverId}/channels/${ch.id}`) },
       { separator: true },
       { label: t('channels.settings'), onClick: () => setChannelSettings(ch) },
+      ...extras.voiceEntries(ch),
       ...(canEdit ? [
         { label: ch.hidden ? t('channels.show') : t('channels.hide'), onClick: () => ch.hidden ? unhideChannelMutation.mutate(ch.id) : hideChannelMutation.mutate(ch.id) },
         { label: ch.archived ? t('channels.restore') : t('channels.archive'), onClick: () => archiveChannel.mutate(ch.id) },
@@ -564,6 +569,7 @@ export default function ChannelSidebar() {
           </button>
         </button>
 
+        {isVoiceCh && ch.voice_status && <p className="pl-8 pr-2 -mt-0.5 mb-0.5 text-[11px] text-fc-muted truncate" title={ch.voice_status} aria-label={t('dfeat.voice.statusOf', { status: ch.voice_status })}>{ch.voice_status}</p>}
         {isVoiceCh && (participants.length > 0 || channelStreams.length > 0) && (
           <VoicePeople serverId={serverId} channel={ch} participants={participants} streams={channelStreams} canMove={canMoveMembers} />
         )}
@@ -632,6 +638,7 @@ export default function ChannelSidebar() {
                   onClick={() => toggleGroup(key)}
                   onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleGroup(key) } }}
                   onContextMenu={e => ctxMenu.open(e, [
+                    ...extras.categoryEntries(key, label),
                     ...(canCreate ? [{ label: t('channels.create'), onClick: () => { setCreateInCategory(key); setShowCreateChannel(true) } }] : []),
                     ...(categories.some((c: any) => c.id === key && canDeleteChannel(c.created_by)) ? [
                       { separator: true as const },
@@ -701,8 +708,8 @@ export default function ChannelSidebar() {
           {/* Canaux archivés */}
           {canEdit && archivedChannels.length > 0 && (
             <div className="mt-3 mb-2">
-              <div
-                className="flex items-center gap-1 px-2 py-1 cursor-pointer"
+              <button type="button" aria-expanded={!collapsed['__archived__']}
+                className="w-full flex items-center gap-1 px-2 py-1 cursor-pointer"
                 onClick={() => toggleGroup('__archived__')}
               >
                 <ChevronRight
@@ -712,7 +719,7 @@ export default function ChannelSidebar() {
                 <span className="text-[10px] font-semibold text-fc-muted/60 uppercase tracking-wide">
                   {t('channels.archivedCount', { n: archivedChannels.length })}
                 </span>
-              </div>
+              </button>
               {!collapsed['__archived__'] && archivedChannels.map((ch: any) => (
                 <div
                   key={ch.id}
@@ -778,6 +785,7 @@ export default function ChannelSidebar() {
         />
       )}
       {ctxMenu.node}
+      {extras.node}
     </>
   )
 }

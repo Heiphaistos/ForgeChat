@@ -17,8 +17,15 @@ import * as profileEditor from './parts/profileEditor.ts'
 import * as nameStyleMore from './parts/nameStyleMore.ts'
 import * as serverLook from './parts/serverLook.ts'
 import * as profileDecorMore from './parts/profileDecorMore.ts'
+import * as profileDecorExtra from './parts/profileDecorExtra.ts'
+import * as auditUi from './parts/auditUi.ts'
+import * as auditChat from './parts/auditChat.ts'
+import * as siteAdmin from './parts/siteAdmin.ts'
+import * as discordFeatures from './parts/discordFeatures.ts'
+import * as auditRest from './parts/auditRest.ts'
 import { profileEn } from './profileEn.ts'
 import { profileStyleEn } from './profileStyleEn.ts'
+import { ringEn } from './ringEn.ts'
 import { socialEn } from './socialEn.ts'
 import { comfortEn } from './comfort.ts'
 import { voiceLotEn } from './voiceLotEn.ts'
@@ -29,6 +36,7 @@ import { systemDeskEn } from './systemDesk.ts'
 export const en: Partial<Record<Key, string>> = {
   ...profileEn,
   ...profileStyleEn,
+  ...ringEn,
   ...socialEn,
   ...comfortEn,
   ...voiceLotEn,
@@ -49,6 +57,12 @@ export const en: Partial<Record<Key, string>> = {
   ...nameStyleMore.en,
   ...serverLook.en,
   ...profileDecorMore.en,
+  ...profileDecorExtra.en,
+  ...auditUi.en,
+  ...auditChat.en,
+  ...siteAdmin.en,
+  ...discordFeatures.en,
+  ...auditRest.en,
   // --- Connexion, inscription, mot de passe oublié ---
   'auth.email': 'Email',
   'auth.password': 'Password',
@@ -1050,7 +1064,7 @@ export const en: Partial<Record<Key, string>> = {
   'settings.profile.removeBanner': 'Remove banner',
   'settings.profile.bannerFormats': 'PNG, JPG, GIF, WEBP or APNG (animated allowed) · max 10 MB',
   'settings.profile.changeAvatar': 'Change avatar',
-  'settings.profile.avatarHint': 'Click the avatar to change it · animated GIF allowed (10 MB)',
+  'settings.profile.avatarHint': 'Use the camera button to change the avatar · animated GIF allowed (10 MB)',
   'settings.profile.bio': 'Bio (markdown supported)',
   'settings.profile.bioCount': '{n}/190 characters',
   'settings.profile.bioPlaceholder': 'Describe yourself in a few words...',

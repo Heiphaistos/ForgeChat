@@ -71,7 +71,7 @@ pub async fn upload_server_banner(
         .bind(&url)
         .execute(&state.db)
         .await?;
-    log_event(&state, server_id, "SERVER_UPDATE", Some(claims.sub), None, None, None, None).await;
+    log_event(&state, server_id, "SERVER_UPDATE", Some(claims.sub), None, None, None).await;
     broadcast_server(&state, server_id).await?;
     Ok(Json(serde_json::json!({ "banner": url })))
 }
@@ -105,6 +105,6 @@ pub async fn put_look(
         .bind(look)
         .execute(&state.db)
         .await?;
-    log_event(&state, server_id, "SERVER_UPDATE", Some(claims.sub), None, None, None, None).await;
+    log_event(&state, server_id, "SERVER_UPDATE", Some(claims.sub), None, None, None).await;
     Ok(Json(broadcast_server(&state, server_id).await?))
 }

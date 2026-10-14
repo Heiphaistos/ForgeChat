@@ -25,6 +25,8 @@ mod health;
 mod dnd;
 #[cfg(test)]
 mod fuzz_props;
+#[cfg(test)]
+mod routes_test;
 
 use axum::{
     middleware as axum_middleware,
@@ -56,6 +58,10 @@ async fn main() -> anyhow::Result<()> {
     if std::env::args().nth(1).as_deref() == Some("generate-vapid-keys") {
         push::print_new_vapid_keys();
         return Ok(());
+    }
+    // `forgechat sweep-orphan-uploads` : liste (lecture seule) des fichiers orphelins, voir upload_sweep.rs.
+    if std::env::args().nth(1).as_deref() == Some("sweep-orphan-uploads") {
+        return handlers::upload_sweep::run_cli().await;
     }
     tracing_subscriber::registry()
         .with(tracing_subscriber::EnvFilter::new(
@@ -296,7 +302,34 @@ async fn main() -> anyhow::Result<()> {
         ])
         .allow_credentials(true);
 
-    let app = Router::new()
+    let app = app_routes(protected_routes(state.clone()), &config.upload_dir)
+        // 12 Mo partout ailleurs (plus gros envoi hors pièce jointe : une bannière de 10 Mo) : un
+        // corps JSON est lu entier en mémoire. Seules les pièces jointes, écrites sur le disque au
+        // fil de l'eau, ont droit à ATTACHMENT_BODY_LIMIT (route par route).
+        .layer(DefaultBodyLimit::max(12 * 1024 * 1024))
+        .layer(axum::middleware::from_fn(security_headers::apply))
+        .layer(axum::middleware::from_fn_with_state(state.clone(), health::count_server_errors))
+        .layer(cors)
+        .layer(TraceLayer::new_for_http())
+        .with_state(state);
+
+    let addr = format!("0.0.0.0:{}", config.port);
+    tracing::info!("ForgeChat v{} écoute sur {addr}", env!("CARGO_PKG_VERSION"));
+
+    let listener = tokio::net::TcpListener::bind(&addr).await?;
+    axum::serve(
+        listener,
+        app.into_make_service_with_connect_info::<std::net::SocketAddr>(),
+    ).await?;
+
+    Ok(())
+}
+
+/// Table complète des routes (publiques, `/api` protégé, `/uploads`), sans les couches
+/// globales qui portent l'état. Séparée de `main` pour que routes_test.rs la construise
+/// sans Postgres ni Redis : axum panique dès l'insertion d'une route en conflit.
+fn app_routes(protected: Router<AppState>, upload_dir: &str) -> Router<AppState> {
+    Router::new()
         // Healthcheck réel du backend -- accessible via nginx location /api/ existante
         // (contrairement à /health qui n'a pas de route nginx dédiée et retombe
         // silencieusement sur le SPA React, 200 même backend down)
@@ -352,7 +385,7 @@ async fn main() -> anyhow::Result<()> {
                 .layer(DefaultBodyLimit::max(handlers::diagnostics::MAX_BODY_BYTES)),
         )
         // Routes protégées
-        .nest("/api", protected_routes(state.clone()))
+        .nest("/api", protected)
         // Fichiers uploadés — avec en-têtes de sécurité pour éviter le sniffing de type MIME
         .nest_service(
             "/uploads",
@@ -365,28 +398,8 @@ async fn main() -> anyhow::Result<()> {
                 ))
                 // F8 : hors dossiers publics, URL signée exigée (404 sinon).
                 .layer(axum::middleware::from_fn(upload_sign::guard))
-                .service(ServeDir::new(&config.upload_dir))
+                .service(ServeDir::new(upload_dir))
         )
-        // 12 Mo partout ailleurs (plus gros envoi hors pièce jointe : une bannière de 10 Mo) : un
-        // corps JSON est lu entier en mémoire. Seules les pièces jointes, écrites sur le disque au
-        // fil de l'eau, ont droit à ATTACHMENT_BODY_LIMIT (route par route).
-        .layer(DefaultBodyLimit::max(12 * 1024 * 1024))
-        .layer(axum::middleware::from_fn(security_headers::apply))
-        .layer(axum::middleware::from_fn_with_state(state.clone(), health::count_server_errors))
-        .layer(cors)
-        .layer(TraceLayer::new_for_http())
-        .with_state(state);
-
-    let addr = format!("0.0.0.0:{}", config.port);
-    tracing::info!("ForgeChat v{} écoute sur {addr}", env!("CARGO_PKG_VERSION"));
-
-    let listener = tokio::net::TcpListener::bind(&addr).await?;
-    axum::serve(
-        listener,
-        app.into_make_service_with_connect_info::<std::net::SocketAddr>(),
-    ).await?;
-
-    Ok(())
 }
 
 /// Supprime les messages éphémères expirés comme une suppression normale :
@@ -599,6 +612,14 @@ async fn send_dm_notifications(state: &AppState) {
 const ATTACHMENT_BODY_LIMIT: usize = 1_100 * 1_048_576;
 
 fn protected_routes(state: AppState) -> Router<AppState> {
+    protected_route_table().route_layer(axum_middleware::from_fn_with_state(
+        state,
+        middleware::require_auth,
+    ))
+}
+
+/// Routes `/api` authentifiées, sans la couche d'auth (qui porte l'état).
+fn protected_route_table() -> Router<AppState> {
     Router::new()
         // Auth
         .route("/auth/logout", post(handlers::auth::logout))
@@ -690,7 +711,15 @@ fn protected_routes(state: AppState) -> Router<AppState> {
         .route("/servers/:id/channels", get(handlers::channels::get_channels))
         .route("/servers/:id/channels", post(handlers::channels::create_channel))
         .route("/servers/:server_id/categories", get(handlers::channels::get_categories).post(handlers::channels::create_category))
-        .route("/servers/:server_id/categories/:category_id", delete(handlers::channels::delete_category))
+        .route("/servers/:server_id/categories/:category_id", delete(handlers::channels::delete_category).patch(handlers::categories::rename_category))
+        .route("/servers/:server_id/categories/reorder", patch(handlers::categories::reorder_categories))
+        .route("/servers/:server_id/categories/:category_id/permissions", get(handlers::categories::get_category_permissions))
+        .route("/servers/:server_id/categories/:category_id/permissions/:target_id",
+            put(handlers::categories::put_category_permission).delete(handlers::categories::delete_category_permission))
+        .route("/servers/:server_id/categories/:category_id/sync-permissions", post(handlers::categories::sync_category_permissions))
+        .route("/servers/:server_id/channels/:channel_id/voice-status", put(handlers::channel_extras::set_voice_status).layer(DefaultBodyLimit::max(SMALL_JSON_LIMIT)))
+        .route("/servers/:server_id/channels/:channel_id/forum-settings", patch(handlers::channel_extras::set_forum_settings).layer(DefaultBodyLimit::max(SMALL_JSON_LIMIT)))
+        .route("/servers/:server_id/invite-tracking", get(handlers::invite_tracking::list_invite_tracking))
         .route("/servers/:server_id/categories/:category_id/backup", get(handlers::channel_backup::backup_category))
         .route("/channels/:channel_id/backup", get(handlers::channel_backup::backup_channel))
         .route("/servers/:server_id/channels/:channel_id", patch(handlers::channels::update_channel))
@@ -804,6 +833,8 @@ fn protected_routes(state: AppState) -> Router<AppState> {
         .route("/channels/:channel_id/read", post(handlers::reads::mark_channel_read))
         .route("/servers/:server_id/read", post(handlers::reads::mark_server_read))
         .route("/dms/groups/:group_id/read", post(handlers::reads::mark_group_dm_read))
+        .route("/channels/:channel_id/unread", post(handlers::unread::mark_channel_unread))
+        .route("/dms/:dm_id/unread", post(handlers::unread::mark_dm_unread))
         // Threads
         .route("/servers/:server_id/channels/:channel_id/forum-uploads", post(handlers::uploads::forum_upload).layer(DefaultBodyLimit::max(ATTACHMENT_BODY_LIMIT)))
         .route("/uploads/sign", post(handlers::uploads::sign_urls))
@@ -976,7 +1007,7 @@ fn protected_routes(state: AppState) -> Router<AppState> {
         .route("/user/focus-mode", patch(handlers::users::toggle_focus_mode))
         .route("/user/connected-accounts", get(handlers::user_settings::list_connected_accounts))
         .route("/user/connected-accounts", post(handlers::user_settings::add_connected_account))
-        .route("/user/connected-accounts/:platform", delete(handlers::user_settings::delete_connected_account))
+        .route("/user/connected-accounts/:platform", delete(handlers::user_settings::delete_connected_account).patch(handlers::connections::set_visibility))
         .route("/user/notification-overrides", get(handlers::user_settings::get_notification_overrides))
         .route("/user/notification-overrides", post(handlers::user_settings::set_notification_override))
         .route("/user/notification-overrides", delete(handlers::notif_center::reset_notif))
@@ -1085,8 +1116,4 @@ fn protected_routes(state: AppState) -> Router<AppState> {
         .route("/friends/blocked", get(handlers::friends::get_blocked))
         .route("/friends/block/:user_id", post(handlers::friends::block_user))
         .route("/friends/block/:user_id", delete(handlers::friends::unblock_user))
-        .route_layer(axum_middleware::from_fn_with_state(
-            state,
-            middleware::require_auth,
-        ))
 }

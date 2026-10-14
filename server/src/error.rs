@@ -49,7 +49,10 @@ impl IntoResponse for AppError {
     fn into_response(self) -> Response {
         let (status, message) = match &self {
             AppError::Unauthorized => (StatusCode::UNAUTHORIZED, self.to_string()),
-            AppError::Forbidden => (StatusCode::FORBIDDEN, self.to_string()),
+            // `code` stable lisible par machine (M9) ; `error` inchangé pour les anciens clients.
+            AppError::Forbidden => {
+                return (StatusCode::FORBIDDEN, Json(json!({ "error": self.to_string(), "code": "forbidden" }))).into_response();
+            }
             AppError::ForbiddenMsg(m) => (StatusCode::FORBIDDEN, m.clone()),
             AppError::NotFound(m) => (StatusCode::NOT_FOUND, m.clone()),
             AppError::BadRequest(m) => (StatusCode::BAD_REQUEST, m.clone()),

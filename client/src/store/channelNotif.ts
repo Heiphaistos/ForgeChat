@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import api from '../api/client'
 import { queryClient } from '../main'
+import { useWs } from './ws'
 import { resolveLevel, type Effective, type NotifLevel } from './notifLevels'
 
 export { resolveLevel, forumPostAlerts, type Effective, type NotifLevel } from './notifLevels'
@@ -96,6 +97,8 @@ export function serverDefault(serverId: string): string | undefined {
     ?? queryClient.getQueryData<WithDefault[]>(['servers'])?.find(x => x.id === serverId)?.default_notification_level
 }
 
+let retryArmed = false
+
 export const useChannelNotif = create<ChannelNotifState>((set, get) => ({
   ...EMPTY_NOTIF_STATE,
 
@@ -123,7 +126,13 @@ export const useChannelNotif = create<ChannelNotifState>((set, get) => ({
         channelInfo: new Map(center.channels.map(c => [c.channel_id, { serverId: c.server_id, name: c.channel_name }])),
         loaded: true,
       })
-    } catch {}
+    } catch (e) {
+      console.warn('[channelNotif] réglages de notification non chargés ; nouvel essai à la reconnexion', e)
+      // Un seul nouvel essai armé à la fois, à la prochaine (re)connexion du WebSocket.
+      if (retryArmed) return
+      retryArmed = true
+      const off = useWs.getState().onOpen(() => { off(); retryArmed = false; void get().fetch() })
+    }
   },
 
   setMuted: (channelId, muted, until = null) => set(s => ({ mutedChannels: withMute(s.mutedChannels, channelId, muted, until) })),

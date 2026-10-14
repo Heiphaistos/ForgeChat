@@ -19,9 +19,14 @@ import * as accountGuard from './parts/accountGuard'
 import * as themesMore from './parts/themesMore'
 import * as profileStyle from './parts/profileStyle'
 import * as profileDecorMore from './parts/profileDecorMore'
+import * as profileDecorExtra from './parts/profileDecorExtra'
 import * as appIcon from './parts/appIcon'
 import * as nameStyleMore from './parts/nameStyleMore'
 import * as serverLook from './parts/serverLook'
+import * as ringCard from './parts/ringCard'
+import * as siteAdmin from './parts/siteAdmin'
+import * as auditMobile from './parts/auditMobile'
+import * as discordFeatures from './parts/discordFeatures'
 
 export const en: Partial<Record<Key, string>> = {
   ...settings.en,
@@ -43,9 +48,14 @@ export const en: Partial<Record<Key, string>> = {
   ...themesMore.en,
   ...profileStyle.en,
   ...profileDecorMore.en,
+  ...profileDecorExtra.en,
   ...appIcon.en,
   ...nameStyleMore.en,
   ...serverLook.en,
+  ...ringCard.en,
+  ...siteAdmin.en,
+  ...auditMobile.en,
+  ...discordFeatures.en,
 
   // --- Commun ---
   'common.cancel': 'Cancel',

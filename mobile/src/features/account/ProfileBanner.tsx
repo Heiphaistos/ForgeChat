@@ -2,6 +2,7 @@ import { useState, type ReactNode } from 'react'
 import { StyleSheet, View, type LayoutChangeEvent, type StyleProp, type ViewStyle } from 'react-native'
 import { Image } from 'expo-image'
 import { useT } from '@/i18n'
+import type { ProfileCard } from '@/features/account/profileCard'
 import { resolveMediaUrl } from '@/lib/links'
 import { useAnimateAvatars } from '@/stores/settings'
 import { colors, radius } from '@/theme'
@@ -20,7 +21,7 @@ function stillUri(uri: string): string {
  * « animer les avatars et bannières ».
  */
 export function FullBanner({
-  uri, minHeight = 64, maxHeight = 220, focus, label, style, children,
+  uri, minHeight = 64, maxHeight = 220, focus, label, style, blur, children,
 }: {
   uri: string | null | undefined
   minHeight?: number
@@ -29,6 +30,8 @@ export function FullBanner({
   focus?: { x: number; y: number }
   label?: string
   style?: StyleProp<ViewStyle>
+  /** Flou de l'image (carte de profil, effet « blur »). */
+  blur?: number
   children?: ReactNode
 }) {
   const src = resolveMediaUrl(uri)
@@ -50,6 +53,7 @@ export function FullBanner({
         contentFit="contain"
         contentPosition={focus ? { left: `${focus.x}%`, top: `${focus.y}%` } : 'center'}
         cachePolicy="memory-disk"
+        blurRadius={blur}
         autoplay={animate}
         accessible={!!label}
         accessibilityLabel={label}
@@ -63,8 +67,44 @@ export function FullBanner({
   )
 }
 
-/** Bannière de profil entière ; rien si l'utilisateur n'en a pas. */
-export function ProfileBanner({ uri, name }: { uri: string | null | undefined; name: string }) {
+/** Bannière de profil entière ; rien si l'utilisateur n'en a pas. `card` : carte de profil
+ *  (point focal vertical, hauteur selon la mise en page, effet) ; effets approchés par calques :
+ *  flou natif, voile sombre, fondu par bandes vers `fadeTo`, bichromie = voile de `tint`. */
+export function ProfileBanner({
+  uri, name, card, tint, fadeTo,
+}: {
+  uri: string | null | undefined
+  name: string
+  card?: Pick<ProfileCard, 'banner_y' | 'banner_fx' | 'layout'>
+  tint?: string
+  fadeTo?: string
+}) {
   const t = useT()
-  return <FullBanner uri={uri} minHeight={80} maxHeight={260} style={{ borderRadius: radius.lg }} label={t('settings.profile.bannerA11y', { name })} />
+  const fx = card?.banner_fx ?? 'none'
+  const maxHeight = card?.layout === 'compact' ? 140 : card?.layout === 'wide' ? 320 : 260
+  return (
+    <FullBanner
+      uri={uri}
+      minHeight={80}
+      maxHeight={maxHeight}
+      focus={card ? { x: 50, y: card.banner_y } : undefined}
+      blur={fx === 'blur' ? 12 : undefined}
+      style={{ borderRadius: radius.lg }}
+      label={t('settings.profile.bannerA11y', { name })}
+    >
+      {fx === 'dim' ? <View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.45)' }]} /> : null}
+      {fx === 'duotone' ? <View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: tint ?? colors.primary, opacity: 0.45 }]} /> : null}
+      {fx === 'fade' ? (
+        <View pointerEvents="none" style={styles.fade}>
+          {[0.15, 0.3, 0.45, 0.6, 0.75, 0.9].map((o) => (
+            <View key={o} style={{ flex: 1, backgroundColor: fadeTo ?? colors.bg, opacity: o }} />
+          ))}
+        </View>
+      ) : null}
+    </FullBanner>
+  )
 }
+
+const styles = StyleSheet.create({
+  fade: { position: 'absolute', left: 0, right: 0, bottom: 0, height: '55%' },
+})

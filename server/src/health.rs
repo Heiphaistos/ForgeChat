@@ -73,6 +73,7 @@ fn email_state(state: &AppState) -> &'static str {
 }
 
 /// Octets libres et totaux du disque des fichiers envoyés.
+#[cfg(unix)]
 fn disk(path: &str) -> Option<(u64, u64)> {
     let c = std::ffi::CString::new(path).ok()?;
     let mut s: libc::statvfs = unsafe { std::mem::zeroed() };
@@ -82,6 +83,12 @@ fn disk(path: &str) -> Option<(u64, u64)> {
     }
     let block = s.f_frsize as u64;
     Some((s.f_bavail as u64 * block, s.f_blocks as u64 * block))
+}
+
+/// Hors Unix (poste de dev Windows) : pas de statvfs, disque non mesuré.
+#[cfg(not(unix))]
+fn disk(_path: &str) -> Option<(u64, u64)> {
+    None
 }
 
 /// État global : `down` si la base ou Redis tombent, `degraded` si un service secondaire flanche.
@@ -169,6 +176,7 @@ mod tests {
         assert_eq!(overall(Probe::Up(3), Probe::Up(1), Probe::Down), "degraded");
         assert_eq!(overall(Probe::Up(1500), Probe::Up(1), Probe::Up(2)), "degraded");
         assert_eq!(overall(Probe::Down, Probe::Up(1), Probe::Up(2)), "down");
+        #[cfg(unix)]
         assert!(disk("/").is_some_and(|(f, t)| t >= f && t > 0));
     }
 }

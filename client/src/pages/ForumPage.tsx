@@ -22,6 +22,7 @@ import { completeChannelKeys } from '../e2e/conversations'
 import { openPost, openPosts, sealPost } from '../e2e/channelScopes'
 import { ChannelLock } from '../e2e/ChannelBadge'
 import UserPopup from '../components/UserPopup'
+import ForumGuidelines from '../components/forum/ForumGuidelines'
 import { isToday, isYesterday, format } from 'date-fns'
 
 /** Aperçu de la liste : sans chemins d'images du serveur (affichées dans la publication). */
@@ -30,7 +31,7 @@ const snippet = (c: string | null | undefined) => (c ?? '').replace(/\/uploads\/
 const POST_PAGE = 50
 
 interface Props {
-  channel: { id: string; name: string; topic?: string }
+  channel: { id: string; name: string; topic?: string; post_guidelines?: string | null }
   serverId: string
   channelId: string
   canManageMessages?: boolean
@@ -38,7 +39,7 @@ interface Props {
   media?: boolean
 }
 
-function CreatePostModal({ serverId, channelId, media, onClose }: { serverId: string; channelId: string; media?: boolean; onClose: () => void }) {
+function CreatePostModal({ serverId, channelId, media, guidelines, onClose }: { serverId: string; channelId: string; media?: boolean; guidelines?: string | null; onClose: () => void }) {
   const t = useT()
   const [title, setTitle] = useState('')
   const [mediaFile, setMediaFile] = useState<string | null>(null)
@@ -95,6 +96,7 @@ function CreatePostModal({ serverId, channelId, media, onClose }: { serverId: st
           <button onClick={onClose} aria-label={t('common.close')} className="text-fc-muted hover:text-white transition"><X size={20} aria-hidden /></button>
         </div>
         <div className="p-6 space-y-4">
+          <ForumGuidelines text={guidelines} open />
           {media && (
             <div>
               <span className="block text-xs font-semibold text-fc-muted uppercase tracking-wide mb-1">{t('forum.mediaLabel')}</span>
@@ -404,6 +406,7 @@ export default function ForumPage({ channel, serverId, channelId, canManageMessa
 
       {/* Liste posts */}
       <div className="flex-1 overflow-y-auto overscroll-contain p-4 space-y-3">
+        <ForumGuidelines text={channel.post_guidelines} />
         {/* Skeleton au premier chargement (évite le faux « Aucun post ») */}
         {postsLoading && (
           <div role="status" aria-label={t('forum.loading')} className="space-y-3">
@@ -536,7 +539,7 @@ export default function ForumPage({ channel, serverId, channelId, canManageMessa
       </div>
 
       {showCreate && (
-        <CreatePostModal serverId={serverId} channelId={channelId} media={media} onClose={() => setShowCreate(false)} />
+        <CreatePostModal serverId={serverId} channelId={channelId} media={media} guidelines={channel.post_guidelines} onClose={() => setShowCreate(false)} />
       )}
     </div>
   )

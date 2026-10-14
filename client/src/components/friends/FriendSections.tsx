@@ -9,6 +9,7 @@ import api from '../../api/client'
 import { usePresence } from '../../store/presence'
 import { useT } from '../../i18n'
 import RichStatus from '../ui/RichStatus'
+import TextPromptDialog from '../ui/TextPromptDialog'
 import { upcomingBirthdays, type DayMonth } from '../../utils/birthday'
 import { dayMonthLabel } from '../UserSocialInfo'
 
@@ -61,6 +62,7 @@ export function FriendStatusLine({ friend, fallback }: { friend: SocialFriend; f
 function GroupManager({ groups }: { groups: FriendGroup[] }) {
   const t = useT()
   const [name, setName] = useState('')
+  const [renaming, setRenaming] = useState<FriendGroup | null>(null)
   const create = useGroupMutation((n: string) => api.post('/friends/groups', { name: n }))
   const rename = useGroupMutation(({ id, n }: { id: string; n: string }) => api.put(`/friends/groups/${id}`, { name: n }))
   const remove = useGroupMutation((id: string) => api.delete(`/friends/groups/${id}`))
@@ -80,7 +82,7 @@ function GroupManager({ groups }: { groups: FriendGroup[] }) {
           <button aria-label={t('soc.groups.up')} title={t('soc.groups.up')} onClick={() => move(i, -1)} disabled={i === 0} className="p-1 hover:text-white disabled:opacity-30"><ArrowUp size={14} /></button>
           <button aria-label={t('soc.groups.down')} title={t('soc.groups.down')} onClick={() => move(i, 1)} disabled={i === groups.length - 1} className="p-1 hover:text-white disabled:opacity-30"><ArrowDown size={14} /></button>
           <button aria-label={t('soc.groups.rename')} title={t('soc.groups.rename')} className="p-1 hover:text-white"
-            onClick={() => { const n = window.prompt(t('soc.groups.rename'), g.name)?.trim(); if (n) rename.mutate({ id: g.id, n }) }}><Pencil size={14} /></button>
+            onClick={() => setRenaming(g)}><Pencil size={14} /></button>
           <button aria-label={t('soc.groups.delete')} title={t('soc.groups.delete')} onClick={() => remove.mutate(g.id)} className="p-1 hover:text-fc-red"><Trash2 size={14} /></button>
         </div>
       ))}
@@ -89,6 +91,10 @@ function GroupManager({ groups }: { groups: FriendGroup[] }) {
           aria-label={t('soc.groups.namePh')} className="flex-1 px-2 py-1 bg-fc-input rounded text-sm text-white outline-none focus:ring-1 focus:ring-fc-accent" />
         <button type="submit" disabled={!name.trim() || create.isPending} className="px-3 py-1 bg-fc-accent text-white rounded text-sm disabled:opacity-40">{t('soc.groups.create')}</button>
       </form>
+      {renaming && (
+        <TextPromptDialog title={t('soc.groups.rename')} label={t('soc.groups.namePh')} initial={renaming.name} maxLength={64}
+          onSubmit={n => { rename.mutate({ id: renaming.id, n }); setRenaming(null) }} onClose={() => setRenaming(null)} />
+      )}
     </div>
   )
 }

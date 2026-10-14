@@ -16,6 +16,7 @@ import {
 } from '@/api/admin'
 import { Button, EmptyState, ErrorState, Loading, Row, Section, TextField } from '@/components/ui'
 import { apiOrigin } from '@/config/env'
+import { dateLocale, t as tr, useT, type Key } from '@/i18n'
 import { errorMessage } from '@/lib/http'
 import { queryClient } from '@/lib/queryClient'
 import { colors, font, radius, spacing } from '@/theme'
@@ -24,65 +25,41 @@ import { useSiteAdmin } from './useSiteAdmin'
 /** Administration du site (rôle El Patron) : aperçu, comptes, invitations, réglages, journal. */
 
 type Tab = 'overview' | 'users' | 'servers' | 'invites' | 'settings' | 'audit'
-const TABS: [Tab, string][] = [
-  ['overview', 'Aperçu'],
-  ['users', 'Comptes'],
-  ['servers', 'Serveurs'],
-  ['invites', 'Invitations'],
-  ['settings', 'Réglages'],
-  ['audit', 'Journal'],
-]
-const FILTERS: [UserFilter, string][] = [
-  ['all', 'Tous'],
-  ['online', 'Connectés'],
-  ['recent', 'Récents'],
-  ['banned', 'Bannis'],
-  ['patrons', 'El Patron'],
-]
-const MODES: Record<RegistrationMode, string> = {
-  invite: 'Sur invitation (code obligatoire)',
-  closed: 'Fermées',
-  open: 'Ouvertes à tous (déconseillé)',
-}
-const ACTIONS: Record<string, string> = {
-  ban: 'a banni',
-  unban: 'a débanni',
-  force_logout: 'a déconnecté',
-  create_invite: 'a créé une invitation',
-  revoke_invite: 'a révoqué une invitation',
-  grant_patron: 'a donné le rôle El Patron à',
-  revoke_patron: 'a retiré le rôle El Patron à',
-  set_registration_mode: 'a changé le mode d’inscription',
-  supervise_server: 'supervise le serveur',
-  end_supervision: 'a terminé la supervision de',
-  suspend_server: 'a suspendu le serveur',
-  unsuspend_server: 'a rétabli le serveur',
-  delete_server: 'a supprimé le serveur',
-}
-const STATUS: Record<Invite['status'], string> = { active: 'Active', used: 'Utilisée', expired: 'Expirée', revoked: 'Révoquée' }
+const TABS: Tab[] = ['overview', 'users', 'servers', 'invites', 'settings', 'audit']
+const FILTERS: UserFilter[] = ['all', 'online', 'recent', 'banned', 'patrons']
+const MODES: RegistrationMode[] = ['invite', 'closed', 'open']
+/** Actions connues du journal (libellé traduit) ; une action inconnue s'affiche telle quelle. */
+const ACTIONS = new Set([
+  'ban', 'unban', 'force_logout', 'create_invite', 'revoke_invite', 'grant_patron', 'revoke_patron',
+  'set_registration_mode', 'supervise_server', 'end_supervision', 'suspend_server', 'unsuspend_server', 'delete_server',
+])
+const actionLabel = (a: string) => (ACTIONS.has(a) ? tr(`sadmin.action.${a}` as Key) : a)
+const statusLabel = (s: Invite['status']) => tr(`sadmin.status.${s}` as Key)
 
-const fmt = (iso: string | null) => (iso ? new Date(iso).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' }) : '—')
+const fmt = (iso: string | null) => (iso ? new Date(iso).toLocaleString(dateLocale(), { dateStyle: 'short', timeStyle: 'short' }) : '—')
+const num = (n: number) => n.toLocaleString(dateLocale())
 const refresh = () => void queryClient.invalidateQueries({ queryKey: ['site-admin'] })
-const fail = (e: unknown) => Alert.alert('Action impossible', errorMessage(e))
+const fail = (e: unknown) => Alert.alert(tr('sadmin.failed'), errorMessage(e))
 
 function OverviewTab() {
+  const t = useT()
   const q = useQuery({ queryKey: ['site-admin', 'overview'], queryFn: adminApi.overview, refetchInterval: 30_000 })
   if (q.isLoading) return <Loading />
   if (q.error || !q.data) return <ErrorState message={errorMessage(q.error)} onRetry={() => void q.refetch()} />
   const d = q.data
-  const mode = d.registration_mode === 'invite' ? 'Sur invitation' : d.registration_mode === 'closed' ? 'Fermées' : 'Ouvertes'
+  const value = (n: number | string) => <Text style={styles.value}>{typeof n === 'number' ? num(n) : n}</Text>
   return (
     <Section>
-      <Row icon="people-outline" title="Comptes" right={<Text style={styles.value}>{d.total_users}</Text>} />
-      <Row icon="radio-button-on-outline" title="Connectés maintenant" right={<Text style={styles.value}>{d.online_now}</Text>} />
-      <Row icon="pulse-outline" title="Actifs sur 24 h" subtitle={`${d.active_7d} sur 7 jours`} right={<Text style={styles.value}>{d.active_24h}</Text>} />
-      <Row icon="person-add-outline" title="Nouveaux (7 jours)" subtitle={`${d.new_24h} en 24 h · ${d.new_30d} en 30 j`} right={<Text style={styles.value}>{d.new_7d}</Text>} />
-      <Row icon="ban-outline" title="Bannis" right={<Text style={styles.value}>{d.banned}</Text>} />
-      <Row icon="ribbon-outline" title="El Patron" subtitle="propriétaire inclus" right={<Text style={styles.value}>{d.patrons + 1}</Text>} />
-      <Row icon="server-outline" title="Serveurs" right={<Text style={styles.value}>{d.servers}</Text>} />
-      <Row icon="chatbubbles-outline" title="Messages" right={<Text style={styles.value}>{d.messages.toLocaleString('fr-FR')}</Text>} />
-      <Row icon="ticket-outline" title="Invitations actives" right={<Text style={styles.value}>{d.active_invites}</Text>} />
-      <Row icon="lock-closed-outline" title="Inscriptions" right={<Text style={styles.value}>{mode}</Text>} />
+      <Row icon="people-outline" title={t('sadmin.ov.accounts')} right={value(d.total_users)} />
+      <Row icon="radio-button-on-outline" title={t('sadmin.ov.online')} right={value(d.online_now)} />
+      <Row icon="pulse-outline" title={t('sadmin.ov.active24')} subtitle={t('sadmin.ov.active7', { n: d.active_7d })} right={value(d.active_24h)} />
+      <Row icon="person-add-outline" title={t('sadmin.ov.new7')} subtitle={t('sadmin.ov.newSub', { d: d.new_24h, m: d.new_30d })} right={value(d.new_7d)} />
+      <Row icon="ban-outline" title={t('sadmin.ov.banned')} right={value(d.banned)} />
+      <Row icon="ribbon-outline" title={t('sadmin.ov.patrons')} subtitle={t('sadmin.ov.patronsSub')} right={value(d.patrons + 1)} />
+      <Row icon="server-outline" title={t('sadmin.ov.servers')} right={value(d.servers)} />
+      <Row icon="chatbubbles-outline" title={t('sadmin.ov.messages')} right={value(d.messages)} />
+      <Row icon="ticket-outline" title={t('sadmin.ov.invites')} right={value(d.active_invites)} />
+      <Row icon="lock-closed-outline" title={t('sadmin.ov.registration')} right={value(t(`sadmin.modeShort.${d.registration_mode}`))} />
     </Section>
   )
 }
@@ -107,6 +84,7 @@ function PromptModal({
   onClose: () => void
   onConfirm: (value: string) => void
 }) {
+  const t = useT()
   const [value, setValue] = useState('')
   const close = () => {
     setValue('')
@@ -120,7 +98,7 @@ function PromptModal({
           <Text style={styles.muted}>{message}</Text>
           <TextField label={label} value={value} onChangeText={setValue} maxLength={300} secureTextEntry={secure} autoCapitalize="none" autoCorrect={false} />
           <View style={{ flexDirection: 'row', gap: spacing.md }}>
-            <Button title="Annuler" variant="secondary" style={{ flex: 1 }} onPress={close} />
+            <Button title={t('common.cancel')} variant="secondary" style={{ flex: 1 }} onPress={close} />
             <Button
               title={confirmLabel}
               variant="danger"
@@ -137,7 +115,21 @@ function PromptModal({
   )
 }
 
+/** Pastilles de filtre défilantes. */
+function Pills<T extends string>({ items, value, onChange, label, role = 'button' }: { items: readonly T[]; value: T; onChange: (v: T) => void; label: (v: T) => string; role?: 'button' | 'tab' }) {
+  return (
+    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: spacing.sm }}>
+      {items.map((id) => (
+        <Pressable key={id} onPress={() => onChange(id)} accessibilityRole={role} accessibilityState={{ selected: value === id }} style={[styles.pill, value === id && styles.pillOn]}>
+          <Text style={[styles.pillText, value === id && { color: '#fff' }]}>{label(id)}</Text>
+        </Pressable>
+      ))}
+    </ScrollView>
+  )
+}
+
 function UsersTab() {
+  const t = useT()
   const { owner } = useSiteAdmin()
   const [q, setQ] = useState('')
   const [filter, setFilter] = useState<UserFilter>('all')
@@ -145,49 +137,58 @@ function UsersTab() {
   const list = useQuery({ queryKey: ['site-admin', 'users', q, filter], queryFn: () => adminApi.users(q, filter), placeholderData: (p) => p })
   const ban = useMutation({ mutationFn: ({ id, reason }: { id: string; reason: string }) => adminApi.ban(id, reason), onSuccess: refresh, onError: fail })
   const unban = useMutation({ mutationFn: adminApi.unban, onSuccess: refresh, onError: fail })
-  const logout = useMutation({ mutationFn: adminApi.forceLogout, onSuccess: () => { refresh(); Alert.alert('Appareils déconnectés') }, onError: fail })
+  const logout = useMutation({ mutationFn: adminApi.forceLogout, onSuccess: () => { refresh(); Alert.alert(t('sadmin.loggedOut')) }, onError: fail })
   const patron = useMutation({ mutationFn: ({ id, on }: { id: string; on: boolean }) => adminApi.setPatron(id, on), onSuccess: refresh, onError: fail })
 
   const actions = (u: AdminUser) => {
     const buttons: { text: string; style?: 'destructive' | 'cancel'; onPress?: () => void }[] = []
-    if (u.banned_at) buttons.push({ text: 'Débannir', onPress: () => unban.mutate(u.id) })
-    else if (!u.is_patron) buttons.push({ text: 'Bannir…', style: 'destructive', onPress: () => setBanTarget(u) })
-    if (!u.is_bot) buttons.push({ text: 'Déconnecter partout', onPress: () => logout.mutate(u.id) })
+    if (u.banned_at) buttons.push({ text: t('sadmin.u.unban'), onPress: () => unban.mutate(u.id) })
+    else if (!u.is_patron) buttons.push({ text: t('sadmin.u.ban'), style: 'destructive', onPress: () => setBanTarget(u) })
+    if (!u.is_bot) buttons.push({ text: t('sadmin.u.logout'), onPress: () => logout.mutate(u.id) })
     if (owner && !u.is_owner && !u.is_bot && !u.banned_at) {
       buttons.push({
-        text: u.is_patron ? 'Retirer le rôle El Patron' : 'Donner le rôle El Patron',
+        text: u.is_patron ? t('sadmin.u.revokePatron') : t('sadmin.u.grantPatron'),
         onPress: () =>
           Alert.alert(
-            u.is_patron ? 'Retirer le rôle ?' : 'Donner le rôle El Patron ?',
-            u.is_patron ? u.username : `${u.username} aura accès à toute l’administration et tous les pouvoirs, partout.`,
-            [{ text: 'Annuler', style: 'cancel' }, { text: 'Confirmer', onPress: () => patron.mutate({ id: u.id, on: !u.is_patron }) }],
+            u.is_patron ? t('sadmin.u.revokeTitle') : t('sadmin.u.grantTitle'),
+            u.is_patron ? u.username : t('sadmin.u.grantBody', { name: u.username }),
+            [{ text: t('common.cancel'), style: 'cancel' }, { text: t('common.confirm'), onPress: () => patron.mutate({ id: u.id, on: !u.is_patron }) }],
           ),
       })
     }
-    buttons.push({ text: 'Fermer', style: 'cancel' })
+    buttons.push({ text: t('common.close'), style: 'cancel' })
     Alert.alert(u.username, u.email, buttons)
+  }
+
+  const title = (u: AdminUser) =>
+    [u.username, u.is_owner ? t('sadmin.u.owner') : u.is_patron ? t('sadmin.u.patron') : '', u.banned_at ? t('sadmin.u.bannedTag') : '', u.is_bot ? t('sadmin.u.bot') : '']
+      .filter(Boolean)
+      .join(' · ')
+  const subtitle = (u: AdminUser) => {
+    const invited = u.invited_by ? `${t('sadmin.u.invitedBy', { name: u.invited_by })}${u.invite_note ? ` (« ${u.invite_note} »)` : ''}` : t('sadmin.u.noInvite')
+    const lines = [
+      u.email,
+      `${t('sadmin.u.joined', { date: fmt(u.created_at) })} · ${invited}`,
+      `${t('sadmin.u.seen', { when: u.online ? t('sadmin.u.onlineNow') : fmt(u.last_seen) })} · ${t('sadmin.u.stats', { servers: u.server_count, messages: u.message_count })}`,
+    ]
+    if (u.banned_at) lines.push(`${t('sadmin.u.bannedOn', { date: fmt(u.banned_at) })}${u.ban_reason ? ` — ${u.ban_reason}` : ''}`)
+    return lines.join('\n')
   }
 
   return (
     <View style={{ gap: spacing.md }}>
-      <TextField label="Rechercher" value={q} onChangeText={setQ} autoCapitalize="none" autoCorrect={false} placeholder="Pseudo, e-mail ou identifiant" />
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: spacing.sm }}>
-        {FILTERS.map(([id, label]) => (
-          <Pressable key={id} onPress={() => setFilter(id)} accessibilityRole="button" accessibilityState={{ selected: filter === id }} style={[styles.pill, filter === id && styles.pillOn]}>
-            <Text style={[styles.pillText, filter === id && { color: '#fff' }]}>{label}</Text>
-          </Pressable>
-        ))}
-      </ScrollView>
+      <TextField label={t('sadmin.search')} value={q} onChangeText={setQ} autoCapitalize="none" autoCorrect={false} placeholder={t('sadmin.u.searchPh')} />
+      <Pills items={FILTERS} value={filter} onChange={setFilter} label={(f) => t(`sadmin.filter.${f}`)} />
       {list.isLoading ? <Loading /> : list.error ? <ErrorState message={errorMessage(list.error)} onRetry={() => void list.refetch()} /> : (
         <>
-          <Text style={styles.muted}>{list.data?.total ?? 0} compte(s)</Text>
+          <Text style={styles.muted}>{t('sadmin.u.count', { n: list.data?.total ?? 0 })}</Text>
           <Section>
             {list.data?.users.map((u) => (
               <Row
                 key={u.id}
                 icon={u.online ? 'radio-button-on' : 'radio-button-off-outline'}
-                title={`${u.username}${u.is_owner ? ' · PROPRIÉTAIRE' : u.is_patron ? ' · EL PATRON' : ''}${u.banned_at ? ' · BANNI' : ''}${u.is_bot ? ' · BOT' : ''}`}
-                subtitle={`${u.email}\nInscrit le ${fmt(u.created_at)} · ${u.invited_by ? `invité par ${u.invited_by}${u.invite_note ? ` (« ${u.invite_note} »)` : ''}` : 'sans invitation'}\nVu : ${u.online ? 'en ligne' : fmt(u.last_seen)} · ${u.server_count} serveur(s) · ${u.message_count} msg${u.banned_at ? `\nBanni le ${fmt(u.banned_at)}${u.ban_reason ? ` — ${u.ban_reason}` : ''}` : ''}`}
+                title={title(u)}
+                subtitle={subtitle(u)}
                 danger={!!u.banned_at}
                 onPress={() => actions(u)}
                 chevron
@@ -198,10 +199,10 @@ function UsersTab() {
       )}
       <PromptModal
         visible={!!banTarget}
-        title={`Bannir ${banTarget?.username ?? ''} ?`}
-        message="Le compte est déconnecté partout et ne peut plus se reconnecter. Motif (facultatif) :"
-        label="Motif"
-        confirmLabel="Bannir"
+        title={t('sadmin.u.banTitle', { name: banTarget?.username ?? '' })}
+        message={t('sadmin.u.banBody')}
+        label={t('sadmin.reason')}
+        confirmLabel={t('sadmin.u.banConfirm')}
         onClose={() => setBanTarget(null)}
         onConfirm={(reason) => {
           if (banTarget) ban.mutate({ id: banTarget.id, reason })
@@ -212,16 +213,13 @@ function UsersTab() {
   )
 }
 
-const SERVER_FILTERS: [ServerFilter, string][] = [
-  ['all', 'Tous'],
-  ['public', 'Publics'],
-  ['suspended', 'Suspendus'],
-  ['supervised', 'Supervisés'],
-]
-const sizeLabel = (n: number) => (n >= 1e9 ? `${(n / 1e9).toFixed(1)} Go` : n >= 1e6 ? `${(n / 1e6).toFixed(1)} Mo` : `${Math.round(n / 1e3)} Ko`)
+const SERVER_FILTERS: ServerFilter[] = ['all', 'public', 'suspended', 'supervised']
+const sizeLabel = (n: number) =>
+  n >= 1e9 ? tr('sadmin.size.gb', { n: (n / 1e9).toFixed(1) }) : n >= 1e6 ? tr('sadmin.size.mb', { n: (n / 1e6).toFixed(1) }) : tr('sadmin.size.kb', { n: Math.round(n / 1e3) })
 
 /** Modération de l'instance : supervision visible, suspension, suppression. */
 function ServersTab() {
+  const t = useT()
   const [q, setQ] = useState('')
   const [filter, setFilter] = useState<ServerFilter>('all')
   const [suspendTarget, setSuspendTarget] = useState<AdminServer | null>(null)
@@ -239,39 +237,42 @@ function ServersTab() {
 
   const actions = (s: AdminServer) => {
     const buttons: { text: string; style?: 'destructive' | 'cancel'; onPress?: () => void }[] = []
-    if (s.joined && !s.supervising) buttons.push({ text: 'Ouvrir', onPress: () => router.push(`/server/${s.id}`) })
-    else buttons.push({ text: s.supervising ? 'Ouvrir (supervision)' : 'Superviser', onPress: () => (s.supervising ? router.push(`/server/${s.id}`) : supervise.mutate(s.id)) })
-    if (s.supervising) buttons.push({ text: 'Terminer la supervision', onPress: () => endSup.mutate(s.id) })
-    if (s.suspended_at) buttons.push({ text: 'Rétablir', onPress: () => resume.mutate(s.id) })
-    else buttons.push({ text: 'Suspendre…', onPress: () => setSuspendTarget(s) })
-    buttons.push({ text: 'Supprimer…', style: 'destructive', onPress: () => setDeleteTarget(s) })
-    buttons.push({ text: 'Fermer', style: 'cancel' })
-    Alert.alert(s.name, `${s.members} membre(s) · propriétaire ${s.owner ?? '—'}`, buttons)
+    if (s.joined && !s.supervising) buttons.push({ text: t('sadmin.s.open'), onPress: () => router.push(`/server/${s.id}`) })
+    else buttons.push({ text: s.supervising ? t('sadmin.s.openSupervised') : t('sadmin.s.supervise'), onPress: () => (s.supervising ? router.push(`/server/${s.id}`) : supervise.mutate(s.id)) })
+    if (s.supervising) buttons.push({ text: t('sadmin.s.endSupervision'), onPress: () => endSup.mutate(s.id) })
+    if (s.suspended_at) buttons.push({ text: t('sadmin.s.resume'), onPress: () => resume.mutate(s.id) })
+    else buttons.push({ text: t('sadmin.s.suspend'), onPress: () => setSuspendTarget(s) })
+    buttons.push({ text: t('sadmin.s.delete'), style: 'destructive', onPress: () => setDeleteTarget(s) })
+    buttons.push({ text: t('common.close'), style: 'cancel' })
+    Alert.alert(s.name, t('sadmin.s.summary', { n: s.members, owner: s.owner ?? '—' }), buttons)
+  }
+
+  const title = (s: AdminServer) =>
+    [s.name, s.is_public ? t('sadmin.s.publicTag') : '', s.suspended_at ? t('sadmin.s.suspendedTag') : '', s.supervising ? t('sadmin.s.supervisedTag') : ''].filter(Boolean).join(' · ')
+  const subtitle = (s: AdminServer) => {
+    const lines = [
+      t('sadmin.s.ownerLine', { owner: s.owner ?? '—', date: fmt(s.created_at) }),
+      t('sadmin.s.stats', { members: s.members, channels: s.channels, messages: num(s.messages), size: sizeLabel(s.storage_bytes) }),
+    ]
+    if (s.suspended_at) lines.push(`${t('sadmin.s.suspendedOn', { date: fmt(s.suspended_at) })}${s.suspended_reason ? ` — ${s.suspended_reason}` : ''}`)
+    return lines.join('\n')
   }
 
   return (
     <View style={{ gap: spacing.md }}>
-      <Text style={styles.muted}>
-        La supervision vous ajoute comme membre visible du serveur (inscrite dans son journal d’audit). Les messages privés et les salons chiffrés de bout en bout restent illisibles.
-      </Text>
-      <TextField label="Rechercher" value={q} onChangeText={setQ} autoCapitalize="none" autoCorrect={false} placeholder="Nom, propriétaire ou identifiant" />
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: spacing.sm }}>
-        {SERVER_FILTERS.map(([id, label]) => (
-          <Pressable key={id} onPress={() => setFilter(id)} accessibilityRole="button" accessibilityState={{ selected: filter === id }} style={[styles.pill, filter === id && styles.pillOn]}>
-            <Text style={[styles.pillText, filter === id && { color: '#fff' }]}>{label}</Text>
-          </Pressable>
-        ))}
-      </ScrollView>
+      <Text style={styles.muted}>{t('sadmin.s.intro')}</Text>
+      <TextField label={t('sadmin.search')} value={q} onChangeText={setQ} autoCapitalize="none" autoCorrect={false} placeholder={t('sadmin.s.searchPh')} />
+      <Pills items={SERVER_FILTERS} value={filter} onChange={setFilter} label={(f) => t(`sadmin.filter.${f}`)} />
       {list.isLoading ? <Loading /> : list.error ? <ErrorState message={errorMessage(list.error)} onRetry={() => void list.refetch()} /> : (
         <>
-          <Text style={styles.muted}>{list.data?.total ?? 0} serveur(s)</Text>
+          <Text style={styles.muted}>{t('sadmin.s.count', { n: list.data?.total ?? 0 })}</Text>
           <Section>
             {list.data?.servers.map((s) => (
               <Row
                 key={s.id}
                 icon={s.suspended_at ? 'pause-circle-outline' : s.supervising ? 'eye-outline' : 'server-outline'}
-                title={`${s.name}${s.is_public ? ' · PUBLIC' : ''}${s.suspended_at ? ' · SUSPENDU' : ''}${s.supervising ? ' · SUPERVISÉ' : ''}`}
-                subtitle={`Propriétaire : ${s.owner ?? '—'} · créé le ${fmt(s.created_at)}\n${s.members} membre(s) · ${s.channels} salon(s) · ${s.messages.toLocaleString('fr-FR')} message(s) · ${sizeLabel(s.storage_bytes)}${s.suspended_at ? `\nSuspendu le ${fmt(s.suspended_at)}${s.suspended_reason ? ` — ${s.suspended_reason}` : ''}` : ''}`}
+                title={title(s)}
+                subtitle={subtitle(s)}
                 danger={!!s.suspended_at}
                 onPress={() => actions(s)}
                 chevron
@@ -282,10 +283,10 @@ function ServersTab() {
       )}
       <PromptModal
         visible={!!suspendTarget}
-        title={`Suspendre ${suspendTarget?.name ?? ''} ?`}
-        message="Ses membres n’y ont plus accès jusqu’au rétablissement. Motif (facultatif) :"
-        label="Motif"
-        confirmLabel="Suspendre"
+        title={t('sadmin.s.suspendTitle', { name: suspendTarget?.name ?? '' })}
+        message={t('sadmin.s.suspendBody')}
+        label={t('sadmin.reason')}
+        confirmLabel={t('sadmin.s.suspendConfirm')}
         onClose={() => setSuspendTarget(null)}
         onConfirm={(reason) => {
           if (suspendTarget) suspend.mutate({ id: suspendTarget.id, reason })
@@ -294,10 +295,10 @@ function ServersTab() {
       />
       <PromptModal
         visible={!!deleteTarget}
-        title={`Supprimer ${deleteTarget?.name ?? ''} ?`}
-        message="Suppression définitive : salons, messages et fichiers disparaissent. Confirmez avec votre mot de passe."
-        label="Votre mot de passe"
-        confirmLabel="Supprimer"
+        title={t('sadmin.s.deleteTitle', { name: deleteTarget?.name ?? '' })}
+        message={t('sadmin.s.deleteBody')}
+        label={t('sadmin.s.password')}
+        confirmLabel={t('sadmin.s.deleteConfirm')}
         secure
         onClose={() => setDeleteTarget(null)}
         onConfirm={(password) => {
@@ -310,6 +311,7 @@ function ServersTab() {
 }
 
 function InvitesTab() {
+  const t = useT()
   const [note, setNote] = useState('')
   const [uses, setUses] = useState('1')
   const [days, setDays] = useState('7')
@@ -321,8 +323,8 @@ function InvitesTab() {
       refresh()
       const link = inviteLink(apiOrigin(), r.code)
       await Clipboard.setStringAsync(link)
-      Alert.alert('Invitation créée', `${r.code}\n\nLe lien est copié : envoie-le à la personne.`, [
-        { text: 'Partager', onPress: () => void Share.share({ message: `Rejoins ForgeChat : ${link}` }) },
+      Alert.alert(t('sadmin.i.created'), t('sadmin.i.createdBody', { code: r.code }), [
+        { text: t('sadmin.i.share'), onPress: () => void Share.share({ message: t('sadmin.i.shareMessage', { link }) }) },
         { text: 'OK' },
       ])
     },
@@ -332,29 +334,29 @@ function InvitesTab() {
 
   return (
     <View style={{ gap: spacing.md }}>
-      <Section title="Nouvelle invitation">
+      <Section title={t('sadmin.i.new')}>
         <View style={{ padding: spacing.md, gap: spacing.md }}>
-          <TextField label="Pour qui ? (note privée)" value={note} onChangeText={setNote} maxLength={100} placeholder="ex. Cousine Léa" />
+          <TextField label={t('sadmin.i.note')} value={note} onChangeText={setNote} maxLength={100} placeholder={t('sadmin.i.notePh')} />
           <View style={{ flexDirection: 'row', gap: spacing.md }}>
-            <View style={{ flex: 1 }}><TextField label="Utilisations" value={uses} onChangeText={setUses} keyboardType="number-pad" /></View>
-            <View style={{ flex: 1 }}><TextField label="Valable (jours, 0 = illimité)" value={days} onChangeText={setDays} keyboardType="number-pad" /></View>
+            <View style={{ flex: 1 }}><TextField label={t('sadmin.i.uses')} value={uses} onChangeText={setUses} keyboardType="number-pad" /></View>
+            <View style={{ flex: 1 }}><TextField label={t('sadmin.i.days')} value={days} onChangeText={setDays} keyboardType="number-pad" /></View>
           </View>
-          <Button title="Générer et copier le lien" icon="add-circle-outline" onPress={() => create.mutate()} loading={create.isPending} />
+          <Button title={t('sadmin.i.generate')} icon="add-circle-outline" onPress={() => create.mutate()} loading={create.isPending} />
         </View>
       </Section>
       {list.isLoading ? <Loading /> : list.error ? <ErrorState message={errorMessage(list.error)} onRetry={() => void list.refetch()} /> : (
-        <Section title="Invitations">
-          {list.data?.invites.length === 0 ? <EmptyState icon="ticket-outline" title="Aucune invitation" /> : null}
+        <Section title={t('sadmin.i.list')}>
+          {list.data?.invites.length === 0 ? <EmptyState icon="ticket-outline" title={t('sadmin.i.empty')} /> : null}
           {list.data?.invites.map((i) => (
             <Row
               key={i.id}
               icon="ticket-outline"
               title={i.code}
-              subtitle={`${STATUS[i.status]} · ${i.uses}/${i.max_uses}${i.note ? ` · ${i.note}` : ''}${i.used_by.length ? `\n→ ${i.used_by.map((u) => u.username).join(', ')}` : ''}\n${i.expires_at ? `expire le ${fmt(i.expires_at)}` : 'sans expiration'}`}
+              subtitle={`${statusLabel(i.status)} · ${i.uses}/${i.max_uses}${i.note ? ` · ${i.note}` : ''}${i.used_by.length ? `\n→ ${i.used_by.map((u) => u.username).join(', ')}` : ''}\n${i.expires_at ? t('sadmin.i.expires', { date: fmt(i.expires_at) }) : t('sadmin.i.noExpiry')}`}
               onPress={() =>
-                Alert.alert(i.code, STATUS[i.status], [
-                  ...(i.status === 'active' ? [{ text: 'Révoquer', style: 'destructive' as const, onPress: () => revoke.mutate(i.id) }] : []),
-                  { text: 'Fermer', style: 'cancel' as const },
+                Alert.alert(i.code, statusLabel(i.status), [
+                  ...(i.status === 'active' ? [{ text: t('sadmin.i.revoke'), style: 'destructive' as const, onPress: () => revoke.mutate(i.id) }] : []),
+                  { text: t('common.close'), style: 'cancel' as const },
                 ])
               }
               chevron
@@ -367,31 +369,33 @@ function InvitesTab() {
 }
 
 function SettingsTab() {
+  const t = useT()
   const q = useQuery({ queryKey: ['site-admin', 'overview'], queryFn: adminApi.overview })
   const save = useMutation({ mutationFn: adminApi.setMode, onSuccess: refresh, onError: fail })
   if (q.isLoading) return <Loading />
   return (
-    <Section title="Qui peut créer un compte ?" footer="Les comptes existants ne sont pas affectés. Un code d’invitation ne fonctionne qu’en mode « sur invitation ».">
-      {(Object.keys(MODES) as RegistrationMode[]).map((m) => (
-        <Row key={m} title={MODES[m]} selected={q.data?.registration_mode === m} icon={q.data?.registration_mode === m ? 'radio-button-on' : 'radio-button-off-outline'} onPress={() => save.mutate(m)} />
+    <Section title={t('sadmin.settings.title')} footer={t('sadmin.settings.footer')}>
+      {MODES.map((m) => (
+        <Row key={m} title={t(`sadmin.mode.${m}`)} selected={q.data?.registration_mode === m} icon={q.data?.registration_mode === m ? 'radio-button-on' : 'radio-button-off-outline'} onPress={() => save.mutate(m)} />
       ))}
     </Section>
   )
 }
 
 function AuditTab() {
+  const t = useT()
   const q = useQuery({ queryKey: ['site-admin', 'audit'], queryFn: adminApi.audit })
   if (q.isLoading) return <Loading />
   if (q.error) return <ErrorState message={errorMessage(q.error)} onRetry={() => void q.refetch()} />
   const entries: AuditEntry[] = q.data?.entries ?? []
-  if (entries.length === 0) return <EmptyState icon="list-outline" title="Aucune action enregistrée" />
+  if (entries.length === 0) return <EmptyState icon="list-outline" title={t('sadmin.audit.empty')} />
   return (
     <Section>
       {entries.map((e) => (
         <Row
           key={e.id}
           icon="time-outline"
-          title={`${e.admin ?? 'Administrateur supprimé'} ${ACTIONS[e.action] ?? e.action}${e.target ? ` ${e.target}` : ''}${e.detail?.server ? ` ${e.detail.server}` : ''}`}
+          title={`${e.admin ?? t('sadmin.audit.deletedAdmin')} ${actionLabel(e.action)}${e.target ? ` ${e.target}` : ''}${e.detail?.server ? ` ${e.detail.server}` : ''}`}
           subtitle={`${fmt(e.created_at)}${e.detail?.reason ? ` — ${e.detail.reason}` : ''}${e.detail?.mode ? ` → ${e.detail.mode}` : ''}`}
         />
       ))}
@@ -400,19 +404,14 @@ function AuditTab() {
 }
 
 export default function AdminScreen() {
+  const t = useT()
   const { admin } = useSiteAdmin()
   const [tab, setTab] = useState<Tab>('overview')
   // Sans le rôle : rien à voir (le serveur refuse de toute façon).
   if (!admin) return <View style={{ flex: 1, backgroundColor: colors.bg }} />
   return (
     <ScrollView style={{ backgroundColor: colors.bg }} contentContainerStyle={{ padding: spacing.lg, gap: spacing.md }} keyboardShouldPersistTaps="handled">
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: spacing.sm }}>
-        {TABS.map(([id, label]) => (
-          <Pressable key={id} onPress={() => setTab(id)} accessibilityRole="tab" accessibilityState={{ selected: tab === id }} style={[styles.pill, tab === id && styles.pillOn]}>
-            <Text style={[styles.pillText, tab === id && { color: '#fff' }]}>{label}</Text>
-          </Pressable>
-        ))}
-      </ScrollView>
+      <Pills items={TABS} value={tab} onChange={setTab} label={(id) => t(`sadmin.tab.${id}`)} role="tab" />
       {tab === 'overview' && <OverviewTab />}
       {tab === 'users' && <UsersTab />}
       {tab === 'servers' && <ServersTab />}

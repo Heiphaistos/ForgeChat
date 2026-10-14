@@ -205,11 +205,14 @@ impl AppState {
     // clés par canal si l'écriture complète devient un point chaud.
 
     pub async fn persist_voice_to_redis(&self) {
+        // Verrous pris l'un après l'autre (jamais voice_rooms puis user_voice
+        // ensemble : `voice_join` les prend dans l'ordre inverse -> interblocage).
+        let rooms = self.voice_rooms.read().await.iter()
+            .filter(|(_, m)| !m.is_empty())
+            .map(|(c, m)| (*c, m.iter().copied().collect()))
+            .collect();
         let snap = VoiceSnapshot {
-            rooms: self.voice_rooms.read().await.iter()
-                .filter(|(_, m)| !m.is_empty())
-                .map(|(c, m)| (*c, m.iter().copied().collect()))
-                .collect(),
+            rooms,
             user_voice: self.user_voice.read().await.clone(),
             states: self.voice_states.read().await.clone(),
         };
@@ -454,31 +457,32 @@ impl AppState {
     // Rejoindre un salon vocal — retourne les user_ids déjà présents
     /// Rejoindre un salon vocal. Retourne `None` si la limite est atteinte.
     pub async fn voice_join(&self, user_id: Uuid, channel_id: Uuid, max_users: Option<usize>) -> Option<Vec<Uuid>> {
-        // Auto-leave de l'ancien salon si nécessaire
-        {
-            let mut user_voice = self.user_voice.write().await;
-            if let Some(old_ch) = user_voice.get(&user_id).copied() {
-                if old_ch != channel_id {
-                    let mut rooms = self.voice_rooms.write().await;
-                    if let Some(room) = rooms.get_mut(&old_ch) {
-                        room.remove(&user_id);
-                    }
-                }
-            }
-            user_voice.insert(user_id, channel_id);
-        }
-
+        // Les deux verrous (même ordre qu'avant : user_voice puis voice_rooms) sont
+        // tenus ensemble : limite vérifiée AVANT toute écriture. Avant, user_voice
+        // était mis à jour puis le salon plein refusait l'entrée : l'utilisateur
+        // restait « fantôme » dans un salon où il n'était pas, et sortait de l'ancien.
+        let mut user_voice = self.user_voice.write().await;
         let mut rooms = self.voice_rooms.write().await;
-        let room = rooms.entry(channel_id).or_insert_with(HashSet::new);
-        // Vérification atomique de la limite (dans le write lock pour éviter la race condition)
-        if let Some(limit) = max_users {
-            if limit > 0 && !room.contains(&user_id) && room.len() >= limit {
+        if let Some(limit) = max_users.filter(|&l| l > 0) {
+            let target = rooms.get(&channel_id);
+            let inside = target.is_some_and(|r| r.contains(&user_id));
+            if !inside && target.map_or(0, HashSet::len) >= limit {
                 return None;
             }
         }
+        // Auto-leave de l'ancien salon si nécessaire
+        if let Some(old_ch) = user_voice.insert(user_id, channel_id) {
+            if old_ch != channel_id {
+                if let Some(room) = rooms.get_mut(&old_ch) {
+                    room.remove(&user_id);
+                }
+            }
+        }
+        let room = rooms.entry(channel_id).or_default();
         let existing: Vec<Uuid> = room.iter().filter(|&&u| u != user_id).copied().collect();
         room.insert(user_id);
         drop(rooms);
+        drop(user_voice);
         self.persist_voice_to_redis().await;
         crate::handlers::presence::call_changed(self, vec![user_id]);
         crate::handlers::badges::voice_together(self, existing.iter().copied().chain([user_id]).collect());

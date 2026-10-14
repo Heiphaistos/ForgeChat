@@ -1,0 +1,163 @@
+/* Petits écrans : téléphone (< 768 px, breakpoint md de Tailwind) et tablette / téléphone en
+   paysage (< 1024 px, breakpoint lg), portrait et paysage.
+   Correctifs de mise en page regroupés ici plutôt que dans les gros composants.
+   Vérifié par scripts/responsive.playwright.mjs (aucun défilement horizontal). */
+
+/* ── Toutes tailles : un nom long se coupe avec « … » au lieu de recouvrir ses voisins ── */
+.fc-chat-header > .truncate,
+.fc-chat-header > .min-w-0 { flex: 1 1 4.5rem; min-width: 4.5rem; }
+.fc-chat-header > .min-w-0 > :first-child {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* En-tête de message : les badges (non chiffré, éphémère…) passent à la ligne. */
+.fc-msg-head { flex-wrap: wrap; row-gap: 0; min-width: 0; }
+.fc-msg-name { min-width: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Bulles de groupe : un lien ou un mot sans espace imposait sa largeur à la bulle (largeur
+   minimale d'un élément flex) et la faisait sortir de l'écran ; il se coupe désormais. */
+.fc-gdm-col { min-width: 0; }
+.fc-gdm-msg { max-width: 100%; }
+/* Barre d'actions au survol (7 × 44 px, invisible mais dans le flux) : elle écrasait la bulle dans
+   sa colonne de 320 px. Dès 768 px elle flotte au-dessus de la bulle, hors du flux, et ne capte
+   les clics que lorsqu'elle est visible. Sur téléphone elle passe sous la bulle (plus bas). */
+@media (min-width: 768px) {
+  .fc-gdm-msg { position: relative; }
+  .fc-gdm-tools {
+    position: absolute;
+    bottom: 100%;
+    right: 0;
+    z-index: 10;
+    padding: 0.125rem;
+    border-radius: 0.5rem;
+    background: rgb(var(--fc-channel-rgb));
+    box-shadow: 0 4px 12px rgb(0 0 0 / 0.35);
+    pointer-events: none;
+  }
+  .group:hover .fc-gdm-tools,
+  .fc-gdm-tools:focus-within { pointer-events: auto; opacity: 1; }
+}
+.fc-gdm-msg > :not(.fc-gdm-tools),
+.fc-gdm-msg > :not(.fc-gdm-tools) > * { min-width: 0; max-width: 100%; overflow-wrap: anywhere; }
+
+/* Composer en rangée (≥ 768 px) : dans une colonne de discussion étroite (tablette, 768 px avec la
+   barre latérale), les ~9 boutons écrasaient la zone de saisie à 30 px. Les boutons passent alors
+   à la ligne, comme sur téléphone ; rien ne change quand il y a la place. */
+@media (min-width: 768px) {
+  .fc-chat-input .md\:flex-row { flex-wrap: wrap; justify-content: flex-end; }
+  .fc-chat-input .md\:flex-row > .flex-1 { flex-basis: 14rem; }
+}
+
+/* Encoches et barres système (viewport-fit=cover, barre d'état iOS translucide) : rien sous la
+   barre d'état ni sous l'encoche en paysage. env() vaut 0 partout ailleurs. Le bas est géré par
+   le composer (.fc-chat-input) et le panneau utilisateur (pb-safe). */
+#fc-main { padding-top: env(safe-area-inset-top); padding-right: env(safe-area-inset-right); }
+.fc-nav { padding-top: env(safe-area-inset-top); padding-left: env(safe-area-inset-left); }
+.fc-settings-page { padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
+
+/* Réglages du serveur : la colonne des onglets (flex en colonne qui défile) écrasait à 0 px son
+   en-tête `truncate` — nom du serveur et bouton Fermer invisibles dès que la liste dépasse l'écran. */
+[aria-labelledby="server-settings-modal-title"] .overflow-y-auto.flex-col > * { flex-shrink: 0; }
+
+@media (max-width: 1023px) {
+  /* ── En-têtes de conversation (salon, MP) : les actions défilent dans leur propre bande
+     au lieu d'élargir l'en-tête (ce qui décalait toute la colonne des messages). */
+  .fc-chat-header > .ml-auto {
+    flex: 0 1 auto;
+    min-width: 0;
+    overflow-x: auto;
+    overflow-y: hidden;
+    overscroll-behavior-x: contain;
+    scrollbar-width: none;
+    /* Indice visuel : la bande s'estompe à droite. */
+    -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 1rem), transparent);
+    mask-image: linear-gradient(to right, #000 calc(100% - 1rem), transparent);
+  }
+  .fc-chat-header > .ml-auto::-webkit-scrollbar { display: none; }
+  .fc-chat-header > .ml-auto > * { flex-shrink: 0; }
+  /* Groupe : boutons directement dans l'en-tête → seconde ligne au lieu de déborder. */
+  .fc-chat-header:not(:has(> .ml-auto)) { flex-wrap: wrap; justify-content: flex-end; }
+  .fc-chat-header:not(:has(> .ml-auto)) > .flex-1 { flex: 1 1 8rem; min-width: 6rem; }
+  /* Menus ancrés dans cette bande (qui coupe ce qui dépasse) : fixés sous l'en-tête. */
+  .fc-chat-header .fc-header-pop {
+    position: fixed;
+    top: calc(3.5rem + env(safe-area-inset-top));
+    left: auto;
+    right: 0.5rem;
+    bottom: auto;
+    width: min(18rem, calc(100vw - 1rem));
+    max-width: none;
+    transform: none;
+    margin: 0;
+  }
+}
+
+@media (max-width: 767px) {
+  /* iOS zoome au focus d'un champ dont la police fait moins de 16 px. La règle d'index.css
+     (sélecteurs de type) perdait contre les classes Tailwind text-sm / text-xs des champs :
+     !important délibéré, c'est le seul moyen de passer devant toutes les utilitaires. */
+  input:not([type="checkbox"], [type="radio"], [type="range"], [type="color"], [type="file"]),
+  textarea,
+  select { font-size: 16px !important; }
+
+  .fc-chat-header {
+    gap: 0.25rem;
+    padding-left: 0.25rem;
+    padding-right: 0.25rem;
+  }
+
+  /* ── Liste des salons ─────────────────────────────────────────────────────
+     Réglages / archiver / masquer : seulement sur le salon ouvert (appui long = menu complet),
+     sinon trois cibles de 44 px réduisaient le nom du salon à une lettre. */
+  .fc-ch:not([aria-current="page"]) > button { display: none; }
+  .fc-ch > button { min-width: 36px; min-height: 36px; }
+
+  /* ── Tiroir de navigation : fond opaque (le panneau utilisateur laissait voir le composer),
+     jamais plus large que l'écran. */
+  .fc-nav { background: rgb(var(--fc-bg-rgb)); max-width: 100vw; }
+  /* Panneau utilisateur : ~10 boutons de 44 px élargissaient le tiroir à 570 px et coupaient
+     Paramètres. Les actions défilent ; Paramètres passe en tête. */
+  .fc-user-panel { min-width: 0; max-width: 100%; }
+  .fc-user-panel > button { min-width: 6.5rem; }
+  .fc-user-panel-actions {
+    flex-shrink: 1;
+    min-width: 0;
+    overflow-x: auto;
+    overflow-y: hidden;
+    overscroll-behavior-x: contain;
+    scrollbar-width: none;
+    -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 1rem), transparent);
+    mask-image: linear-gradient(to right, #000 calc(100% - 1rem), transparent);
+  }
+  .fc-user-panel-actions::-webkit-scrollbar { display: none; }
+  .fc-user-panel-actions > * { flex-shrink: 0; }
+  .fc-user-panel-actions > :last-child { order: -1; }
+
+  /* ── Grandes modales (réglages du salon, apparence du serveur, création de salon, forum…) :
+     plein écran. Repérées par leur hauteur max 90vh et leur largeur de bureau ≥ 512 px ;
+     les petites confirmations restent des cartes centrées. */
+  .fixed.inset-0:has(> div:is([class*="max-h-[90dvh]"], [class*="max-h-[90vh]"]):is([class*="max-w-[5"], [class*="max-w-[6"], [class*="max-w-lg"], [class*="max-w-2xl"], [class*="md:w-["])) {
+    padding: env(safe-area-inset-top) 0 env(safe-area-inset-bottom);
+  }
+  .fixed.inset-0 > div:is([class*="max-h-[90dvh]"], [class*="max-h-[90vh]"]):is([class*="max-w-[5"], [class*="max-w-[6"], [class*="max-w-lg"], [class*="max-w-2xl"], [class*="md:w-["]) {
+    width: 100%;
+    max-width: none;
+    max-height: none;
+    align-self: stretch;
+    margin: 0;
+    border-radius: 0;
+  }
+
+  /* ── Interrupteurs : la règle globale des 44 px (index.css) les déformait en gros ronds.
+     Taille visuelle d'origine, zone tactile agrandie par un pseudo-élément invisible. */
+  button[role="switch"] { position: relative; min-width: 0; min-height: 0; }
+  button[role="switch"]::after { content: ""; position: absolute; inset: -12px -6px; }
+
+  /* ── Groupe : la barre d'actions (7 × 44 px) poussait la bulle hors de l'écran ;
+     elle passe sous la bulle et la colonne laisse la place de l'avatar. */
+  .fc-gdm-col { max-width: calc(100% - 2.75rem); min-width: 0; }
+  .fc-gdm-msg { flex-wrap: wrap; min-width: 0; }
+  .fc-gdm-tools { order: 2; flex-wrap: wrap; }
+}

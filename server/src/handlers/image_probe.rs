@@ -138,7 +138,10 @@ fn vp8_dims(ty: &[u8], data: &[u8]) -> R<(u32, u32)> {
     }
 }
 
-fn riff_chunks(d: &[u8], from: usize) -> R<Vec<(&[u8], &[u8], usize, usize)>> {
+/// Morceau RIFF : (type, données, début, fin alignée).
+type RiffChunk<'a> = (&'a [u8], &'a [u8], usize, usize);
+
+fn riff_chunks(d: &[u8], from: usize) -> R<Vec<RiffChunk<'_>>> {
     let mut out = Vec::new();
     let mut at = from;
     while at + 8 <= d.len() {

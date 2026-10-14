@@ -23,7 +23,8 @@ export const isBirthdayToday = (b: { month: number; day: number } | null | undef
 export const dayMonthLabel = (b: { month: number; day: number }) =>
   new Date(2000, b.month - 1, b.day).toLocaleDateString(intlLocale(), { day: 'numeric', month: 'long' })
 
-export default function UserSocialInfo({ userId }: { userId: string }) {
+/** `showBadges` : choix de l'utilisateur dans sa carte de profil (users.profile_card.show_badges). */
+export default function UserSocialInfo({ userId, showBadges = true }: { userId: string; showBadges?: boolean }) {
   const t = useT()
   const { data } = useQuery<UserSocial>({
     queryKey: ['user-social', userId],
@@ -31,7 +32,7 @@ export default function UserSocialInfo({ userId }: { userId: string }) {
     staleTime: 60_000,
   })
   if (!data) return null
-  const known = data.badges.filter(b => b in BADGE_ICONS)
+  const known = showBadges ? data.badges.filter(b => b in BADGE_ICONS) : []
   if (!data.in_call && !data.birthday && known.length === 0) return null
   return (
     <div className="mb-3 space-y-2">

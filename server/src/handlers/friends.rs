@@ -339,35 +339,8 @@ pub async fn open_dm(
     // n'importe qui pouvait ouvrir un salon DM avec n'importe qui, y compris un
     // utilisateur l'ayant bloqué ou ayant explicitement désactivé "Autoriser les DMs
     // de tout le monde" dans PrivacySection.tsx (réglage 100% placebo côté serveur).
-    let blocked = sqlx::query_scalar::<_, bool>(
-        "SELECT EXISTS(SELECT 1 FROM blocks WHERE
-         (blocker_id=$1 AND blocked_id=$2) OR (blocker_id=$2 AND blocked_id=$1))"
-    )
-    .bind(claims.sub)
-    .bind(user_id)
-    .fetch_one(&state.db)
-    .await?;
-    if blocked {
-        return Err(AppError::Forbidden);
-    }
-
-    let dm_from_all: bool = sqlx::query_scalar("SELECT dm_from_all FROM user_settings WHERE user_id=$1")
-        .bind(user_id)
-        .fetch_optional(&state.db)
-        .await?
-        .unwrap_or(true);
-    if !dm_from_all {
-        let is_friend: bool = sqlx::query_scalar(
-            "SELECT EXISTS(SELECT 1 FROM friendships WHERE ((user_id=$1 AND friend_id=$2) OR (user_id=$2 AND friend_id=$1)) AND status='accepted')"
-        )
-        .bind(claims.sub)
-        .bind(user_id)
-        .fetch_one(&state.db)
-        .await?;
-        if !is_friend {
-            return Err(AppError::Forbidden);
-        }
-    }
+    // Garde partagée avec les groupes (dm_guard) ; 404 si l'utilisateur n'existe pas.
+    crate::handlers::dm_guard::ensure_can_dm(&state.db, claims.sub, user_id).await?;
 
     let (u1, u2) = if claims.sub < user_id {
         (claims.sub, user_id)
@@ -413,7 +386,7 @@ pub async fn get_dm_messages(
 
     if !ok { return Err(AppError::Forbidden); }
 
-    let limit: i64 = params.get("limit").and_then(|l| l.parse().ok()).unwrap_or(50).min(100).max(1);
+    let limit: i64 = params.get("limit").and_then(|l| l.parse().ok()).unwrap_or(50).clamp(1, 100);
     let before: Option<Uuid> = params.get("before").and_then(|s| s.parse().ok());
     let around: Option<Uuid> = params.get("around").and_then(|s| s.parse().ok());
     // Voir messages.rs::get_messages -- la branche `around` construit déjà son
@@ -768,37 +741,16 @@ pub async fn send_dm(
 
     if !ok { return Err(AppError::Forbidden); }
 
-    // Vérifier que le destinataire n'a pas bloqué l'expéditeur
-    {
-        use sqlx::Row;
-        let other_id: Option<Uuid> = sqlx::query(
-            "SELECT CASE WHEN user1_id=$2 THEN user2_id ELSE user1_id END AS other
-             FROM dm_channels WHERE id=$1"
-        )
-        .bind(dm_id).bind(claims.sub)
-        .fetch_optional(&state.db).await?
-        .map(|r| r.get("other"));
-        if let Some(oid) = other_id {
-            let blocked: bool = sqlx::query_scalar(
-                "SELECT EXISTS(SELECT 1 FROM blocks WHERE blocker_id=$1 AND blocked_id=$2)"
-            ).bind(oid).bind(claims.sub).fetch_one(&state.db).await.unwrap_or(false);
-            if blocked { return Err(AppError::Forbidden); }
-        }
-    }
+    // Blocage dans un sens comme dans l'autre ; une erreur DB refuse (fail-closed).
+    let blocked: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM blocks b JOIN dm_channels d ON d.id=$1
+                       WHERE (b.blocker_id=d.user1_id AND b.blocked_id=d.user2_id)
+                          OR (b.blocker_id=d.user2_id AND b.blocked_id=d.user1_id))"
+    ).bind(dm_id).fetch_one(&state.db).await?;
+    if blocked { return Err(AppError::Forbidden); }
 
-    // Anti-spam DM : max 5 messages / 3 secondes via Redis
-    {
-        use redis::AsyncCommands;
-        let key = format!("dm_spam:{}:{}", claims.sub, dm_id);
-        let mut redis = state.redis.lock().await;
-        let count: i64 = redis.incr(&key, 1).await.unwrap_or(0);
-        if count == 1 {
-            let _: () = redis.expire(&key, 3).await.unwrap_or(());
-        }
-        if count > 5 {
-            return Err(AppError::TooManyRequests);
-        }
-    }
+    // Anti-spam DM : max 5 messages / 3 secondes ; Redis injoignable = 503, jamais un passage libre.
+    crate::handlers::auth_v2::hit(&state, &format!("dm_spam:{}:{}", claims.sub, dm_id), 5, 3).await?;
 
     let content_raw = body["content"].as_str().unwrap_or("").trim().to_string();
     let mut reply_to: Option<Uuid> = body["reply_to"].as_str().and_then(|s| s.parse().ok());
@@ -1904,14 +1856,8 @@ pub async fn delete_dm_message(
     }
 
     // Supprimer les fichiers du disque
-    let upload_dir = state.config.upload_dir.clone();
-    tokio::spawn(async move {
-        for url in attachment_urls {
-            if let Some(rel) = url.strip_prefix("/uploads/") {
-                let _ = tokio::fs::remove_file(std::path::Path::new(&upload_dir).join(rel)).await;
-            }
-        }
-    });
+    // Chemin validé (pas de traversée) par le nettoyeur commun.
+    crate::handlers::uploads::remove_upload_files(&state, attachment_urls);
 
     // Notifier les deux participants
     let event = serde_json::json!({

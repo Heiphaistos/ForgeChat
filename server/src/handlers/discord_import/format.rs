@@ -301,10 +301,8 @@ pub fn rewrite_mentions(text: &str, names: &Names) -> String {
                 (&names.users, "@", id)
             } else if let Some(id) = inner.strip_prefix('@') {
                 (&names.users, "@", id)
-            } else if let Some(id) = inner.strip_prefix('#') {
-                (&names.channels, "#", id)
             } else {
-                return None;
+                (&names.channels, "#", inner.strip_prefix('#')?)
             };
             map.get(id).map(|n| (format!("{prefix}{n}"), end + 1))
         });
