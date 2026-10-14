@@ -5,12 +5,14 @@ import api from '../api/client'
 import { storeSession } from '../lib/localSession'
 import { markUserMigrated } from '../e2e/authGuard'
 import toast from 'react-hot-toast'
+import { useT } from '../i18n'
 
 const CODE_LEN = 6
 
 const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
 
 export default function VerifyEmailPage() {
+  const t = useT()
   const location = useLocation()
   const nav = useNavigate()
   const { fetchMe } = useAuth()
@@ -52,7 +54,7 @@ export default function VerifyEmailPage() {
   const submit = async () => {
     const code = digits.join('')
     if (code.length !== CODE_LEN) {
-      toast.error(`Entre les ${CODE_LEN} chiffres`)
+      toast.error(t('hc.ver.digits', { n: CODE_LEN }))
       return
     }
     setLoading(true)
@@ -63,10 +65,10 @@ export default function VerifyEmailPage() {
       // Compte né en v2 : anti-retour arrière des actions sensibles (e2e/authGuard.ts)
       if (typeof data?.user?.id === 'string') void markUserMigrated(data.user.id)
       await fetchMe()
-      toast.success('Compte créé !')
+      toast.success(t('hc.ver.created'))
       nav('/')
     } catch (err: any) {
-      toast.error(err.response?.data?.error ?? 'Code invalide')
+      toast.error(err.response?.data?.error ?? t('hc.ver.invalid'))
     } finally {
       setLoading(false)
     }
@@ -82,23 +84,23 @@ export default function VerifyEmailPage() {
           </svg>
         </div>
 
-        <h1 className="text-2xl font-bold text-white mb-2">Vérifie ton email</h1>
+        <h1 className="text-2xl font-bold text-white mb-2">{t('hc.ver.title')}</h1>
 
         {devCode ? (
           <div className="mb-6 p-3 bg-yellow-500/10 border border-yellow-500/30 rounded-lg text-left">
-            <p className="text-yellow-400 text-xs font-medium mb-1">⚠ SMTP non configuré — mode self-hosted</p>
-            <p className="text-fc-muted text-xs">Ton code est affiché directement ici. Configure SMTP pour envoyer de vrais emails.</p>
+            <p className="text-yellow-400 text-xs font-medium mb-1">{t('hc.ver.noSmtp')}</p>
+            <p className="text-fc-muted text-xs">{t('hc.ver.noSmtpHint')}</p>
           </div>
         ) : (
           <p className="text-fc-muted text-sm mb-1">
-            Un code de vérification a été envoyé à
+            {t('hc.ver.sentTo')}
           </p>
         )}
         <p className="text-fc-accent font-medium mb-6">{email}</p>
 
         <div
           role="group"
-          aria-label={`Code de vérification à ${CODE_LEN} chiffres`}
+          aria-label={t('hc.ver.group', { n: CODE_LEN })}
           className="flex justify-center gap-3 mb-6"
           onPaste={handlePaste}
         >
@@ -114,7 +116,7 @@ export default function VerifyEmailPage() {
               onChange={e => handleDigit(i, e.target.value)}
               onKeyDown={e => handleKeyDown(i, e)}
               autoComplete={i === 0 ? 'one-time-code' : 'off'}
-              aria-label={`Chiffre ${i + 1} sur ${CODE_LEN}`}
+              aria-label={t('hc.ver.digit', { i: i + 1, n: CODE_LEN })}
               className="w-11 h-14 text-center text-2xl font-bold bg-fc-input text-white rounded-lg
                          outline-none focus:ring-2 focus:ring-fc-accent transition caret-transparent"
             />
@@ -128,7 +130,7 @@ export default function VerifyEmailPage() {
           className="w-full py-2.5 bg-fc-accent hover:bg-indigo-500 text-white font-medium rounded
                      transition disabled:opacity-50 mb-4"
         >
-          {loading ? 'Vérification...' : 'Confirmer le compte'}
+          {loading ? t('hc.ver.checking') : t('hc.ver.confirm')}
         </button>
 
         <p className="text-fc-muted text-sm">
@@ -136,7 +138,7 @@ export default function VerifyEmailPage() {
             onClick={() => nav('/register')}
             className="text-fc-accent hover:underline"
           >
-            ← Recommencer l'inscription
+            {t('hc.ver.restart')}
           </button>
         </p>
       </div>

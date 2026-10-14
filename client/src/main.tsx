@@ -65,6 +65,8 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
     <QueryClientProvider client={queryClient}>
       <App />
       <Toaster position="bottom-right" toastOptions={{
+        // Erreurs (dont celles de formulaire) annoncées tout de suite par les lecteurs d'écran.
+        error: { ariaProps: { role: 'alert', 'aria-live': 'assertive' } },
         style: { background: 'rgb(var(--fc-channel-rgb))', color: 'rgb(var(--fc-text-rgb))', border: '1px solid rgb(var(--fc-border-rgb))' }
       }} />
     </QueryClientProvider>
