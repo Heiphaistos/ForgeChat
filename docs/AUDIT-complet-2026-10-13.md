@@ -32,9 +32,9 @@ fonctions de personnalisation et « type Discord » ajoutées. Ce document fait 
 | Constats client | 20 (C1-C20) + 4 suites bureau (X1-X4) + 3 suites serveur (Y1-Y3) |
 | Constats mobile | 14 (M1-M14) + 8 écarts de parité |
 | Constats bureau | 9 (D1-D9) |
-| Corrigés | S : 21 / 24 · C : 15 / 20 · M : 13 / 14 · D : 8 / 9 · X : 4 / 4 |
-| Partiels | S6, S10, S22, C6, C14, C17, C18, M9 |
-| Non corrigés / documentés | C20 (non corrigé), D7 (documenté) |
+| Corrigés (au 2026-10-14) | S : 22 / 24 · C : 17 / 20 · M : 14 / 14 · D : 8 / 9 · X : 4 / 4 |
+| Partiels (au 2026-10-14) | S10, S22, C17, C18, C20 |
+| Non corrigés / documentés | D7 (documenté) |
 | Migrations ajoutées | 136 (anneau global, carte de profil), 137 (fonctions type Discord) |
 | Thèmes | 1440 -> 1580 |
 | Styles d'anneau | 14 -> 34 |
@@ -160,7 +160,7 @@ Gravités : Haute, Moyenne, Basse, Info, Test (qualité des tests).
 | S3 | Moyenne | `messages.rs:916-1087` | `forward_message` sans limite de débit, antispam ni slowmode | Corrigé | bloc de contrôles de `send_message` factorisé |
 | S4 | Moyenne | `threads.rs:654`, `forum.rs:632` | Édition de message de fil / réponse de forum sans AutoMod ni timeout | Corrigé | |
 | S5 | Moyenne | `state.rs:456-472` | `voice_join` écrit `user_voice` avant le contrôle de limite -> utilisateur fantôme | Corrigé | interblocage latent dans `persist_voice_to_redis` corrigé au passage |
-| S6 | Moyenne | `uploads.rs:420`, `:462` | `remove_upload_files` ignore les chemins avec `/` (avatars et bannières jamais effacés, RGPD) ; `remove_unreferenced` ignore `server_avatar`/`server_banner` | Partiel | les orphelins déjà présents sur disque ne sont pas balayés |
+| S6 | Moyenne | `uploads.rs:420`, `:462` | `remove_upload_files` ignore les chemins avec `/` (avatars et bannières jamais effacés, RGPD) ; `remove_unreferenced` ignore `server_avatar`/`server_banner` | Corrigé (lecture seule) | 2026-10-14 : sous-commande `forgechat sweep-orphan-uploads` (`handlers/upload_sweep.rs`) : parcourt toutes les colonnes texte/json/tableaux via `information_schema`, ignore les fichiers de moins de 24 h, ne suit pas les liens symboliques, sortie TSV `<octets>\t<chemin>` ; pas d'option d'effacement tant qu'une première liste n'a pas été relue en production ; requête jamais exécutée sur une vraie base. Aussi : fichier effacé si l'insertion `attachments` échoue ou si le flush échoue. `remove_unreferenced` ignore encore 7 colonnes (`forum_posts.media_url`, `roles.icon`, `servers.banner_url`, `users.banner_url`, `bg_image_url`, `user_sounds.file_url`, avatars de webhook) |
 | S7 | Moyenne | `users.rs:32`, `:510` | `get_user` et `get_user_profile` exposent `status`/`custom_status` à tous (alors que `search_users` les masque) | Corrigé | |
 | S8 | Basse | `member_profile.rs:92`, `:117` | PATCH du profil de membre sans limite de débit (amplification de diffusion) ; ancienne image non supprimée | Corrigé | |
 | S9 | Basse | `USER_UPDATE` | Événement envoyé à soi via `UserPublic::from` au lieu de `into_self_public()` | Corrigé | |
@@ -196,7 +196,7 @@ préexistants non formatés ; le reformatage global est laissé à la décision 
 | C3 | Basse | `ProfileSection.tsx:98-101`, `126-129` | Champ fichier non réinitialisé (re-choisir le même fichier ne fait rien) | Corrigé | |
 | C4 | Moyenne | `users.rs` `update_me` + `ProfileSection.tsx` | Impossible de retirer son avatar | Corrigé | serveur accepte `avatar: ""` ; bouton corbeille côté client |
 | C5 | Moyenne | `UserPopup.tsx:259-299` | Relations : demande reçue sans Accepter/Refuser ; utilisateur bloqué avec « Envoyer un message » ; soi-même avec « Message » au lieu de « Modifier le profil » | Corrigé | |
-| C6 | Moyenne | `UserPopup.tsx`, `UserProfilePage.tsx:333-336`, `KanbanBoard.tsx:30-40`, `SiteAdminPage`, `AuditLogPage`, `ThreadPanel`, `StickerPicker`, `Onboarding`, `MemberModeration`, `QuickSwitcher`, `afk.ts:50` | Textes en dur hors i18n (plus de 100) ; `activity_type` affiché brut | Partiel | listé corrigé ; restent `HealthTabs.tsx`, `FloatingCallPiP.tsx` et les boîtes natives `prompt`/`confirm` |
+| C6 | Moyenne | `UserPopup.tsx`, `UserProfilePage.tsx:333-336`, `KanbanBoard.tsx:30-40`, `SiteAdminPage`, `AuditLogPage`, `ThreadPanel`, `StickerPicker`, `Onboarding`, `MemberModeration`, `QuickSwitcher`, `afk.ts:50` | Textes en dur hors i18n (plus de 100) ; `activity_type` affiché brut | Corrigé | 2026-10-14 : `HealthTabs`, `FloatingCallPiP`, `RegisterPage` passés en i18n (`parts/auditRest.ts`) ; tous les `window.prompt`/`confirm` remplacés par `ConfirmModal`/`TextPromptDialog` (`DiscordSyncTab`, `ThemeGallery`, `AppearanceSection`, `PasskeysSection`, `SessionsSection`, `FriendSections`, `SiteAdminPage`, `ServerHeader`). Seul reste : `k.label` des événements de sécurité vient du serveur ; `ServerAdminPage` passe des textes FR en dur à `confirm()` |
 | C7 | Basse | `UserPopup.tsx:137-146`, `:121` | `role=dialog` sans focus initial ni retour du focus ; `isSheet` calculé une seule fois | Corrigé | `matchMedia` |
 | C8 | Basse | `UserPopup.tsx:109-117` | `useEffect([])` capture un `onClose` figé ; `react-hooks/exhaustive-deps` désactivé partout | Corrigé | règle remise en `warn` : 85 avertissements existants à traiter |
 | C9 | Basse | `ChannelSidebar.tsx:383-386` | Sourdine optimiste sans `.catch` | Corrigé | retour arrière + toast |
@@ -204,13 +204,13 @@ préexistants non formatés ; le reformatage global est laissé à la décision 
 | C11 | Basse | `App.tsx:906-913` | `USER_UPDATE` ne met pas à jour `useAuth.user` pour soi ni n'invalide `['profile', id]` | Corrigé | |
 | C12 | Basse | `GET /users/:id/profile` + `ProfileLinks` | Comptes connectés jamais affichés publiquement | Corrigé | via le lot E1 (section 4.5) |
 | C13 | Basse | `store/channelNotif.ts:126` | `catch {}` muet | Corrigé | avertissement + nouvel essai à l'ouverture du WS |
-| C14 | Basse | `CalendarView.tsx:227`, `ChannelSidebar.tsx:704`, `QuickSwitcher.tsx:288`, `SiteAdminPage.tsx:133`, `FloatingCallPiP.tsx:138`, `useUpdateNotifier.tsx:78` | Éléments cliquables inaccessibles au clavier | Partiel | `FloatingCallPiP` laissé |
+| C14 | Basse | `CalendarView.tsx:227`, `ChannelSidebar.tsx:704`, `QuickSwitcher.tsx:288`, `SiteAdminPage.tsx:133`, `FloatingCallPiP.tsx:138`, `useUpdateNotifier.tsx:78` | Éléments cliquables inaccessibles au clavier | Corrigé | 2026-10-14 : `FloatingCallPiP` (boutons `type=button` + `aria-label`, section étiquetée) ; lignes de `MemberList` atteignables au clavier (Entrée/Espace) |
 | C15 | Moyenne | page profil | 3 boutons Enregistrer séparés, pas de garde des modifications non enregistrées, aperçus partiels | Corrigé | barre unique + garde de sortie |
 | C16 | Basse | `UserPopup` | Anneau seulement par serveur ; le popup n'affiche pas `server_avatar_ring` | Corrigé | anneau global + affichage serveur ?? global |
 | C17 | Basse | profil | `profile_color_*` limité à un dégradé de fond | Partiel | carte de profil (styles, motifs) ajoutée |
-| C18 | Basse | `ProfileSection.tsx:109` | Aperçu d'avatar sans décoration ; pas de recadrage | Partiel | aperçu complet ; pas de recadrage |
+| C18 | Basse | `ProfileSection.tsx:109` | Aperçu d'avatar sans décoration ; pas de recadrage | Partiel | aperçu complet ; 2026-10-14 : recadrage carré de l'avatar (`ImageCropDialog`, profil global et profil de serveur ; GIF/APNG/WebP animés envoyés sans recadrage) ; bannière non recadrée volontairement (`ProfileBanner` affiche la bannière entière) |
 | C19 | Info | `ProfileLinks.tsx:17` | `key={l.url}` peut être en double | Corrigé | |
-| C20 | Info | `MessageList`, `MemberList` | Pas de virtualisation (P2-8) | Non corrigé | proposé en section 7 |
+| C20 | Info | `MessageList`, `MemberList` | Pas de virtualisation (P2-8) | Partiel | `MemberList` déjà virtualisée à la main (lignes de 48 px en position absolue) ; `MessageList` non virtualisée (risque d'ancrage du défilement avant déploiement) |
 
 Bug trouvé en route : l'éditeur de surcharges de permissions tronquait les bits à 32 bits (STREAM = 2^40
 était ignoré) ; passé en `BigInt`. Corrigé.
@@ -245,7 +245,7 @@ Fichiers client au-delà de 800 lignes (préexistants) : `i18n/fr.ts` et `en.ts`
 | M6 | Basse | `user/[userId].tsx:69` | `ProfileEffect` sans `key` (pas de remontage au changement d'effet) | Corrigé | |
 | M7 | Basse | `settings/profile.tsx:122-128` | `void pick()` : rejets non gérés | Corrigé | |
 | M8 | Basse | `settings/profile.tsx:150` | Aperçu sans `decorationOpts` | Corrigé | |
-| M9 | Basse | `lib/http.ts:335` | Comparaison sur le texte « Accès interdit » au lieu d'un code d'erreur | Partiel | le serveur n'envoie pas de code pour un 403 générique ; reconnaissance centralisée dans `parseError` |
+| M9 | Basse | `lib/http.ts:335` | Comparaison sur le texte « Accès interdit » au lieu d'un code d'erreur | Corrigé | 2026-10-14 : `AppError::Forbidden` renvoie `{"error":"Accès interdit","code":"forbidden"}` ; `parseError` mobile lit le code d'abord, repli sur le texte pour les anciens serveurs ; 3 tests |
 | M10 | Basse | `security.tsx:31`, `AccountSwitcher.tsx:14`, `register.tsx:29` | `setState` après un appel asynchrone sans garde de montage | Corrigé | |
 | M11 | Basse | `server/[serverId]/nickname.tsx:57-58` | Sauvegarde partielle possible | Corrigé | |
 | M12 | Test | `__tests__/theme.test.ts:19-20` | Test tautologique | Corrigé | compare désormais les fichiers web et mobile |
@@ -263,8 +263,8 @@ Fichiers client au-delà de 800 lignes (préexistants) : `i18n/fr.ts` et `en.ts`
 | Pas d'éditeur de style d'étiquette | Corrigé | |
 | Couleurs de profil limitées à une palette fixe | Corrigé | sélecteur libre |
 | Pas de bouton « Retirer la bannière » | Corrigé | |
-| Pas d'éditeur de thème | Non corrigé | |
-| Pas de passkeys | Non corrigé | |
+| Pas d'éditeur de thème | Non corrigé | 2026-10-14 : écran complet impossible à vérifier sans appareil |
+| Pas de passkeys | Non corrigé | 2026-10-14 : module natif nécessaire, fichiers `assetlinks.json` / `apple-app-site-association` absents, build natif et appareil requis |
 
 Limite connue : le rendu React Native est une approximation (pas de SVG ni de dégradés natifs ; lueur
 absente sur Android). Fichier mobile au-delà de 800 lignes : `stores/voice.ts` (972).
@@ -278,13 +278,81 @@ absente sur Android). Fichier mobile au-delà de 800 lignes : `stores/voice.ts` 
 | D4 | Basse | `register_ptt_shortcut` | Accepte n'importe quelle touche | Corrigé | modificateur requis sauf F1-F24 (voir X4) |
 | D5 | Basse | `save_file` | Pas de plafond de taille ; liste d'extensions exécutables incomplète | Corrigé | |
 | D6 | Basse | voix/vidéo native | `Mutex::lock().unwrap()` (panique si verrou empoisonné) | Corrigé | |
-| D7 | Basse | CSP | `img-src https:` (signalé seulement) | Documenté | à traiter avec un proxy d'images |
+| D7 | Basse | CSP | `img-src https:` (signalé seulement) | Documenté | à traiter avec un proxy d'images ; non fait le 2026-10-14 : un proxy d'images serveur ajoute une surface SSRF non testable sans infra la veille du déploiement |
 | D8 | Basse | agent utilisateur | Version 3.27.0 figée | Corrigé | |
 | D9 | Info | fenêtres détachées | Pas de filtre de navigation | Corrigé | |
 
 Bug trouvé en route : `nv_popout` acceptait `ws://127.0.0.1:80@evil.example` (hôte réel = `evil.example`). Corrigé.
 Qualité : clippy et fmt verts sur le bureau (3 erreurs clippy préexistantes corrigées, `cargo fmt` appliqué).
 `updater.rs` dépasse 800 lignes (1043). Le code `cfg(linux)` n'a pas été compilé (poste Windows).
+
+### 3.5 Responsive web (2026-10-14)
+
+#### Méthode
+- Playwright 1.63.0 (Chromium 1243), build de production servi par `vite preview`, API simulée par
+  `page.route` (`scripts/responsive.mocks.mjs`), WebSocket coupé.
+- Tailles : 320x640, 360x740, 390x844, 414x896, 768x1024 en portrait ; 740x360 et 844x390 en paysage ;
+  émulation mobile tactile. 22 pages x 7 tailles = 154 vérifications.
+
+#### Tests ajoutés
+- `client/scripts/responsive.playwright.mjs` (usage :
+  `PW_MODULE=<chemin>/playwright/index.mjs node scripts/responsive.playwright.mjs`). Échoue si le
+  `scrollWidth` du document ou de `body` dépasse `innerWidth`, si un conteneur `overflow-x:hidden` est
+  décalé, si une zone pleine largeur défile horizontalement, ou si un champ est sous 16 px en dessous de 768 px.
+- `client/scripts/imageCrop.playwright.mjs` vérifie le recadrage à 360 et 320 px (envoi d'un PNG carré 400x400).
+
+#### Pages testées
+- Publiques : accueil, connexion, inscription, `/telecharger`, `/fonctionnalites`.
+- Connectées (simulées) : salon, tiroir, membres, fiche profil, réglages serveur, réglages salon, création
+  de serveur, écran de clé E2E, vocal avant et pendant un appel, MP, groupe, amis, Réglages compte / profil / apparence.
+
+#### Corrections
+Fichier principal : `client/src/responsive.css`.
+
+| Constat | Correction |
+|---|---|
+| En-têtes de salon et de MP coupés entre 320 et 414 px | actions défilantes, nom tronqué |
+| En-tête de groupe à 7 boutons | retour à la ligne |
+| Tiroir élargi à 570 px par le panneau utilisateur, fond transparent, boutons de 44 px qui écrasaient le nom de salon | largeur, fond et boutons corrigés |
+| Bulles de groupe poussées hors écran par la barre d'actions ; liens, mots et code longs | bulles contenues, coupure des longs contenus |
+| Composer écrasé à 768 px | mise en page corrigée |
+| Zoom iOS : champs en `text-sm`/`text-xs` sous 16 px sur 16 pages sur 21 | 16 px forcé sous 768 px |
+| Interrupteurs déformés par la règle des 44 px | interrupteurs exclus de la règle |
+| Nom du serveur et bouton Fermer écrasés dans Réglages serveur (aussi sur ordinateur) | en-tête corrigé |
+| Grandes modales sur téléphone | plein écran |
+| Encoches et bords arrondis | `safe-area-inset` en haut et sur les côtés |
+| Pseudo long dans l'en-tête de message | tronqué |
+| Liste des membres ouverte par défaut sur petits écrans | ouverte par défaut seulement dès 1024 px |
+| Pas de retour pendant un appel vocal | bouton retour |
+| Fiche profil qui passait sous le composer | rendue dans un portail |
+| Onglet Rôles sur téléphone | colonnes empilées |
+| Pastille appareil photo qui couvrait l'avatar | repositionnée |
+
+#### Non testé
+Vrai clavier virtuel iOS/Android (iOS Safari ignore `interactive-widget`), appel réel avec participants,
+vidéo et partage d'écran, forum, fils, recherche, épinglés, actualités, pages d'administration, invitation, explorer.
+
+#### Restes
+- En paysage 740x360, la zone des messages ne fait qu'environ 150 px.
+- Barre d'actions visible sous chaque bulle de groupe sur téléphone (pas d'appui long).
+- Boutons d'action de la ligne du salon ouvert à 36 px.
+- Certaines règles CSS ciblent des classes Tailwind existantes ; le test les surveille.
+
+### 3.6 Bugs trouvés le 2026-10-14
+
+| Bug | Emplacement | Statut |
+|---|---|---|
+| Pièces jointes éphémères qui n'expiraient jamais : le client ajoutait `ttl_hours` après le fichier alors que le serveur l'applique aux fichiers suivants | `e2e/files.ts` | Corrigé |
+| Clé anti-spam MP sans TTL : 429 définitif | `friends.rs` | Corrigé |
+| Échec d'insertion dans `user_sessions` avalé sans log | `auth.rs` | Corrigé |
+| Suppression de passkey sans message d'erreur | client | Corrigé |
+| Libellés non reliés aux champs sur connexion et inscription | client | Corrigé |
+| Échap dans `TextPromptDialog` fermait aussi les Paramètres | client | Corrigé |
+| `store_attachments` garde le 1er fichier si le 2e est refusé (doublons au nouvel essai) | serveur | Non corrigé |
+| `send_dm` ne vérifie que le blocage destinataire -> expéditeur | serveur | Non corrigé |
+| Anti-spam MP ouvert si `incr` Redis échoue | serveur | Non corrigé |
+| `verify_email` limité par adresse seulement | serveur | Non corrigé |
+| Aide du profil « Cliquez sur l'avatar » alors que seul le bouton appareil photo ouvre le sélecteur | client | Non corrigé |
 
 ---
 
@@ -378,6 +446,22 @@ Passage final le 2026-10-13 sous Windows 11, après toutes les corrections.
 
 État initial : client vert ; mobile avec 3 tests jest en échec ; serveur qui ne compilait pas sous Windows (`health.rs`), avec clippy en échec ; bureau avec clippy en échec.
 
+## Résultats des gates (2026-10-14)
+
+| Domaine | Commande | Résultat |
+|---|---|---|
+| Client | `npm run lint` | OK (code 0) |
+| Client | `npx tsc --noEmit` | OK (code 0) |
+| Client | `node --test scripts/*.test.mjs` | OK : 232 tests, 232 réussis, 0 échec |
+| Client | `npx vite build` (après suppression de `dist/`) | OK |
+| Client | `responsive.playwright.mjs` | OK : 154 vérifications |
+| Client | `imageCrop.playwright.mjs` | OK à 360 et 320 px |
+| Mobile | `npm run typecheck` | OK (code 0) |
+| Mobile | `npx jest --ci --no-watchman` | OK : 104 suites, 713 tests, 0 échec |
+| Mobile | `npm run lint` | OK (code 0) |
+| Serveur | `cargo clippy --all-targets -- -D warnings` | OK |
+| Serveur | `cargo test` | OK : 269 réussis, 0 échec, 32 ignorés (tests qui demandent une base) |
+
 ---
 
 ## 6. Ce qui n'a pas été vérifié
@@ -385,7 +469,9 @@ Passage final le 2026-10-13 sous Windows 11, après toutes les corrections.
 | Point | Raison | Conséquence |
 |---|---|---|
 | Migrations 136 et 137 et tout le SQL nouveau | pas de Postgres ni de Docker sur le poste | jamais exécutés contre une vraie base ; tests base (`#[ignore]`, dont `discord_features_end_to_end`) écrits mais non lancés |
-| Tests navigateur | Playwright non lancé | `remoteSupport.playwright.mjs` mis à jour mais non exécuté ; aucun parcours web testé en vrai |
+| Tests navigateur | Playwright lancé le 2026-10-14 pour le responsive et le recadrage, avec API simulée | aucun parcours contre un vrai serveur ; `remoteSupport.playwright.mjs` toujours non exécuté |
+| `sweep-orphan-uploads` (S6) | pas de base | requête sur le catalogue (`information_schema`) jamais exécutée |
+| Clavier virtuel réel | pas d'appareil | comportement du clavier iOS/Android non vu (section 3.5) |
 | Appareils mobiles | pas d'appareil ni d'émulateur | rendu des anneaux, cartes et effets non vu sur iOS/Android |
 | Code Linux du bureau | poste Windows | blocs `cfg(linux)` (dont `nv_connect`) non compilés |
 | Effacement automatique du statut vocal | pas de base | `clear_voice_status` non exécuté contre Postgres |
@@ -399,17 +485,18 @@ Passage final le 2026-10-13 sous Windows 11, après toutes les corrections.
 | Rang | Sujet | Pourquoi | Réf. |
 |---|---|---|---|
 | 1 | Exécuter les migrations 136/137 et les tests base `#[ignore]` sur un Postgres jetable | tout le SQL nouveau est non testé ; un échec de migration bloque le déploiement | section 6 |
-| 2 | Lancer Playwright (dont `remoteSupport`) et un essai sur appareil mobile | aucune vérification de bout en bout de l'interface | section 6 |
+| 2 | Lancer Playwright (dont `remoteSupport`) et un essai sur appareil mobile (partiellement fait le 2026-10-14 : responsive et recadrage avec API simulée) | aucune vérification de bout en bout contre un vrai serveur | section 6 |
 | 3 | Décider de la règle des pseudos (latin seul ?) et revérifier les pseudos existants | choix produit qui touche des comptes existants | S10 |
-| 4 | Balayage ponctuel des fichiers orphelins sur disque | obligation RGPD d'effacement | S6 |
-| 5 | Code d'erreur structuré pour les 403 génériques | supprime la comparaison de texte côté mobile | M9 |
+| 4 | Balayage ponctuel des fichiers orphelins sur disque (fait en lecture seule le 2026-10-14) | obligation RGPD d'effacement | S6 |
+| 4b | Ajouter `--delete` au balayage après relecture d'une première liste en production ; compléter `remove_unreferenced` (7 colonnes ignorées) | effacement effectif des orphelins | S6 |
+| 5 | Code d'erreur structuré pour les 403 génériques (fait le 2026-10-14) | supprime la comparaison de texte côté mobile | M9 |
 | 6 | Proxy d'images puis CSP `img-src` restreinte | réduit le pistage par image externe | D7 |
-| 7 | Virtualisation de `MessageList` et `MemberList` | performances sur gros salons et serveurs > 1000 membres | C20, P2-8 |
+| 7 | Virtualisation de `MessageList` (`MemberList` déjà virtualisée ; `MessageList` reste) | performances sur gros salons et serveurs > 1000 membres | C20, P2-8 |
 | 8 | Demandes de message (MP d'inconnus) | protection contre le spam en MP | manque serveur |
 | 9 | Réactions sur la publication de forum (route serveur absente) | complète la réaction par défaut | 4.6 |
-| 11 | Recadrage avatar et bannière | demandé par l'audit profil | C18 |
+| 11 | Recadrage avatar et bannière (avatar fait le 2026-10-14 ; bannière non recadrée volontairement) | demandé par l'audit profil | C18 |
 | 12 | Passkeys et éditeur de thème sur mobile | parité avec le web | parité mobile |
-| 13 | Restes i18n et a11y (`HealthTabs`, `FloatingCallPiP`, `prompt`/`confirm` natifs) ; traiter les 85 avertissements `exhaustive-deps` | finir C6, C8, C14 | C6, C8, C14 |
+| 13 | Restes i18n et a11y (faits le 2026-10-14) ; traiter les 85 avertissements `exhaustive-deps` (restent) | finir C6, C8, C14 | C6, C8, C14 |
 | 14 | Droit des catégories : `CAN_EDIT` ou `MANAGE_CHANNELS` strict | aujourd'hui EDIT_CHANNELS suffit, à valider | 4.1 |
 | 15 | Reformatage global `cargo fmt` du serveur (environ 2461 blocs), dans un commit isolé | évite de mélanger formatage et logique dans les diffs futurs | 3.1 |
 | 16 | Découper les fichiers de plus de 800 lignes | client : `MessageInput`, `GroupDMPage`, `MessageList`, `App`, `store/voice`, `ServerSidebar`, `ChannelPage`, `ServerSettingsModal`, i18n ; serveur : `websocket.rs` ~1887, `servers.rs` ~1644, `users.rs` ~1043, `channels.rs` ~1037, `main.rs`, `state.rs` 848 ; mobile : `stores/voice.ts` 972 ; bureau : `updater.rs` 1043 | 3.x |
