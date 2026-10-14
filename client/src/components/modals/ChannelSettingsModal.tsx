@@ -233,7 +233,7 @@ export default function ChannelSettingsModal({ channel, serverId, onClose, initi
                 <label className="block text-xs font-semibold text-fc-muted uppercase tracking-wide mb-1.5">{t('createChannel.name')}</label>
                 <div className="relative">
                   <TypeIcon size={14} className={`absolute left-3 top-3 ${typeColor}`} />
-                  <input value={name}
+                  <input aria-label={t('createChannel.name')} value={name}
                     onChange={e => setName(e.target.value)}
                     maxLength={100}
                     enterKeyHint="done"
@@ -260,7 +260,7 @@ export default function ChannelSettingsModal({ channel, serverId, onClose, initi
               {isText(channel.type) && (
                 <div>
                   <label className="block text-xs font-semibold text-fc-muted uppercase tracking-wide mb-1.5">{t('createChannel.slowmode')}</label>
-                  <select value={slowmode} onChange={e => setSlowmode(Number(e.target.value))}
+                  <select aria-label={t('createChannel.slowmode')} value={slowmode} onChange={e => setSlowmode(Number(e.target.value))}
                     className="w-full px-3 py-2 bg-fc-input rounded-lg text-white outline-none text-sm">
                     {SLOWMODE_OPTIONS.map(v => <option key={v} value={v}>{t(`slowmode.${v}`)}</option>)}
                   </select>
@@ -280,7 +280,7 @@ export default function ChannelSettingsModal({ channel, serverId, onClose, initi
                 <>
                   <div>
                     <label className="block text-xs font-semibold text-fc-muted uppercase tracking-wide mb-1.5">{t('chset.defaultSort')}</label>
-                    <select value={defaultSort} onChange={e => setDefaultSort(e.target.value)}
+                    <select aria-label={t('chset.defaultSort')} value={defaultSort} onChange={e => setDefaultSort(e.target.value)}
                       className="w-full px-3 py-2 bg-fc-input rounded-lg text-white outline-none text-sm">
                       {FORUM_SORT_OPTIONS.map(v => <option key={v} value={v}>{t(`forumSort.${v}`)}</option>)}
                     </select>
@@ -331,7 +331,7 @@ export default function ChannelSettingsModal({ channel, serverId, onClose, initi
                     <label className="block text-xs font-semibold text-fc-muted uppercase tracking-wide mb-1.5">
                       {t('createChannel.userLimit')} — <span className="text-white">{userLimit === 0 ? t('invite.unlimited') : userLimit}</span>
                     </label>
-                    <input type="range" min={0} max={99} value={userLimit}
+                    <input aria-label={t('createChannel.userLimit')} type="range" min={0} max={99} value={userLimit}
                       onChange={e => setUserLimit(Number(e.target.value))}
                       className="w-full accent-fc-accent" />
                   </div>
@@ -341,7 +341,7 @@ export default function ChannelSettingsModal({ channel, serverId, onClose, initi
                       <label className="block text-xs font-semibold text-fc-muted uppercase tracking-wide mb-1.5">
                         {t('chset.bitrate')} — <span className="text-white">{Math.round(bitrate / 1000)} kbps</span>
                       </label>
-                      <input type="range" min={8000} max={384000} step={8000} value={bitrate}
+                      <input aria-label={t('chset.bitrate')} type="range" min={8000} max={384000} step={8000} value={bitrate}
                         onChange={e => setBitrate(Number(e.target.value))}
                         className="w-full accent-fc-accent" />
                       <div className="flex justify-between text-xs text-fc-muted mt-0.5">

@@ -299,13 +299,13 @@ export default function VideoSection() {
             <option value="2160">2160p (4K)</option>
             <option value="source">{t('dock.stream.source')}</option>
           </select>
-          <select value={screenFps} onChange={e => savePref('fc_screen_fps', e.target.value, setScreenFps)}
+          <select aria-label={t('settings.video.screenResolution')} value={screenFps} onChange={e => savePref('fc_screen_fps', e.target.value, setScreenFps)}
             className="bg-fc-channel border border-fc-hover rounded-lg px-3 py-2 text-sm text-white">
             <option value="15">{fps(15)}</option>
             <option value="30">{fps(30)}</option>
             <option value="60">{`${fps(60)} (${t('settings.video.game')})`}</option>
           </select>
-          <select value={screenBitrate} onChange={e => savePref('fc_screen_bitrate', e.target.value, setScreenBitrate)}
+          <select aria-label={t('settings.video.screenFps')} value={screenBitrate} onChange={e => savePref('fc_screen_bitrate', e.target.value, setScreenBitrate)}
             className="bg-fc-channel border border-fc-hover rounded-lg px-3 py-2 text-sm text-white">
             <option value="1500000">{mbps(1.5)}</option>
             <option value="4000000">{`${mbps(4)} (${rec})`}</option>
@@ -313,7 +313,7 @@ export default function VideoSection() {
             <option value="12000000">12 Mb/s (4K)</option>
             <option value="20000000">{`${mbps(20)} (4K, ${fps(60)})`}</option>
           </select>
-          <select value={screenHint} onChange={e => savePref('fc_screen_hint', e.target.value, setScreenHint)}
+          <select aria-label={t('settings.video.screenBitrate')} value={screenHint} onChange={e => savePref('fc_screen_hint', e.target.value, setScreenHint)}
             className="bg-fc-channel border border-fc-hover rounded-lg px-3 py-2 text-sm text-white">
             <option value="motion">{t('settings.video.motion')}</option>
             <option value="detail">{t('settings.video.detail')}</option>

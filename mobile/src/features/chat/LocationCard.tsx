@@ -8,7 +8,7 @@ import { colors, font, radius, spacing } from '@/theme'
 export function LocationCard({ g }: { g: Geo }) {
   const t = useT()
   return (
-    <Pressable style={styles.card} onPress={() => void Linking.openURL(osmUrl(g))} accessibilityRole="link" accessibilityLabel={t('geo.open')}>
+    <Pressable style={styles.card} onPress={() => void Linking.openURL(osmUrl(g)).catch(() => undefined)} accessibilityRole="link" accessibilityLabel={t('geo.open')}>
       <Ionicons name="location" size={22} color={colors.danger} />
       <View style={{ flex: 1 }}>
         <Text style={styles.title}>{t('geo.shared')}</Text>

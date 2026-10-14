@@ -19,7 +19,7 @@ export function EventExtras({ event: e }: { event: ServerEvent }) {
       {repeat || reminder ? <T variant="muted">{[repeat, reminder && `🔔 ${reminder}`].filter(Boolean).join(' · ')}</T> : null}
       <View style={{ flexDirection: 'row', gap: spacing.sm }}>
         <Button title={t('community.events.google')} icon="calendar-outline" variant="secondary" style={{ flex: 1 }}
-          onPress={() => void Linking.openURL(url)} />
+          onPress={() => void Linking.openURL(url).catch(() => undefined)} />
         <Button title={t('community.events.share')} icon="share-outline" variant="secondary" style={{ flex: 1 }}
           onPress={() => void Share.share({ message: `${e.name}\n${formatEventDate(e.start_time)}${repeat ? ` (${repeat})` : ''}\n${url}` })} />
       </View>

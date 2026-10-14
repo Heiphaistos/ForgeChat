@@ -2,7 +2,9 @@
 // automatique quand un logiciel de diffusion tourne (app de bureau). L'état courant vit dans
 // l'attribut `data-streamer-mode` de <html>, lu par index.css et par streamerActive().
 import { useEffect, useState } from 'react'
+import toast from 'react-hot-toast'
 import api from '../api/client'
+import { t as tr } from '../i18n'
 import { queryClient } from '../main'
 import { streamerActive, useUxPrefs } from './uxPrefs'
 import { isStreamingSoftwareRunning } from './streamingSoftware'
@@ -14,7 +16,7 @@ export function setStreamerMode(on: boolean, persist: boolean) {
   setAttr(on)
   if (!persist) return
   queryClient.setQueryData<Record<string, unknown>>(['user-settings'], d => (d ? { ...d, streamer_mode: on } : d))
-  api.put('/user/settings', { streamer_mode: on }).catch(() => {})
+  api.put('/user/settings', { streamer_mode: on }).catch(() => toast.error(tr('msg.saveFailed')))
 }
 
 /** Raccourci « Basculer le mode streamer ». */

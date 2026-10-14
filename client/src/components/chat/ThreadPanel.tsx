@@ -279,7 +279,7 @@ export default function ThreadPanel({ serverId, channelId, parentMessageId, thre
       qc.invalidateQueries({ queryKey: ['threads', channelId] })
       toast.success(tr('thr.created'))
       if (tid && res.data.first_message_id && res.prepared.count > 0) {
-        await uploadPrepared(attachUrl(tid, res.data.first_message_id), res.prepared).catch(() => {})
+        await uploadPrepared(attachUrl(tid, res.data.first_message_id), res.prepared).catch(() => toast.error(tr('common.error')))
         qc.invalidateQueries({ queryKey: ['thread-messages', tid] })
       }
     },
@@ -301,7 +301,7 @@ export default function ThreadPanel({ serverId, channelId, parentMessageId, thre
       pending.clear()
       qc.invalidateQueries({ queryKey: ['thread-messages', threadId] })
       if (threadId && msgId && res.prepared.count > 0) {
-        await uploadPrepared(attachUrl(threadId, msgId), res.prepared).catch(() => {})
+        await uploadPrepared(attachUrl(threadId, msgId), res.prepared).catch(() => toast.error(tr('common.error')))
         qc.invalidateQueries({ queryKey: ['thread-messages', threadId] })
       }
     },

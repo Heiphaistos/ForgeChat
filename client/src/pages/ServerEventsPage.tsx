@@ -173,7 +173,7 @@ function EventModal({ initial, onClose, onSubmit, loading, mode }: EventModalPro
               <label className="block text-xs font-semibold text-fc-muted uppercase tracking-wide mb-1.5">
                 {t('settings.notif.start')} <span className="text-fc-red">*</span>
               </label>
-              <input
+              <input aria-label={t('settings.notif.start')}
                 type="datetime-local"
                 value={form.start_time}
                 onChange={set('start_time')}
@@ -185,7 +185,7 @@ function EventModal({ initial, onClose, onSubmit, loading, mode }: EventModalPro
               <label className="block text-xs font-semibold text-fc-muted uppercase tracking-wide mb-1.5">
                 {t('settings.notif.end')}
               </label>
-              <input
+              <input aria-label={t('settings.notif.end')}
                 type="datetime-local"
                 value={form.end_time}
                 onChange={set('end_time')}

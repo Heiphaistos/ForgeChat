@@ -200,7 +200,7 @@ export default function AppearanceSection() {
 
       <section>
         <H>{t('settings.appearance.codeTheme')}</H>
-        <select value={codeTheme} onChange={e => setCodeTheme(e.target.value)}
+        <select aria-label={t('settings.appearance.codeTheme')} value={codeTheme} onChange={e => setCodeTheme(e.target.value)}
           className="w-full bg-fc-channel border border-fc-hover rounded-lg px-3 py-2 text-sm text-fc-text">
           {CODE_THEMES.map(c => <option key={c} value={c}>{c}</option>)}
         </select>

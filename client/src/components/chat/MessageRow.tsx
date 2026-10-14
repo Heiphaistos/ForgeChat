@@ -768,7 +768,7 @@ function EditingArea({
 
   return (
     <div className="mt-1">
-      <textarea
+      <textarea aria-label={t('msg.editLabel')}
         ref={editRef}
         value={content}
         onChange={e => setContent(e.target.value)}

@@ -386,12 +386,12 @@ export default function RolesTab({ serverId }: { serverId: string }) {
                     <Trash2 size={14} />
                   </button>
                   {showDeleteConfirm && (
-                    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 px-4" onClick={() => setShowDeleteConfirm(false)}>
+                    <div role="dialog" aria-modal="true" aria-label={t('servers.delete.title', { name: selected.name })} className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 px-4" onClick={() => setShowDeleteConfirm(false)} onKeyDown={e => { if (e.key === 'Escape') setShowDeleteConfirm(false) }}>
                       <div className="bg-fc-sidebar rounded-xl shadow-2xl p-6 w-full max-w-sm" onClick={e => e.stopPropagation()}>
                         <h3 className="text-lg font-bold text-white mb-2">{t('servers.delete.title', { name: selected.name })}</h3>
                         <p className="text-sm text-fc-muted mb-5">{t('roles.deleteWarn')}</p>
                         <div className="flex gap-3 justify-end">
-                          <button onClick={() => setShowDeleteConfirm(false)} className="px-4 py-2 text-sm rounded-lg bg-fc-hover hover:bg-fc-input text-white transition">{t('common.cancel')}</button>
+                          <button autoFocus onClick={() => setShowDeleteConfirm(false)} className="px-4 py-2 text-sm rounded-lg bg-fc-hover hover:bg-fc-input text-white transition">{t('common.cancel')}</button>
                           <button onClick={() => { deleteRole.mutate(selected.id); setShowDeleteConfirm(false) }} disabled={deleteRole.isPending} className="px-4 py-2 text-sm rounded-lg bg-red-500 hover:bg-red-600 text-white font-semibold transition disabled:opacity-50">{t('common.delete')}</button>
                         </div>
                       </div>
@@ -420,7 +420,7 @@ export default function RolesTab({ serverId }: { serverId: string }) {
                 <div className="flex gap-3">
                   <div className="flex-1">
                     <label className="text-xs font-semibold text-fc-muted uppercase tracking-wide mb-1.5 block">{t('roles.name')}</label>
-                    <input value={editName} onChange={e => setEditName(e.target.value)}
+                    <input aria-label={t('roles.name')} value={editName} onChange={e => setEditName(e.target.value)}
                       disabled={selected.is_everyone}
                       className="w-full px-3 py-2 bg-fc-input rounded-lg text-white text-sm outline-none focus:ring-2 focus:ring-fc-accent disabled:opacity-50"
                     />

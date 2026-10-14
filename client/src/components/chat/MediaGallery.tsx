@@ -4,7 +4,7 @@
 import { useInfiniteQuery } from '@tanstack/react-query'
 import { useMemo, useState } from 'react'
 import { X } from 'lucide-react'
-import api from '../../api/client'
+import api, { mediaUrl } from '../../api/client'
 import { useT } from '../../i18n'
 import { openDm, type RawDm } from '../../e2e/dmMessages'
 import { displayAttachments, type ServerAttachment } from '../../e2e/files'
@@ -56,7 +56,7 @@ export default function MediaGallery({ dmId, onClose, onJump }: { dmId: string; 
             <div key={`${messageId}-${i}`} className="relative group">
               {att.e2e || att.e2eLocked
                 ? <E2EAttachment att={att} mediaClass={filter === 'media' ? 'w-full h-28 object-cover rounded' : undefined} />
-                : <a href={att.url} target="_blank" rel="noopener noreferrer" className="text-sm text-fc-text underline break-all">{att.filename}</a>}
+                : <a href={mediaUrl(att.url)} target="_blank" rel="noopener noreferrer" className="text-sm text-fc-text underline break-all">{att.filename}</a>}
               <button onClick={() => onJump(messageId)}
                 className="absolute bottom-1 right-1 text-[10px] px-1.5 py-0.5 rounded bg-black/60 text-white opacity-0 group-hover:opacity-100 focus:opacity-100">
                 {t('gallery.jump')}
