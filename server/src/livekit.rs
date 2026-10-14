@@ -12,9 +12,12 @@
 use serde::Serialize;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-/// Durée de validité du jeton. Il ne sert qu'à l'ouverture de la connexion
-/// (et aux reconnexions complètes) : une session déjà établie n'expire pas.
-const TOKEN_TTL_S: u64 = 6 * 3600;
+/// Durée de validité du jeton. Il ne sert qu'à l'ouverture de la connexion :
+/// une session déjà établie n'expire pas (le SFU renouvelle lui-même le jeton
+/// de reconnexion), et chaque (re)join passe par VOICE_JOIN qui en redélivre un
+/// après revérification des droits. Court, pour qu'un membre exclu ne puisse
+/// pas rejoindre le SFU en direct avec son ancien jeton.
+const TOKEN_TTL_S: u64 = 10 * 60;
 
 #[derive(Clone, Debug)]
 pub struct LiveKitConfig {
@@ -289,6 +292,13 @@ mod tests {
         assert_eq!(c["video"]["canPublishSources"], serde_json::json!(["microphone", "camera"]));
         assert!(c["video"].get("roomAdmin").is_none());
         assert!(c.get("attributes").is_none());
+    }
+
+    #[test]
+    fn le_jeton_expire_vite() {
+        let c = lire(&join_token(&cfg(), "voice-1", "u", "u", Publish::default(), false).unwrap());
+        let ttl = c["exp"].as_u64().unwrap() - now();
+        assert!(ttl <= 15 * 60 && ttl > 5 * 60, "ttl = {ttl}");
     }
 
     #[test]

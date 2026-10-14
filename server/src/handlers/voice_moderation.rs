@@ -25,6 +25,21 @@ use crate::{
     state::AppState,
 };
 
+/// Après un changement de rôle ou de surcharge : éjecte du vocal (et du SFU)
+/// les membres du serveur qui n'ont plus VIEW_CHANNEL + CONNECT_VOICE sur leur salon.
+pub async fn evict_unauthorized_voice(state: &AppState, server_id: Uuid) {
+    let occupants: Vec<(Uuid, Uuid)> = state.user_voice.read().await.iter().map(|(u, c)| (*u, *c)).collect();
+    for (user, ch) in occupants {
+        if state.channel_server_id(ch).await != Some(server_id) { continue; }
+        let perms = state.effective_channel_permissions(user, ch).await.map(|(_, p)| p).unwrap_or(0);
+        if has_perm(perms, Permissions::VIEW_CHANNEL) && voice_perm_ok(state, server_id, ch, perms, Permissions::CONNECT_VOICE).await { continue; }
+        cleanup_voice(state, user, None).await;
+        state.broadcast_to_user(user, serde_json::json!({
+            "type": "VOICE_FORCE_DISCONNECT", "server_id": server_id, "channel_id": ch,
+        }).to_string()).await;
+    }
+}
+
 /// Délai laissé au client déplacé pour rejoindre le salon cible.
 const MOVE_GRANT_TTL: Duration = Duration::from_secs(30);
 
