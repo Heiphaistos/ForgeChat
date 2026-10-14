@@ -138,7 +138,7 @@ export default function MembersTab({ serverId }: { serverId: string }) {
               </div>
               <div className="flex-1 min-w-0" aria-hidden>
                 <div className="flex items-center gap-1.5 flex-wrap">
-                  <span className="text-white text-sm font-medium">{m.username}</span>
+                  <span className="text-white text-sm font-medium truncate max-w-full">{m.username}</span>
                   {m.is_owner && (
                     <span className="text-xs bg-yellow-500/20 text-yellow-400 px-1.5 py-0.5 rounded">{t('mtab.owner')}</span>
                   )}

@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Calendar, MessageCircle, ExternalLink, UserPlus, UserCheck, Check, X, Pencil, Ban } from 'lucide-react'
 import toast from 'react-hot-toast'
@@ -148,7 +149,8 @@ export default function UserPopup({ userId, serverId, anchorX, anchorY, onClose 
         zIndex: 9999,
       }
 
-  return (
+  // Portail : rendue dans la liste des messages, la feuille passait sous le composer (contexte d'empilement).
+  return createPortal(
     <>
     {isSheet && (
       <div style={{ position: 'fixed', inset: 0, zIndex: 9998 }} className="bg-black/50" aria-hidden onMouseDown={onClose} />
@@ -371,6 +373,7 @@ export default function UserPopup({ userId, serverId, anchorX, anchorY, onClose 
         )}
       </div>
     </div>
-    </>
+    </>,
+    document.body,
   )
 }

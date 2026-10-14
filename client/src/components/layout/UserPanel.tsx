@@ -264,7 +264,7 @@ export default function UserPanel({ onToggleActivity, activityOpen, compact = fa
   if (!user) return null
 
   return (
-    <div className={`flex items-center gap-2 px-2 py-2 bg-fc-bg/50 border-t border-fc-bg flex-shrink-0 relative pb-safe ${compact ? 'md:w-[72px] md:flex-col md:px-0 md:gap-1' : ''}`}>
+    <div className={`fc-user-panel flex items-center gap-2 px-2 py-2 bg-fc-bg/50 border-t border-fc-bg flex-shrink-0 relative pb-safe ${compact ? 'md:w-[72px] md:flex-col md:px-0 md:gap-1' : ''}`}>
       {/* Popup statut rapide */}
       {showStatusPopup && (
         <QuickStatusPopup onClose={() => setShowStatusPopup(false)} />
@@ -294,7 +294,7 @@ export default function UserPanel({ onToggleActivity, activityOpen, compact = fa
         </div>
       </button>
 
-      <div className="flex items-center gap-0.5 flex-shrink-0">
+      <div className="fc-user-panel-actions flex items-center gap-0.5 flex-shrink-0">
         <div className={`contents ${compact ? 'md:hidden' : ''}`}>
         <button
           onClick={toggleFocus}

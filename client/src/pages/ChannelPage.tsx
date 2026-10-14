@@ -86,7 +86,7 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
   const meId = useAuth(s => s.user?.id)
   const markRead = useUnread(s => s.markRead)
   const qc = useQueryClient()
-  const [showMembers, setShowMembers] = useState(() => window.innerWidth >= 768)
+  const [showMembers, setShowMembers] = useState(() => window.innerWidth >= 1024)
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null)
   const [activeDirectThreadId, setActiveDirectThreadId] = useState<string | null>(null)
   // Lien ?thread=<id> (notification de fil) : ouvre ce fil directement

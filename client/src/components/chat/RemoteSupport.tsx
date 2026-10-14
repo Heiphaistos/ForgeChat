@@ -233,7 +233,7 @@ function RemoteSupportMenu({ dmId, autoOpen, round }: { dmId: string; autoOpen: 
         <LifeBuoy size={round ? 20 : 18} />
       </button>
       {open && (
-        <div className={`absolute z-50 w-72 max-w-[calc(100vw-24px)] rounded-lg border border-fc-hover bg-fc-sidebar p-2 shadow-xl ${round ? 'bottom-full left-1/2 -translate-x-1/2 mb-2' : 'right-0 top-full mt-1'}`}>
+        <div className={`fc-header-pop absolute z-50 w-72 max-w-[calc(100vw-24px)] rounded-lg border border-fc-hover bg-fc-sidebar p-2 shadow-xl ${round ? 'bottom-full left-1/2 -translate-x-1/2 mb-2' : 'right-0 top-full mt-1'}`}>
           {open === 'menu' ? (
             <div className="flex flex-col">
               <button className="rounded px-2 py-2 text-left text-sm text-fc-text hover:bg-fc-hover"

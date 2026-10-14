@@ -130,7 +130,7 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="fixed inset-0 bg-fc-bg z-50 flex">
+    <div className="fc-settings-page fixed inset-0 bg-fc-bg z-50 flex">
       {/* Sidebar nav — masquée sur mobile quand contenu affiché */}
       <div className={`
         flex flex-col flex-shrink-0 bg-fc-channel border-r border-fc-hover

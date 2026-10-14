@@ -303,9 +303,9 @@ export default function RolesTab({ serverId }: { serverId: string }) {
   )
 
   return (
-    <div className="flex gap-4 h-full min-h-0">
-      {/* Liste rôles */}
-      <div className="w-52 flex-shrink-0 flex flex-col gap-2">
+    <div className="flex flex-col md:flex-row gap-4 h-full min-h-0">
+      {/* Liste rôles (au-dessus de l'éditeur sur téléphone) */}
+      <div className="w-full md:w-52 flex-shrink-0 flex flex-col gap-2">
         <div className="flex gap-2">
           <input
             value={newName} onChange={e => setNewName(e.target.value)}

@@ -991,7 +991,7 @@ export default function GroupDMPage() {
                   }
                 </button>
                 </AvatarDecoration>
-                <div className={`max-w-xs ${isMe ? 'items-end' : 'items-start'} flex flex-col`}>
+                <div className={`fc-gdm-col max-w-xs ${isMe ? 'items-end' : 'items-start'} flex flex-col`}>
                   {!isMe && (
                     <span className="text-xs text-fc-muted mb-0.5 ml-1" onContextMenu={authorMenu}><UserName userId={msg.sender_id} name={msg.sender_username} withTag /></span>
                   )}
@@ -1020,8 +1020,8 @@ export default function GroupDMPage() {
                       <button onClick={() => setEditingMsgId(null)} className="p-1.5 text-fc-muted hover:text-white rounded-lg" aria-label={t('msg.cancel')}><X size={13} /></button>
                     </div>
                   ) : (
-                    <div className="flex items-center gap-1">
-                      <div className="opacity-100 md:opacity-0 md:group-hover:opacity-100 flex gap-0.5 transition">
+                    <div className="fc-gdm-msg flex items-center gap-1">
+                      <div className="fc-gdm-tools opacity-100 md:opacity-0 md:group-hover:opacity-100 flex gap-0.5 transition">
                         <div className="relative">
                           <button
                             onClick={() => setEmojiPickerFor(p => p === msg.id ? null : msg.id)}
