@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useEscapeKey } from '../hooks/useEscapeKey'
 import { useNavigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ChevronLeft, Ban, LogOut, Trash2, Plus, Search, Crown } from 'lucide-react'
@@ -200,6 +201,7 @@ function ServersTab() {
   const [q, setQ] = useState('')
   const [filter, setFilter] = useState('all')
   const [del, setDel] = useState<AdminServer | null>(null)
+  useEscapeKey(() => { setDel(null); setPw('') }, !!del)
   const [suspending, setSuspending] = useState<AdminServer | null>(null)
   const [pw, setPw] = useState('')
   const { data, isLoading } = useQuery<{ total: number; servers: AdminServer[] }>({

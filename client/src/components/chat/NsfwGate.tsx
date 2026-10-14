@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useEscapeKey } from '../../hooks/useEscapeKey'
 import { ShieldAlert } from 'lucide-react'
 import { useT } from '../../i18n'
 
@@ -29,6 +30,7 @@ export function useNsfwOk(channelId: string | undefined): [boolean, () => void] 
 /** Écran de confirmation avant d'entrer dans un salon réservé aux adultes (comme Discord). */
 export default function NsfwGate({ name, onConfirm, onBack }: { name: string; onConfirm: () => void; onBack: () => void }) {
   const t = useT()
+  useEscapeKey(onBack)
   return (
     <div className="flex h-full items-center justify-center bg-fc-chat p-6">
       <div role="alertdialog" aria-labelledby="nsfw-titre" className="max-w-md text-center space-y-4">

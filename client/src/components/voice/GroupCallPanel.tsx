@@ -1,6 +1,7 @@
 // Interface de l'appel de groupe privé : réutilise la scène (CallStage) et les
 // tuiles (PeerTile) des appels vocaux/vidéo, plus la sonnerie globale.
 import { useEffect, useMemo, useState } from 'react'
+import { useEscapeKey } from '../../hooks/useEscapeKey'
 import { useNavigate } from 'react-router-dom'
 import { Mic, MicOff, Video, VideoOff, PhoneOff, Phone } from 'lucide-react'
 import { useGroupCall } from '../../store/groupCall'
@@ -102,6 +103,7 @@ export function GroupCallRinger() {
     const t = setTimeout(dismissRing, Math.max(0, ring.expiresAt - Date.now()))
     return () => clearTimeout(t)
   }, [ring, dismissRing])
+  useEscapeKey(dismissRing, !!ring)
   if (!ring) return null
   const accept = () => {
     nav(`/dms/groups/${ring.groupId}`)

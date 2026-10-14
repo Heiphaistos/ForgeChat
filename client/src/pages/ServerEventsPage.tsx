@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useEscapeKey } from '../hooks/useEscapeKey'
 import { Calendar, Plus, Users, Edit2, Trash2, Check, Clock, X, List } from 'lucide-react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import api from '../api/client'
@@ -86,6 +87,7 @@ interface EventModalProps {
 
 function EventModal({ initial, onClose, onSubmit, loading, mode }: EventModalProps) {
   const t = useT()
+  useEscapeKey(onClose)
   const [form, setForm] = useState<EventFormData>({
     name:        initial?.name        ?? '',
     description: initial?.description ?? '',

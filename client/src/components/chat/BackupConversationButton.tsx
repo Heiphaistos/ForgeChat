@@ -2,6 +2,7 @@
 // sur l'appareil, sont rescellés par une phrase secrète (e2e/historyBackup.ts). Lecture hors
 // ligne : page /sauvegarde.
 import { useState } from 'react'
+import { useEscapeKey } from '../../hooks/useEscapeKey'
 import { ShieldCheck } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { useChat } from '../../store/chat'
@@ -18,6 +19,7 @@ export default function BackupConversationButton({ channelId, channelName }: { c
   const [pass, setPass] = useState('')
   const [pass2, setPass2] = useState('')
   const [busy, setBusy] = useState(false)
+  useEscapeKey(() => { if (!busy) setOpen(false) }, open)
 
   const run = async (e: React.FormEvent) => {
     e.preventDefault()

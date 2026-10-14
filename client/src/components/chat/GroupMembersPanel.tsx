@@ -1,6 +1,7 @@
 // Panneau des membres d'un groupe privé : le propriétaire peut exclure un membre
 // ou lui céder le groupe (P2-10), avec confirmation.
 import { useState } from 'react'
+import { useEscapeKey } from '../../hooks/useEscapeKey'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Crown, UserMinus } from 'lucide-react'
 import toast from 'react-hot-toast'
@@ -18,6 +19,7 @@ export default function GroupMembersPanel({ groupId, ownerId, members, meId }: {
   const qc = useQueryClient()
   const [pending, setPending] = useState<Pending>(null)
   const iAmOwner = !!meId && meId === ownerId
+  useEscapeKey(() => setPending(null), !!pending)
 
   const act = useMutation({
     mutationFn: (p: NonNullable<Pending>) => p.kind === 'remove'
