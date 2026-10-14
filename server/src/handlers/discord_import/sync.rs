@@ -1526,4 +1526,39 @@ mod tests {
         assert_eq!(family("announcement"), family("text"));
         assert_ne!(family("voice"), family("text"));
     }
+
+    /// Migration 139 : défauts = comportement antérieur, mode borné par une contrainte.
+    #[tokio::test]
+    #[ignore]
+    async fn selection_columns_defaults_and_constraint() {
+        let url = std::env::var("FORGECHAT_TEST_DATABASE_URL").expect("FORGECHAT_TEST_DATABASE_URL");
+        let db = sqlx::PgPool::connect(&url).await.unwrap();
+        sqlx::migrate!("./migrations").run(&db).await.unwrap();
+        let tag = Uuid::new_v4().simple().to_string();
+        let user: Uuid = sqlx::query_scalar("INSERT INTO users (username, email, password_hash) VALUES ($1, $2, 'x') RETURNING id")
+            .bind(&tag[..20])
+            .bind(format!("{tag}@test.local"))
+            .fetch_one(&db)
+            .await
+            .unwrap();
+        let srv: Uuid = sqlx::query_scalar("INSERT INTO servers (name, owner_id) VALUES ('dsel', $1) RETURNING id")
+            .bind(user)
+            .fetch_one(&db)
+            .await
+            .unwrap();
+        sqlx::query("INSERT INTO discord_sync_configs (server_id, guild_id) VALUES ($1, '123456789012345678')")
+            .bind(srv)
+            .execute(&db)
+            .await
+            .unwrap();
+        let (mode, inc, exc, auto): (String, Vec<String>, Vec<String>, bool) =
+            sqlx::query_as("SELECT sync_mode, included_ids, excluded_ids, auto_include_new FROM discord_sync_configs WHERE server_id=$1")
+                .bind(srv)
+                .fetch_one(&db)
+                .await
+                .unwrap();
+        assert_eq!((mode.as_str(), inc.len(), exc.len(), auto), ("full", 0, 0, true));
+        let bad = sqlx::query("UPDATE discord_sync_configs SET sync_mode='bogus' WHERE server_id=$1").bind(srv).execute(&db).await;
+        assert!(bad.is_err());
+    }
 }
