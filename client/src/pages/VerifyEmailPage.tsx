@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { useFormError } from '../components/ui/FormError'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../store/auth'
 import api from '../api/client'
@@ -13,6 +14,7 @@ const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
 
 export default function VerifyEmailPage() {
   const t = useT()
+  const form = useFormError()
   const location = useLocation()
   const nav = useNavigate()
   const { fetchMe } = useAuth()
@@ -54,7 +56,7 @@ export default function VerifyEmailPage() {
   const submit = async () => {
     const code = digits.join('')
     if (code.length !== CODE_LEN) {
-      toast.error(t('hc.ver.digits', { n: CODE_LEN }))
+      form.fail(t('hc.ver.digits', { n: CODE_LEN }))
       return
     }
     setLoading(true)
@@ -68,7 +70,7 @@ export default function VerifyEmailPage() {
       toast.success(t('hc.ver.created'))
       nav('/')
     } catch (err: any) {
-      toast.error(err.response?.data?.error ?? t('hc.ver.invalid'))
+      form.fail(err.response?.data?.error ?? t('hc.ver.invalid'))
     } finally {
       setLoading(false)
     }
@@ -123,6 +125,7 @@ export default function VerifyEmailPage() {
           ))}
         </div>
 
+        {form.el && <div className="mb-4">{form.el}</div>}
         <button
           onClick={submit}
           disabled={loading || digits.join('').length !== 4}
