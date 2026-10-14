@@ -4,6 +4,8 @@
 // quitte jamais l'appareil. Service injoignable : on n'empêche rien (les autres règles restent).
 // Testé par `node --test scripts/pwned.test.mjs`.
 
+import { intlLocale, t } from '../i18n/index.ts'
+
 export type RangeFetcher = (prefix: string) => Promise<string>
 
 async function sha1Hex(text: string): Promise<string> {
@@ -35,5 +37,5 @@ export async function pwnedProblem(pw: string, fetchRange?: RangeFetcher): Promi
   })
   const n = await pwnedCount(pw, fetcher)
   if (!n) return null
-  return `Ce mot de passe figure dans ${n.toLocaleString('fr-FR')} fuite${n > 1 ? 's' : ''} de données connue${n > 1 ? 's' : ''} : les pirates l'essaient en premier. Choisis-en un autre.`
+  return t(n > 1 ? 'e2e.pw.leaked.other' : 'e2e.pw.leaked.one', { n: n.toLocaleString(intlLocale()) })
 }

@@ -12,6 +12,15 @@ const AAD = 'forgechat backup v1'
 
 export interface BackupMessage { at: string; author: string; text: string; files?: string[] }
 export interface BackupPayload { conversation: string; exported_at: string; messages: BackupMessage[] }
+/** Code stable de l'échec : l'écran traduit d'après ce code, `message` reste le texte français de repli. */
+export type BackupErrorCode = 'NOT_BACKUP' | 'BAD_PARAMS' | 'BAD_PASSPHRASE'
+export class BackupError extends Error {
+  code: BackupErrorCode
+  constructor(code: BackupErrorCode, message: string) {
+    super(message)
+    this.code = code
+  }
+}
 interface Sealed {
   format: typeof BACKUP_FORMAT; v: 1
   kdf: { alg: 'argon2id'; t: number; m: number; p: number; salt: string }
@@ -41,18 +50,18 @@ export async function openBackup(text: string, pass: string): Promise<BackupPayl
   try {
     s = JSON.parse(text)
   } catch {
-    throw new Error('Ce fichier n’est pas une sauvegarde ForgeChat.')
+    throw new BackupError('NOT_BACKUP', 'Ce fichier n’est pas une sauvegarde ForgeChat.')
   }
-  if (s?.format !== BACKUP_FORMAT || s.v !== 1 || s.kdf?.alg !== 'argon2id') throw new Error('Ce fichier n’est pas une sauvegarde ForgeChat.')
+  if (s?.format !== BACKUP_FORMAT || s.v !== 1 || s.kdf?.alg !== 'argon2id') throw new BackupError('NOT_BACKUP', 'Ce fichier n’est pas une sauvegarde ForgeChat.')
   // Bornes : un fichier piégé ne doit pas bloquer l'appareil avec des réglages démesurés.
   const { t, m, p } = s.kdf
-  if (!(t >= 1 && t <= 10 && m >= 8192 && m <= 262144 && p >= 1 && p <= 4)) throw new Error('Réglages de sauvegarde refusés.')
+  if (!(t >= 1 && t <= 10 && m >= 8192 && m <= 262144 && p >= 1 && p <= 4)) throw new BackupError('BAD_PARAMS', 'Réglages de sauvegarde refusés.')
   const key = await keyFrom(pass, c.b64uDecode(s.kdf.salt), { t, m, p })
   try {
     const plain = await c.aesGcmDecrypt(key, c.b64uDecode(s.iv), c.b64uDecode(s.ct), AAD)
     return JSON.parse(new TextDecoder().decode(plain)) as BackupPayload
   } catch {
-    throw new Error('Phrase secrète incorrecte (ou fichier modifié).')
+    throw new BackupError('BAD_PASSPHRASE', 'Phrase secrète incorrecte (ou fichier modifié).')
   } finally {
     key.fill(0)
   }

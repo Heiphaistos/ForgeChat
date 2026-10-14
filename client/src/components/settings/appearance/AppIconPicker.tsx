@@ -33,6 +33,12 @@ export default function AppIconPicker() {
     return v === key ? fallback : v
   }
 
+  const presetName = (n: number, fallback: string) => {
+    const key = `appIcon.p.${n}` as Key
+    const v = t(key)
+    return v === key ? fallback : v
+  }
+
   const groups = useMemo(() => {
     const q = fold(query.trim())
     return PRESET_GROUPS
@@ -40,7 +46,8 @@ export default function AppIconPicker() {
       .map(g => {
         const label = groupLabel(g.id, g.label)
         const inGroup = !q || fold(`${label} ${g.label}`).includes(q)
-        return { ...g, label, presets: inGroup ? g.presets : g.presets.filter(p => fold(p.name).includes(q)) }
+        const named = g.presets.map(p => ({ ...p, name: presetName(p.n, p.name), fr: p.name }))
+        return { ...g, label, presets: inGroup ? named : named.filter(p => fold(`${p.name} ${p.fr}`).includes(q)) }
       })
       .filter(g => g.presets.length > 0)
     // eslint-disable-next-line react-hooks/exhaustive-deps -- t suit la langue, groupLabel en dépend seul
@@ -62,7 +69,7 @@ export default function AppIconPicker() {
   const chosenN = choice?.startsWith('preset:') ? Number(choice.slice(7)) : null
   const chosenName = choice === null ? t('appIcon.default')
     : choice === 'custom' ? t('appIcon.custom')
-    : NAMES.get(chosenN ?? 0) ?? t('appIcon.preset', { n: chosenN ?? 0 })
+    : NAMES.has(chosenN ?? 0) ? presetName(chosenN ?? 0, NAMES.get(chosenN ?? 0) ?? '') : t('appIcon.preset', { n: chosenN ?? 0 })
 
   return (
     <div className="space-y-3">

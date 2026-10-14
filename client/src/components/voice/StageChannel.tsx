@@ -230,7 +230,7 @@ export default function StageChannel({
               onClick={handleTakeFloor}
               className="text-[11px] font-medium text-fc-accent hover:text-fc-accent/80 transition"
             >
-              Prendre la parole
+              {tr('sw.stage.speak')}
             </button>
           )}
           {amSpeaking && (

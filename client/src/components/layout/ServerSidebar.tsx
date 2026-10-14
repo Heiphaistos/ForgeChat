@@ -342,7 +342,7 @@ export default function ServerSidebar() {
         {(serverMentionCounts[s.id] ?? 0) > 0 && (
           <span
             role="status"
-            aria-label={`${serverMentionCounts[s.id]} mention${serverMentionCounts[s.id] > 1 ? 's' : ''} non lue${serverMentionCounts[s.id] > 1 ? 's' : ''} sur ${s.name}`}
+            aria-label={tr(serverMentionCounts[s.id] > 1 ? 'sw.rail.mentionsOther' : 'sw.rail.mentionsOne', { n: serverMentionCounts[s.id], name: s.name })}
             className="absolute bottom-0 right-1 min-w-[18px] h-[18px] px-1 bg-fc-red text-white text-[10px] font-bold rounded-full border-2 border-fc-bg flex items-center justify-center"
           >
             <span aria-hidden>{serverMentionCounts[s.id] > 99 ? '99+' : serverMentionCounts[s.id]}</span>

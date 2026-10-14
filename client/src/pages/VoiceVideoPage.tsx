@@ -382,7 +382,7 @@ export default function VoiceVideoPage({ channel, serverId }: Props) {
   const detach = (userId: string, kind: 'camera' | 'screen', label: string, url?: string | null) => {
     if (isNativeVoice()) {
       // Linux : la vue web ne partage pas de flux entre fenêtres, la fenêtre relit le flux local.
-      if (url) void nativePopOut(url, kind === 'screen' ? `Écran de ${label} — ForgeChat` : `${label} — ForgeChat`)
+      if (url) void nativePopOut(url, kind === 'screen' ? tr('sw.voice.screenOf', { name: label }) : `${label} — ForgeChat`)
         .catch(e => toast.error(tr('voice.windowFailed', { error: String(e) })))
       return
     }

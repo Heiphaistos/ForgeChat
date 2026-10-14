@@ -68,8 +68,8 @@ export function initVoiceModeration(
     s.leave()
     // media_lost : retiré par le serveur après 20 s sans connexion au média.
     toast(d.reason === 'media_lost'
-      ? 'Déconnecté du salon vocal : connexion au serveur audio/vidéo perdue.'
-      : 'Un modérateur vous a déconnecté du salon vocal.')
+      ? tr('sw.v.modDropped')
+      : tr('sw.v.modKicked'))
   })
 
   return () => { offState(); offMove(); offDisconnect() }

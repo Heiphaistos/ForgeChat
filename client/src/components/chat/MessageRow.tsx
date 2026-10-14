@@ -21,7 +21,7 @@ import { AvatarDecoration } from '../ui/ProfileDecor'
 import AvatarRing from '../ui/AvatarRing'
 import AnimatedImg from '../ui/AnimatedImg'
 import UserName from '../ui/UserName'
-import { dateLocale, useT } from '../../i18n'
+import { dateLocale, useT, t as tr } from '../../i18n'
 import { ThreadCountsContext } from './threadCounts'
 import { UnencryptedBadge } from '../../e2e/ChannelBadge'
 import { displayAttachments } from '../../e2e/files'
@@ -351,7 +351,7 @@ function MessageRow({
                         onClick={() => setMediaRevealed(true)}
                         className="flex items-center justify-center w-full max-w-full sm:max-w-sm h-40 rounded shadow bg-black/60 text-white text-xs font-medium text-center px-2"
                       >
-                        Contenu potentiellement explicite — cliquer pour afficher
+                        {tr('sw.nsfw.reveal')}
                       </button>
                     ) : (
                       <E2EAttachment att={att} onOpen={src => onOpenLightbox([src], 0)} />
@@ -377,7 +377,7 @@ function MessageRow({
                           onClick={e => { e.stopPropagation(); setMediaRevealed(true) }}
                           className="absolute inset-0 flex items-center justify-center bg-black/30 rounded text-white text-xs font-medium text-center px-2"
                         >
-                          Contenu potentiellement explicite — cliquer pour afficher
+                          {tr('sw.nsfw.reveal')}
                         </button>
                       )}
                       {att.expires_at && !shouldBlurMedia && (
@@ -396,7 +396,7 @@ function MessageRow({
                           onClick={() => setMediaRevealed(true)}
                           className="flex items-center justify-center w-full max-w-full sm:max-w-sm h-40 rounded shadow bg-black/60 text-white text-xs font-medium text-center px-2"
                         >
-                          Contenu potentiellement explicite — cliquer pour afficher
+                          {tr('sw.nsfw.reveal')}
                         </button>
                       ) : (
                         <video

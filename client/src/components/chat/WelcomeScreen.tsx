@@ -100,7 +100,7 @@ export default function WelcomeScreen({ server, channels }: Props) {
         <p className={`text-fc-muted text-sm max-w-lg mb-2 leading-relaxed ${style === 'minimal' ? 'text-left' : 'text-center'}`}>
           {server.welcome_message
             ?? server.description
-            ?? `Voici le serveur ${server.name}. Commence par choisir un canal et rejoindre la conversation !`}
+            ?? tr('sw.welcome.default', { name: server.name })}
         </p>
 
         {/* Compteur membres */}
@@ -113,7 +113,7 @@ export default function WelcomeScreen({ server, channels }: Props) {
         {publicChannels.length > 0 && (
           <div className="w-full mb-8">
             <div className="text-xs font-semibold text-fc-muted uppercase tracking-widest mb-3">
-              Canaux disponibles
+              {tr('sw.welcome.channels')}
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               {publicChannels.map(ch => (

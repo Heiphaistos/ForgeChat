@@ -37,7 +37,7 @@ export default function EditHistoryModal({ messageId, onClose }: Props) {
         <div className="flex items-center justify-between px-5 py-4 border-b border-fc-hover">
           <h2 id="edit-history-modal-title" className="flex items-center gap-2 text-base font-semibold text-white">
             <History size={16} className="text-fc-accent" />
-            Historique des modifications
+            {tr('sw.edit.history')}
           </h2>
           <button
             onClick={onClose}
@@ -58,7 +58,7 @@ export default function EditHistoryModal({ messageId, onClose }: Props) {
 
           {!isLoading && edits.length === 0 && (
             <p className="text-sm text-fc-muted text-center py-8">
-              Aucun historique disponible.
+              {tr('sw.edit.none')}
             </p>
           )}
 

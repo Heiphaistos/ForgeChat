@@ -29,6 +29,7 @@ import * as auditMobile from './parts/auditMobile'
 import * as discordSync from './parts/discordSync'
 import * as discordFeatures from './parts/discordFeatures'
 import * as parity from './parts/parity'
+import * as sweep from './parts/sweep'
 
 export const en: Partial<Record<Key, string>> = {
   ...settings.en,
@@ -60,6 +61,7 @@ export const en: Partial<Record<Key, string>> = {
   ...discordSync.en,
   ...discordFeatures.en,
   ...parity.en,
+  ...sweep.en,
 
   // --- Commun ---
   'common.cancel': 'Cancel',

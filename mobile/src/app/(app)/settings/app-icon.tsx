@@ -7,7 +7,7 @@ import { APP_ENV } from '@/config/env'
 import { appIconSupported, applyAppIcon, currentAppIcon } from '@/features/appearance/appIcon'
 import { presetId, presetNumber, type AppIconId } from '@/features/appearance/appIconIds'
 import { DEFAULT_DEV_PREVIEW, DEFAULT_PREVIEW, PRESET_GROUPS, PRESET_PREVIEWS } from '@/features/appearance/appIconPreviews'
-import { useT } from '@/i18n'
+import { useT, type Key } from '@/i18n'
 import { errorMessage } from '@/lib/http'
 import { colors, font, radius, spacing } from '@/theme'
 import { useAppearance } from '@/theme/prefs'
@@ -65,7 +65,11 @@ export default function AppIconScreen() {
   }
 
   const n = presetNumber(saved)
-  const currentName = n === null ? t('appIcon.default') : (PRESET_NAMES.get(n) ?? t('appIcon.preset', { n }))
+  const tr = (key: string, fallback: string) => {
+    const v = t(key as Key)
+    return v === key ? fallback : v
+  }
+  const currentName = n === null ? t('appIcon.default') : PRESET_NAMES.has(n) ? tr(`appIcon.p.${n}`, PRESET_NAMES.get(n) ?? '') : t('appIcon.preset', { n })
 
   return (
     <ScrollView style={{ backgroundColor: colors.bg }} contentContainerStyle={{ padding: spacing.lg }}>
@@ -88,13 +92,13 @@ export default function AppIconScreen() {
             </View>
           </Section>
           {PRESET_GROUPS.map((g) => (
-            <Section key={g.id} title={g.label}>
-              <View style={styles.grid} accessibilityRole="radiogroup" accessibilityLabel={g.label}>
+            <Section key={g.id} title={tr(`appIcon.group.${g.id}`, g.label)}>
+              <View style={styles.grid} accessibilityRole="radiogroup" accessibilityLabel={tr(`appIcon.group.${g.id}`, g.label)}>
                 {g.presets.map((p) => (
                   <Tile
                     key={p.n}
                     source={PRESET_PREVIEWS[p.n]!}
-                    label={p.name}
+                    label={tr(`appIcon.p.${p.n}`, p.name)}
                     selected={saved === presetId(p.n)}
                     disabled={busy}
                     onPress={() => void pick(presetId(p.n))}

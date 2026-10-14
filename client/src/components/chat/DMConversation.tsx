@@ -96,7 +96,7 @@ function ReadReceiptBar({
         <div
           key={r.user_id}
           className="w-3.5 h-3.5 rounded-full bg-fc-accent overflow-hidden flex-shrink-0 ring-1 ring-fc-bg flex items-center justify-center"
-          title={`Lu par ${r.username}`}
+          title={tr('sw.dm.readBy', { name: r.username })}
         >
           {r.avatar
             ? <img src={mediaUrl(r.avatar)} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
@@ -287,7 +287,7 @@ export default function DMConversation({ dmId, partnerName, onSend, onLoadMore, 
     try {
       await withSeal('dm', dmId, content, body => api.patch(`/dms/${dmId}/messages/${msgId}`, body), prev?.client_msg_id ?? crypto.randomUUID())
     } catch (e) {
-      toast.error(sendErrorText(e, 'Impossible de modifier ce message'))
+      toast.error(sendErrorText(e, tr('sw.dm.editFail')))
     }
   }, [dmId])
 

@@ -13,7 +13,7 @@ export default function ServerBoostBanner({ boostLevel, boostCount }: ServerBoos
     return (
       <div
         role="status"
-        aria-label={`Niveau de boost 1 — ${boostCount} boost${boostCount > 1 ? 's' : ''}`}
+        aria-label={tr('sw.boost.level', { l: 1, n: boostCount })}
         className="mx-2 mb-1 px-3 py-1.5 rounded-md bg-gradient-to-r from-indigo-600/30 to-purple-600/30 border border-indigo-500/30 flex items-center gap-2"
       >
         <span className="text-xs font-semibold text-indigo-300 truncate">
@@ -27,7 +27,7 @@ export default function ServerBoostBanner({ boostLevel, boostCount }: ServerBoos
     return (
       <div
         role="status"
-        aria-label={`Niveau de boost 2 — ${boostCount} boost${boostCount > 1 ? 's' : ''}`}
+        aria-label={tr('sw.boost.level', { l: 2, n: boostCount })}
         className="mx-2 mb-1 px-3 py-1.5 rounded-md border border-purple-500/40 overflow-hidden relative flex items-center gap-2"
         style={{
           background: 'linear-gradient(90deg, #6d28d9 0%, #7c3aed 40%, #8b5cf6 70%, #6d28d9 100%)',
@@ -48,7 +48,7 @@ export default function ServerBoostBanner({ boostLevel, boostCount }: ServerBoos
   return (
     <div
       role="status"
-      aria-label={`Niveau de boost 3 — ${boostCount} boost${boostCount > 1 ? 's' : ''}`}
+      aria-label={tr('sw.boost.level', { l: 3, n: boostCount })}
       className="mx-2 mb-1 px-3 py-1.5 rounded-md border-2 overflow-hidden flex items-center gap-2"
       style={{
         background: 'linear-gradient(90deg, #78350f, #7c3aed, #d97706, #7c3aed, #78350f)',

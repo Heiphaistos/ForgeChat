@@ -23,7 +23,7 @@ export async function postWithUploadProgress(url: string, fd: FormData, totalByt
       try {
         return await api.post(url, fd)
       } catch (err: any) {
-        toast.error(err?.response?.data?.error ?? "Échec de l'envoi du fichier")
+        toast.error(err?.response?.data?.error ?? tr('sw.upload.fail'))
         throw err
       }
     }
@@ -41,7 +41,7 @@ export async function postWithUploadProgress(url: string, fd: FormData, totalByt
       return res
     } catch (err: any) {
       // Message serveur si disponible (type refusé, taille, permission...)
-      toast.error(err?.response?.data?.error ?? "Échec de l'envoi du fichier", { id: tid })
+      toast.error(err?.response?.data?.error ?? tr('sw.upload.fail'), { id: tid })
       throw err
     }
   } finally {

@@ -18,7 +18,7 @@ export function supportsMessageExtras(ref: ConversationRef): boolean {
  * Message chiffré : jamais de copie du texte (l'appli déchiffre l'original à la lecture).
  */
 export function savedBody(ref: ConversationRef, m: ChatMessage) {
-  if (ref.kind === 'group') throw new Error('Messages de groupe non enregistrables')
+  if (ref.kind === 'group') throw new Error(t('sw.saved.noGroup'))
   return {
     message_id: m.id,
     channel_id: ref.kind === 'channel' ? ref.channelId : ref.dmId,

@@ -30,6 +30,7 @@ import * as auditMobile from './parts/auditMobile'
 import * as discordSync from './parts/discordSync'
 import * as discordFeatures from './parts/discordFeatures'
 import * as parity from './parts/parity'
+import * as sweep from './parts/sweep'
 
 export const fr = {
   ...settings.fr,
@@ -61,6 +62,7 @@ export const fr = {
   ...discordSync.fr,
   ...discordFeatures.fr,
   ...parity.fr,
+  ...sweep.fr,
 
   // --- Commun ---
   'common.cancel': 'Annuler',

@@ -182,7 +182,7 @@ export default function MainLayout() {
             href="#fc-main"
             className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-[9999] focus:bg-white focus:text-black focus:text-sm focus:font-semibold focus:px-4 focus:py-2 focus:rounded-lg focus:shadow-lg"
           >
-            Passer au contenu principal
+            {tr('sw.skip')}
           </a>
 
           {/* Bannière d'état de connexion (WS + réseau navigateur) */}

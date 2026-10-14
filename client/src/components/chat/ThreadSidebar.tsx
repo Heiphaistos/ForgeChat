@@ -5,7 +5,7 @@ import { X, MessagesSquare, Plus } from 'lucide-react'
 import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import api from '../../api/client'
 import toast from 'react-hot-toast'
-import { useT } from '../../i18n'
+import { useT, t as tr } from '../../i18n'
 import ThreadItem from '../threads/ThreadItem'
 import { useWs } from '../../store/ws'
 import type { EncPayload } from '../../e2e/crypto'
@@ -157,7 +157,7 @@ export default function ThreadSidebar({ serverId, channelId, onSelectThread, onC
             <div className="p-5 space-y-3">
               <div>
                 <label htmlFor="ts-thread-title" className="text-xs font-semibold text-fc-muted uppercase tracking-wide block mb-1.5">
-                  Titre du fil
+                  {tr('sw.thread.title')}
                 </label>
                 <input
                   id="ts-thread-title"

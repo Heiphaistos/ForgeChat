@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { t as tr } from '../../i18n'
 import { useCallStore } from '../../store/call'
 import { useVoice } from '../../store/voice'
 import { useAudioNotifications } from '../../hooks/useAudioNotifications'
@@ -75,7 +76,7 @@ export default function PersistentDmCallAudio() {
           onClick={() => { elRef.current?.play().then(() => setAutoplayBlocked(false)).catch(() => {}) }}
           className="fixed bottom-20 right-4 z-50 px-4 py-2 rounded-lg bg-fc-accent text-white text-sm font-medium shadow-lg"
         >
-          Cliquez pour activer le son
+          {tr('sw.dmcall.enableSound')}
         </button>
       )}
     </>

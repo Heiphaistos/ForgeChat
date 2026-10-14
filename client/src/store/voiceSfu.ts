@@ -371,7 +371,7 @@ async function connectNative(url: string, token: string, roomName: string, ctx: 
   } catch (e) {
     _nativeRoom = null
     report('connect_failed', { native: true, error: String(e) })
-    ctx.set({ mediaStatus: 'failed', error: `Vocal indisponible : ${String(e)}` })
+    ctx.set({ mediaStatus: 'failed', error: t('sw.v.nativeDown', { err: String(e) }) })
     ctx.onMediaLost?.('network')
   }
 }
@@ -385,7 +385,7 @@ export async function connectMedia(url: string, token: string, roomName: string,
   if (isNativeVoice()) return connectNative(url, token, roomName, ctx, canSpeak, e2eeChannel)
 
   if (typeof RTCPeerConnection === 'undefined') {
-    ctx.set({ mediaStatus: 'failed', error: 'Ce moteur d\'affichage ne gère pas WebRTC : le vocal y est impossible. Utilisez la version web dans Chrome, Edge ou Firefox.' })
+    ctx.set({ mediaStatus: 'failed', error: t('sw.v.noWebrtcSfu') })
     return
   }
 
@@ -473,7 +473,7 @@ export async function connectMedia(url: string, token: string, roomName: string,
     report('connect_failed', { error: String(e) })
     if (_room === room) {
       _room = null; _roomName = null; expose()
-      ctx.set({ mediaStatus: 'failed', error: 'Impossible de joindre le serveur audio/vidéo. Vérifiez votre connexion puis réessayez.' })
+      ctx.set({ mediaStatus: 'failed', error: t('sw.v.sfuJoin') })
       ctx.onMediaLost?.('network')
     }
     return
@@ -496,13 +496,13 @@ export async function connectMedia(url: string, token: string, roomName: string,
     if (_camTrack) await publishCamera(room, _camTrack)
   } catch (e) {
     warn('publication de la caméra', e)
-    ctx.set({ error: 'Votre caméra n\'a pas pu être diffusée. Vérifiez les permissions du salon.' })
+    ctx.set({ error: t('sw.v.camPublish') })
   }
   try {
     await publishScreen(room)
   } catch (e) {
     warn('publication du partage', e)
-    ctx.set({ error: 'Votre partage d\'écran n\'a pas pu être diffusé. Vérifiez les permissions du salon.' })
+    ctx.set({ error: t('sw.v.screenPublish') })
   }
   applyWhisper()
 }

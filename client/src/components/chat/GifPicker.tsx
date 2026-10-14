@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { useT } from '../../i18n'
+import { t as tr, useT, type Key } from '../../i18n'
 import { useEscapeKey } from '../../hooks/useEscapeKey'
 import PickerShell from '../ui/PickerShell'
 import { Search, X, Loader2 } from 'lucide-react'
@@ -10,18 +10,21 @@ import api from '../../api/client'
 // sur le serveur. L'API Tenor appelée auparavant depuis le navigateur a fermé le 30/06/2026.
 
 // GIFs placeholder pour le mode démo (GIF non configurés sur le serveur ou indisponibles)
-const DEMO_GIFS = [
-  { id: 'demo1', url: '', preview: '', title: '😀 Heureux', emoji: '😀' },
-  { id: 'demo2', url: '', preview: '', title: '😂 Rire', emoji: '😂' },
-  { id: 'demo3', url: '', preview: '', title: '😍 Amour', emoji: '😍' },
-  { id: 'demo4', url: '', preview: '', title: '🔥 Feu', emoji: '🔥' },
-  { id: 'demo5', url: '', preview: '', title: '🎉 Fête', emoji: '🎉' },
-  { id: 'demo6', url: '', preview: '', title: '👍 OK', emoji: '👍' },
-  { id: 'demo7', url: '', preview: '', title: '😎 Cool', emoji: '😎' },
-  { id: 'demo8', url: '', preview: '', title: '🤔 Hmm', emoji: '🤔' },
-  { id: 'demo9', url: '', preview: '', title: '😭 Pleurs', emoji: '😭' },
-  { id: 'demo10', url: '', preview: '', title: '🚀 Fusée', emoji: '🚀' },
+const DEMO_GIFS_RAW = [
+  { id: 'demo1', url: '', preview: '', title: '😀 sw.gif.happy', emoji: '😀' },
+  { id: 'demo2', url: '', preview: '', title: '😂 sw.gif.laugh', emoji: '😂' },
+  { id: 'demo3', url: '', preview: '', title: '😍 sw.gif.love', emoji: '😍' },
+  { id: 'demo4', url: '', preview: '', title: '🔥 sw.gif.fire', emoji: '🔥' },
+  { id: 'demo5', url: '', preview: '', title: '🎉 sw.gif.party', emoji: '🎉' },
+  { id: 'demo6', url: '', preview: '', title: '👍 sw.gif.ok', emoji: '👍' },
+  { id: 'demo7', url: '', preview: '', title: '😎 sw.gif.cool', emoji: '😎' },
+  { id: 'demo8', url: '', preview: '', title: '🤔 sw.gif.hmm', emoji: '🤔' },
+  { id: 'demo9', url: '', preview: '', title: '😭 sw.gif.cry', emoji: '😭' },
+  { id: 'demo10', url: '', preview: '', title: '🚀 sw.gif.rocket', emoji: '🚀' },
 ]
+
+/** Titres de démo traduits au moment de l'affichage (langue active). */
+const demoGifs = () => DEMO_GIFS_RAW.map(g => ({ ...g, title: g.title.replace(/ (sw\.gif\.\w+)$/, (_, key: string) => ' ' + tr(key as Key)) }))
 
 interface TenorGif {
   id: string
@@ -51,7 +54,7 @@ export default function GifPicker({ onPick, onClose }: Props) {
   const [source, setSource] = useState({ placeholder: t('hc.gif.search'), attribution: '' })
   useEffect(() => {
     api.get('/gifs/status').then(({ data }) => setSource({
-      placeholder: typeof data?.search_placeholder === 'string' ? data.search_placeholder : 'Rechercher un GIF',
+      placeholder: typeof data?.search_placeholder === 'string' ? data.search_placeholder : tr('sw.gif.search'),
       attribution: typeof data?.attribution === 'string' ? data.attribution : '',
     })).catch(() => {})
   }, [])
@@ -92,7 +95,7 @@ export default function GifPicker({ onPick, onClose }: Props) {
     } catch (err) {
       if ((err as Error)?.name === 'AbortError') return
       if (!append) {
-        setGifs(DEMO_GIFS)
+        setGifs(demoGifs())
         setDemoMode(true)
         setHasMore(false)
       }

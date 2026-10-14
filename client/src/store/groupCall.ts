@@ -233,7 +233,7 @@ export const useGroupCall = create<GroupCallStore>((set, get) => ({
     })
     const offError = ws.on('GROUP_CALL_ERROR', (d: any) => {
       if (d.group_id !== get().groupId) return
-      toast.error(d.reason === 'unavailable' ? 'Serveur audio/vidéo indisponible.' : 'Appel de groupe refusé.')
+      toast.error(d.reason === 'unavailable' ? tr('sw.v.sfuDown') : tr('sw.v.groupDenied'))
       _cleanup(set)
     })
     return () => { offSession(); offMedia(); offUpdate(); offRing(); offError() }

@@ -229,7 +229,7 @@ export const useGroupCall = create<GroupCallState>((set, get) => {
     set({
       ring: {
         groupId: e.group_id,
-        fromUsername: typeof e.from_username === 'string' ? e.from_username.slice(0, 64) : 'Un membre',
+        fromUsername: typeof e.from_username === 'string' ? e.from_username.slice(0, 64) : t('store.voice.aMember'),
         callType: e.call_type === 'video' ? 'video' : 'voice',
       },
     })

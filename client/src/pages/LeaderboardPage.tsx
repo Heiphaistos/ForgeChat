@@ -19,13 +19,13 @@ interface LeaderboardEntry {
 
 const MEDALS = ['🥇', '🥈', '🥉']
 const PERIODS = [
-  { value: 'week', label: '7 jours' },
-  { value: 'month', label: '30 jours' },
-  { value: 'all', label: 'Tout' },
+  { value: 'week', label: 'sw.lb.p7' as const },
+  { value: 'month', label: 'sw.lb.p30' as const },
+  { value: 'all', label: 'sw.lb.all' as const },
 ]
 
 export default function LeaderboardPage() {
-  usePageTitle('Classement')
+  usePageTitle(tr('sw.lb.title'))
   const { serverId } = useParams<{ serverId: string }>()
   const { user } = useAuth()
   const { openSidebar } = useMobile()
@@ -33,7 +33,7 @@ export default function LeaderboardPage() {
 
   useEffect(() => {
     const prefix = document.title.match(/^\(\d+\)\s*/)?.[0] ?? ''
-    document.title = `${prefix}Classement | ForgeChat`
+    document.title = `${prefix}${tr('sw.lb.title')} | ForgeChat`
     return () => {
       const p = document.title.match(/^\(\d+\)\s*/)?.[0] ?? ''
       document.title = `${p}ForgeChat`
@@ -81,7 +81,7 @@ export default function LeaderboardPage() {
                     : 'text-fc-muted hover:text-white'
                 }`}
               >
-                {p.label}
+                {tr(p.label)}
               </button>
             ))}
           </div>
@@ -91,7 +91,7 @@ export default function LeaderboardPage() {
 
         {entries.length === 0 ? (
           <div className="text-center py-16 text-fc-muted">
-            Aucune activité sur cette période
+            {tr('sw.lb.empty')}
           </div>
         ) : (
           <div className="space-y-2">

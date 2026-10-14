@@ -160,7 +160,7 @@ export function useConversation(ref: ConversationRef) {
       const text = outgoingText(content.trim())
       const files = opts.files ?? []
       if (!text && files.length === 0) return
-      if (text.length > LIMITS.messageMaxChars) throw new Error(`Message trop long (max ${LIMITS.messageMaxChars} caractères)`)
+      if (text.length > LIMITS.messageMaxChars) throw new Error(t('sw.send.tooLongMax', { max: LIMITS.messageMaxChars }))
       for (const f of files) {
         const err = validateAttachment(f)
         if (err) throw new Error(err)
@@ -244,7 +244,7 @@ export function useConversation(ref: ConversationRef) {
               failed: true,
             }))
           }
-          throw new AttachmentUploadError(`Pièce jointe non envoyée : ${errorMessage(e)}`)
+          throw new AttachmentUploadError(t('sw.send.attachFail', { err: errorMessage(e) }))
         } finally {
           prepared.cleanup()
         }
@@ -258,8 +258,8 @@ export function useConversation(ref: ConversationRef) {
   const edit = useCallback(
     async (messageId: string, content: string) => {
       const text = content.trim()
-      if (!text) throw new Error('Le message ne peut pas être vide')
-      if (text.length > LIMITS.messageMaxChars) throw new Error('Message trop long')
+      if (!text) throw new Error(t('sw.send.empty'))
+      if (text.length > LIMITS.messageMaxChars) throw new Error(t('sw.send.tooLong'))
       let previous: string | null = null
       let clientMsgId: string | null = null
       patchMessage(stableRef.kind, id, messageId, (m) => {
