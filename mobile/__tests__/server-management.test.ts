@@ -40,7 +40,7 @@ describe('permissions affichées', () => {
   it('propriétaire : tout, supprimer au lieu de quitter', () => {
     const p = serverPerms(detail([]), OWNER)
     expect(serverMenuKeys(p)).toEqual(['read', 'invite', 'notifications', 'events', 'community', 'createChannel', 'createCategory', 'settings', 'nickname', 'boost', 'copyId', 'delete'])
-    expect(settingsSections(p)).toEqual(['overview', 'advanced', 'channels', 'roles', 'tags', 'members', 'reports', 'bans', 'invites', 'emojis', 'webhooks', 'bots', 'audit', 'automod', 'stats', 'community', 'onboarding', 'danger'])
+    expect(settingsSections(p)).toEqual(['overview', 'advanced', 'channels', 'roles', 'tags', 'members', 'reports', 'bans', 'invites', 'emojis', 'webhooks', 'bots', 'discordSync', 'audit', 'automod', 'stats', 'community', 'onboarding', 'danger'])
   })
 
   it('questions d’accueil : chaque membre peut revoir ses réponses', () => {
@@ -51,7 +51,7 @@ describe('permissions affichées', () => {
   it('administrateur (bit 31) : tout sauf vue d’ensemble et zone de danger (réservées au propriétaire)', () => {
     const p = serverPerms(detail(['admin'], [role('admin', PERM.ADMINISTRATOR, 1)]), ME)
     expect(p.isAdmin).toBe(true)
-    expect(settingsSections(p)).toEqual(['channels', 'roles', 'tags', 'members', 'reports', 'bans', 'invites', 'emojis', 'webhooks', 'bots', 'audit', 'automod', 'stats', 'community'])
+    expect(settingsSections(p)).toEqual(['channels', 'roles', 'tags', 'members', 'reports', 'bans', 'invites', 'emojis', 'webhooks', 'bots', 'discordSync', 'audit', 'automod', 'stats', 'community'])
     expect(serverMenuKeys(p)).toContain('leave')
     expect(serverMenuKeys(p)).not.toContain('delete')
   })
