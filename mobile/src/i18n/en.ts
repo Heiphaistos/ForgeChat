@@ -26,6 +26,7 @@ import * as serverLook from './parts/serverLook'
 import * as ringCard from './parts/ringCard'
 import * as siteAdmin from './parts/siteAdmin'
 import * as auditMobile from './parts/auditMobile'
+import * as discordSync from './parts/discordSync'
 import * as discordFeatures from './parts/discordFeatures'
 import * as parity from './parts/parity'
 
@@ -56,6 +57,7 @@ export const en: Partial<Record<Key, string>> = {
   ...ringCard.en,
   ...siteAdmin.en,
   ...auditMobile.en,
+  ...discordSync.en,
   ...discordFeatures.en,
   ...parity.en,
 

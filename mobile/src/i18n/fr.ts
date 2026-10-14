@@ -27,6 +27,7 @@ import * as serverLook from './parts/serverLook'
 import * as ringCard from './parts/ringCard'
 import * as siteAdmin from './parts/siteAdmin'
 import * as auditMobile from './parts/auditMobile'
+import * as discordSync from './parts/discordSync'
 import * as discordFeatures from './parts/discordFeatures'
 import * as parity from './parts/parity'
 
@@ -57,6 +58,7 @@ export const fr = {
   ...ringCard.fr,
   ...siteAdmin.fr,
   ...auditMobile.fr,
+  ...discordSync.fr,
   ...discordFeatures.fr,
   ...parity.fr,
 
