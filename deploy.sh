@@ -53,7 +53,8 @@ log "Démarrage des services..."
 docker compose pull --quiet 2>/dev/null || true
 # --pull : l'image de base du serveur est retirée à chaque build (correctifs de sécurité Debian),
 # le Dockerfile ne fait plus d'apt-get upgrade.
-docker compose build --pull
+# Sans GIT_SHA (« unknown »), la couche de compilation reste en cache et l'ancien binaire continue de tourner.
+GIT_SHA="$(git rev-parse --short HEAD 2>/dev/null || date +%s)" docker compose build --pull
 docker compose up -d --remove-orphans
 
 log "Attente de la DB (max 30s)..."
