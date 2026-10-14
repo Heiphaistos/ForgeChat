@@ -1,4 +1,5 @@
 import { mediaUrl } from '../../api/client'
+import { useT, t as tr } from '../../i18n'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Mic, Hand, UserPlus, UserMinus, LogOut, Users } from 'lucide-react'
 import { useWs } from '../../store/ws'
@@ -38,6 +39,7 @@ function Avatar({ user, size = 'md' }: { user: StageUser; size?: 'sm' | 'md' | '
 
 // ─── Speaker tile ─────────────────────────────────────────────────────────────
 function SpeakerTile({ user, canDemote, onDemote }: { user: StageUser; canDemote: boolean; onDemote: (userId: string, username: string) => void }) {
+  const t = useT()
   return (
     <div className="flex flex-col items-center gap-1.5 relative group">
       <div className="relative">
@@ -48,7 +50,7 @@ function SpeakerTile({ user, canDemote, onDemote }: { user: StageUser; canDemote
         {canDemote && (
           <button
             onClick={() => onDemote(user.user_id, user.username)}
-            aria-label={`Rétrograder ${user.username}`}
+            aria-label={t('hc.stage.demote', { name: user.username })}
             className="absolute -top-1 -right-1 bg-red-500 rounded-full p-0.5 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition"
           >
             <UserMinus size={8} className="text-white" aria-hidden />
@@ -70,6 +72,7 @@ export default function StageChannel({
   isSpeaker,
   isModerator,
 }: Props) {
+  const t = useT()
   const { send, on } = useWs()
   const [speakers, setSpeakers] = useState<StageUser[]>([])
   const [handRaises, setHandRaises] = useState<HandRaise[]>([])
@@ -166,7 +169,7 @@ export default function StageChannel({
         setHasRequestedSpeak(false)
       }
       if (data.raised && data.user_id !== currentUserId) {
-        toast(`✋ ${data.username} demande à parler`, { duration: 3000 })
+        toast(tr('hc.stage.handToast', { name: data.username }), { duration: 3000 })
       }
     })
 
@@ -182,7 +185,7 @@ export default function StageChannel({
     if (hasRequestedSpeak) return
     setHasRequestedSpeak(true)
     send({ type: 'STAGE_REQUEST_SPEAK', channel_id: channelId })
-    toast('Demande envoyée aux modérateurs', { duration: 2500 })
+    toast(t('hc.stage.requestSent'), { duration: 2500 })
   }
 
   const handleToggleHand = () => {
@@ -194,12 +197,12 @@ export default function StageChannel({
 
   const handleInviteToSpeak = (userId: string, username: string) => {
     send({ type: 'STAGE_INVITE_SPEAK', channel_id: channelId, target_user_id: userId })
-    toast.success(`Invitation envoyée à ${username}`)
+    toast.success(t('hc.stage.invited', { name: username }))
   }
 
   const handleTakeFloor = () => {
     send({ type: 'STAGE_INVITE_SPEAK', channel_id: channelId, target_user_id: currentUserId })
-    toast.success('Vous prenez la parole')
+    toast.success(t('hc.stage.takeFloor'))
   }
 
   const handleLeaveSpeaker = () => {
@@ -208,18 +211,18 @@ export default function StageChannel({
 
   const handleDemoteSpeaker = (userId: string, username: string) => {
     send({ type: 'STAGE_LEAVE_SPEAKER', channel_id: channelId, target_user_id: userId })
-    toast(`${username} a été rétrogradé`, { duration: 2500 })
+    toast(t('hc.stage.demoted', { name: username }), { duration: 2500 })
   }
 
   return (
     <div className="flex flex-col h-full bg-fc-bg text-white">
       {/* Section Orateurs */}
-      <section aria-label="Orateurs sur scène" className="flex-shrink-0 p-4 border-b border-fc-hover">
+      <section aria-label={t('hc.stage.speakersAria')} className="flex-shrink-0 p-4 border-b border-fc-hover">
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2" aria-hidden>
             <Mic size={14} className="text-fc-accent" />
             <span className="text-xs font-semibold text-fc-muted uppercase tracking-wider">
-              Scene — Orateurs
+              {t('hc.stage.speakersTitle')}
             </span>
           </div>
           {isModerator && !amSpeaking && (
@@ -236,15 +239,15 @@ export default function StageChannel({
               className="flex items-center gap-1 text-[11px] font-medium text-fc-muted hover:text-white transition"
             >
               <LogOut size={12} aria-hidden />
-              Quitter la scène
+              {t('hc.stage.leaveStage')}
             </button>
           )}
         </div>
 
         {speakers.length === 0 ? (
-          <p role="status" className="text-xs text-fc-muted italic">Aucun orateur pour le moment</p>
+          <p role="status" className="text-xs text-fc-muted italic">{t('hc.stage.noSpeaker')}</p>
         ) : (
-          <div className="flex flex-wrap gap-4" role="list" aria-label={`${speakers.length} orateur${speakers.length > 1 ? 's' : ''}`}>
+          <div className="flex flex-wrap gap-4" role="list" aria-label={t('hc.stage.nSpeakers', { n: speakers.length })}>
             {speakers.map(s => (
               <div key={s.user_id} role="listitem">
                 <SpeakerTile
@@ -259,18 +262,18 @@ export default function StageChannel({
       </section>
 
       {/* Section Audience */}
-      <section aria-label="Audience" className="flex-1 overflow-y-auto overscroll-contain p-4 border-b border-fc-hover">
+      <section aria-label={t('hc.stage.audience')} className="flex-1 overflow-y-auto overscroll-contain p-4 border-b border-fc-hover">
         <div className="flex items-center gap-2 mb-3" aria-hidden>
           <Users size={14} className="text-fc-muted" />
           <span className="text-xs font-semibold text-fc-muted uppercase tracking-wider">
-            Audience ({audience.length})
+            {t('hc.stage.audienceN', { n: audience.length })}
           </span>
         </div>
 
         {audience.length === 0 ? (
-          <p role="status" className="text-xs text-fc-muted italic">Aucun spectateur</p>
+          <p role="status" className="text-xs text-fc-muted italic">{t('hc.stage.noViewer')}</p>
         ) : (
-          <div className="flex flex-wrap gap-2" role="list" aria-label={`${audience.length} spectateur${audience.length > 1 ? 's' : ''}`}>
+          <div className="flex flex-wrap gap-2" role="list" aria-label={t('hc.stage.nViewers', { n: audience.length })}>
             {audience.map(a => (
               <div key={a.user_id} role="listitem" className="relative group flex flex-col items-center gap-1">
                 <Avatar user={a} size="sm" />
@@ -278,7 +281,7 @@ export default function StageChannel({
                 {isModerator && a.user_id !== currentUserId && (
                   <button
                     onClick={() => handleInviteToSpeak(a.user_id, a.username)}
-                    aria-label={`Inviter ${a.username} à parler`}
+                    aria-label={t('hc.stage.invite', { name: a.username })}
                     className="absolute -top-1 -right-1 bg-fc-accent rounded-full p-0.5 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition"
                   >
                     <UserPlus size={8} className="text-white" aria-hidden />
@@ -292,9 +295,9 @@ export default function StageChannel({
 
       {/* Mains levées */}
       {handRaises.length > 0 && (
-        <section aria-label="Demandes à parler" aria-live="polite" className="flex-shrink-0 p-4 border-b border-fc-hover bg-fc-yellow/5">
+        <section aria-label={t('hc.stage.requests')} aria-live="polite" className="flex-shrink-0 p-4 border-b border-fc-hover bg-fc-yellow/5">
           <p className="text-xs font-semibold text-fc-yellow mb-2">
-            <span aria-hidden>✋ </span>Mains levées ({handRaises.length})
+            <span aria-hidden>✋ </span>{t('hc.stage.hands', { n: handRaises.length })}
           </p>
           <div className="space-y-1.5">
             {handRaises.map(h => (
@@ -304,7 +307,7 @@ export default function StageChannel({
                 {isModerator && (
                   <button
                     onClick={() => handleInviteToSpeak(h.user_id, h.username)}
-                    aria-label={`Inviter ${h.username} à parler`}
+                    aria-label={t('hc.stage.invite', { name: h.username })}
                     className="text-[10px] bg-fc-accent hover:bg-fc-accent/80 text-white px-2 py-0.5 rounded transition"
                   >
                     Inviter
@@ -328,13 +331,13 @@ export default function StageChannel({
             className="flex-1 flex items-center justify-center gap-2 py-2 rounded-xl bg-fc-accent hover:bg-fc-accent/80 text-white text-sm font-medium transition disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Mic size={14} aria-hidden />
-            {hasRequestedSpeak ? 'Demande envoyée...' : 'Demander à parler'}
+            {hasRequestedSpeak ? t('hc.stage.requested') : t('hc.stage.request')}
           </button>
 
           <button
             onClick={handleToggleHand}
             aria-pressed={handRaised}
-            aria-label={handRaised ? 'Baisser la main' : 'Lever la main'}
+            aria-label={handRaised ? t('hc.stage.lower') : t('hc.stage.raise')}
             className={`p-2.5 rounded-xl transition ${
               handRaised
                 ? 'bg-fc-yellow text-white'

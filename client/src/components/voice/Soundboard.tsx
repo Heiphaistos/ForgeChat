@@ -280,7 +280,7 @@ export default function Soundboard({ serverId, channelId, onClose }: Props) {
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
           <Music2 size={14} className="text-fc-accent" />
-          <span className="text-sm font-semibold text-white">Soundboard</span>
+          <span className="text-sm font-semibold text-white">{t('voice.soundboard')}</span>
         </div>
         <button
           onClick={onClose}

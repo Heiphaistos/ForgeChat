@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Crown, UserMinus } from 'lucide-react'
 import toast from 'react-hot-toast'
+import { useT } from '../../i18n'
 import api, { mediaUrl } from '../../api/client'
 import { userMenuProps } from '../userMenu/store'
 
@@ -13,6 +14,7 @@ type Pending = { kind: 'remove' | 'owner'; member: Member } | null
 export default function GroupMembersPanel({ groupId, ownerId, members, meId }: {
   groupId: string; ownerId: string; members: Member[]; meId?: string
 }) {
+  const t = useT()
   const qc = useQueryClient()
   const [pending, setPending] = useState<Pending>(null)
   const iAmOwner = !!meId && meId === ownerId
@@ -22,11 +24,11 @@ export default function GroupMembersPanel({ groupId, ownerId, members, meId }: {
       ? api.delete(`/dms/groups/${groupId}/members/${p.member.id}`)
       : api.patch(`/dms/groups/${groupId}/owner`, { user_id: p.member.id }),
     onSuccess: (_, p) => {
-      toast.success(p.kind === 'remove' ? `${p.member.username} a été retiré du groupe` : `${p.member.username} est propriétaire du groupe`)
+      toast.success(t(p.kind === 'remove' ? 'hc.gm.removed' : 'hc.gm.owner', { name: p.member.username }))
       qc.invalidateQueries({ queryKey: ['group-dm', groupId] })
       qc.invalidateQueries({ queryKey: ['dms'] })
     },
-    onError: (e: any) => toast.error(e.response?.data?.error ?? 'Action impossible'),
+    onError: (e: any) => toast.error(e.response?.data?.error ?? t('hc.gm.fail')),
     onSettled: () => setPending(null),
   })
 
@@ -49,17 +51,17 @@ export default function GroupMembersPanel({ groupId, ownerId, members, meId }: {
             }`} />
           </div>
           <span className={`flex-1 min-w-0 text-sm truncate ${m.id === meId ? 'text-fc-accent font-medium' : 'text-fc-text'}`}>
-            {m.username}{m.id === meId ? ' (moi)' : ''}
+            {m.username}{m.id === meId ? t('hc.gm.me') : ''}
           </span>
-          {m.id === ownerId && <span title="Propriétaire du groupe"><Crown size={12} className="text-yellow-400 flex-shrink-0" aria-label="Propriétaire" /></span>}
+          {m.id === ownerId && <span title={t('hc.gm.ownerTitle')}><Crown size={12} className="text-yellow-400 flex-shrink-0" aria-label={t('hc.gm.ownerShort')} /></span>}
           {iAmOwner && m.id !== meId && (
             <span className="flex gap-0.5 md:opacity-0 md:group-hover:opacity-100 md:focus-within:opacity-100">
-              <button onClick={() => setPending({ kind: 'owner', member: m })} title="Rendre propriétaire"
-                aria-label={`Rendre ${m.username} propriétaire`} className="p-1 text-fc-muted hover:text-yellow-400">
+              <button onClick={() => setPending({ kind: 'owner', member: m })} title={t('hc.gm.makeOwner')}
+                aria-label={t('hc.gm.makeOwnerAria', { name: m.username })} className="p-1 text-fc-muted hover:text-yellow-400">
                 <Crown size={13} />
               </button>
-              <button onClick={() => setPending({ kind: 'remove', member: m })} title="Retirer du groupe"
-                aria-label={`Retirer ${m.username} du groupe`} className="p-1 text-fc-muted hover:text-red-400">
+              <button onClick={() => setPending({ kind: 'remove', member: m })} title={t('hc.gm.removeTitle')}
+                aria-label={t('hc.gm.removeAria', { name: m.username })} className="p-1 text-fc-muted hover:text-red-400">
                 <UserMinus size={13} />
               </button>
             </span>
@@ -71,18 +73,18 @@ export default function GroupMembersPanel({ groupId, ownerId, members, meId }: {
         <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 px-4" onClick={() => setPending(null)}>
           <div className="bg-fc-sidebar rounded-xl shadow-2xl p-6 w-full max-w-sm" role="dialog" aria-modal="true" onClick={e => e.stopPropagation()}>
             <h3 className="text-lg font-bold text-white mb-2">
-              {pending.kind === 'remove' ? `Retirer ${pending.member.username}` : `Céder le groupe à ${pending.member.username}`}
+              {t(pending.kind === 'remove' ? 'hc.gm.confirmRemove' : 'hc.gm.confirmGive', { name: pending.member.username })}
             </h3>
             <p className="text-sm text-fc-muted mb-5">
               {pending.kind === 'remove'
-                ? 'Ce membre ne verra plus les messages du groupe et quittera l\'appel en cours.'
-                : 'Vous ne pourrez plus retirer de membres. Seul le nouveau propriétaire pourra vous rendre ce rôle.'}
+                ? t('hc.gm.removeBody')
+                : t('hc.gm.giveBody')}
             </p>
             <div className="flex gap-3 justify-end">
-              <button onClick={() => setPending(null)} className="px-4 py-2 text-sm rounded-lg bg-fc-hover hover:bg-fc-input text-white transition">Annuler</button>
+              <button onClick={() => setPending(null)} className="px-4 py-2 text-sm rounded-lg bg-fc-hover hover:bg-fc-input text-white transition">{t('hc.common.cancel')}</button>
               <button onClick={() => act.mutate(pending)} disabled={act.isPending}
                 className="px-4 py-2 text-sm rounded-lg bg-red-500 hover:bg-red-600 text-white font-semibold transition disabled:opacity-50">
-                Confirmer
+                {t('hc.common.confirm')}
               </button>
             </div>
           </div>

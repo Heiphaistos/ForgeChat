@@ -1,6 +1,7 @@
 import { useRef, useEffect, useState, useCallback } from 'react'
 import { useWs } from '../../store/ws'
 import { Pencil, Eraser, Trash2, Download, Square, Circle as CircleIcon, Minus } from 'lucide-react'
+import { useT } from '../../i18n'
 
 type Tool = 'pen' | 'eraser' | 'line' | 'rect' | 'circle'
 
@@ -16,6 +17,7 @@ interface DrawEvent {
 interface Props { channelId: string; onClose: () => void }
 
 export default function Whiteboard({ channelId, onClose }: Props) {
+  const t = useT()
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const { send, on } = useWs()
   const [tool, setTool] = useState<Tool>('pen')
@@ -165,28 +167,28 @@ export default function Whiteboard({ channelId, onClose }: Props) {
   }
 
   const toolLabels: Record<Tool, string> = {
-    pen: 'Crayon', eraser: 'Gomme', line: 'Ligne', rect: 'Rectangle', circle: 'Cercle',
+    pen: t('hc.wb.pen'), eraser: t('hc.wb.eraser'), line: t('hc.wb.line'), rect: t('hc.wb.rect'), circle: t('hc.wb.circle'),
   }
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/80 flex flex-col" role="dialog" aria-modal="true" aria-label="Tableau blanc">
+    <div className="fixed inset-0 z-50 bg-black/80 flex flex-col" role="dialog" aria-modal="true" aria-label={t('hc.wb.title')}>
       <div className="flex items-center gap-3 px-4 py-2 bg-fc-sidebar border-b border-fc-hover">
-        <span className="text-white font-semibold text-sm">Tableau blanc</span>
-        <div className="flex items-center gap-1 flex-1" role="group" aria-label="Outils de dessin">
+        <span className="text-white font-semibold text-sm">{t('hc.wb.title')}</span>
+        <div className="flex items-center gap-1 flex-1" role="group" aria-label={t('hc.wb.tools')}>
           {([
             ['pen', <Pencil size={14} />],
             ['eraser', <Eraser size={14} />],
             ['line', <Minus size={14} />],
             ['rect', <Square size={14} />],
             ['circle', <CircleIcon size={14} />],
-          ] as [Tool, React.ReactNode][]).map(([t, icon]) => (
+          ] as [Tool, React.ReactNode][]).map(([tl, icon]) => (
             <button
-              key={t}
-              onClick={() => setTool(t)}
-              title={toolLabels[t]}
-              aria-label={toolLabels[t]}
-              aria-pressed={tool === t}
-              className={`p-1.5 rounded ${tool === t ? 'bg-fc-accent text-white' : 'text-fc-muted hover:bg-fc-hover'}`}
+              key={tl}
+              onClick={() => setTool(tl)}
+              title={toolLabels[tl]}
+              aria-label={toolLabels[tl]}
+              aria-pressed={tool === tl}
+              className={`p-1.5 rounded ${tool === tl ? 'bg-fc-accent text-white' : 'text-fc-muted hover:bg-fc-hover'}`}
             >
               {icon}
             </button>
@@ -195,7 +197,7 @@ export default function Whiteboard({ channelId, onClose }: Props) {
             type="color"
             value={color}
             onChange={e => setColor(e.target.value)}
-            aria-label="Couleur du trait"
+            aria-label={t('hc.wb.color')}
             className="w-8 h-8 rounded cursor-pointer border-0 bg-transparent"
           />
           <input
@@ -204,13 +206,13 @@ export default function Whiteboard({ channelId, onClose }: Props) {
             max={20}
             value={size}
             onChange={e => setSize(+e.target.value)}
-            aria-label="Épaisseur du trait"
+            aria-label={t('hc.wb.size')}
             className="w-20"
           />
-          <button onClick={clear} aria-label="Effacer le tableau" className="p-1.5 min-w-[32px] min-h-[32px] flex items-center justify-center text-fc-red hover:bg-fc-red/10 rounded">
+          <button onClick={clear} aria-label={t('hc.wb.clear')} className="p-1.5 min-w-[32px] min-h-[32px] flex items-center justify-center text-fc-red hover:bg-fc-red/10 rounded">
             <Trash2 size={14} aria-hidden />
           </button>
-          <button onClick={download} aria-label="Télécharger le tableau" className="p-1.5 min-w-[32px] min-h-[32px] flex items-center justify-center text-fc-muted hover:bg-fc-hover rounded">
+          <button onClick={download} aria-label={t('hc.wb.download')} className="p-1.5 min-w-[32px] min-h-[32px] flex items-center justify-center text-fc-muted hover:bg-fc-hover rounded">
             <Download size={14} aria-hidden />
           </button>
         </div>
