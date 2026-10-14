@@ -284,7 +284,7 @@ export const messagesApi = {
     return normalizeReactionUsers(await http.get<unknown>('/reactions', { query }))
   },
 
-  /** Aperçu d'un lien (titre, description) ; le serveur filtre les adresses privées et les domaines. */
+  /** Aperçu d'un lien (titre, description, image) ; le serveur filtre les adresses privées (SSRF). */
   async linkPreview(url: string, signal?: AbortSignal): Promise<LinkPreviewData | null> {
     return normalizeOg(await http.get<unknown>('/og', { query: { url }, signal }), url)
   },

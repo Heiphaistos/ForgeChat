@@ -10,6 +10,7 @@ interface OGData {
   description?: string
   image?: string
   site_name?: string
+  nsfw?: boolean
   url: string
 }
 
@@ -19,11 +20,8 @@ interface Props {
   data?: unknown
 }
 
-// Première URL http(s) d'un contenu — partagé entre les surfaces qui affichent une preview
-const URL_REGEX = /https?:\/\/[^\s<>"]+/g
-export function extractFirstUrl(content: string): string | null {
-  return content.match(URL_REGEX)?.[0] ?? null
-}
+// Lien à prévisualiser — partagé entre les surfaces qui affichent une preview
+export { previewUrl as extractFirstUrl } from '../../e2e/channelText'
 
 /** Aperçu venu d'un contenu chiffré (donc de l'expéditeur) : on ne garde que des chaînes. */
 function asOg(v: unknown): OGData | null {
@@ -31,7 +29,30 @@ function asOg(v: unknown): OGData | null {
   const o = v as Record<string, unknown>
   const str = (k: string) => (typeof o[k] === 'string' ? (o[k] as string) : undefined)
   const url = str('url')
-  return url ? { url, title: str('title'), description: str('description'), image: str('image'), site_name: str('site_name') } : null
+  const clip = (k: string, max: number) => str(k)?.slice(0, max)
+  return url ? { url, title: clip('title', 200), description: clip('description', 400), image: str('image'), site_name: clip('site_name', 100), nsfw: o.nsfw === true } : null
+}
+
+/**
+ * Image d'aperçu récupérée par le serveur (GET /og/image, jeton d'accès requis : donc via axios,
+ * en blob) : le site du lien ne voit jamais l'IP du lecteur, même si l'adresse vient d'un
+ * expéditeur malveillant. Échec : pas d'image.
+ */
+function PreviewImage({ src, alt }: { src: string; alt: string }) {
+  const { data: blobUrl } = useQuery<string | null>({
+    queryKey: ['og-image', src],
+    queryFn: () => api.get('/og/image', { params: { url: src }, responseType: 'blob', timeout: 10_000 })
+      .then(r => URL.createObjectURL(r.data as Blob)),
+    staleTime: Infinity,
+    gcTime: 600_000,
+    retry: false,
+  })
+  // ponctuel : l'URL blob (3 Mo au plus) reste valide tant que la requête est en cache ; pas de revoke.
+  if (!blobUrl) return null
+  return (
+    <img src={blobUrl} alt={alt} loading="lazy" decoding="async" referrerPolicy="no-referrer"
+      className="w-full max-h-48 object-cover" />
+  )
 }
 
 export default function LinkPreview({ url, data: given }: Props) {
@@ -53,9 +74,9 @@ export default function LinkPreview({ url, data: given }: Props) {
   // Aperçu fourni par l'expéditeur : le lien suit l'URL visible dans le message, pas celle de l'aperçu.
   const target = given === undefined ? data.url : url
   const safeUrl = isSafeUrl(target) ? target : '#'
-  // Aperçu fourni par l'expéditeur (`given`) : jamais d'image, elle pourrait venir de son propre
-  // serveur et lui livrer l'IP et l'heure de lecture de chaque lecteur (même règle que le mobile).
-  const safeImage = given === undefined && data.image && isSafeUrl(data.image) ? data.image : undefined
+  // L'image ne se charge jamais directement depuis le site du lien (elle livrerait l'IP du lecteur) :
+  // seulement via le serveur (PreviewImage), même pour l'aperçu d'un expéditeur.
+  const safeImage = !data.nsfw && data.image && isSafeUrl(data.image) ? data.image : undefined
 
   return (
     <div
@@ -63,17 +84,7 @@ export default function LinkPreview({ url, data: given }: Props) {
       aria-label={tr('hc.lp.aria', { name: data.title ?? data.site_name ?? url })}
       className="mt-2 max-w-full sm:max-w-lg rounded-xl border border-fc-hover bg-fc-channel overflow-hidden"
     >
-      {safeImage && (
-        <img
-          src={safeImage}
-          alt={data.title ?? ''}
-          loading="lazy"
-          decoding="async"
-          referrerPolicy="no-referrer"
-          className="w-full max-h-48 object-cover"
-          onError={e => { (e.target as HTMLImageElement).style.display = 'none' }}
-        />
-      )}
+      {safeImage && <PreviewImage src={safeImage} alt={data.title ?? ''} />}
       <div className="p-3">
         {data.site_name && (
           <div className="text-xs text-fc-muted uppercase tracking-wide mb-1">{data.site_name}</div>

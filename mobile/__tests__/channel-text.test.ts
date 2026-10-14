@@ -1,5 +1,5 @@
 // Mentions en métadonnées et AutoMod côté appli : mêmes cas que client/scripts/channelText.test.mjs.
-import { automodBlock, containsWord, firstUrl, linkHosts, mentionMeta, previewAllowed } from '@/e2e/channelText'
+import { automodBlock, containsWord, firstUrl, linkHosts, mentionMeta, previewAllowed, previewUrl } from '@/e2e/channelText'
 
 const U = '11111111-1111-4111-8111-111111111111'
 const R = '22222222-2222-4222-8222-222222222222'
@@ -41,11 +41,25 @@ test('AutoMod : liens dangereux (liste locale), mêmes cas que le web', () => {
   expect(automodBlock(r, 'https://google.com@grabify.link/x')).toBe('dangerous_link')
 })
 
-test("aperçu : seuls les domaines prévisualisés par le serveur partent à /og", () => {
-  for (const ok of ['https://github.com/a/b', 'https://fr.wikipedia.org/wiki/X', 'https://www.youtube.com/watch?v=1', 'https://forgechat.heiphaistos.org/x']) {
+test("aperçu : tout site public part à /og, jamais une adresse locale ni un schéma exotique", () => {
+  for (const ok of ['https://github.com/a/b', 'https://exemple.com/secret', 'http://blog.exemple.fr/x?y=1', 'https://xn--bcher-kva.example/']) {
     expect(previewAllowed(ok)).toBe(true)
   }
-  for (const ko of ['https://exemple.com/secret', 'https://github.com.evil.io/', 'https://evilgithub.com/', 'javascript:alert(1)', 'pas une url', 'ftp://github.com/']) {
+  for (const ko of ['http://127.0.0.1/', 'http://localhost/x', 'https://nas.local/', 'http://x.internal/', 'http://[::1]/', 'http://10.0.0.1/', 'javascript:alert(1)', 'data:text/html,x', 'pas une url', 'ftp://github.com/']) {
     expect(previewAllowed(ko)).toBe(false)
   }
+})
+
+test("aperçu : lien visible seulement (pas de code, spoiler, média), ponctuation retirée, plusieurs liens = le premier", () => {
+  expect(previewUrl('voir https://a.fr/x. Puis https://b.fr')).toBe('https://a.fr/x')
+  expect(previewUrl('[texte](https://a.fr/p?q=1) fin')).toBe('https://a.fr/p?q=1')
+  expect(previewUrl('(https://a.fr/x), ok')).toBe('https://a.fr/x')
+  expect(previewUrl('https://fr.wikipedia.org/wiki/Foo_(bar)')).toBe('https://fr.wikipedia.org/wiki/Foo_(bar)')
+  expect(previewUrl('`https://code.fr` puis https://b.fr')).toBe('https://b.fr')
+  expect(previewUrl('```\nhttps://code.fr\n```\nhttps://b.fr')).toBe('https://b.fr')
+  expect(previewUrl('||https://secret.fr|| rien')).toBe(null)
+  expect(previewUrl('https://a.fr/img.PNG')).toBe(null)
+  expect(previewUrl('https://a.fr/page.html')).toBe('https://a.fr/page.html')
+  expect(previewUrl('aucun lien')).toBe(null)
+  expect(firstUrl('<https://a.fr/x>')).toBe('https://a.fr/x')
 })

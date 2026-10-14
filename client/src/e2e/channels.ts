@@ -6,7 +6,7 @@ import api from '../api/client'
 import { confirm } from '../components/ui/ConfirmModal'
 import { t } from '../i18n'
 import { useAccountKey } from './accountKey'
-import { automodBlock, firstUrl, mentionMeta, previewAllowed, type AutoModBlock, type AutoModRules } from './channelText'
+import { automodBlock, mentionMeta, previewAllowed, previewUrl, type AutoModBlock, type AutoModRules } from './channelText'
 import { completeChannelKeys, lockedText, mustEncrypt, openText, sendErrorText, withSeal } from './conversations'
 import type { EncPayload } from './crypto'
 
@@ -69,9 +69,12 @@ export const channelSendError = (e: unknown, fallback: string) =>
 
 /** Aperçu du premier lien, demandé par l'expéditeur (court délai, erreurs ignorées). */
 async function linkPreview(text: string): Promise<Record<string, unknown> | null> {
-  const url = firstUrl(text)
+  const url = previewUrl(text)
   if (!url || !previewAllowed(url)) return null
   try {
+    // Réglage « aperçus de liens » coupé : le lien ne part pas au serveur.
+    const prefs = await api.get('/user/settings', { timeout: 4000 })
+    if (prefs.data?.link_preview === false) return null
     const { data } = await api.get(`/og?url=${encodeURIComponent(url)}`, { timeout: 4000 })
     return data && (data.title || data.description || data.image) ? data : null
   } catch {

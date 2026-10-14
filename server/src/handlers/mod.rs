@@ -60,6 +60,7 @@ pub mod webhooks;
 pub mod saved;
 pub mod search;
 pub mod audit;
+pub mod link_preview;
 pub mod feeds;
 pub mod scheduled;
 pub mod disappearing;

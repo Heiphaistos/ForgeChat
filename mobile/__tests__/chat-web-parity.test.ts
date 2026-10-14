@@ -120,7 +120,7 @@ describe('extras de message', () => {
   })
   it('aperçu de lien : rien sans titre ni description', () => {
     expect(normalizeOg({ title: ' ', description: null, url: 'https://a' }, 'https://a')).toBeNull()
-    expect(normalizeOg({ title: 'T', site_name: 'S' }, 'https://a')).toEqual({ title: 'T', description: null, siteName: 'S', url: 'https://a' })
+    expect(normalizeOg({ title: 'T', site_name: 'S' }, 'https://a')).toEqual({ title: 'T', description: null, siteName: 'S', image: null, url: 'https://a' })
   })
 })
 

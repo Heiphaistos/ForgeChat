@@ -2,7 +2,7 @@
 // Le mobile vérifie les mêmes cas (mobile/__tests__/channel-text.test.ts).
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { automodBlock, containsWord, firstUrl, linkHosts, mentionMeta, previewAllowed } from '../src/e2e/channelText.ts'
+import { automodBlock, containsWord, firstUrl, linkHosts, mentionMeta, previewAllowed, previewUrl } from '../src/e2e/channelText.ts'
 
 const U = '11111111-1111-4111-8111-111111111111'
 const R = '22222222-2222-4222-8222-222222222222'
@@ -53,11 +53,25 @@ test('AutoMod : liens dangereux (liste locale), sous-domaines compris', () => {
   assert.equal(automodBlock(r, 'https://google.com@grabify.link/x'), 'dangerous_link')
 })
 
-test("aperçu : seuls les domaines prévisualisés par le serveur partent à /og", () => {
-  for (const ok of ['https://github.com/a/b', 'https://fr.wikipedia.org/wiki/X', 'https://www.youtube.com/watch?v=1', 'https://forgechat.heiphaistos.org/x']) {
+test("aperçu : tout site public part à /og, jamais une adresse locale ni un schéma exotique", () => {
+  for (const ok of ['https://github.com/a/b', 'https://exemple.com/secret', 'http://blog.exemple.fr/x?y=1', 'https://xn--bcher-kva.example/']) {
     assert.equal(previewAllowed(ok), true, ok)
   }
-  for (const ko of ['https://exemple.com/secret', 'https://github.com.evil.io/', 'https://evilgithub.com/', 'javascript:alert(1)', 'pas une url', 'ftp://github.com/']) {
+  for (const ko of ['http://127.0.0.1/', 'http://localhost/x', 'https://nas.local/', 'http://x.internal/', 'http://[::1]/', 'http://10.0.0.1/', 'javascript:alert(1)', 'data:text/html,x', 'pas une url', 'ftp://github.com/']) {
     assert.equal(previewAllowed(ko), false, ko)
   }
+})
+
+test("aperçu : lien visible seulement (pas de code, spoiler, média), ponctuation retirée, plusieurs liens = le premier", () => {
+  assert.equal(previewUrl('voir https://a.fr/x. Puis https://b.fr'), 'https://a.fr/x')
+  assert.equal(previewUrl('[texte](https://a.fr/p?q=1) fin'), 'https://a.fr/p?q=1')
+  assert.equal(previewUrl('(https://a.fr/x), ok'), 'https://a.fr/x')
+  assert.equal(previewUrl('https://fr.wikipedia.org/wiki/Foo_(bar)'), 'https://fr.wikipedia.org/wiki/Foo_(bar)')
+  assert.equal(previewUrl('`https://code.fr` puis https://b.fr'), 'https://b.fr')
+  assert.equal(previewUrl('```\nhttps://code.fr\n```\nhttps://b.fr'), 'https://b.fr')
+  assert.equal(previewUrl('||https://secret.fr|| rien'), null)
+  assert.equal(previewUrl('https://a.fr/img.PNG'), null)
+  assert.equal(previewUrl('https://a.fr/page.html'), 'https://a.fr/page.html')
+  assert.equal(previewUrl('aucun lien'), null)
+  assert.equal(firstUrl('<https://a.fr/x>'), 'https://a.fr/x')
 })

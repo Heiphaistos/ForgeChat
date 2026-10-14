@@ -21,6 +21,8 @@ export interface ServerSideSettings {
   accent_color: string | null
   time_format: string
   streamer_mode: boolean
+  /** Aperçus de liens dans les messages (réglage partagé avec le web). */
+  link_preview?: boolean
   /** Langue de l'interface (fr, en…), partagée avec le web et le bureau. */
   language: string
 }

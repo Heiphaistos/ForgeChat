@@ -431,21 +431,6 @@ pub async fn get_dm_read(
     Ok(Json(list))
 }
 
-// OG preview (scraping basique)
-#[derive(Deserialize)]
-pub struct OgQuery {
-    pub url: String,
-}
-
-#[derive(Serialize)]
-pub struct OgMeta {
-    pub title: Option<String>,
-    pub description: Option<String>,
-    pub image: Option<String>,
-    pub site_name: Option<String>,
-    pub url: String,
-}
-
 /// Vérifie qu'une URL n'est pas une adresse privée/locale (protection SSRF)
 pub(crate) fn is_ssrf_safe_url(url: &str) -> bool {
     use std::net::IpAddr;
@@ -502,39 +487,6 @@ pub(crate) fn is_ssrf_safe_url(url: &str) -> bool {
     }
 
     true
-}
-
-pub async fn og_preview(
-    State(state): State<AppState>,
-    Extension(claims): Extension<Claims>,
-    Query(q): Query<OgQuery>,
-) -> Result<Json<OgMeta>, AppError> {
-    if crate::handlers::password_reset::over_limit(&state, &format!("og:{}", claims.sub), 30, 60).await {
-        return Err(AppError::TooManyRequests);
-    }
-    // Validation URL anti-SSRF
-    if !is_ssrf_safe_url(&q.url) {
-        return Err(AppError::BadRequest("URL invalide ou non autorisée".into()));
-    }
-
-    // Domaines autorisés : liste fixe + sites d'actualité relayés par un bot (page Actualités).
-    const ALLOWED_DOMAINS: &[&str] = &[
-        "github.com", "youtube.com", "youtu.be", "twitter.com", "x.com",
-        "reddit.com", "stackoverflow.com", "wikipedia.org", "medium.com",
-        "heiphaistos.org", "forgechat.heiphaistos.org",
-    ];
-    let parsed_url = q.url.parse::<reqwest::Url>()
-        .map_err(|_| AppError::BadRequest("URL invalide".into()))?;
-    let host = parsed_url.host_str().unwrap_or("").to_ascii_lowercase();
-    let listed = ALLOWED_DOMAINS.iter().any(|d| host == *d || host.ends_with(&format!(".{}", d)));
-    let news_site = !listed && sqlx::query_scalar::<_, bool>(
-        "SELECT EXISTS(SELECT 1 FROM news_articles WHERE lower(split_part(link, '/', 3)) = $1)",
-    ).bind(&host).fetch_one(&state.db).await.unwrap_or(false);
-    if !listed && !news_site {
-        return Err(AppError::BadRequest("Domaine non autorisé pour l'aperçu".into()));
-    }
-    let meta = fetch_og(&state, &q.url).await.ok_or_else(|| AppError::NotFound("Aucune métadonnée".into()))?;
-    Ok(Json(meta))
 }
 
 /// Attributs d'une balise (`name="v"`, `name='v'` ou `name=v`), noms en minuscules.
@@ -645,40 +597,6 @@ pub(crate) fn meta_tags(html: &str) -> std::collections::HashMap<String, String>
         if out.len() > 300 { break }
     }
     out
-}
-
-/// Métadonnées d'une page (titre, description, image absolue en https), lues en français.
-pub(crate) async fn fetch_og(state: &AppState, url: &str) -> Option<OgMeta> {
-    if !is_ssrf_safe_url(url) { return None }
-    let resp = state.public_http.get(url)
-        .header("Accept-Language", "fr-FR,fr;q=0.9,en;q=0.5")
-        .timeout(std::time::Duration::from_secs(6))
-        .send().await.ok()?;
-    let final_url = resp.url().clone();
-    if !is_ssrf_safe_url(final_url.as_str()) { return None }
-    let ct = resp.headers().get("content-type").and_then(|v| v.to_str().ok()).unwrap_or("").to_string();
-    if !ct.contains("text/html") && !ct.contains("text/plain") { return None }
-    // Limiter la taille de réponse pour éviter un DOS
-    const MAX_HTML_SIZE: usize = 1024 * 1024;
-    let bytes = crate::net_guard::read_capped(resp, MAX_HTML_SIZE).await?;
-    let html = String::from_utf8_lossy(&bytes);
-    let m = meta_tags(&html);
-    let pick = |keys: &[&str]| keys.iter().find_map(|k| m.get(*k).cloned());
-    let title = pick(&["og:title", "twitter:title"]).or_else(|| {
-        let start = html.find("<title")?;
-        let after = &html[start..];
-        let s = &after[after.find('>')? + 1..];
-        let t = decode_entities(s[..s.find("</title")?].trim());
-        (!t.is_empty()).then_some(t)
-    });
-    let description = pick(&["og:description", "twitter:description", "description"]);
-    let image = pick(&["og:image:secure_url", "og:image", "og:image:url", "twitter:image", "twitter:image:src", "image"])
-        .and_then(|raw| final_url.join(&raw).ok())
-        .filter(|u| u.scheme() == "https")
-        .map(|u| u.to_string());
-    let site_name = pick(&["og:site_name", "application-name"]);
-    if title.is_none() && description.is_none() && image.is_none() { return None }
-    Some(OgMeta { title, description, image, site_name, url: url.to_string() })
 }
 
 #[cfg(test)]

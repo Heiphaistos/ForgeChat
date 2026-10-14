@@ -197,20 +197,30 @@ export function scheduleDateError(at: Date | null, now: Date): string | null {
   return null
 }
 
-// ─── Aperçu de lien (audit.rs::og_preview) ────────────────────────────────────
+// ─── Aperçu de lien (link_preview.rs::og_preview) ────────────────────────────────────
 
 export interface LinkPreviewData {
   title: string | null
   description: string | null
   siteName: string | null
+  /** Adresse de l'image chez le site du lien : jamais chargée telle quelle, seulement via GET /og/image. */
+  image: string | null
   url: string
 }
 
 /** null si rien d'affichable (ni titre ni description) — comme LinkPreview.tsx. */
 export function normalizeOg(raw: unknown, requested: string): LinkPreviewData | null {
   const r = obj(raw)
-  const title = str(r.title)?.trim() || null
-  const description = str(r.description)?.trim() || null
+  const text = (v: unknown, max: number) => str(v)?.trim().slice(0, max) || null
+  const title = text(r.title, 200)
+  const description = text(r.description, 400)
   if (!title && !description) return null
-  return { title, description, siteName: str(r.site_name)?.trim() || null, url: str(r.url) ?? requested }
+  const image = text(r.image, 2000)
+  return {
+    title,
+    description,
+    siteName: text(r.site_name, 100),
+    image: r.nsfw !== true && image && /^https?:\/\//i.test(image) ? image : null,
+    url: str(r.url) ?? requested,
+  }
 }

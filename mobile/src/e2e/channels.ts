@@ -3,9 +3,11 @@
 // aperçu de lien), et ouverture des titres de fils, publications et sondages.
 // Les fonctions pures sont testées par __tests__/e2e-channels.test.ts.
 import * as Crypto from 'expo-crypto'
+import { settingsApi, settingsKey } from '@/api/settings'
 import { t } from '@/i18n'
 import { http, path } from '@/lib/http'
-import { automodBlock, firstUrl, previewAllowed, type AutoModRules } from './channelText'
+import { queryClient } from '@/lib/queryClient'
+import { automodBlock, previewAllowed, previewUrl, type AutoModRules } from './channelText'
 import { completeChannelKeys, lockedText, mustEncrypt, openBody, sealBody, withSeal } from './conversations'
 import * as c from './crypto'
 
@@ -45,8 +47,11 @@ export async function checkAutomod(serverId: string, text: string): Promise<void
 // ─── Aperçu de lien ─────────────────────────────────────────────────────────
 /** Aperçu du premier lien demandé par l'expéditeur, mis dans le contenu chiffré (`p`) ; {} sinon. */
 async function linkPreviewExtra(text: string): Promise<Record<string, unknown>> {
-  const url = firstUrl(text)
+  const url = previewUrl(text)
   if (!url || !previewAllowed(url)) return {}
+  // Réglage « aperçus de liens » coupé : le lien ne part pas au serveur.
+  const prefs = await queryClient.fetchQuery({ queryKey: settingsKey, queryFn: settingsApi.get, staleTime: 300_000 }).catch(() => null)
+  if (prefs?.link_preview === false) return {}
   const ctrl = new AbortController()
   const timer = setTimeout(() => ctrl.abort(), 3000)
   try {
