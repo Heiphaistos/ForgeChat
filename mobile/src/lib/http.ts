@@ -27,6 +27,8 @@ export class ApiError extends Error {
     message: string,
     public readonly code?: string,
     public readonly retryAfter?: number,
+    /** Options de connexion par clé d'accès (réponse `totp_required` du serveur), si le compte en a. */
+    public readonly passkey?: unknown,
   ) {
     super(message)
     this.name = 'ApiError'
@@ -113,14 +115,18 @@ async function parseError(res: Response): Promise<ApiError> {
   let message = t('error.status', { status: res.status })
   let code: string | undefined
   let retryAfter: number | undefined
+  let passkey: unknown
   try {
-    const data = (await res.json()) as { error?: unknown; code?: unknown; retry_after?: unknown }
+    const data = (await res.json()) as { error?: unknown; code?: unknown; retry_after?: unknown; passkey?: unknown }
     // AppError::Forbidden (server/src/error.rs) envoie `code: "forbidden"` ; les 403 à motif
     // lisible n'ont pas de code et gardent leur message.
     if (res.status === 403 && data.code === 'forbidden') code = 'forbidden'
     if (typeof data.error === 'string') {
       message = data.error
-      if (data.error === 'totp_required') code = 'totp_required'
+      if (data.error === 'totp_required') {
+        code = 'totp_required'
+        passkey = data.passkey
+      }
       // Repli pour les anciens serveurs sans `code` : texte générique de AppError::Forbidden.
       else if (!code && res.status === 403 && data.error === 'Accès interdit') code = 'forbidden'
     }
@@ -130,7 +136,7 @@ async function parseError(res: Response): Promise<ApiError> {
   }
   if (res.status === 429 && !code) code = 'rate_limited'
   if (res.status === 426) code = 'update_required'
-  return new ApiError(res.status, message, code, retryAfter)
+  return new ApiError(res.status, message, code, retryAfter, passkey)
 }
 
 // ─── Santé de l'API : 503 (refus par sécurité, Redis indisponible) et 426 (appli trop ancienne) ──

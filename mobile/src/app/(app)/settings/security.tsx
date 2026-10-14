@@ -118,6 +118,7 @@ export default function SecuritySettings() {
           onPress={() => router.push('/settings/two-factor')}
           chevron
         />
+        <Row icon="finger-print" title={t('settings.security.passkeys')} onPress={() => router.push('/settings/passkeys')} chevron />
         <Row icon="phone-portrait-outline" title={t('settings.security.devices')} onPress={() => router.push('/settings/sessions')} chevron />
         <Row icon="time-outline" title={t('settings.security.loginHistory')} onPress={() => router.push('/settings/login-history')} chevron />
         <Row

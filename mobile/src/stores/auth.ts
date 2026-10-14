@@ -16,6 +16,7 @@ import { clearAccountKey, prelogin, rememberLogin, upgradeKdf } from '@/e2e/acco
 import { asKdf, deriveSecrets, newKdfSalt, passwordProblem } from '@/e2e/authKdf'
 import { pwnedProblem } from '@/e2e/pwned'
 import { guardArgon, markMigrated, markUserMigrated } from '@/e2e/authGuard'
+import type { PasskeyAssertion } from '@/lib/passkey'
 import { forgetOfflineData, setOfflineOwner } from '@/lib/offline'
 import { listAccounts, putAccount, takeAccount } from '@/lib/accounts'
 
@@ -51,7 +52,7 @@ interface AuthState {
   /** Motif de la dernière déconnexion forcée (affiché sur l'écran de login). */
   notice: string | null
   bootstrap: () => Promise<void>
-  login: (email: string, password: string, totpCode?: string) => Promise<void>
+  login: (email: string, password: string, totpCode?: string, passkey?: PasskeyAssertion) => Promise<void>
   /** Envoie le code de vérification ; le compte naît à `verifyEmail`. */
   register: (username: string, email: string, password: string, inviteCode?: string) => Promise<void>
   verifyEmail: (email: string, code: string) => Promise<void>
@@ -135,7 +136,7 @@ export const useAuth = create<AuthState>((set, get) => {
       }
     },
 
-    login: async (email, password, totpCode) => {
+    login: async (email, password, totpCode, passkey) => {
       // Connexion v2 : seul `auth` part. Compte pas encore migré : le mot de passe part une
       // dernière fois avec la nouvelle preuve, et le serveur bascule le compte.
       const pre = await prelogin(email)
@@ -149,6 +150,7 @@ export const useAuth = create<AuthState>((set, get) => {
           email,
           pre.legacy ? { password, auth_new: secrets.auth, kdf_salt_new: salt, kdf_new: 'argon2id' } : { auth: secrets.auth },
           totpCode,
+          passkey,
         )
       } catch (e) {
         secrets.wrapKey.fill(0)

@@ -2,6 +2,7 @@ import { z } from 'zod'
 import { t } from '@/i18n'
 import { ApiError, http } from '@/lib/http'
 import { deviceHeaders, rememberDevice } from '@/lib/deviceId'
+import type { PasskeyAssertion } from '@/lib/passkey'
 import type { AuthResponse, Session, User } from '@/types/models'
 
 const userSchema = z
@@ -29,16 +30,17 @@ export const authApi = {
    * Connexion v2 : `proof` = `{auth}` (compte migré) ou `{password, auth_new, kdf_salt_new}`
    * (dernière fois que le mot de passe part, le serveur migre le compte). Voir stores/auth.ts.
    */
-  async login(email: string, proof: Record<string, string>, totpCode?: string): Promise<AuthResponse> {
+  async login(email: string, proof: Record<string, string>, totpCode?: string, passkey?: PasskeyAssertion): Promise<AuthResponse> {
     try {
-      const body: Record<string, string> = { email: email.trim().toLowerCase(), ...proof }
+      const body: Record<string, unknown> = { email: email.trim().toLowerCase(), ...proof }
       if (totpCode) body.totp_code = totpCode.replace(/\s+/g, '')
+      if (passkey) body.passkey = passkey
       const res = (await http.post('/auth/login', body, { auth: false, schema: authSchema, headers: await deviceHeaders() })) as AuthResponse
       await rememberDevice(res.device_id)
       return res
     } catch (e) {
       if (e instanceof ApiError && e.status === 401) {
-        throw new ApiError(401, t(totpCode ? 'auth.invalidTotp' : 'store.api.badCredentials'), 'bad_credentials')
+        throw new ApiError(401, t(passkey ? 'guard.passkey.failed' : totpCode ? 'auth.invalidTotp' : 'store.api.badCredentials'), 'bad_credentials')
       }
       throw e
     }
