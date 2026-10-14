@@ -9,5 +9,8 @@
         ]
       }
     ]
+  },
+  "webcredentials": {
+    "apps": ["TEAMID.org.heiphaistos.forgechat"]
   }
 }

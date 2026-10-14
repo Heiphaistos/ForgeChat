@@ -108,9 +108,9 @@ niveau OS Android, minification R8, pas de sauvegarde Android des données de l'
 
 ### Liens universels (une fois)
 
-Remplir `deploy/well-known/assetlinks.json` (empreinte SHA-256 du certificat de la clé de release,
-`docs/MAINTAINER.md` §4), le servir sous `https://<hôte>/.well-known/` et ajouter le bloc de
-`deploy/nginx-well-known.conf` à nginx. (`apple-app-site-association` : pour une future version iOS.)
+Remplir `client/public/.well-known/assetlinks.json` (empreinte SHA-256 du certificat de la clé de release,
+`docs/MAINTAINER.md` §4) ; le `nginx.conf` du dépôt le sert sous `https://<hôte>/.well-known/` avec
+`apple-app-site-association` (iOS : `TEAMID` à remplacer). Clés d'accès : `docs/PASSKEYS.md`.
 
 ---
 
@@ -134,7 +134,6 @@ encodage des chemins d'API, validation des formulaires et fichiers, cache de mes
 mobile/
 ├── app.config.ts          # config Expo dynamique (env, permissions, durcissement)
 ├── eas.json               # profils de build EAS
-├── deploy/                # fichiers .well-known + snippet nginx (liens universels)
 ├── docs/                  # architecture, sécurité, changements serveur
 ├── __tests__/             # tests unitaires (Jest)
 └── src/

@@ -59,6 +59,8 @@ services:
       PORT: 8080
       UPLOAD_DIR: /app/uploads
       FRONTEND_URL: ${FRONTEND_URL:-https://forgechat.heiphaistos.org}
+      # Clés d'accès de l'appli Android : android:apk-key-hash:<SHA-256 du certificat, base64url> (voir mobile/docs)
+      PASSKEY_APP_ORIGINS: ${PASSKEY_APP_ORIGINS:-}
       RUST_LOG: forgechat=info,tower_http=warn
       JWT_ISSUER: ${JWT_ISSUER:-forgechat}
       # Mails (reinitialisation du mot de passe) : absent = pas d'envoi
