@@ -1,3 +1,5 @@
+import { t as tr } from '../../i18n'
+
 export interface ServerBoostBannerProps {
   boostLevel: number
   boostCount: number
@@ -35,7 +37,7 @@ export default function ServerBoostBanner({ boostLevel, boostCount }: ServerBoos
       >
         <style>{`@keyframes boostSlide { 0%{background-position:0% 50%} 100%{background-position:200% 50%} }`}</style>
         <span className="text-xs font-semibold text-white truncate relative z-10">
-          <span aria-hidden>✨ </span>Niveau 2 · {boostCount} boost{boostCount > 1 ? 's' : ''}
+          <span aria-hidden>✨ </span>{tr('hc.boost', { n: boostCount })}
         </span>
         <span className="ml-auto text-[10px] text-purple-200 relative z-10 flex-shrink-0" aria-hidden>✦ ✦ ✦</span>
       </div>

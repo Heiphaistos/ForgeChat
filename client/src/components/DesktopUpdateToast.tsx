@@ -107,9 +107,9 @@ export function DesktopUpdateToast({ info, onClose }: { info: DesktopUpdateInfo;
       </div>
 
       <div className="text-xs text-fc-muted mt-0.5">
-        Vous avez la {info.current_version}
-        {date && ` · publiée le ${date}`}
-        {info.portable && ' · version portable'}
+        {tr('hc.up.have', { v: info.current_version })}
+        {date && tr('hc.up.date', { d: date })}
+        {info.portable && tr('hc.up.portable')}
       </div>
 
       {info.notes && phase === 'idle' && (
@@ -140,8 +140,7 @@ export function DesktopUpdateToast({ info, onClose }: { info: DesktopUpdateInfo;
 
       {phase === 'installing' && (
         <div className="mt-3 text-xs text-fc-text/90">
-          Paquet téléchargé et vérifié. Terminez l'installation dans la fenêtre qui vient de s'ouvrir,
-          puis relancez ForgeChat.
+          {tr('hc.up.installing')}
         </div>
       )}
 
@@ -155,7 +154,7 @@ export function DesktopUpdateToast({ info, onClose }: { info: DesktopUpdateInfo;
             onClick={install}
             className="px-3 py-1.5 rounded bg-fc-accent text-white font-medium hover:brightness-110"
           >
-            {phase === 'error' ? 'Réessayer' : 'Installer'}
+            {phase === 'error' ? tr('hc.up.retry') : tr('hc.up.install')}
           </button>
         )}
         {phase === 'done' && (
@@ -163,7 +162,7 @@ export function DesktopUpdateToast({ info, onClose }: { info: DesktopUpdateInfo;
             onClick={restart}
             className="px-3 py-1.5 rounded bg-fc-green text-white font-medium hover:brightness-110"
           >
-            Redémarrer maintenant
+            {tr('hc.up.restart')}
           </button>
         )}
       </div>

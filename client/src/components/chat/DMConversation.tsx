@@ -47,8 +47,8 @@ function TypingIndicator({ users }: { users: TypingUser[] }) {
 
   const label =
     users.length === 1
-      ? `${users[0].username} est en train d'écrire...`
-      : `${users.map(u => u.username).join(', ')} sont en train d'écrire...`
+      ? tr('channel.typingOne', { name: users[0].username })
+      : tr('channel.typingFew', { names: users.map(u => u.username).join(', ') })
 
   return (
     <div

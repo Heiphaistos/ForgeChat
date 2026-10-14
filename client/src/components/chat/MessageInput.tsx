@@ -1256,8 +1256,8 @@ export default function MessageInput({ channelId, serverId, convKind = 'dm', pla
             }`}
           >
             {content.length > MAX_CHARS
-              ? <span className="font-medium">{content.length - MAX_CHARS} caractère{content.length - MAX_CHARS > 1 ? 's' : ''} en trop</span>
-              : <span>{MAX_CHARS - content.length} restant{MAX_CHARS - content.length > 1 ? 's' : ''}</span>
+              ? <span className="font-medium">{t('hc.mi.over', { n: content.length - MAX_CHARS })}</span>
+              : <span>{t('hc.mi.left', { n: MAX_CHARS - content.length })}</span>
             }
           </div>
         )}

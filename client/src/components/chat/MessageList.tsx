@@ -125,8 +125,8 @@ export default function MessageList({
   const formatTs = (dateStr: string) => {
     const d = new Date(dateStr)
     const timeFmt = timeFormat === '12h' ? 'hh:mm a' : 'HH:mm'
-    if (isToday(d)) return `Aujourd'hui à ${format(d, timeFmt)}`
-    if (isYesterday(d)) return `Hier à ${format(d, timeFmt)}`
+    if (isToday(d)) return t('date.todayAt', { time: format(d, timeFmt) })
+    if (isYesterday(d)) return t('date.yesterdayAt', { time: format(d, timeFmt) })
     const dateFmt = dateFormat === 'MM/DD/YYYY' ? 'MM/dd/yyyy' : dateFormat === 'YYYY-MM-DD' ? 'yyyy-MM-dd' : 'dd/MM/yyyy'
     return format(d, `${dateFmt} ${timeFmt}`, { locale: dateLocale() })
   }
@@ -861,8 +861,8 @@ export default function MessageList({
         {typing && Object.keys(typing).length > 0 && (() => {
           const names = Object.values(typing)
           const label = names.length === 1
-            ? `${names[0]} est en train d'écrire...`
-            : `${names.slice(0, 2).join(', ')} sont en train d'écrire...`
+            ? t('channel.typingOne', { name: names[0] })
+            : t('channel.typingFew', { names: names.slice(0, 2).join(', ') })
           return (
             <div className="text-xs text-fc-muted px-2 py-1 flex items-center gap-1.5 h-6">
               <div className="flex gap-0.5 items-center">
@@ -888,7 +888,7 @@ export default function MessageList({
                 onClick={onRetryLoad}
                 className="mt-1 px-4 py-2 min-h-[44px] bg-fc-accent hover:bg-indigo-500 text-white text-sm font-medium rounded-lg transition"
               >
-                Réessayer
+                {t('hc.up.retry')}
               </button>
             )}
           </div>

@@ -67,7 +67,7 @@ export default function QuickReplies({ onPick, onClose }: Props) {
       <div className="px-4 py-3 border-b border-fc-hover flex items-center justify-between">
         <div className="flex items-center gap-2 text-sm font-semibold text-white">
           <Zap size={14} className="text-fc-accent" aria-hidden />
-          Réponses rapides
+          {tr('hc.qr.title')}
         </div>
         <div className="flex items-center gap-2">
           {!editing ? (
@@ -103,7 +103,7 @@ export default function QuickReplies({ onPick, onClose }: Props) {
             {!editing ? (
               <button
                 onClick={() => handlePick(reply.content)}
-                aria-label={`Répondre : ${reply.label || reply.content || '(vide)'}`}
+                aria-label={tr('hc.qr.reply', { x: reply.label || reply.content || tr('hc.qr.empty') })}
                 className="w-full text-left px-3 py-2 rounded-lg text-sm text-fc-muted hover:text-white hover:bg-fc-hover transition truncate"
               >
                 {reply.label || reply.content || '(vide)'}

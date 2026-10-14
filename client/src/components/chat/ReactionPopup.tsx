@@ -1,4 +1,5 @@
 import { mediaUrl } from '../../api/client'
+import { t as tr } from '../../i18n'
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 
 interface ReactionUser {
@@ -63,13 +64,13 @@ export default function ReactionPopup({ emoji, users, onClose, x, y }: Props) {
     <div
       ref={ref}
       role="tooltip"
-      aria-label={`${emoji} — ${users.length} réaction${users.length > 1 ? 's' : ''}`}
+      aria-label={tr('hc.rx.aria', { emoji, n: users.length })}
       style={style}
       className="bg-fc-channel border border-fc-hover rounded-lg shadow-xl p-3 min-w-[160px] max-w-[220px]"
     >
       <div className="flex items-center gap-2 mb-2 pb-2 border-b border-fc-hover">
         <span aria-hidden className="text-xl">{emoji}</span>
-        <span className="text-xs text-fc-muted">{users.length} réaction{users.length > 1 ? 's' : ''}</span>
+        <span className="text-xs text-fc-muted">{tr('hc.rx.n', { n: users.length })}</span>
       </div>
       <div role="list" className="flex flex-col gap-1.5 max-h-40 overflow-y-auto overscroll-contain">
         {users.map(u => (

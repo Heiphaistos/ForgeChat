@@ -174,8 +174,8 @@ function AppInner() {
       toast.error(message)
       void useAuth.getState().logout().finally(() => { window.location.href = '/login' })
     }
-    const offBan = on('ACCOUNT_BANNED', end('Ton compte a été suspendu.'))
-    const offOut = on('FORCE_LOGOUT', end('Tu as été déconnecté par un administrateur.'))
+    const offBan = on('ACCOUNT_BANNED', end(tr('hc.app.banned')))
+    const offOut = on('FORCE_LOGOUT', end(tr('hc.app.forced')))
     return () => { offBan(); offOut() }
   }, [on])
   const qcHook = useQueryClient()
@@ -655,8 +655,8 @@ function AppInner() {
       playRing()
       // Fenêtre en arrière-plan : notification native (sinon l'appel est invisible)
       if (!document.hasFocus() && typeof Notification !== 'undefined' && Notification.permission === 'granted') {
-        sendNativeNotification(`${callType === 'video' ? '📹' : '📞'} Appel ${callType === 'video' ? 'vidéo' : 'vocal'} entrant`, {
-          body: `${fromUsername} t'appelle`,
+        sendNativeNotification(`${callType === 'video' ? '📹' : '📞'} ${tr(callType === 'video' ? 'hc.app.callInVideo' : 'hc.app.callInVoice')}`, {
+          body: tr('hc.app.calls', { name: fromUsername }),
           onClick: () => nav(`/dms/${d.dm_id}`),
         })
       }
@@ -738,8 +738,8 @@ function AppInner() {
           } as any)
         } else {
           // Fenêtre non focusée → native si permission, sinon mettre en file pour afficher au focus
-          const title = msg.sender_username ?? 'Message privé'
-          const body = msg.content ? stripMarkdown(msg.content).slice(0, 100) : '📎 Pièce jointe'
+          const title = msg.sender_username ?? tr('toast.privateMessage')
+          const body = msg.content ? stripMarkdown(msg.content).slice(0, 100) : `📎 ${tr('common.attachment')}`
           if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
             sendNativeNotification(title, { body, onClick: () => nav(`/dms/${d.dm_id}`) })
           } else {
@@ -781,13 +781,13 @@ function AppInner() {
             onClick: goTo,
           } as any)
         } else if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
-          sendNativeNotification(msg.sender_username ?? 'Groupe', {
-            body: content ? contentClean.slice(0, 100) : '📎 Pièce jointe',
+          sendNativeNotification(msg.sender_username ?? tr('dms.group'), {
+            body: content ? contentClean.slice(0, 100) : `📎 ${tr('common.attachment')}`,
             onClick: goTo,
           })
         } else {
           pendingNotifs.current.push({
-            title: msg.sender_username ?? 'Groupe',
+            title: msg.sender_username ?? tr('dms.group'),
             body: preview,
             path: `/dms/groups/${d.group_id}`,
           })
@@ -1175,7 +1175,7 @@ function IncomingCallModal({ call, onAccept, onDecline }: {
           <p className="text-white font-semibold text-sm streamer-blur">{call.fromUsername}</p>
           <p className="text-fc-muted text-xs flex items-center gap-1">
             {call.callType === 'video' ? <Video size={11} /> : <Phone size={11} />}
-            {call.callType === 'video' ? 'Appel vidéo entrant...' : 'Appel vocal entrant...'}
+            {tr(call.callType === 'video' ? 'hc.app.callInVideo' : 'hc.app.callInVoice')}...
           </p>
         </div>
       </div>
