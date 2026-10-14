@@ -306,6 +306,28 @@ fn same_name(a: &str, b: &str) -> bool {
     }
 }
 
+/// Message déjà présent dans ForgeChat, sans correspondance Discord (candidat « jumeau »).
+struct Twin {
+    id: Uuid,
+    content: String,
+    created_at: DateTime<Utc>,
+    author: String,
+}
+
+/// Retire du lot et rend le message existant qui est le même que celui de Discord : même auteur
+/// affiché, à 2 s près, et même texte (le texte ForgeChat peut avoir une note de pièce jointe en
+/// plus). Un message sans texte n'est jamais rapproché : trop ambigu.
+fn take_twin(pool: &mut Vec<Twin>, author: &str, at: DateTime<Utc>, base: &str) -> Option<Uuid> {
+    let base = base.trim();
+    if base.is_empty() {
+        return None;
+    }
+    let pos = pool.iter().position(|p| {
+        p.author == author && (p.created_at - at).num_seconds().abs() <= 2 && p.content.trim().starts_with(base)
+    })?;
+    Some(pool.swap_remove(pos).id)
+}
+
 /// Catégorie ForgeChat (non encore liée) dont les salons recoupent au moins la moitié de ceux d'une
 /// catégorie Discord, et au moins deux : elle a été renommée ou stylisée autrement, c'est la même.
 /// Une catégorie Discord à un seul salon reste trop ambiguë pour être rapprochée ainsi.
@@ -722,6 +744,28 @@ impl Ctx<'_> {
         Ok(())
     }
 
+    /// Messages du salon, dans la fenêtre de temps du paquet, qui n'ont aucune correspondance Discord.
+    async fn archive_twins(&self, channel_id: Uuid, msgs: &[DMessage]) -> anyhow::Result<Vec<Twin>> {
+        let times: Vec<DateTime<Utc>> = msgs.iter().map(|m| super::format::parse_ts(&m.timestamp, &m.id)).collect();
+        let (Some(lo), Some(hi)) = (times.iter().min(), times.iter().max()) else {
+            return Ok(Vec::new());
+        };
+        let rows: Vec<(Uuid, Option<String>, DateTime<Utc>, String)> = sqlx::query_as(
+            "SELECT m.id, m.content, m.created_at, m.webhook_display_name FROM messages m
+             WHERE m.channel_id=$1 AND m.webhook_display_name IS NOT NULL
+               AND m.created_at BETWEEN $2 - interval '3 seconds' AND $3 + interval '3 seconds'
+               AND NOT EXISTS (SELECT 1 FROM discord_sync_map d
+                               WHERE d.server_id=$4 AND d.kind='message' AND d.forgechat_id=m.id)",
+        )
+        .bind(channel_id)
+        .bind(lo)
+        .bind(hi)
+        .bind(self.server_id)
+        .fetch_all(&self.state.db)
+        .await?;
+        Ok(rows.into_iter().map(|(id, content, created_at, author)| Twin { id, content: content.unwrap_or_default(), created_at, author }).collect())
+    }
+
     /// Insère un paquet de messages et avance le curseur dans la même transaction :
     /// un passage interrompu reprend exactement là où il s'est arrêté, sans doublon.
     async fn store_messages(&mut self, discord_channel: &str, channel_id: Uuid, msgs: Vec<DMessage>, cursor: u64) -> anyhow::Result<()> {
@@ -746,6 +790,11 @@ impl Ctx<'_> {
         .await?
         .into_iter()
         .collect();
+
+        // Messages déjà présents sans correspondance Discord (import d'archive, ou synchro d'avant la
+        // liaison) : un message identique est rattaché, pas réimporté en double.
+        let mut pool = self.archive_twins(channel_id, &msgs).await?;
+        let mut twins: Vec<(String, Uuid)> = Vec::new();
 
         struct Row {
             discord_id: String,
@@ -785,6 +834,17 @@ impl Ctx<'_> {
                 ..Default::default()
             };
             if is_system(&data) {
+                continue;
+            }
+            let base = build_content(&data, &self.names, &[]);
+            if let Some(twin) = take_twin(
+                &mut pool,
+                &truncate(data.author_name.trim(), 80),
+                super::format::parse_ts(&data.timestamp, &data.id),
+                &base,
+            ) {
+                twins.push((data.id.clone(), twin));
+                msg_map.insert(data.id.clone(), twin);
                 continue;
             }
             let mut extra = Vec::new();
@@ -858,6 +918,18 @@ impl Ctx<'_> {
         let res: anyhow::Result<HashSet<String>> = async {
             let mut tx = db.begin().await?;
             let mut claimed: HashSet<String> = HashSet::new();
+            if !twins.is_empty() {
+                sqlx::query(
+                    "INSERT INTO discord_sync_map (server_id, kind, discord_id, forgechat_id)
+                     SELECT $1, 'message', t.d, t.f FROM UNNEST($2::text[], $3::uuid[]) AS t(d, f)
+                     ON CONFLICT DO NOTHING",
+                )
+                .bind(self.server_id)
+                .bind(twins.iter().map(|t| t.0.clone()).collect::<Vec<_>>())
+                .bind(twins.iter().map(|t| t.1).collect::<Vec<_>>())
+                .execute(&mut *tx)
+                .await?;
+            }
             if !rows.is_empty() {
                 // Réservation des correspondances d'abord : seul le passage qui crée la ligne
                 // insère le message. Un passage concurrent (verrou perdu) attend notre
@@ -1415,6 +1487,27 @@ mod tests {
         assert!(same_name("⭒𝐓𝐢𝐜𝐤𝐞𝐭-𝐇𝐞𝐥𝐩🗪", "⭒𝗧𝗶𝗰𝗸𝗲𝘁-𝗛𝗲𝗹𝗽🗪"));
         assert!(same_name("ＩＮＦＯ", "info"));
         assert!(!same_name("𝗜𝗡𝗙𝗢𝗥𝗠𝗔𝗧𝗜𝗢𝗡", "𝗜𝗡𝗙𝗢𝗥𝗠𝗔𝗧𝗜𝗤𝗨𝗘"));
+    }
+
+    #[test]
+    fn archive_message_is_taken_as_twin_once() {
+        let t0 = Utc::now();
+        let mk = |n: u128, content: &str, author: &str, dt: i64| Twin {
+            id: Uuid::from_u128(n),
+            content: content.into(),
+            created_at: t0 + chrono::Duration::seconds(dt),
+            author: author.into(),
+        };
+        let mut pool = vec![mk(1, "salut tout le monde\n📎 a.png (non archivé)", "Bob", 1), mk(2, "salut tout le monde", "Bob", 0), mk(3, "autre", "Eve", 0)];
+        // Même auteur, même texte, à 2 s près : jumeau ; chaque jumeau n'est rendu qu'une fois.
+        assert!(take_twin(&mut pool, "Bob", t0, "salut tout le monde").is_some());
+        assert!(take_twin(&mut pool, "Bob", t0, "salut tout le monde").is_some());
+        assert!(take_twin(&mut pool, "Bob", t0, "salut tout le monde").is_none());
+        // Autre auteur, trop loin dans le temps, ou sans texte : jamais rapprochés.
+        assert!(take_twin(&mut pool, "Bob", t0, "autre").is_none());
+        assert!(take_twin(&mut pool, "Eve", t0 + chrono::Duration::seconds(10), "autre").is_none());
+        assert!(take_twin(&mut pool, "Eve", t0, "  ").is_none());
+        assert!(take_twin(&mut pool, "Eve", t0, "autre").is_some());
     }
 
     #[test]
