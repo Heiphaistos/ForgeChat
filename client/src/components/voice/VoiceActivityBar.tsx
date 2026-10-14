@@ -1,3 +1,4 @@
+import { t as tr } from '../../i18n'
 import { useAudioLevel } from '../../hooks/useVoiceActivity'
 import { SPEAKING_THRESHOLD } from '../../lib/audio'
 
@@ -42,7 +43,7 @@ function ParticipantLevel({ participant }: { participant: Participant }) {
   return (
     <div
       className={`flex items-center gap-1.5 px-2 py-1 rounded-lg transition ${speaking ? 'bg-fc-green/10' : 'bg-transparent'}`}
-      aria-label={`${participant.username}${speaking ? ' — parle' : ''}`}
+      aria-label={speaking ? tr('sw.voice.speaking', { name: participant.username }) : participant.username}
       title={participant.username}
     >
       <div

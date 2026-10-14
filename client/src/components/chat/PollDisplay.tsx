@@ -114,7 +114,7 @@ export default function PollDisplay({ pollId, serverId, channelId }: Props) {
       queryClient.invalidateQueries({ queryKey: ['poll', pollId] })
     },
     onError: (e: any) => {
-      toast.error(e.response?.data?.error ?? 'Erreur lors du vote')
+      toast.error(e.response?.data?.error ?? tr('sw.poll.voteFail'))
     },
     onSettled: () => {
       setPendingOptionId(null)
@@ -129,7 +129,7 @@ export default function PollDisplay({ pollId, serverId, channelId }: Props) {
       queryClient.invalidateQueries({ queryKey: ['poll', pollId] })
     },
     onError: (e: any) => {
-      toast.error(e.response?.data?.error ?? 'Erreur lors de la fermeture')
+      toast.error(e.response?.data?.error ?? tr('sw.poll.closeFail'))
     },
   })
 
@@ -213,7 +213,7 @@ export default function PollDisplay({ pollId, serverId, channelId }: Props) {
                   <button
                     onClick={() => voteMutation.mutate(option.id)}
                     disabled={voteMutation.isPending}
-                    aria-label={isMyVote ? `Retirer mon vote : ${option.text}` : `Voter pour : ${option.text}`}
+                    aria-label={tr(isMyVote ? 'sw.poll.unvote' : 'sw.poll.vote', { text: option.text })}
                     aria-pressed={isMyVote}
                     className={`flex-1 text-left text-sm px-2 py-1 rounded transition
                       ${isPending
@@ -281,8 +281,8 @@ export default function PollDisplay({ pollId, serverId, channelId }: Props) {
       {hasVoted && !isExpired && (
         <p className="text-xs text-fc-muted mt-2 text-center">
           {poll.multiple_choice
-            ? "Cliquez sur une option pour l'ajouter ou la retirer."
-            : 'Cliquez sur une autre option pour changer votre vote.'}
+            ? tr('sw.poll.hintMulti')
+            : tr('sw.poll.hintSingle')}
         </p>
       )}
     </div>

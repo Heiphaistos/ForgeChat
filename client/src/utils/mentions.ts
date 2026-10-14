@@ -1,3 +1,4 @@
+import { t } from '../i18n'
 import { queryClient } from '../main'
 
 // Jetons de mention stockés dans les messages (résolus par server/src/notify.rs) :
@@ -45,7 +46,7 @@ export function cachedChannel(id: string): ChannelLike | undefined {
 /** Texte lisible (toasts, notifications système) : jetons remplacés par @nom. */
 export function mentionsToText(content: string): string {
   return content.replace(MENTION_TOKEN_RE, (_, kind: string, id: string) =>
-    `@${(kind === '&' ? cachedRole(id)?.name : cachedUsername(id)) ?? 'inconnu'}`)
+    `@${(kind === '&' ? cachedRole(id)?.name : cachedUsername(id)) ?? t('sw.mention.unknown')}`)
 }
 
 /**

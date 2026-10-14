@@ -1,3 +1,4 @@
+import { t } from '../i18n/index.ts'
 // Clés d'accès (passkeys / WebAuthn) comme second facteur — audit 2026-10-12, amélioration n° 3.
 // Le serveur (server/src/webauthn.rs) envoie ses options en base64url et vérifie origine, défi,
 // signature et compteur. Web seulement : l'appli de bureau (origine tauri://) ne peut pas
@@ -58,7 +59,7 @@ export interface PasskeyAssertion { id: string; clientDataJSON: string; authenti
 /** Enregistre une clé sur cet appareil ; renvoie ce que le serveur vérifie. */
 export async function createPasskey(serverOptions: Json): Promise<{ clientDataJSON: string; attestationObject: string }> {
   const cred = await navigator.credentials.create({ publicKey: creationOptions(serverOptions) }) as PublicKeyCredential | null
-  if (!cred) throw new Error('Clé d’accès annulée')
+  if (!cred) throw new Error(t('sw.passkey.cancelled'))
   const r = cred.response as AuthenticatorAttestationResponse
   return { clientDataJSON: bytesToB64u(r.clientDataJSON), attestationObject: bytesToB64u(r.attestationObject) }
 }
@@ -66,7 +67,7 @@ export async function createPasskey(serverOptions: Json): Promise<{ clientDataJS
 /** Signe le défi de connexion avec une clé du compte. */
 export async function getPasskey(serverOptions: Json): Promise<PasskeyAssertion> {
   const cred = await navigator.credentials.get({ publicKey: requestOptions(serverOptions) }) as PublicKeyCredential | null
-  if (!cred) throw new Error('Clé d’accès annulée')
+  if (!cred) throw new Error(t('sw.passkey.cancelled'))
   const r = cred.response as AuthenticatorAssertionResponse
   return {
     id: bytesToB64u(cred.rawId),

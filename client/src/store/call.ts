@@ -2,7 +2,7 @@ import { create } from 'zustand'
 import { t as tr } from '../i18n'
 import { useWs } from './ws'
 import api from '../api/client'
-import { webrtcMissing, openInBrowser, NO_WEBRTC_MESSAGE } from '../lib/webrtcSupport'
+import { webrtcMissing, openInBrowser, noWebrtcMessage } from '../lib/webrtcSupport'
 import {
   isNativeVoice, nativeConnect, nativeDisconnect, nativeSetMic, nativeSetDeafen, nativeSetCamera,
 } from '../lib/nativeVoice'
@@ -309,7 +309,7 @@ async function _switchDevice(kind: 'audio' | 'video', set: SetFn, get: () => Cal
     old?.stop()
     set(() => ({ localStream: new MediaStream([...local.getTracks().filter(x => x !== old), t]) }))
   } catch {
-    toast.error(kind === 'audio' ? 'Impossible d\'utiliser ce microphone.' : 'Impossible d\'utiliser cette caméra.')
+    toast.error(kind === 'audio' ? tr('sw.v.micFail') : tr('sw.v.camFail'))
   }
 }
 
@@ -406,7 +406,7 @@ export const useCallStore = create<CallStore>((set, get) => ({
     if (_callInFlight) return
     if (get().callState !== 'idle') return
     if (webrtcMissing() && !isNativeVoice()) {
-      toast.error((await openInBrowser(`/dms/${dmId}`)) ? NO_WEBRTC_MESSAGE : 'Appels indisponibles ici : ouvrez ForgeChat dans votre navigateur.', { duration: 9000 })
+      toast.error((await openInBrowser(`/dms/${dmId}`)) ? noWebrtcMessage() : tr('sw.v.callsUnavailable'), { duration: 9000 })
       return
     }
     _callInFlight = true
@@ -426,7 +426,7 @@ export const useCallStore = create<CallStore>((set, get) => ({
       }, 45_000)
     } catch {
       _cleanup(set)
-      throw new Error('Accès micro/caméra refusé')
+      throw new Error(tr('sw.v.mediaDenied'))
     }
   },
 
@@ -445,7 +445,7 @@ export const useCallStore = create<CallStore>((set, get) => ({
     }
     if (webrtcMissing() && !isNativeVoice()) {
       // Laisser sonner : l'appel peut être décroché dans le navigateur ouvert.
-      toast.error((await openInBrowser(`/dms/${dmId}`)) ? NO_WEBRTC_MESSAGE : 'Appels indisponibles ici : ouvrez ForgeChat dans votre navigateur.', { duration: 9000 })
+      toast.error((await openInBrowser(`/dms/${dmId}`)) ? noWebrtcMessage() : tr('sw.v.callsUnavailable'), { duration: 9000 })
       return
     }
     _callInFlight = true

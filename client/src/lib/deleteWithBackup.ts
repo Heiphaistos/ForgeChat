@@ -24,13 +24,13 @@ const slug = (s: string) =>
 export async function deleteWithBackup(t: Target): Promise<boolean> {
   const isCat = t.kind === 'category'
   const choice = await confirmChoice({
-    title: isCat ? `Supprimer la catégorie « ${t.name} » ?` : `Supprimer #${t.name} ?`,
+    title: isCat ? tr('sw.del.titleCat', { name: t.name }) : tr('sw.del.titleCh', { name: t.name }),
     message: isCat
-      ? 'Ses salons seront détachés (pas supprimés). Vous pouvez d’abord télécharger une sauvegarde JSON de la catégorie et de ses salons.'
-      : 'Messages, épingles et réglages seront perdus. Vous pouvez d’abord télécharger une sauvegarde JSON du salon.',
+      ? tr('sw.del.msgCat')
+      : tr('sw.del.msgCh'),
     danger: true,
-    altLabel: 'Sauvegarder puis supprimer',
-    confirmLabel: 'Supprimer sans sauvegarde',
+    altLabel: tr('sw.del.backupThen'),
+    confirmLabel: tr('sw.del.noBackup'),
   })
   if (choice === 'cancel') return false
 
@@ -46,7 +46,7 @@ export async function deleteWithBackup(t: Target): Promise<boolean> {
         toast(tr('hc.t.backupLimit'))
       }
     } catch (e: any) {
-      toast.error(e?.response?.data?.error ?? 'Sauvegarde impossible : rien n’a été supprimé.')
+      toast.error(e?.response?.data?.error ?? tr('sw.del.backupFail'))
       return false
     }
   }
@@ -55,7 +55,7 @@ export async function deleteWithBackup(t: Target): Promise<boolean> {
     await api.delete(isCat ? `/servers/${t.serverId}/categories/${t.id}` : `/servers/${t.serverId}/channels/${t.id}`)
     return true
   } catch (e: any) {
-    toast.error(e?.response?.data?.error ?? 'Erreur lors de la suppression')
+    toast.error(e?.response?.data?.error ?? tr('sw.del.fail'))
     return false
   }
 }

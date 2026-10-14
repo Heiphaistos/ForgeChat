@@ -1,3 +1,4 @@
+import { t } from '../i18n'
 // Moteurs sans WebRTC : la WebKitGTK des distributions Linux est compilée sans
 // (mesuré le 2026-09-22 : `typeof RTCPeerConnection === 'undefined'` dans
 // WebKitGTK 2.50.4 d'Ubuntu, même avec enable-webrtc). L'application Linux ne
@@ -22,6 +23,4 @@ export async function openInBrowser(path: string): Promise<boolean> {
   }
 }
 
-export const NO_WEBRTC_MESSAGE =
-  "Les appels ne sont pas possibles dans l'application Linux (son moteur d'affichage n'intègre pas WebRTC). " +
-  'La page a été ouverte dans votre navigateur : le vocal y fonctionne normalement.'
+export const noWebrtcMessage = () => t('sw.webrtc.msg')

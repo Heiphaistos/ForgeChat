@@ -5,7 +5,7 @@ import { useAuth } from './auth'
 import { hasUxPref } from './uxPrefs'
 import api from '../api/client'
 import toast from 'react-hot-toast'
-import { webrtcMissing, openInBrowser, NO_WEBRTC_MESSAGE } from '../lib/webrtcSupport'
+import { webrtcMissing, openInBrowser, noWebrtcMessage } from '../lib/webrtcSupport'
 import { isNativeVoice, nativeSetDeafen, nativeSetPeerAudio, nativeSetCamera, nativeSetScreen } from '../lib/nativeVoice'
 import {
   createProcessedAudioTrack, getNoiseEngine, setNoiseEngine as persistNoiseEngine,
@@ -259,10 +259,10 @@ async function buildMicTrack(raw: MediaStreamTrack, engine: NoiseEngine): Promis
     _processed = null
     if (engine === 'off' || engine === 'browser') {
       warn('volume d’entrée / seuil du micro indisponibles', e)
-      return { track: raw, error: 'Volume d’entrée et seuil de sensibilité indisponibles : micro envoyé tel quel.' }
+      return { track: raw, error: tr('sw.v.inputFx') }
     }
     warn(`moteur de suppression de bruit "${engine}" indisponible`, e)
-    return { track: raw, error: `Suppression de bruit « ${engine} » indisponible : traitement du navigateur utilisé à la place.` }
+    return { track: raw, error: tr('sw.v.noiseFx', { engine }) }
   }
 }
 
@@ -328,16 +328,16 @@ export const useVoice = create<VoiceStore>((set, get) => {
       // Le serveur nous a déjà sortis (ou un autre appareil a repris le salon) :
       // un VOICE_LEAVE ici sortirait l'autre appareil, et un VOICE_JOIN le chasserait.
       teardown(why === 'evicted', why === 'duplicate')
-      toast(why === 'duplicate' ? 'Salon vocal repris sur un autre appareil.'
-        : why === 'evicted' ? 'Salon vocal quitté pour l\'appel privé.'
-        : 'Vous avez été déconnecté du salon vocal.')
+      toast(why === 'duplicate' ? tr('sw.v.movedDup')
+        : why === 'evicted' ? tr('sw.v.movedEvicted')
+        : tr('sw.v.movedOut'))
       return
     }
     // Panne réseau : redemander un accès au SFU (nouveau jeton) avant que le
     // serveur ne nous retire du salon (20 s d'absence), avec un délai croissant.
     if (_rejoinTimer) return
     if (_rejoinAttempts >= MAX_REJOIN_ATTEMPTS) {
-      set({ mediaStatus: 'failed', error: 'Connexion au serveur audio/vidéo perdue. Quittez et rejoignez le salon.' })
+      set({ mediaStatus: 'failed', error: tr('sw.v.mediaLostRejoin') })
       return
     }
     const delay = 1000 * 2 ** _rejoinAttempts++
@@ -418,7 +418,7 @@ export const useVoice = create<VoiceStore>((set, get) => {
     raw.onended = () => {
       if (!get().joined || getRawMicTrack() !== raw) return
       localStorage.removeItem('fc_audio_input')
-      set({ notice: 'Micro débranché : micro par défaut utilisé.' })
+      set({ notice: tr('sw.v.micUnplugged') })
       void get().setAudioInput('')
     }
   }
@@ -428,7 +428,7 @@ export const useVoice = create<VoiceStore>((set, get) => {
     vt.onended = () => {
       const s = get()
       if (!s.joined || !s.videoEnabled) return
-      set({ notice: 'Caméra débranchée : caméra coupée.' })
+      set({ notice: tr('sw.v.camUnplugged') })
       void s.toggleVideo()
     }
   }
@@ -592,7 +592,7 @@ export const useVoice = create<VoiceStore>((set, get) => {
       if (cur.joined && cur.channelId === channelId && cur.listenOnly === listenOnly) return
       if (webrtcMissing() && !isNativeVoice()) {
         const opened = await openInBrowser(`/servers/${serverId}/channels/${channelId}`)
-        set({ error: opened ? NO_WEBRTC_MESSAGE : 'Ce moteur d\'affichage ne gère pas les appels : ouvrez ForgeChat dans votre navigateur.' })
+        set({ error: opened ? noWebrtcMessage() : tr('sw.v.noWebrtcEngine') })
         return
       }
       // Garde posée AVANT l'await : deux clics rapides créaient deux jeux de
@@ -623,7 +623,7 @@ export const useVoice = create<VoiceStore>((set, get) => {
               // sinon tout le vocal inaccessible.
               stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false })
             } catch {
-              set({ error: 'Impossible d\'accéder au microphone. Vérifiez les permissions du navigateur.' })
+              set({ error: tr('sw.v.micAccess') })
               return
             }
           }
@@ -718,7 +718,7 @@ export const useVoice = create<VoiceStore>((set, get) => {
           }
           const lk = d.livekit
           if (!lk?.url || !lk?.token || !lk?.room) {
-            set({ mediaStatus: 'failed', error: 'Serveur audio/vidéo indisponible : réessayez dans un instant.' })
+            set({ mediaStatus: 'failed', error: tr('sw.v.sfuRetry') })
             return
           }
           // Sans effet si la connexion au SFU tient déjà (reconnexion du seul WebSocket).
@@ -751,11 +751,11 @@ export const useVoice = create<VoiceStore>((set, get) => {
           // Seulement en réponse à notre VOICE_JOIN (le message part à toutes nos sessions).
           if (!_awaitingPeers) return
           const error = d.reason === 'channel_full' || d.reason === 'full' ? `Canal plein (${d.current ?? '?'}/${d.limit} places)`
-            : d.reason === 'missing_permission' ? "Vous n'avez pas la permission de rejoindre ce salon vocal."
-            : d.reason === 'rate_limited' ? 'Trop de tentatives de connexion : patientez quelques secondes.'
-            : d.reason === 'wrong_password' ? 'Mot de passe du salon incorrect.'
-            : d.reason === 'media_unavailable' ? 'Serveur audio/vidéo indisponible : réessayez dans un instant.'
-            : 'Impossible de rejoindre ce salon vocal.'
+            : d.reason === 'missing_permission' ? tr('sw.v.noJoinPerm')
+            : d.reason === 'rate_limited' ? tr('sw.v.rateLimited')
+            : d.reason === 'wrong_password' ? tr('sw.v.wrongPassword')
+            : d.reason === 'media_unavailable' ? tr('sw.v.sfuRetry')
+            : tr('sw.v.joinFail')
           // Le serveur ne nous a pas acceptés : l'interface ne doit pas rester
           // « connectée » à un salon où l'on n'est pas (micro ouvert pour rien).
           get().leave()
@@ -767,9 +767,9 @@ export const useVoice = create<VoiceStore>((set, get) => {
         const offStateError = ws.on('VOICE_STATE_ERROR', (d: any) => {
           if (d.permission === 'STREAM') {
             void get().stopScreenShare()
-            set({ error: "Vous n'avez pas la permission de partager votre écran sur ce serveur." })
+            set({ error: tr('sw.v.noStreamPerm') })
           } else if (d.permission === 'SPEAK_VOICE') {
-            set({ muted: true, notice: "Vous n'avez pas la permission de parler dans ce salon : micro coupé." })
+            set({ muted: true, notice: tr('sw.v.noSpeakPerm') })
             syncMic()
           }
         })
@@ -803,7 +803,7 @@ export const useVoice = create<VoiceStore>((set, get) => {
     toggleMute: () => {
       const s0 = get()
       if (s0.muted && (s0.serverMuted || s0.serverDeafened)) {
-        set({ notice: 'Un modérateur vous a rendu muet sur ce serveur.' })
+        set({ notice: tr('sw.v.modMuted') })
         return
       }
       set(s => ({ muted: !s.muted }))
@@ -814,7 +814,7 @@ export const useVoice = create<VoiceStore>((set, get) => {
     toggleDeafen: () => {
       const next = !get().deafened
       if (!next && get().serverDeafened) {
-        set({ notice: 'Un modérateur vous a mis en sourdine sur ce serveur.' })
+        set({ notice: tr('sw.v.modDeafened') })
         return
       }
       applyDeafen(next)
@@ -847,7 +847,7 @@ export const useVoice = create<VoiceStore>((set, get) => {
             set({ videoEnabled: !videoEnabled && !!url, localVideoUrl: url })
           } catch (e) {
             warn('caméra native', e)
-            if (stillHere()) set({ error: `Caméra indisponible : ${String(e)}` })
+            if (stillHere()) set({ error: tr('sw.v.camErr', { err: String(e) }) })
           }
           broadcastState()
           return
@@ -870,7 +870,7 @@ export const useVoice = create<VoiceStore>((set, get) => {
             refreshLocal()
           } catch (e) {
             warn('activation caméra', e)
-            set({ error: 'Impossible d\'accéder à la caméra.' })
+            set({ error: tr('sw.v.camAccess') })
           }
         }
         broadcastState()
@@ -892,13 +892,13 @@ export const useVoice = create<VoiceStore>((set, get) => {
           broadcastState()
         } catch (e) {
           warn('partage natif', e)
-          set({ error: `Partage d'écran impossible : ${String(e)}` })
+          set({ error: tr('sw.v.screenFail', { err: String(e) }) })
         }
         return
       }
       const md = navigator.mediaDevices as any
       if (typeof md?.getDisplayMedia !== 'function') {
-        set({ error: 'Le partage d\'écran n\'est pas disponible sur cette version de l\'application.' })
+        set({ error: tr('sw.v.noScreenShare') })
         return
       }
 
@@ -916,7 +916,7 @@ export const useVoice = create<VoiceStore>((set, get) => {
           localScreenStream: localScreen,
           // Partager UNE FENÊTRE ne transmet jamais le son (limite navigateur) :
           // le dire, au lieu de laisser croire que le retour audio est cassé.
-          notice: sat || !screenAudioWanted() ? null : 'Aucun son capté : partagez un onglet ou l\'écran entier pour transmettre le son du jeu.',
+          notice: sat || !screenAudioWanted() ? null : tr('sw.v.noScreenAudio'),
         })
         broadcastState()
 
@@ -926,12 +926,12 @@ export const useVoice = create<VoiceStore>((set, get) => {
         if (err?.name === 'NotAllowedError' && /permission|denied|disallowed/i.test(err.message ?? '')) {
           // Sous WebKitGTK (paquets Linux), la capture est refusée par le moteur
           // et renvoie la même erreur qu'une annulation utilisateur.
-          set({ error: 'Partage d\'écran refusé par le système. Sur Linux, lancez l\'application avec le portail de capture activé ou utilisez la version web.' })
+          set({ error: tr('sw.v.screenDenied') })
           return
         }
         if (err?.name === 'NotAllowedError') return // annulation du sélecteur
         warn('shareScreen', e)
-        set({ error: 'Impossible de partager l\'écran' })
+        set({ error: tr('sw.v.screenCant') })
       }
     },
 
@@ -1069,7 +1069,7 @@ export const useVoice = create<VoiceStore>((set, get) => {
         set({ notice: built.error })
       } catch (e) {
         warn('changement de microphone', e)
-        set({ error: 'Impossible d\'utiliser ce microphone.' })
+        set({ error: tr('sw.v.micFail') })
       }
     },
 
@@ -1085,7 +1085,7 @@ export const useVoice = create<VoiceStore>((set, get) => {
         refreshLocal()
       } catch (e) {
         warn('changement de caméra', e)
-        set({ error: 'Impossible d\'utiliser cette caméra.' })
+        set({ error: tr('sw.v.camFail') })
       }
     },
 

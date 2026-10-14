@@ -1,3 +1,4 @@
+import { t as tr } from '../../i18n'
 // Rangement de la barre des serveurs (comme Discord), sans interface : ordre du premier niveau
 // (serveurs hors dossier et dossiers mêlés) et dossiers. Synchronisé via /users/me/server-layout
 // ({ order, folders }) ; `order` contient des ids de serveurs et de dossiers (`folder_…`).
@@ -47,7 +48,7 @@ export function applyDrop(serverIds: readonly string[], l: RailLayout, drag: Dra
     if (target.kind === 'folder' && folders[target.id]) folders[target.id].serverIds.push(drag.id)
     else {
       const fid = newFolderId()
-      folders[fid] = { name: 'Nouveau dossier', color: FOLDER_COLORS[Object.keys(folders).length % FOLDER_COLORS.length], serverIds: [target.id, drag.id] }
+      folders[fid] = { name: tr('sw.rail.newFolder'), color: FOLDER_COLORS[Object.keys(folders).length % FOLDER_COLORS.length], serverIds: [target.id, drag.id] }
       top = top.map(id => (id === target.id ? fid : id))
     }
   } else {

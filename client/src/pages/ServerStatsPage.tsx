@@ -106,9 +106,9 @@ export default function ServerStatsPage({ serverId }: Props) {
       <div>
         <h3 className="text-lg font-semibold text-white mb-1 flex items-center gap-2">
           <BarChart2 size={18} className="text-fc-accent" aria-hidden />
-          Statistiques du serveur
+          {tr('sw.stats.title')}
         </h3>
-        <p className="text-sm text-fc-muted">Actualisées toutes les minutes.</p>
+        <p className="text-sm text-fc-muted">{tr('sw.stats.refresh')}</p>
       </div>
 
       {/* Métriques rapides — 4 cards 2x2 */}
@@ -116,29 +116,29 @@ export default function ServerStatsPage({ serverId }: Props) {
         <MetricCard
           icon={<Users size={18} className="text-white" />}
           iconBg="bg-indigo-500/30"
-          label="Membres total"
+          label={tr('sw.stats.members')}
           value={data?.member_count}
           loading={isLoading}
         />
         <MetricCard
           icon={<Wifi size={18} className="text-white" />}
           iconBg="bg-green-500/30"
-          label="En ligne"
+          label={tr('sw.stats.online')}
           value={data?.online_count}
-          sub={data ? `${onlineRatio}% du serveur` : undefined}
+          sub={data ? tr('sw.stats.onlinePct', { n: onlineRatio }) : undefined}
           loading={isLoading}
         />
         <MetricCard
           icon={<MessageSquare size={18} className="text-white" />}
           iconBg="bg-purple-500/30"
-          label="Messages aujourd'hui"
+          label={tr('sw.stats.msgsToday')}
           value={data?.message_count_today}
           loading={isLoading}
         />
         <MetricCard
           icon={<TrendingUp size={18} className="text-white" />}
           iconBg="bg-orange-500/30"
-          label="Messages cette semaine"
+          label={tr('sw.stats.msgsWeek')}
           value={data?.message_count_week}
           loading={isLoading}
         />
@@ -148,7 +148,7 @@ export default function ServerStatsPage({ serverId }: Props) {
       {data && (
         <div className="p-4 bg-fc-channel rounded-lg border border-fc-hover">
           <div aria-hidden className="text-xs font-semibold text-fc-muted uppercase tracking-wide mb-3">
-            Taux de présence
+            {tr('sw.stats.presence')}
           </div>
           <div className="flex items-center gap-3">
             <div className="flex-1 h-2 bg-fc-hover rounded-full overflow-hidden">
@@ -158,7 +158,7 @@ export default function ServerStatsPage({ serverId }: Props) {
                 aria-valuemin={0}
                 aria-valuemax={100}
                 aria-valuenow={onlineRatio}
-                aria-valuetext={`${onlineRatio}% des membres en ligne`}
+                aria-valuetext={tr('sw.stats.presencePct', { n: onlineRatio })}
                 className="h-full bg-green-500 rounded-full transition-all duration-500"
                 style={{ width: `${onlineRatio}%` }}
               />
@@ -173,14 +173,14 @@ export default function ServerStatsPage({ serverId }: Props) {
         <MetricCard
           icon={<UserPlus size={18} className="text-white" />}
           iconBg="bg-teal-500/30"
-          label="Nouveaux aujourd'hui"
+          label={tr('sw.stats.newToday')}
           value={data?.new_members_today}
           loading={isLoading}
         />
         <MetricCard
           icon={<UserPlus size={18} className="text-white" />}
           iconBg="bg-cyan-500/30"
-          label="Nouveaux cette semaine"
+          label={tr('sw.stats.newWeek')}
           value={data?.new_members_week}
           loading={isLoading}
         />
@@ -190,7 +190,7 @@ export default function ServerStatsPage({ serverId }: Props) {
       {(isLoading || (data?.top_channels && data.top_channels.length > 0)) && (
         <div>
           <div aria-hidden className="text-xs font-semibold text-fc-muted uppercase tracking-wide mb-3">
-            Top salons actifs
+            {tr('sw.stats.topChannels')}
           </div>
           <div className="space-y-2">
             {isLoading
@@ -225,7 +225,7 @@ export default function ServerStatsPage({ serverId }: Props) {
       {(isLoading || data?.active_hours) && (
         <div className="p-4 bg-fc-channel rounded-lg">
           <div aria-hidden className="text-xs font-semibold text-fc-muted uppercase tracking-wide mb-4">
-            Activité par heure (aujourd'hui)
+            {tr('sw.stats.hourly')}
           </div>
           {isLoading ? (
             <div aria-hidden className="h-16 bg-fc-hover animate-pulse rounded" />

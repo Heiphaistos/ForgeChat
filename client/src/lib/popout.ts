@@ -1,3 +1,4 @@
+import { t } from '../i18n'
 // Fenêtres détachées : un stream, une caméra, chacun dans sa propre fenêtre,
 // autant qu'on veut en même temps (Discord n'en détache qu'une, pour tout l'appel).
 //
@@ -83,7 +84,7 @@ export function popOut(userId: string, kind: PopKind, label: string): boolean {
   const win = window.open('', `fc-pop-${key.replace(/[^a-zA-Z0-9-]/g, '_')}`, 'popup,width=1024,height=600')
   if (!win) return false
 
-  const title = kind === 'screen' ? `Écran de ${label} — ForgeChat` : `${label} — ForgeChat`
+  const title = kind === 'screen' ? t('sw.voice.screenOf', { name: label }) : `${label} — ForgeChat`
   const video = buildWindow(win, title)
   video.srcObject = stream
   play(video)

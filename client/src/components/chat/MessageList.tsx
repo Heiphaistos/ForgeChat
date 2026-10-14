@@ -915,7 +915,7 @@ export default function MessageList({
             <div className="w-16 h-16 rounded-2xl bg-fc-accent/20 flex items-center justify-center text-3xl" aria-hidden>
               💬
             </div>
-            <p className="text-base font-semibold text-white">Aucun message ici… pour l'instant.</p>
+            <p className="text-base font-semibold text-white">{tr('sw.ml.empty')}</p>
             <p className="text-sm text-fc-muted">{t('hc.ml.first')}</p>
           </div>
         )}
@@ -939,7 +939,7 @@ export default function MessageList({
       {showScrollBtn && (
         <button
           onClick={() => { scrollToBottom(); setNewMsgCount(0) }}
-          aria-label={newMsgCount > 0 ? `Aller en bas — ${newMsgCount} nouveau${newMsgCount > 1 ? 'x' : ''} message${newMsgCount > 1 ? 's' : ''}` : 'Aller en bas'}
+          aria-label={newMsgCount > 0 ? tr(newMsgCount > 1 ? 'sw.ml.bottomOther' : 'sw.ml.bottomOne', { n: newMsgCount }) : tr('sw.ml.bottom')}
           className="absolute bottom-4 right-4 flex items-center gap-1.5 px-3 py-1.5 min-h-[36px] bg-fc-accent hover:bg-indigo-500 text-white text-xs font-medium rounded-full shadow-lg transition"
         >
           {newMsgCount > 0 && (
@@ -948,13 +948,13 @@ export default function MessageList({
             </span>
           )}
           <ChevronDown size={14} aria-hidden />
-          Aller en bas
+          {tr('sw.ml.bottom')}
         </button>
       )}
 
       {/* Annonce discrète des nouveaux messages pour les lecteurs d'écran */}
       <div aria-live="polite" className="sr-only">
-        {newMsgCount > 0 ? `${newMsgCount} nouveau${newMsgCount > 1 ? 'x' : ''} message${newMsgCount > 1 ? 's' : ''} non lu${newMsgCount > 1 ? 's' : ''}` : ''}
+        {newMsgCount > 0 ? tr(newMsgCount > 1 ? 'sw.ml.unreadOther' : 'sw.ml.unreadOne', { n: newMsgCount }) : ''}
       </div>
 
       {/* Reaction popup */}
@@ -1115,7 +1115,7 @@ export default function MessageList({
             <button
               onClick={() => {
                 navigator.share({
-                  title: 'Message ForgeChat',
+                  title: tr('sw.ml.shareTitle'),
                   text: contextMenu.msg.content ? stripMarkdown(contextMenu.msg.content).slice(0, 200) : undefined,
                   url: messageLink(contextMenu.msg.id),
                 }).catch(() => { /* partage annulé par l'utilisateur */ })

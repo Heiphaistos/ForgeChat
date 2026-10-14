@@ -1127,7 +1127,7 @@ function AppInner() {
       {showDisconnectBanner && (
         <div className="fixed top-0 inset-x-0 z-[9998] flex items-center justify-center gap-2 bg-yellow-600/95 text-white text-xs font-medium py-1.5 px-4">
           <span className="inline-block w-2 h-2 rounded-full bg-white/70 animate-pulse flex-shrink-0" />
-          Connexion perdue — reconnexion en cours…
+          {tr('sw.app.reconnecting')}
         </div>
       )}
 

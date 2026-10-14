@@ -176,7 +176,7 @@ export default function NotificationBell() {
                 }}
                 className="text-xs text-fc-accent hover:underline"
               >
-                Tout marquer comme lu
+                {tr('sw.notif.markAll')}
               </button>
             </div>
           )}

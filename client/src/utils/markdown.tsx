@@ -7,7 +7,7 @@ import { cachedChannel, cachedRole, cachedUsername } from './mentions'
 import { deceptiveHost } from './safeUrl'
 import UserName from '../components/ui/UserName'
 import { userMenuProps } from '../components/userMenu/store'
-import { intlLocale } from '../i18n'
+import { intlLocale, t as tr } from '../i18n'
 import { useUxPrefs } from '../lib/uxPrefs'
 import StillableImg from '../components/ui/StillableImg'
 
@@ -138,14 +138,13 @@ function formatRelativeTime(unix: number): string {
   const hours = Math.floor(abs / 3600000)
   const days = Math.floor(abs / 86400000)
 
-  let label: string
-  if (seconds < 60) label = 'à l\'instant'
-  else if (minutes < 60) label = `${minutes} minute${minutes > 1 ? 's' : ''}`
-  else if (hours < 24) label = `${hours} heure${hours > 1 ? 's' : ''}`
-  else label = `${days} jour${days > 1 ? 's' : ''}`
-
-  if (seconds < 60) return label
-  return future ? `dans ${label}` : `il y a ${label}`
+  // Intl rend « il y a 2 heures » / « 2 hours ago » selon la langue active.
+  const rtf = new Intl.RelativeTimeFormat(intlLocale(), { numeric: 'auto' })
+  const sign = future ? 1 : -1
+  if (seconds < 60) return rtf.format(0, 'second')
+  if (minutes < 60) return rtf.format(sign * minutes, 'minute')
+  if (hours < 24) return rtf.format(sign * hours, 'hour')
+  return rtf.format(sign * days, 'day')
 }
 
 function tokenize(text: string, customEmojis?: Record<string, string>): React.ReactNode[] {
@@ -300,7 +299,7 @@ function CodeBlock({ lang, code }: { lang: string; code: string }) {
           onClick={copy}
           className="text-xs text-fc-muted hover:text-white transition px-1.5 py-0.5 rounded hover:bg-white/10"
         >
-          {copied ? '✓ Copié' : 'Copier'}
+          {copied ? tr('sw.md.copied') : tr('sw.md.copy')}
         </button>
       </div>
       <pre className="p-3 overflow-x-auto text-sm font-mono whitespace-pre leading-relaxed hljs">
@@ -324,7 +323,7 @@ function SpoilerText({ text }: { text: string }) {
       onKeyDown={e => { if (!revealed && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); reveal() } }}
       role={revealed ? undefined : 'button'}
       tabIndex={revealed ? undefined : 0}
-      aria-label={revealed ? undefined : 'Contenu masqué — cliquer pour révéler'}
+      aria-label={revealed ? undefined : tr('sw.md.spoiler')}
       className={`rounded px-0.5 cursor-pointer transition-colors ${
         revealed ? `${auto && !clicked ? 'bg-fc-muted/20' : 'bg-transparent'} cursor-default` : 'bg-fc-muted/40 text-transparent select-none hover:bg-fc-muted/60'
       }`}

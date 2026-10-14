@@ -85,7 +85,7 @@ export default function DiagnosticsAdminPage() {
           <ChevronLeft size={20} />
         </button>
         <h1 className="text-lg font-bold text-white truncate">{t('hc.dg.title')}</h1>
-        <button onClick={() => nav(-1)} className="ml-auto text-fc-muted hover:text-white text-sm transition">← Retour</button>
+        <button onClick={() => nav(-1)} className="ml-auto text-fc-muted hover:text-white text-sm transition">← {t('common.back')}</button>
       </div>
 
       <div className="p-4 max-w-5xl mx-auto space-y-4">

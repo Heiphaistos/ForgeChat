@@ -121,7 +121,7 @@ export default function SearchPanel({ serverId, channelId, channelName, onClose,
     <div
       {...useSwipeRightToClose(onClose)}
       role="search"
-      aria-label={`Rechercher dans #${channelName}`}
+      aria-label={t('sw.sp.aria', { name: channelName })}
       className="absolute inset-0 z-10 md:relative md:inset-auto md:z-auto md:w-72 bg-fc-channel border-l border-fc-bg flex flex-col flex-shrink-0 panel-slide-right"
     >
       <div className="flex items-center justify-between px-4 py-3 border-b border-fc-bg">
@@ -154,7 +154,7 @@ export default function SearchPanel({ serverId, channelId, channelName, onClose,
             }}
             aria-activedescendant={selIdx >= 0 && results[selIdx] ? `search-result-${results[selIdx].id}` : undefined}
             placeholder={t('hc.sp.ph')}
-            aria-label={`Rechercher des messages dans #${channelName}`}
+            aria-label={t('sw.sp.inputAria', { name: channelName })}
             inputMode="search" autoComplete="off"
             enterKeyHint="search" autoCapitalize="none"
             className="flex-1 px-3 py-1.5 bg-fc-input rounded text-sm text-white placeholder-fc-muted outline-none focus:ring-1 focus:ring-fc-accent"
@@ -244,7 +244,7 @@ export default function SearchPanel({ serverId, channelId, channelName, onClose,
                     jumpToMessage(msg)
                   }
                 }}
-                aria-label={`Message de ${msg.author_username}`}
+                aria-label={t('sw.sp.msgOf', { name: msg.author_username })}
                 className={`bg-fc-bg rounded-lg p-3 border cursor-pointer transition-colors focus:outline-none focus:border-fc-accent/70 ${
                   idx === selIdx ? 'border-fc-accent bg-fc-hover/30' : 'border-fc-hover hover:border-fc-accent/50'
                 }`}

@@ -70,7 +70,7 @@ export default function ExportConversationButton({ channelId, channelName }: Exp
   return (
     <button
       onClick={() => void handleExport()}
-      aria-label={`Exporter la conversation #${channelName} en fichier texte`}
+      aria-label={tr('sw.ex.aria', { name: channelName })}
       className="p-1.5 text-fc-muted hover:text-white transition rounded hover:bg-fc-hover"
     >
       <Download size={18} aria-hidden />

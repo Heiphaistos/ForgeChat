@@ -19,10 +19,10 @@ function saveReplies(replies: QuickReply[]) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(replies))
 }
 
-const DEFAULT_REPLIES: QuickReply[] = [
-  { id: '1', label: 'Merci', content: 'Merci beaucoup ! 🙏' },
-  { id: '2', label: 'OK', content: 'Ok, compris !' },
-  { id: '3', label: 'Bientôt', content: 'Je reviens vers toi bientôt.' },
+const defaultReplies = (): QuickReply[] => [
+  { id: '1', label: tr('sw.qr.thanksLabel'), content: tr('sw.qr.thanks') },
+  { id: '2', label: tr('sw.qr.okLabel'), content: tr('sw.qr.ok') },
+  { id: '3', label: tr('sw.qr.soonLabel'), content: tr('sw.qr.soon') },
 ]
 
 interface Props {
@@ -33,7 +33,7 @@ interface Props {
 export default function QuickReplies({ onPick, onClose }: Props) {
   const [replies, setReplies] = useState<QuickReply[]>(() => {
     const stored = loadReplies()
-    return stored.length > 0 ? stored : DEFAULT_REPLIES
+    return stored.length > 0 ? stored : defaultReplies()
   })
   const [editing, setEditing] = useState(false)
 

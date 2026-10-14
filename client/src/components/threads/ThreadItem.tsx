@@ -1,6 +1,6 @@
 import { MessagesSquare } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
-import { dateLocale } from '../../i18n'
+import { dateLocale, t as tr } from '../../i18n'
 
 interface ThreadItemProps {
   id: string
@@ -27,9 +27,9 @@ export default function ThreadItem({
 
   const ariaLabel = [
     title,
-    unread_count > 0 ? `${unread_count > 99 ? '99+' : unread_count} message${unread_count > 1 ? 's' : ''} non lu${unread_count > 1 ? 's' : ''}` : null,
-    `${message_count} message${message_count !== 1 ? 's' : ''}`,
-    creator_username ? `par ${creator_username}` : null,
+    unread_count > 0 ? tr(unread_count > 1 ? 'sw.thread.unreadOther' : 'sw.thread.unreadOne', { n: unread_count > 99 ? '99+' : unread_count }) : null,
+    tr(message_count !== 1 ? 'sw.thread.countOther' : 'sw.thread.countOne', { n: message_count }),
+    creator_username ? tr('sw.thread.by', { name: creator_username }) : null,
     relativeTime ? `— ${relativeTime}` : null,
   ].filter(Boolean).join(', ')
 
