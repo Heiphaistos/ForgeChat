@@ -209,13 +209,16 @@ export default function ProfileSection({ user, updateMe }: Props) {
               </div>
             </AvatarRing>
           </AvatarDecoration>
+          {/* Pastilles de 24 px au coin de l'avatar, dans une zone tactile transparente de 44 px
+              qui déborde vers l'extérieur : sur mobile, la règle « min 44 px » d'index.css
+              agrandissait la pastille elle-même, qui masquait l'avatar. */}
           <button
             type="button"
             onClick={() => fileRef.current?.click()}
             aria-label={t('settings.profile.changeAvatar')}
-            className="absolute -bottom-1 -right-1 p-1.5 bg-fc-accent rounded-full text-white hover:bg-fc-accent/80 transition"
+            className="group/cam absolute -bottom-3.5 -right-3.5 w-11 h-11 p-2.5 flex items-end justify-end rounded-full"
           >
-            <Camera size={12} />
+            <span className="p-1.5 bg-fc-accent rounded-full text-white group-hover/cam:bg-fc-accent/80 transition"><Camera size={12} /></span>
           </button>
           {user.avatar && (
             <button
@@ -224,9 +227,9 @@ export default function ProfileSection({ user, updateMe }: Props) {
               disabled={removeAvatar.isPending}
               aria-label={t('psave.removeAvatar')}
               title={t('psave.removeAvatar')}
-              className="absolute -top-1 -right-1 p-1.5 bg-black/70 rounded-full text-white hover:bg-red-600 transition disabled:opacity-50"
+              className="group/del absolute -top-3.5 -right-3.5 w-11 h-11 p-2.5 flex items-start justify-end rounded-full disabled:opacity-50"
             >
-              <Trash2 size={12} />
+              <span className="p-1.5 bg-black/70 rounded-full text-white group-hover/del:bg-red-600 transition"><Trash2 size={12} /></span>
             </button>
           )}
           <input
