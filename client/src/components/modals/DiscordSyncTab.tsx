@@ -5,6 +5,8 @@ import toast from 'react-hot-toast'
 import api from '../../api/client'
 import { useT, intlLocale } from '../../i18n'
 import { confirm } from '../ui/ConfirmModal'
+import DiscordSyncTree from './DiscordSyncTree'
+import { type SyncTree, initialSelection, toPayload } from '../../lib/discordSyncTree'
 
 // Synchronisation périodique Discord -> ForgeChat (serveur : handlers/discord_import/sync.rs).
 // Le jeton du bot n'est jamais renvoyé par l'API : seul `has_token` indique sa présence.
@@ -17,6 +19,8 @@ interface SyncConfig {
   excluded_categories: string[]
   enabled: boolean
   sync_emojis: boolean
+  sync_mode: 'full' | 'content'
+  auto_include_new: boolean
   next_sync_at: string | null
   last_sync_at: string | null
   last_status: 'ok' | 'partial' | 'error' | null
@@ -24,13 +28,6 @@ interface SyncConfig {
   last_imported: number
   running: boolean
   guild_name?: string | null
-}
-
-interface DiscordCategory {
-  id: string
-  name: string
-  excluded: boolean
-  default_excluded: boolean
 }
 
 const inputCls = 'w-full px-3 py-2 bg-fc-input rounded text-white outline-none focus:ring-2 focus:ring-fc-accent text-sm'
@@ -64,7 +61,10 @@ export default function DiscordSyncTab({ serverId }: { serverId: string }) {
   const [syncEmojis, setSyncEmojis] = useState(true)
   const [excluded, setExcluded] = useState<string[]>([])
   const [newRule, setNewRule] = useState('')
-  const [categories, setCategories] = useState<DiscordCategory[] | null>(null)
+  const [syncMode, setSyncMode] = useState<'full' | 'content'>('full')
+  const [autoNew, setAutoNew] = useState(true)
+  const [tree, setTree] = useState<SyncTree | null>(null)
+  const [sel, setSel] = useState<Set<string>>(new Set())
   const [loaded, setLoaded] = useState(false)
 
   // Formulaire initialisé une fois depuis la configuration enregistrée.
@@ -75,6 +75,8 @@ export default function DiscordSyncTab({ serverId }: { serverId: string }) {
     setEnabled(cfg.enabled)
     setSyncEmojis(cfg.sync_emojis)
     setExcluded(cfg.excluded_categories)
+    setSyncMode(cfg.sync_mode === 'content' ? 'content' : 'full')
+    setAutoNew(cfg.auto_include_new !== false)
     setLoaded(true)
   }, [cfg, loaded])
 
@@ -86,6 +88,10 @@ export default function DiscordSyncTab({ serverId }: { serverId: string }) {
       excluded_categories: excluded,
       enabled,
       sync_emojis: syncEmojis,
+      sync_mode: syncMode,
+      auto_include_new: autoNew,
+      // Sélection envoyée seulement si l'arbre a été chargé : sinon l'enregistrée est conservée.
+      ...(tree ? toPayload(tree, sel) : {}),
     }).then(r => r.data as SyncConfig),
     onSuccess: data => {
       setToken('')
@@ -95,18 +101,11 @@ export default function DiscordSyncTab({ serverId }: { serverId: string }) {
     onError: e => toast.error(errMsg(e, t('common.error'))),
   })
 
-  const loadCategories = useMutation({
-    mutationFn: () => api.get(`/servers/${serverId}/discord-sync/categories`).then(r => r.data as DiscordCategory[]),
-    onSuccess: list => {
-      setCategories(list)
-      // Catégorie d'actualités repérée : proposée exclue (par son identifiant, robuste aux renommages).
-      setExcluded(prev => {
-        const next = [...prev]
-        for (const c of list) {
-          if (c.default_excluded && !c.excluded && !next.includes(c.id)) next.push(c.id)
-        }
-        return next
-      })
+  const loadTree = useMutation({
+    mutationFn: () => api.get(`/servers/${serverId}/discord-sync/tree`).then(r => r.data as SyncTree),
+    onSuccess: data => {
+      setTree(data)
+      setSel(initialSelection(data))
     },
     onError: e => toast.error(errMsg(e, t('common.error'))),
   })
@@ -126,28 +125,18 @@ export default function DiscordSyncTab({ serverId }: { serverId: string }) {
     onSuccess: () => {
       toast.success(t('dsync.unlinked'))
       setLoaded(false)
-      setCategories(null)
+      setTree(null)
       qc.invalidateQueries({ queryKey: key })
     },
     onError: e => toast.error(errMsg(e, t('common.error'))),
   })
-
-  // Règle désignant la catégorie : son identifiant, ou son nom (comparé comme côté serveur).
-  const ruleHits = (r: string, c: DiscordCategory) => r === c.id || (foldName(r) !== '' && foldName(r) === foldName(c.name))
-  const toggleCategory = (c: DiscordCategory, on: boolean) => {
-    setExcluded(prev => {
-      const rest = prev.filter(r => !ruleHits(r, c))
-      return on ? [...rest, c.id] : rest
-    })
-  }
-  const isCatExcluded = (c: DiscordCategory) => excluded.some(r => ruleHits(r, c))
 
   const addRule = () => {
     const r = newRule.trim()
     if (r && !excluded.includes(r) && excluded.length < 50) setExcluded([...excluded, r])
     setNewRule('')
   }
-  const ruleLabel = (r: string) => categories?.find(c => c.id === r)?.name ?? r
+  const ruleLabel = (r: string) => r
 
   const fmt = (d: string) => new Date(d).toLocaleString(intlLocale())
   const guildValid = /^\d{15,21}$/.test(guildId.trim())
@@ -218,7 +207,42 @@ export default function DiscordSyncTab({ serverId }: { serverId: string }) {
           {t('dsync.emojis')}
         </label>
 
-        {/* Catégories exclues */}
+        {/* Mode de synchronisation */}
+        <fieldset>
+          <legend className={labelCls}>{t('dsync.mode')}</legend>
+          {(['full', 'content'] as const).map(m => (
+            <label key={m} className="flex items-start gap-2 text-sm text-white cursor-pointer mb-2">
+              <input type="radio" name="dsync-mode" checked={syncMode === m} onChange={() => setSyncMode(m)} className="accent-fc-accent mt-1" />
+              <span>
+                <span className="font-medium">{t(m === 'full' ? 'dsync.modeFull' : 'dsync.modeContent')}</span>
+                <span className="block text-xs text-fc-muted">{t(m === 'full' ? 'dsync.modeFullHint' : 'dsync.modeContentHint')}</span>
+              </span>
+            </label>
+          ))}
+        </fieldset>
+
+        {/* Éléments à synchroniser */}
+        <fieldset>
+          <legend className={labelCls}>{t('dsync.items')}</legend>
+          <p className="text-xs text-fc-muted mb-2">{t('dsync.itemsHint')}</p>
+          <label className="flex items-start gap-2 text-sm text-white cursor-pointer mb-2">
+            <input type="checkbox" checked={autoNew} onChange={e => setAutoNew(e.target.checked)} className="accent-fc-accent mt-1" />
+            <span>
+              {t('dsync.autoNew')}
+              <span className="block text-xs text-fc-muted">{t('dsync.autoNewHint')}</span>
+            </span>
+          </label>
+          {cfg.has_token && (
+            <button type="button" onClick={() => loadTree.mutate()} disabled={loadTree.isPending} aria-busy={loadTree.isPending}
+              className="mb-2 text-xs text-fc-accent hover:underline disabled:opacity-50">
+              {loadTree.isPending ? t('common.loading') : tree ? t('dsync.reloadTree') : t('dsync.loadTree')}
+            </button>
+          )}
+          {loadTree.isError && <p role="alert" className="text-xs text-red-400 mb-2">{t('dsync.treeError')}</p>}
+          {tree && <DiscordSyncTree tree={tree} sel={sel} onChange={setSel} />}
+        </fieldset>
+
+        {/* Exclusion par nom */}
         <fieldset>
           <legend className={labelCls}>{t('dsync.excluded')}</legend>
           <p className="text-xs text-fc-muted mb-2">{t('dsync.excludedHint')}</p>
@@ -242,25 +266,6 @@ export default function DiscordSyncTab({ serverId }: { serverId: string }) {
               <Plus size={14} aria-hidden /> {t('dsync.add')}
             </button>
           </div>
-          {cfg.has_token && (
-            <button type="button" onClick={() => loadCategories.mutate()} disabled={loadCategories.isPending}
-              className="mt-3 text-xs text-fc-accent hover:underline disabled:opacity-50">
-              {t('dsync.loadCategories')}
-            </button>
-          )}
-          {categories && (
-            <ul className="mt-2 space-y-1">
-              {categories.map(c => (
-                <li key={c.id}>
-                  <label className="flex items-center gap-2 text-sm text-white cursor-pointer">
-                    <input type="checkbox" checked={isCatExcluded(c)} onChange={e => toggleCategory(c, e.target.checked)} className="accent-fc-accent" />
-                    {c.name}
-                    {c.default_excluded && <span className="text-xs text-amber-300">({t('dsync.newsDetected')})</span>}
-                  </label>
-                </li>
-              ))}
-            </ul>
-          )}
         </fieldset>
 
         <p className="text-xs text-fc-muted">{t('dsync.e2eNote')}</p>
