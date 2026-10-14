@@ -164,7 +164,7 @@ certificat = empreinte du §4 (sinon échec). Un APK construit avec un domaine `
 - **Play Store (plus tard, pas prévu pour l'instant)** : à la création de l'app, *Play App Signing* →
   « Utiliser ma propre clé » → exporter cette clé avec l'outil PEPK de Google. Ainsi la version Play
   Store pourra mettre à jour la bêta installée depuis GitHub.
-  Mettre la même empreinte dans `mobile/deploy/well-known/assetlinks.json`.
+  Mettre la même empreinte dans `client/public/.well-known/assetlinks.json` (et `PASSKEY_APP_ORIGINS`, `docs/PASSKEYS.md`).
 
 ## 4 bis. Notifications push Android (Firebase + EAS) — plus tard
 

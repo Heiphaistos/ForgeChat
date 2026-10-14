@@ -14,6 +14,9 @@ pub struct Config {
     /// Requêtes d'envoi de fichiers par compte et par minute (UPLOAD_RATE_PER_MINUTE, 20 par défaut).
     pub upload_rate_per_minute: i64,
     pub frontend_url: String,
+    /// PASSKEY_APP_ORIGINS : origines `android:apk-key-hash:<empreinte>` des applis mobiles, acceptées
+    /// en plus de FRONTEND_URL pour les clés d'accès (Android signe cette origine, pas https://).
+    pub passkey_app_origins: Vec<String>,
     // SMTP (optionnel — si absent, les emails sont loggés en console)
     pub smtp_host: Option<String>,
     pub smtp_port: u16,
@@ -63,6 +66,16 @@ fn check_test_mailbox(mailbox: Option<String>, frontend_url: &str) -> anyhow::Re
     Ok(mailbox)
 }
 
+/// Liste séparée par des virgules ; seules les origines `android:apk-key-hash:` sont retenues
+/// (une origine web ici élargirait la confiance du serveur).
+pub fn parse_app_origins(raw: &str) -> Vec<String> {
+    raw.split(',')
+        .map(str::trim)
+        .filter(|o| o.strip_prefix("android:apk-key-hash:").is_some_and(|h| !h.is_empty()))
+        .map(str::to_string)
+        .collect()
+}
+
 impl Config {
     pub fn from_env() -> anyhow::Result<Self> {
         dotenvy::dotenv().ok();
@@ -88,6 +101,7 @@ impl Config {
                 .ok()
                 .and_then(|v| v.parse().ok())
                 .unwrap_or(20),
+            passkey_app_origins: parse_app_origins(&env::var("PASSKEY_APP_ORIGINS").unwrap_or_default()),
             frontend_url,
             smtp_host: env::var("SMTP_HOST").ok(),
             smtp_port: env::var("SMTP_PORT")

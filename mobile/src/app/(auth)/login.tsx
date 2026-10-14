@@ -7,6 +7,7 @@ import { Button, PasswordField, T, TextField } from '@/components/ui'
 import { apiHost, subscribeApiOrigin } from '@/config/env'
 import { useT } from '@/i18n'
 import { ApiError, errorMessage } from '@/lib/http'
+import { PasskeyCancelled, getPasskey, passkeySupported } from '@/lib/passkey'
 import { useAuth } from '@/stores/auth'
 import { SavedAccountsLogin } from '@/features/account/AccountSwitcher'
 import { colors, radius, spacing } from '@/theme'
@@ -27,6 +28,8 @@ export default function LoginScreen() {
   const [password, setPassword] = useState('')
   const [totp, setTotp] = useState('')
   const [needTotp, setNeedTotp] = useState(false)
+  // Options de connexion par clé d'accès, fournies par le serveur avec `totp_required` (défi à usage unique, 2 min).
+  const [passkeyOptions, setPasskeyOptions] = useState<unknown>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const passwordRef = useRef<TextInput>(null)
@@ -51,12 +54,37 @@ export default function LoginScreen() {
       if (e instanceof ApiError && e.code === 'totp_required') {
         setNeedTotp(true)
         setError(null)
+        setPasskeyOptions(e.passkey && passkeySupported() ? e.passkey : null)
       } else {
         setError(e instanceof Error && e.message === 'AUTH_DOWNGRADE' ? t('auth.downgrade') : errorMessage(e))
         setPassword('')
         setNeedTotp(false)
         setTotp('')
+        setPasskeyOptions(null)
       }
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // Second facteur par clé d'accès. Si le serveur refuse, il renvoie de nouvelles options (nouveau défi).
+  const signInWithPasskey = async () => {
+    setLoading(true)
+    setError(null)
+    clearNotice()
+    try {
+      let assertion
+      try {
+        assertion = await getPasskey(passkeyOptions)
+      } catch (e) {
+        if (!(e instanceof PasskeyCancelled)) setError(errorMessage(e))
+        return
+      }
+      await login(email, password, undefined, assertion)
+      setPassword('')
+    } catch (e) {
+      setPasskeyOptions(e instanceof ApiError && e.code === 'totp_required' && passkeySupported() ? (e.passkey ?? null) : null)
+      setError(t('guard.passkey.failed'))
     } finally {
       setLoading(false)
     }
@@ -123,7 +151,15 @@ export default function LoginScreen() {
               />
             )}
             {error ? <T variant="error">{error}</T> : null}
-            <Button title={t(needTotp ? 'auth.verify' : 'auth.login')} onPress={submit} loading={loading} />
+            {needTotp && passkeyOptions ? (
+              <>
+                <Button title={t('guard.passkey.use')} icon="finger-print" onPress={signInWithPasskey} loading={loading} />
+                <T variant="muted" style={{ textAlign: 'center' }}>
+                  {t('guard.passkey.orCode')}
+                </T>
+              </>
+            ) : null}
+            <Button title={t(needTotp ? 'auth.verify' : 'auth.login')} onPress={submit} loading={loading} variant={needTotp && passkeyOptions ? 'secondary' : 'primary'} />
             {needTotp ? (
               <Button
                 title={t('common.back')}
@@ -131,6 +167,7 @@ export default function LoginScreen() {
                 onPress={() => {
                   setNeedTotp(false)
                   setTotp('')
+                  setPasskeyOptions(null)
                 }}
               />
             ) : (

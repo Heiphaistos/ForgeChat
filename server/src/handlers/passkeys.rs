@@ -30,7 +30,9 @@ pub fn relying_party(state: &AppState) -> (String, Vec<String>) {
     let url = reqwest::Url::parse(&state.config.frontend_url).ok();
     let id = url.as_ref().and_then(|u| u.host_str()).unwrap_or("localhost").to_string();
     let origin = url.map(|u| u.origin().ascii_serialization()).unwrap_or_default();
-    (id, vec![origin])
+    let mut origins = vec![origin];
+    origins.extend(state.config.passkey_app_origins.iter().cloned());
+    (id, origins)
 }
 
 fn bad(msg: &str) -> AppError {
@@ -281,6 +283,14 @@ pub async fn check_assertion(state: &AppState, user_id: Uuid, a: &Assertion) -> 
 #[cfg(test)]
 mod tests {
     use super::extract_code;
+    use crate::config::parse_app_origins;
+
+    #[test]
+    fn seules_les_origines_android_sont_acceptees() {
+        let o = parse_app_origins(" android:apk-key-hash:AbC_-1 ,https://evil.example,android:apk-key-hash:,");
+        assert_eq!(o, vec!["android:apk-key-hash:AbC_-1".to_string()]);
+        assert!(parse_app_origins("").is_empty());
+    }
 
     #[test]
     fn le_code_de_reauth_est_obligatoire() {
