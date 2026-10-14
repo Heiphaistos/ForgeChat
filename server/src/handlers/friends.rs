@@ -741,42 +741,16 @@ pub async fn send_dm(
 
     if !ok { return Err(AppError::Forbidden); }
 
-    // Vérifier que le destinataire n'a pas bloqué l'expéditeur
-    {
-        use sqlx::Row;
-        let other_id: Option<Uuid> = sqlx::query(
-            "SELECT CASE WHEN user1_id=$2 THEN user2_id ELSE user1_id END AS other
-             FROM dm_channels WHERE id=$1"
-        )
-        .bind(dm_id).bind(claims.sub)
-        .fetch_optional(&state.db).await?
-        .map(|r| r.get("other"));
-        if let Some(oid) = other_id {
-            let blocked: bool = sqlx::query_scalar(
-                "SELECT EXISTS(SELECT 1 FROM blocks WHERE blocker_id=$1 AND blocked_id=$2)"
-            ).bind(oid).bind(claims.sub).fetch_one(&state.db).await.unwrap_or(false);
-            if blocked { return Err(AppError::Forbidden); }
-        }
-    }
+    // Blocage dans un sens comme dans l'autre ; une erreur DB refuse (fail-closed).
+    let blocked: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM blocks b JOIN dm_channels d ON d.id=$1
+                       WHERE (b.blocker_id=d.user1_id AND b.blocked_id=d.user2_id)
+                          OR (b.blocker_id=d.user2_id AND b.blocked_id=d.user1_id))"
+    ).bind(dm_id).fetch_one(&state.db).await?;
+    if blocked { return Err(AppError::Forbidden); }
 
-    // Anti-spam DM : max 5 messages / 3 secondes via Redis
-    {
-        use redis::AsyncCommands;
-        let key = format!("dm_spam:{}:{}", claims.sub, dm_id);
-        let mut redis = state.redis.lock().await;
-        let count: i64 = redis.incr(&key, 1).await.unwrap_or(0);
-        if count == 1 {
-            let _: () = redis.expire(&key, 3).await.unwrap_or(());
-        }
-        if count > 5 {
-            // Clé sans TTL (expire raté au 1er incr) : sinon blocage 429 définitif.
-            let ttl: i64 = redis.ttl(&key).await.unwrap_or(0);
-            if ttl == -1 {
-                let _: () = redis.expire(&key, 3).await.unwrap_or(());
-            }
-            return Err(AppError::TooManyRequests);
-        }
-    }
+    // Anti-spam DM : max 5 messages / 3 secondes ; Redis injoignable = 503, jamais un passage libre.
+    crate::handlers::auth_v2::hit(&state, &format!("dm_spam:{}:{}", claims.sub, dm_id), 5, 3).await?;
 
     let content_raw = body["content"].as_str().unwrap_or("").trim().to_string();
     let mut reply_to: Option<Uuid> = body["reply_to"].as_str().and_then(|s| s.parse().ok());

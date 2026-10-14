@@ -173,7 +173,7 @@ async fn auth_v2_email_at_rest() {
     assert!(!stored.contains(&code));
 
     // Vérification : compte créé avec empreinte et adresse chiffrée.
-    let (_, Json(created)) = crate::handlers::auth::verify_email(State(state.clone()), HeaderMap::new(), Json(json!({ "email": norm, "code": code })))
+    let (_, Json(created)) = crate::handlers::auth::verify_email(State(state.clone()), ip(), HeaderMap::new(), Json(json!({ "email": norm, "code": code })))
         .await
         .unwrap();
     let id = created.user.id;
@@ -226,7 +226,7 @@ async fn auth_v2_email_at_rest() {
     let good = mailed_code(&mailbox, &email2).await;
     let wrong = if good == "000000" { "000001" } else { "000000" };
     for _ in 0..5 {
-        let r = crate::handlers::auth::verify_email(State(state.clone()), HeaderMap::new(), Json(json!({ "email": email2, "code": wrong }))).await;
+        let r = crate::handlers::auth::verify_email(State(state.clone()), ip(), HeaderMap::new(), Json(json!({ "email": email2, "code": wrong }))).await;
         assert!(r.is_err());
     }
     let left: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM pending_registrations WHERE email_hmac=$1")

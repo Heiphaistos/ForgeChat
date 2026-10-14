@@ -99,7 +99,11 @@ pub async fn hit(state: &AppState, key: &str, max: i64, window_secs: i64) -> Res
     let mut redis = state.redis.lock().await;
     let n: i64 = redis.incr(key, 1).await.map_err(redis_down)?;
     if n == 1 {
-        let _: () = redis.expire(key, window_secs).await.map_err(redis_down)?;
+        if let Err(e) = redis.expire(key, window_secs).await.map(|_: bool| ()) {
+            // Sans TTL le compteur bloquerait la clé à vie : on la retire avant de refuser.
+            let _: std::result::Result<i64, _> = redis.del(key).await;
+            return Err(redis_down(e));
+        }
     }
     if n > max {
         drop(redis);

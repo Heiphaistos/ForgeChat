@@ -1064,7 +1064,7 @@ export const en: Partial<Record<Key, string>> = {
   'settings.profile.removeBanner': 'Remove banner',
   'settings.profile.bannerFormats': 'PNG, JPG, GIF, WEBP or APNG (animated allowed) · max 10 MB',
   'settings.profile.changeAvatar': 'Change avatar',
-  'settings.profile.avatarHint': 'Click the avatar to change it · animated GIF allowed (10 MB)',
+  'settings.profile.avatarHint': 'Use the camera button to change the avatar · animated GIF allowed (10 MB)',
   'settings.profile.bio': 'Bio (markdown supported)',
   'settings.profile.bioCount': '{n}/190 characters',
   'settings.profile.bioPlaceholder': 'Describe yourself in a few words...',

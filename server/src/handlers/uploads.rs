@@ -270,6 +270,35 @@ pub async fn store_attachments(
     user_id: Uuid,
     encrypted: bool,
 ) -> Result<Vec<serde_json::Value>> {
+    // Tout ou rien : si un fichier est refusé (extension, taille, quota), ceux déjà enregistrés
+    // par cet appel sont retirés, sinon le nouvel essai du client créait des doublons.
+    let mut stored: Vec<(PathBuf, Uuid)> = Vec::new();
+    match store_attachments_inner(state, multipart, privileged, owner, user_id, encrypted, &mut stored).await {
+        Ok(v) => Ok(v),
+        Err(e) => {
+            let ids: Vec<Uuid> = stored.iter().map(|(_, id)| *id).collect();
+            if let Err(db_err) = sqlx::query("DELETE FROM attachments WHERE id = ANY($1)").bind(&ids).execute(&state.db).await {
+                tracing::warn!("Pièces jointes d'un envoi refusé non retirées : {db_err}");
+            }
+            for (path, _) in &stored {
+                if let Err(fs_err) = tokio::fs::remove_file(path).await {
+                    tracing::warn!("Fichier {} non supprimé après envoi refusé : {fs_err}", path.display());
+                }
+            }
+            Err(e)
+        }
+    }
+}
+
+async fn store_attachments_inner(
+    state: &AppState,
+    multipart: &mut Multipart,
+    privileged: bool,
+    owner: AttachmentOwner,
+    user_id: Uuid,
+    encrypted: bool,
+    stored: &mut Vec<(PathBuf, Uuid)>,
+) -> Result<Vec<serde_json::Value>> {
     let mut budget = UploadBudget::open(state, user_id).await?;
     let upload_dir = PathBuf::from(&state.config.upload_dir);
     tokio::fs::create_dir_all(&upload_dir).await
@@ -305,7 +334,9 @@ pub async fn store_attachments(
             let size = budget.save(state, field, &path).await?;
             let url = format!("/uploads/{filename}");
             let row = insert_attachment(state, owner, &name, "application/octet-stream", size, &url, expires_at, user_id).await;
-            uploaded.push(unlink_on_err(&path, row).await?);
+            let item = unlink_on_err(&path, row).await?;
+            if let Some(id) = item["id"].as_str().and_then(|v| v.parse().ok()) { stored.push((path.clone(), id)); }
+            uploaded.push(item);
             continue;
         }
 
@@ -341,7 +372,9 @@ pub async fn store_attachments(
 
         let url = format!("/uploads/{}", filename);
         let row = insert_attachment(state, owner, &safe_name, &content_type, size, &url, expires_at, user_id).await;
-        uploaded.push(unlink_on_err(&path, row).await?);
+        let item = unlink_on_err(&path, row).await?;
+        if let Some(id) = item["id"].as_str().and_then(|v| v.parse().ok()) { stored.push((path.clone(), id)); }
+        uploaded.push(item);
     }
 
     Ok(uploaded)

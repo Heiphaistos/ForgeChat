@@ -232,6 +232,7 @@ pub async fn register(
 /// POST /api/auth/verify-email {email, code} : crée le compte (et consomme l'invitation).
 pub async fn verify_email(
     State(state): State<AppState>,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
     req_headers: HeaderMap,
     Json(body): Json<serde_json::Value>,
 ) -> Result<(HeaderMap, Json<AuthResponse>)> {
@@ -244,6 +245,8 @@ pub async fn verify_email(
         .map(str::trim)
         .ok_or_else(|| AppError::BadRequest("code requis".into()))?;
     hit(&state, &account_key("verify_attempts", &email), 5, 900).await?;
+    // Par IP aussi : sinon un même client essaie 5 codes sur chaque adresse en attente.
+    hit(&state, &format!("verify_ip:{}", crate::privacy::client_key(&req_headers, &addr)), 20, 900).await?;
 
     let bad = || AppError::BadRequest("Code incorrect ou expiré".into());
     let email_hmac = crate::email_crypto::hmac(&email);

@@ -1063,7 +1063,7 @@ export const fr = {
   'settings.profile.removeBanner': 'Retirer la bannière',
   'settings.profile.bannerFormats': 'PNG, JPG, GIF, WEBP ou APNG (animés acceptés) · max 10 Mo',
   'settings.profile.changeAvatar': "Changer l'avatar",
-  'settings.profile.avatarHint': "Cliquez sur l'avatar pour le changer · GIF animé accepté (10 Mo)",
+  'settings.profile.avatarHint': "Utilisez le bouton appareil photo pour changer l'avatar · GIF animé accepté (10 Mo)",
   'settings.profile.bio': 'Bio (markdown accepté)',
   'settings.profile.bioCount': '{n}/190 caractères',
   'settings.profile.bioPlaceholder': 'Décrivez-vous en quelques mots...',

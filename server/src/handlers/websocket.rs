@@ -1571,10 +1571,10 @@ async fn handle_ws_message(
             }
             // Vérifier que les deux utilisateurs ont un canal DM ouvert (anti-spam)
             if !users_share_dm(state, user_id, to).await { return; }
-            // Vérifier que le destinataire n'a pas bloqué l'appelant
+            // Blocage dans un sens ou dans l'autre ; erreur DB = refus.
             let is_blocked: bool = sqlx::query_scalar(
-                "SELECT EXISTS(SELECT 1 FROM blocks WHERE blocker_id=$1 AND blocked_id=$2)"
-            ).bind(to).bind(user_id).fetch_one(&state.db).await.unwrap_or(false);
+                "SELECT EXISTS(SELECT 1 FROM blocks WHERE (blocker_id=$1 AND blocked_id=$2) OR (blocker_id=$2 AND blocked_id=$1))"
+            ).bind(to).bind(user_id).fetch_one(&state.db).await.unwrap_or(true);
             if is_blocked { return; }
             // Appels croisés : `to` nous appelle déjà. Décrocher son appel plutôt que
             // d'en ouvrir un second, sinon chacun sonnait chez l'autre sans jamais
