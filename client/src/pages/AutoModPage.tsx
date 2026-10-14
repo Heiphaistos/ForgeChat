@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useT, t as tr } from '../i18n'
 import { Shield, X, Plus } from 'lucide-react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import api from '../api/client'
@@ -45,6 +46,7 @@ function ToggleRow({ label, description, checked, onChange }: ToggleRowProps) {
         className={`w-11 h-6 rounded-full transition relative flex-shrink-0 ${checked ? 'bg-fc-green' : 'bg-fc-muted'}`}
         role="switch"
         aria-checked={checked}
+        aria-label={label}
       >
         <div className={`w-4 h-4 bg-white rounded-full absolute top-1 transition-all ${checked ? 'left-6' : 'left-1'}`} />
       </button>
@@ -64,7 +66,7 @@ interface SliderRowProps {
   onChange: (v: number) => void
 }
 
-function SliderRow({ label, description, value, min, max, step = 1, unit = '', zeroLabel = 'Désactivé', onChange }: SliderRowProps) {
+function SliderRow({ label, description, value, min, max, step = 1, unit = '', zeroLabel = tr('hc.am.off'), onChange }: SliderRowProps) {
   const pct = max > 0 ? ((value - min) / (max - min)) * 100 : 0
   return (
     <div className="p-4 bg-fc-channel rounded-lg">
@@ -104,6 +106,7 @@ function SliderRow({ label, description, value, min, max, step = 1, unit = '', z
 }
 
 export default function AutoModPage({ serverId }: Props) {
+  const t = useT()
   const qc = useQueryClient()
   const [local, setLocal] = useState<AutoModConfig>(DEFAULT_CONFIG)
   const [wordInput, setWordInput] = useState('')
@@ -128,21 +131,21 @@ export default function AutoModPage({ serverId }: Props) {
     mutationFn: () => api.put(`/servers/${serverId}/automod`, local),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['automod', serverId] })
-      toast.success('AutoMod sauvegardé')
+      toast.success(t('hc.am.saved'))
     },
-    onError: (e: any) => toast.error(e.response?.data?.error ?? 'Erreur sauvegarde'),
+    onError: (e: any) => toast.error(e.response?.data?.error ?? t('hc.am.saveFail')),
   })
 
   const addWord = () => {
     const w = wordInput.trim().toLowerCase()
     if (!w) return
     if (local.blocked_words.includes(w)) {
-      toast.error('Ce mot est déjà dans la liste')
+      toast.error(t('hc.am.dup'))
       setWordInput('')
       return
     }
     if (local.blocked_words.length >= 100) {
-      toast.error('Maximum 100 mots bloqués')
+      toast.error(t('hc.am.max'))
       return
     }
     setLocal(p => ({ ...p, blocked_words: [...p.blocked_words, w] }))
@@ -153,15 +156,15 @@ export default function AutoModPage({ serverId }: Props) {
     setLocal(p => ({ ...p, blocked_words: p.blocked_words.filter(x => x !== w) }))
 
   if (isLoading) {
-    return <div className="text-center text-fc-muted py-12 text-sm">Chargement...</div>
+    return <div className="text-center text-fc-muted py-12 text-sm">{t('common.loading')}</div>
   }
 
   if (isError) {
     return (
       <div className="text-center py-12">
         <Shield size={40} className="mx-auto text-fc-muted/30 mb-3" />
-        <p className="text-fc-muted text-sm">Impossible de charger AutoMod.</p>
-        <p className="text-fc-muted/60 text-xs mt-1">Vérifiez que vous avez la permission Gérer le serveur.</p>
+        <p className="text-fc-muted text-sm">{t('hc.am.loadFail')}</p>
+        <p className="text-fc-muted/60 text-xs mt-1">{t('hc.am.perm')}</p>
       </div>
     )
   }
@@ -175,14 +178,14 @@ export default function AutoModPage({ serverId }: Props) {
           AutoMod
         </h3>
         <p className="text-sm text-fc-muted">
-          Filtrez et modérez automatiquement les messages selon des règles configurables.
+          {t('hc.am.intro')}
         </p>
       </div>
 
       {/* Toggle global */}
       <ToggleRow
-        label="Activer AutoMod"
-        description="Active l'ensemble des règles de modération automatique"
+        label={t('hc.am.enable')}
+        description={t('hc.am.enableDesc')}
         checked={local.enabled}
         onChange={v => setLocal(p => ({ ...p, enabled: v }))}
       />
@@ -190,7 +193,7 @@ export default function AutoModPage({ serverId }: Props) {
       {/* Mots bloqués */}
       <div>
         <label className="block text-xs font-semibold text-fc-muted uppercase tracking-wide mb-3">
-          Mots bloqués
+          {t('hc.am.words')}
           <span className="ml-2 normal-case font-normal">({local.blocked_words.length}/100)</span>
         </label>
 
@@ -206,7 +209,7 @@ export default function AutoModPage({ serverId }: Props) {
                 <button
                   onClick={() => removeWord(w)}
                   className="text-fc-muted hover:text-white transition flex-shrink-0"
-                  aria-label={`Supprimer le mot ${w}`}
+                  aria-label={t('hc.am.removeWord', { w })}
                 >
                   <X size={12} />
                 </button>
@@ -216,7 +219,7 @@ export default function AutoModPage({ serverId }: Props) {
         )}
 
         {local.blocked_words.length === 0 && (
-          <p className="text-xs text-fc-muted mb-3">Aucun mot bloqué pour l'instant.</p>
+          <p className="text-xs text-fc-muted mb-3">{t('hc.am.noWords')}</p>
         )}
 
         <div className="flex gap-2">
@@ -224,7 +227,7 @@ export default function AutoModPage({ serverId }: Props) {
             value={wordInput}
             onChange={e => setWordInput(e.target.value)}
             onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addWord() } }}
-            placeholder="Ajouter un mot à bloquer..."
+            placeholder={t('hc.am.addPh')}
             maxLength={100}
             enterKeyHint="done"
             autoCapitalize="none"
@@ -236,7 +239,7 @@ export default function AutoModPage({ serverId }: Props) {
             className="flex items-center gap-1.5 px-4 py-2 bg-fc-accent hover:bg-indigo-500 text-white rounded text-sm font-medium transition disabled:opacity-50"
           >
             <Plus size={14} />
-            Ajouter
+            {t('hc.am.add')}
           </button>
         </div>
       </div>
@@ -244,26 +247,26 @@ export default function AutoModPage({ serverId }: Props) {
       {/* Limites */}
       <div className="space-y-3">
         <label className="block text-xs font-semibold text-fc-muted uppercase tracking-wide">
-          Limites par message
+          {t('hc.am.limits')}
         </label>
         <SliderRow
-          label="Max mentions par message"
-          description="Bloque les messages avec trop de @mentions"
+          label={t('hc.am.maxMent')}
+          description={t('hc.am.maxMentDesc')}
           value={local.max_mentions}
           min={0}
           max={20}
-          unit=" mentions"
-          zeroLabel="Désactivé"
+          unit={t('hc.am.mentions')}
+          zeroLabel={t('hc.am.off')}
           onChange={v => setLocal(p => ({ ...p, max_mentions: v }))}
         />
         <SliderRow
-          label="Max liens par message"
-          description="Bloque les messages avec trop de liens URL"
+          label={t('hc.am.maxLinks')}
+          description={t('hc.am.maxLinksDesc')}
           value={local.max_links}
           min={0}
           max={10}
-          unit=" liens"
-          zeroLabel="Désactivé"
+          unit={t('hc.am.links')}
+          zeroLabel={t('hc.am.off')}
           onChange={v => setLocal(p => ({ ...p, max_links: v }))}
         />
       </div>
@@ -271,17 +274,17 @@ export default function AutoModPage({ serverId }: Props) {
       {/* Protections */}
       <div className="space-y-3">
         <label className="block text-xs font-semibold text-fc-muted uppercase tracking-wide">
-          Protections
+          {t('hc.am.protect')}
         </label>
         <ToggleRow
-          label="Anti-spam"
-          description="Bloque les messages identiques envoyés rapidement à la suite"
+          label={t('hc.am.spam')}
+          description={t('hc.am.spamDesc')}
           checked={local.anti_spam}
           onChange={v => setLocal(p => ({ ...p, anti_spam: v }))}
         />
         <ToggleRow
-          label="Anti-CAPS"
-          description="Bloque les messages écrits entièrement en majuscules"
+          label={t('hc.am.caps')}
+          description={t('hc.am.capsDesc')}
           checked={local.anti_caps}
           onChange={v => setLocal(p => ({ ...p, anti_caps: v }))}
         />
@@ -294,7 +297,7 @@ export default function AutoModPage({ serverId }: Props) {
           disabled={save.isPending}
           className="px-5 py-2 bg-fc-accent hover:bg-indigo-500 text-white rounded font-medium text-sm transition disabled:opacity-50"
         >
-          {save.isPending ? 'Sauvegarde...' : 'Sauvegarder les règles AutoMod'}
+          {save.isPending ? t('hc.am.saving') : t('hc.am.save')}
         </button>
       </div>
     </div>

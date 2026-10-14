@@ -20,6 +20,7 @@ import * as profileDecorExtra from './parts/profileDecorExtra.ts'
 import * as auditUi from './parts/auditUi.ts'
 import * as serverAdminPage from './parts/serverAdminPage.ts'
 import * as hardcoded from './parts/hardcoded.ts'
+import * as hardcoded5 from './parts/hardcoded5.ts'
 import * as hardcoded4 from './parts/hardcoded4.ts'
 import * as hardcoded3 from './parts/hardcoded3.ts'
 import * as hardcoded2 from './parts/hardcoded2.ts'
@@ -65,6 +66,7 @@ export const fr = {
   ...auditUi.fr,
   ...serverAdminPage.fr,
   ...hardcoded.fr,
+  ...hardcoded5.fr,
   ...hardcoded4.fr,
   ...hardcoded3.fr,
   ...hardcoded2.fr,
