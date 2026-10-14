@@ -7,7 +7,7 @@ import { useAuth } from '../store/auth'
 import { useAccountKey } from './accountKey'
 import * as c from './crypto'
 import { forgetConv } from './conversations'
-import { pinOwnServerKey } from './keyPins'
+import { pinOwnServerKey, trustEnvelopeSender } from './keyPins'
 
 export interface ServerKeyResponse {
   exists: boolean
@@ -167,6 +167,7 @@ export async function recoverServer(
     for (const e of ch.epochs) {
       if (!e.wrapped_by) continue
       try {
+        if (!(await trustEnvelopeSender(e.wrapped_by, e.wrapped_by_pub))) throw new Error('émetteur non épinglé')
         keys.set(e.epoch, await c.unwrapConvKey(sk, c.b64uDecode(e.wrapped_by_pub), e.wrapped, conv, e.epoch, c.serverMember(serverId), e.wrapped_by))
       } catch { /* enveloppe altérée : les messages de cette époque restent illisibles */ }
     }

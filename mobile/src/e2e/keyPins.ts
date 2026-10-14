@@ -5,7 +5,8 @@ import { create } from 'zustand'
 import { secureStateStorage } from '@/lib/secureStorage'
 import { useAccountKey } from './accountKey'
 import { http, path } from '@/lib/http'
-import { checkServerKey, fpOf, ownerVouches, serverSubject, sortMembers, type Pin, type SignedServerKey } from './keyPinsCore'
+import { contactKeyLogged, type KtEntry } from './keyTransparency'
+import { checkServerKey, envelopeSender, fpOf, ownerVouches, serverSubject, sortMembers, type Pin, type SignedServerKey } from './keyPinsCore'
 
 export { fpOf } from './keyPinsCore'
 
@@ -103,17 +104,49 @@ export async function markVerified(userId: string, pub: string): Promise<boolean
 // ─── Points d'entrée du chiffrement ─────────────────────────────────────────
 interface MemberLike { user_id: string; username?: string; public: string | null }
 
+/**
+ * Clé jamais vue d'un contact : inscrite au journal de transparence ? `false` = le journal contredit la
+ * clé servie ; `null` = indéterminé (ancienne clé sans entrée, erreur réseau : l'envoi n'est pas bloqué).
+ */
+async function keyLogged(userId: string, pub: string): Promise<boolean | null> {
+  try {
+    const data = await http.get<{ kt_seq?: number | null }>(path`/users/${userId}/keys/public`)
+    if (typeof data.kt_seq !== 'number') return null
+    const entry = await http.get<KtEntry>(path`/keys/log/${data.kt_seq}`)
+    return await contactKeyLogged(userId, pub, entry)
+  } catch {
+    return null
+  }
+}
+
 /** Membres vers lesquels on peut chiffrer (empreinte recalculée, clé changée exclue et signalée). */
 export async function trustedMembers<T extends MemberLike>(list: T[]) {
   const account = getMyId()
   if (!account) return []
   const { trusted, changed, fresh } = await sortMembers(list, account, useAccountKey.getState().pub, (s) => getPin(account, s))
-  for (const f of fresh) await savePin(account, f.subject, { fp: f.fp })
+  const unlogged = new Set<string>()
+  for (const f of fresh) {
+    const m = trusted.find(x => x.user_id === f.subject)
+    if (m && (await keyLogged(m.user_id, m.public)) === false) {
+      // Le journal de transparence contredit la clé servie : traitée comme une clé changée (non épinglée, exclue).
+      unlogged.add(m.user_id)
+      raise({ subject: m.user_id, name: m.username ?? m.user_id, kind: 'user', pub: m.public, fp: m.fingerprint, verified: false })
+    } else await savePin(account, f.subject, { fp: f.fp })
+  }
   for (const m of changed) raise({ subject: m.user_id, name: m.username ?? m.user_id, kind: 'user', pub: m.public, fp: m.fingerprint, verified: m.verified })
-  return trusted
+  return trusted.filter(m => !unlogged.has(m.user_id))
 }
 
 /** Clé de récupération d'un serveur, empreinte recalculée ; null si elle a changé (enveloppe refusée). */
+/** L'émetteur d'une enveloppe est-il moi, ou un contact à la clé épinglée ? (1re vue : épinglée, acceptée). */
+export async function trustEnvelopeSender(by: string, byPub: string): Promise<boolean> {
+  const account = getMyId()
+  if (!account) return false
+  const r = await envelopeSender(by, byPub, account, useAccountKey.getState().pub, (s) => getPin(account, s))
+  if (r.fresh) await savePin(account, by, { fp: r.fresh })
+  return r.ok
+}
+
 /** Clé de compte publique servie pour un utilisateur (comparée ensuite à son épingle). */
 const signerPublic = (userId: string) =>
   http.get<{ public: string | null }>(path`/users/${userId}/keys/public`).then((r) => r.public ?? null)

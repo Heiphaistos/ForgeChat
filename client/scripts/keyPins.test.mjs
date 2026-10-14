@@ -1,7 +1,7 @@
 // Épinglage des clés publiques (TOFU, audit H3) : node --test scripts/keyPins.test.mjs
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { checkServerKey, firstUnreadable, fpOf, serverSubject, sortMembers, withheldOf } from '../src/e2e/keyPinsCore.ts'
+import { checkServerKey, envelopeSender, firstUnreadable, fpOf, serverSubject, sortMembers, withheldOf } from '../src/e2e/keyPinsCore.ts'
 import { b64uEncode, generateKeyPair } from '../src/e2e/crypto.ts'
 
 const pubKey = async () => b64uEncode((await generateKeyPair()).pub)
@@ -106,4 +106,15 @@ test('clé de serveur signée : acceptée seulement si le signataire est VÉRIFI
   assert.equal(await ownerVouches({ ...sk, public: other }, 'me', null, getPin, served), false)
   assert.equal(await ownerVouches({ ...sk, server_id: 'autre' }, 'me', null, getPin, served), false)
   assert.equal(await ownerVouches({ ...sk, signature: null }, 'me', null, getPin, served), false)
+})
+
+test("émetteur d'enveloppe : moi avec ma clé, pin identique ou 1re vue ; clé changée ou autre clé que la mienne refusées", async () => {
+  const [mine, bob, evil] = [await pubKey(), await pubKey(), await pubKey()]
+  const { get } = store({ b: { fp: await fpOf(bob) } })
+  assert.deepEqual(await envelopeSender('a', mine, 'a', mine, get), { ok: true })
+  assert.equal((await envelopeSender('a', evil, 'a', mine, get)).ok, false)
+  assert.equal((await envelopeSender('a', mine, 'a', null, get)).ok, false)
+  assert.deepEqual(await envelopeSender('b', bob, 'a', mine, get), { ok: true })
+  assert.equal((await envelopeSender('b', evil, 'a', mine, get)).ok, false)
+  assert.deepEqual(await envelopeSender('c', evil, 'a', mine, get), { ok: true, fresh: await fpOf(evil) })
 })

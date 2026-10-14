@@ -47,6 +47,22 @@ export async function sortMembers<T extends Member>(list: T[], me: string, myPub
   return { trusted, changed, fresh }
 }
 
+/**
+ * Émetteur d'une enveloppe (`wrapped_by` / `wrapped_by_pub`, servis par le serveur) : moi avec MA clé,
+ * ou un contact dont l'empreinte correspond à son épingle. Clé changée : refusée. Jamais vue : `fresh`
+ * (TOFU, l'appelant épingle puis accepte). Sans cela un serveur compromis ferait adopter une clé qu'il connaît.
+ */
+export async function envelopeSender(
+  by: string, byPub: string, me: string, myPub: string | null, getPin: GetPin,
+): Promise<{ ok: boolean; fresh?: string }> {
+  if (by === me) return { ok: !!myPub && byPub === myPub }
+  let fp: string
+  try { fp = await fpOf(byPub) } catch { return { ok: false } }
+  const pin = await getPin(by)
+  if (!pin) return { ok: true, fresh: fp }
+  return { ok: pin.fp === fp }
+}
+
 /** Clé de récupération d'un serveur : `ok` si jamais vue (épinglée, `fresh`) ou identique. */
 export async function checkServerKey(sk: { server_id: string; public: string }, getPin: GetPin) {
   const fp = await fpOf(sk.public)

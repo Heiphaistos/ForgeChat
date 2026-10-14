@@ -9,7 +9,7 @@ import { useAccountKey } from './accountKey'
 import * as c from './crypto'
 import { becameReady, cacheUsable, emitKeysChanged, isLocked } from './keysRetry'
 import { indexMessage } from './searchIndex'
-import { reopenKeyAlerts, trustedMembers, trustedServerKey } from './keyPins'
+import { reopenKeyAlerts, trustEnvelopeSender, trustedMembers, trustedServerKey } from './keyPins'
 import { firstUnreadable, withheldOf } from './keyPinsCore'
 
 export { keysFor, onKeysChanged } from './keysRetry'
@@ -82,6 +82,7 @@ async function fetchState(kind: ConvKind, id: string): Promise<ConvState> {
     for (const e of data.envelopes) {
       if (!e.wrapped_by) continue
       try {
+        if (!(await trustEnvelopeSender(e.wrapped_by, e.wrapped_by_pub))) throw new Error('émetteur non épinglé')
         keys.set(e.epoch, await c.unwrapConvKey(priv, c.b64uDecode(e.wrapped_by_pub), e.wrapped, conv, e.epoch, me, e.wrapped_by))
       } catch {
         // Enveloppe pour une ancienne clé ou altérée : signalée (le serveur la supprime et relance
@@ -122,6 +123,8 @@ async function load(kind: ConvKind, id: string, force = false): Promise<ConvStat
 
 /** Faut-il chiffrer ici ? (dès que j'ai une clé de compte : sans elle, on ne peut pas écrire). */
 export async function mustEncrypt(kind: ConvKind, id: string): Promise<boolean> {
+  // Clé de compte ouverte ici : toujours chiffrer, jamais de repli en clair sur la foi d'un champ servi (`encrypt:false`).
+  if (useAccountKey.getState().priv) return true
   return (await load(kind, id)).encrypt
 }
 
