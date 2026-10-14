@@ -92,29 +92,42 @@ export function automodBlock(rules: AutoModRules | null | undefined, text: strin
   return null
 }
 
-/** Première URL http(s) d'un texte (aperçu de lien calculé par l'expéditeur). */
+/** Texte sans bloc de code, code en ligne ni spoiler `||…||` : on n'y cherche aucun lien. */
+const visibleText = (t: string) => t.replace(/```[\s\S]*?(?:```|$)/g, ' ').replace(/`[^`\n]*`/g, ' ').replace(/\|\|[\s\S]*?\|\|/g, ' ')
+
+/** Première URL http(s) visible d'un texte, sans la ponctuation qui la suit (`[a](url)`, `url.`). */
 export function firstUrl(text: string): string | null {
-  return text.match(/https?:\/\/[^\s<>"]+/)?.[0] ?? null
+  const m = visibleText(text).match(/https?:\/\/[^\s<>"]+/)?.[0]
+  if (!m) return null
+  let url = m.replace(/[.,;:!?'*_~\]]+$/, '')
+  if (!url.includes('(')) url = url.replace(/\)+$/, '') // fin d'un lien masqué [a](url)
+  return url.replace(/[.,;:!?'*_~\]]+$/, '')
+}
+
+const MEDIA_EXT = /\.(?:png|jpe?g|gif|webp|avif|bmp|svg|mp4|webm|mov|mkv|mp3|ogg|wav|flac)$/i
+
+/** Lien à prévisualiser : le premier lien visible, sauf un média (déjà affiché ou téléchargeable). */
+export function previewUrl(text: string): string | null {
+  const url = firstUrl(text)
+  if (!url) return null
+  try {
+    return MEDIA_EXT.test(new URL(url).pathname) ? null : url
+  } catch {
+    return null
+  }
 }
 
 /**
- * Domaines dont le serveur fait l'aperçu (liste fixe de server/src/handlers/audit.rs, get_og_preview).
- * Vérifiée ICI avant tout appel à /og : un lien vers un autre site n'est jamais envoyé au serveur,
- * qui sinon apprendrait les liens partagés dans les conversations chiffrées.
+ * Vrai pour un site public (http/https, nom de domaine) : seul cas où l'on demande un aperçu à
+ * /og. Le serveur refait toutes les vérifications SSRF ; ceci évite seulement des appels inutiles.
  */
-export const PREVIEW_DOMAINS = [
-  'github.com', 'youtube.com', 'youtu.be', 'twitter.com', 'x.com',
-  'reddit.com', 'stackoverflow.com', 'wikipedia.org', 'medium.com', 'heiphaistos.org',
-] as const
-
 export function previewAllowed(url: string): boolean {
-  let host: string
   try {
     const u = new URL(url)
     if (u.protocol !== 'https:' && u.protocol !== 'http:') return false
-    host = u.hostname.toLowerCase()
+    const h = u.hostname.toLowerCase()
+    return h.includes('.') && !/^[\d.]+$/.test(h) && !/(^|\.)(localhost|local|internal)$/.test(h)
   } catch {
     return false
   }
-  return PREVIEW_DOMAINS.some(d => host === d || host.endsWith(`.${d}`))
 }
