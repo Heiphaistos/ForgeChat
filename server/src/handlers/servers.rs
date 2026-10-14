@@ -560,7 +560,7 @@ pub async fn leave_server(
 }
 
 /// Membres par page, au plus.
-const MEMBERS_PAGE_MAX: i64 = 1000;
+pub(crate) const MEMBERS_PAGE_MAX: i64 = 1000;
 
 #[derive(serde::Deserialize)]
 pub struct MembersPage {

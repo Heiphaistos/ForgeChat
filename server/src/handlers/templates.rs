@@ -47,7 +47,7 @@ pub struct UseTemplateRequest {
 //   roles: [{name, permissions, position, color}] }
 // Structure seulement : jamais un message, un membre ni un fichier.
 
-const CHANNEL_TYPES: &[&str] = &["text", "announcement", "forum", "media", "voice", "video", "stage"];
+pub(crate) const CHANNEL_TYPES: &[&str] = &["text", "announcement", "forum", "media", "voice", "video", "stage"];
 
 #[derive(Debug)]
 pub struct TplCategory { pub key: String, pub name: String, pub staff_only: bool }

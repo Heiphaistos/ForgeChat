@@ -170,6 +170,9 @@ impl UploadBudget {
     }
 }
 
+/// Fichiers par requête d'envoi (le quota borne les octets, pas le nombre de lignes `attachments`).
+const MAX_FILES_PER_REQUEST: usize = 20;
+
 /// Propriétaire d'une pièce jointe : une colonne de `attachments` par source.
 #[derive(Clone, Copy)]
 pub enum AttachmentOwner {
@@ -313,6 +316,9 @@ async fn store_attachments_inner(
             continue;
         }
 
+        if uploaded.len() >= MAX_FILES_PER_REQUEST {
+            return Err(AppError::BadRequest(format!("{MAX_FILES_PER_REQUEST} fichiers au plus par envoi")));
+        }
         let original_name = field.file_name()
             .unwrap_or("fichier")
             .to_string();

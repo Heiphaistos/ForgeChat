@@ -75,6 +75,9 @@ pub async fn get_channels(
     Ok(Json(result))
 }
 
+/// Salons par serveur (Discord : 500).
+const MAX_CHANNELS_PER_SERVER: i64 = 500;
+
 pub async fn create_channel(
     State(state): State<AppState>,
     Extension(claims): Extension<Claims>,
@@ -101,6 +104,15 @@ pub async fn create_channel(
     }
 
     let channel_type = body.r#type.as_deref().unwrap_or("text");
+    // Type connu seulement (avant : n'importe quelle chaîne, ou 500 au-delà de 16 caractères) ; plafond de salons.
+    if !crate::handlers::templates::CHANNEL_TYPES.contains(&channel_type) {
+        return Err(AppError::BadRequest("Type de salon invalide".into()));
+    }
+    let channels: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM channels WHERE server_id=$1")
+        .bind(server_id).fetch_one(&state.db).await?;
+    if channels >= MAX_CHANNELS_PER_SERVER {
+        return Err(AppError::BadRequest(format!("Limite de {MAX_CHANNELS_PER_SERVER} salons par serveur atteinte")));
+    }
     let staff_only: bool = match body.category_id {
         Some(cat) => sqlx::query_scalar("SELECT staff_only FROM categories WHERE id=$1")
             .bind(cat).fetch_one(&state.db).await?,
