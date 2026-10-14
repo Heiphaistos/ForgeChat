@@ -75,6 +75,7 @@ export default function YouScreen() {
         <Row icon="person-outline" title={t('you.profile')} onPress={() => router.push('/settings/profile')} chevron />
         <Row icon="musical-notes-outline" title={t('soc.settings.title')} subtitle={t('soc.settings.sub')} onPress={() => router.push('/settings/social')} chevron />
         <Row icon="link-outline" title={t('acct.entry')} subtitle={t('acct.entrySub')} onPress={() => router.push('/settings/accounts')} chevron />
+        <Row icon="pulse-outline" title={t('feed.entry')} subtitle={t('feed.entrySub')} onPress={() => router.push('/activity')} chevron />
         <Row icon="bookmark-outline" title={t('you.saved')} onPress={() => router.push('/saved')} chevron />
         <Row icon="calendar-outline" title={t('messaging.sched.title')} onPress={() => router.push('/scheduled')} chevron />
         <Row icon="alarm-outline" title={t('reminders.upcoming')} onPress={() => router.push('/reminders')} chevron />
