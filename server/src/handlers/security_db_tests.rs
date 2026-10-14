@@ -217,7 +217,8 @@ async fn security_upload_sign_access() {
     assert!(!can_read_upload(&state, b, &posted).await.unwrap(), "salon masqué");
     assert!(can_read_upload(&state, a, &plain).await.unwrap(), "auteur");
     assert!(!can_read_upload(&state, owner, &plain).await.unwrap(), "fichier en clair sans salon : auteur seul");
-    assert!(can_read_upload(&state, b, &sealed).await.unwrap(), "blob chiffré");
+    assert!(can_read_upload(&state, b, &sealed).await.unwrap(), "blob chiffré : même serveur que l'auteur");
+    assert!(!can_read_upload(&state, user(&db).await, &sealed).await.unwrap(), "blob chiffré : étranger sans serveur commun");
 
     let (u1, u2) = if a < owner { (a, owner) } else { (owner, a) };
     let dm: Uuid = sqlx::query_scalar("INSERT INTO dm_channels (user1_id, user2_id) VALUES ($1, $2) RETURNING id")
@@ -658,4 +659,84 @@ async fn product_dm_media_filter() {
     let ids: Vec<Uuid> = media.iter().map(|m| serde_json::from_value(m["id"].clone()).unwrap()).collect();
     assert_eq!(ids.len(), 2);
     assert!(ids.iter().all(|i| with_file.contains(i)));
+}
+
+/// Audit 2026-10-14 : suppression de bot, envoi de bot, commande en clair, demande d'ami.
+#[tokio::test]
+#[ignore]
+async fn security_audit_2026_10_14() {
+    use crate::handlers::{bots, friends};
+    use crate::middleware::auth::Claims;
+    use axum::{extract::{Path, State}, http::HeaderMap, Extension, Json};
+    let (state, db) = setup().await;
+    let (owner, victim, a, b) = (user(&db).await, user(&db).await, user(&db).await, user(&db).await);
+    let s: Uuid = sqlx::query_scalar("INSERT INTO servers (name, owner_id) VALUES ('bots', $1) RETURNING id")
+        .bind(owner).fetch_one(&db).await.expect("server");
+    sqlx::query("INSERT INTO roles (server_id, name, permissions, is_everyone) VALUES ($1, '@everyone', $2, TRUE)")
+        .bind(s).bind(Permissions::VIEW_CHANNEL | Permissions::SEND_MESSAGES | Permissions::READ_HISTORY)
+        .execute(&db).await.expect("everyone");
+    for (m, is_owner) in [(owner, true), (victim, false)] {
+        sqlx::query("INSERT INTO server_members (user_id, server_id, is_owner) VALUES ($1, $2, $3)")
+            .bind(m).bind(s).bind(is_owner).execute(&db).await.expect("member");
+    }
+    let claims = Claims { sub: owner, exp: i64::MAX, iss: "forgechat".into(), iat: 0, sid: None };
+
+    // delete_bot ne vise que de vrais bots du serveur : un membre ordinaire n'est pas expulsé.
+    assert!(bots::delete_bot(State(state.clone()), Extension(claims.clone()), Path((s, victim))).await.is_err());
+    let still: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM server_members WHERE user_id=$1 AND server_id=$2)")
+        .bind(victim).bind(s).fetch_one(&db).await.unwrap();
+    assert!(still, "le membre n'a pas été expulsé par delete_bot");
+
+    // Vrai bot : enregistre une commande, poste dans un salon visible, pas dans un salon masqué.
+    let created = bots::create_bot(State(state.clone()), Extension(claims.clone()), Path(s),
+        Json(bots::CreateBotRequest { name: "Mon".into() })).await.expect("create_bot").0;
+    let bot_user: Uuid = created["bot_user_id"].as_str().unwrap().parse().unwrap();
+    let token = created["token"].as_str().unwrap().to_string();
+    let token_id: Uuid = sqlx::query_scalar("SELECT id FROM bot_tokens WHERE bot_user_id=$1").bind(bot_user).fetch_one(&db).await.unwrap();
+    sqlx::query("INSERT INTO bot_commands (bot_id, server_id, name, description) VALUES ($1, $2, 'ping', 'd')")
+        .bind(token_id).bind(s).execute(&db).await.expect("command");
+    assert!(crate::handlers::e2e_channel::is_bot_command(&db, s, "/ping a b").await);
+    assert!(!crate::handlers::e2e_channel::is_bot_command(&db, s, "/ping\nsecret").await);
+    assert!(!crate::handlers::e2e_channel::is_bot_command(&db, s, "/ unknown").await);
+    let open: Uuid = sqlx::query_scalar("INSERT INTO channels (server_id, name) VALUES ($1, 'o') RETURNING id").bind(s).fetch_one(&db).await.unwrap();
+    let hidden: Uuid = sqlx::query_scalar("INSERT INTO channels (server_id, name) VALUES ($1, 'h') RETURNING id").bind(s).fetch_one(&db).await.unwrap();
+    sqlx::query("INSERT INTO channel_permissions (channel_id, target_id, target_type, deny) VALUES ($1, $2, 'member', $3)")
+        .bind(hidden).bind(bot_user).bind(Permissions::VIEW_CHANNEL).execute(&db).await.expect("override");
+    let post = |channel_id: Uuid| {
+        let (state, token) = (state.clone(), token.clone());
+        async move {
+            let mut h = HeaderMap::new();
+            h.insert("authorization", format!("Bot {token}").parse().unwrap());
+            bots::bot_send_message(State(state), h, Json(bots::BotMessageRequest { channel_id, server_id: s, content: "salut".into() })).await
+        }
+    };
+    assert!(post(open).await.is_ok());
+    assert!(post(hidden).await.is_err(), "le bot ne poste pas dans un salon qu'il ne voit pas");
+    // Bot retiré : sa commande n'autorise plus le clair.
+    let _ = bots::delete_bot(State(state.clone()), Extension(claims), Path((s, bot_user))).await.expect("delete_bot");
+    assert!(!crate::handlers::e2e_channel::is_bot_command(&db, s, "/ping a").await);
+
+    // Message programmé : les droits sont revérifiés à l'envoi (salon passé en lecture seule).
+    let ro: Uuid = sqlx::query_scalar("INSERT INTO channels (server_id, name) VALUES ($1, 'ro') RETURNING id").bind(s).fetch_one(&db).await.unwrap();
+    sqlx::query("INSERT INTO channel_permissions (channel_id, target_id, target_type, deny) VALUES ($1, $2, 'member', $3)")
+        .bind(ro).bind(victim).bind(Permissions::SEND_MESSAGES).execute(&db).await.expect("read-only");
+    for ch in [ro, open] {
+        sqlx::query("INSERT INTO scheduled_messages (channel_id, user_id, content, send_at) VALUES ($1, $2, 'programme', NOW() - INTERVAL '1 minute')")
+            .bind(ch).bind(victim).execute(&db).await.expect("scheduled");
+    }
+    crate::handlers::scheduled::dispatch_scheduled_messages(state.clone()).await;
+    let sent_in = |ch: Uuid| {
+        let db = db.clone();
+        async move { sqlx::query_scalar::<_, bool>("SELECT EXISTS(SELECT 1 FROM messages WHERE channel_id=$1 AND user_id=$2)").bind(ch).bind(victim).fetch_one(&db).await.unwrap() }
+    };
+    assert!(!sent_in(ro).await, "salon en lecture seule : message programmé annulé");
+    assert!(sent_in(open).await, "salon ouvert : envoyé");
+
+    // Demande d'ami : blocage et réglage `friend_request_from` valent pour toutes les voies.
+    sqlx::query("INSERT INTO blocks (blocker_id, blocked_id) VALUES ($1, $2)").bind(a).bind(b).execute(&db).await.unwrap();
+    assert!(friends::request_or_accept(&state, b, a, None).await.is_err(), "bloqué");
+    let c = user(&db).await;
+    sqlx::query("INSERT INTO user_settings (user_id, friend_request_from) VALUES ($1, 'nobody')").bind(c).execute(&db).await.unwrap();
+    assert!(friends::request_or_accept(&state, victim, c, None).await.is_err(), "réglage nobody");
+    assert_eq!(friends::request_or_accept(&state, owner, victim, None).await.unwrap(), "sent");
 }

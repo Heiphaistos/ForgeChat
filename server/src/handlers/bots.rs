@@ -129,11 +129,16 @@ pub async fn delete_bot(
 ) -> Result<Json<serde_json::Value>> {
     require_permission(&state, claims.sub, server_id, Permissions::MANAGE_SERVER).await?;
 
-    sqlx::query("DELETE FROM bot_tokens WHERE bot_user_id=$1 AND server_id=$2")
+    // Seul un vrai bot de CE serveur (jeton existant) est retiré : avant, n'importe quel
+    // `bot_user_id` (un membre, le propriétaire) était expulsé par un simple MANAGE_SERVER.
+    let removed = sqlx::query("DELETE FROM bot_tokens WHERE bot_user_id=$1 AND server_id=$2")
         .bind(bot_user_id).bind(server_id)
         .execute(&state.db).await?;
+    if removed.rows_affected() == 0 {
+        return Err(AppError::NotFound("Bot introuvable".into()));
+    }
 
-    sqlx::query("DELETE FROM server_members WHERE user_id=$1 AND server_id=$2")
+    sqlx::query("DELETE FROM server_members WHERE user_id=$1 AND server_id=$2 AND NOT is_owner")
         .bind(bot_user_id).bind(server_id)
         .execute(&state.db).await?;
 
@@ -217,6 +222,8 @@ pub async fn bot_send_message(
     if !channel_in_server {
         return Err(AppError::Forbidden);
     }
+    // Mêmes droits que tout membre : salon visible, écriture permise, serveur non verrouillé.
+    crate::handlers::servers::require_can_post(&state, bot_id, body.server_id, body.channel_id, false).await?;
 
     let content_raw = body.content.trim().to_string();
     if content_raw.is_empty() {

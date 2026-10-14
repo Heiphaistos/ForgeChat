@@ -14,12 +14,43 @@ use crate::{
 /// Demande d'ami de `me` vers `target` : crée la demande, ou ACCEPTE celle que `target` avait
 /// déjà envoyée (demandes croisées = amis, comme Discord). Avant, n'importe quelle ligne entre
 /// les deux comptes (une demande restée en attente) renvoyait « Demande déjà existante ».
-async fn request_or_accept(state: &AppState, me: Uuid, target: Uuid, message: Option<String>) -> Result<&'static str> {
+pub(crate) async fn request_or_accept(state: &AppState, me: Uuid, target: Uuid, message: Option<String>) -> Result<&'static str> {
     use sqlx::Row;
+    // Garde commune à toutes les voies (par id, par pseudo, en masse) : avant, « ajouter par
+    // pseudo » contournait le blocage et le réglage `friend_request_from` du destinataire.
+    crate::handlers::auth_v2::hit(state, &format!("friend_req:{me}"), 60, 3600).await?;
+    let blocked: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM blocks WHERE (blocker_id=$1 AND blocked_id=$2) OR (blocker_id=$2 AND blocked_id=$1))"
+    ).bind(me).bind(target).fetch_one(&state.db).await?;
+    if blocked {
+        return Err(AppError::Forbidden);
+    }
     let row = sqlx::query(
         "SELECT id, user_id, status FROM friendships WHERE (user_id=$1 AND friend_id=$2) OR (user_id=$2 AND friend_id=$1)"
     )
     .bind(me).bind(target).fetch_optional(&state.db).await?;
+    // Une demande de `target` déjà en attente s'accepte toujours ; sinon le réglage du destinataire s'applique.
+    if row.is_none() {
+        let pref: Option<String> = sqlx::query_scalar("SELECT friend_request_from FROM user_settings WHERE user_id=$1")
+            .bind(target).fetch_optional(&state.db).await?;
+        let allowed = match pref.as_deref() {
+            Some("nobody") => false,
+            Some("friends_of_friends") => sqlx::query_scalar::<_, bool>(
+                "SELECT EXISTS(
+                    SELECT 1 FROM friendships f1
+                    JOIN friendships f2 ON
+                        (CASE WHEN f1.user_id=$1 THEN f1.friend_id ELSE f1.user_id END) =
+                        (CASE WHEN f2.user_id=$2 THEN f2.friend_id ELSE f2.user_id END)
+                    WHERE (f1.user_id=$1 OR f1.friend_id=$1) AND f1.status='accepted'
+                      AND (f2.user_id=$2 OR f2.friend_id=$2) AND f2.status='accepted'
+                )"
+            ).bind(me).bind(target).fetch_one(&state.db).await?,
+            _ => true,
+        };
+        if !allowed {
+            return Err(AppError::Forbidden);
+        }
+    }
     let me_name: String = sqlx::query_scalar("SELECT username FROM users WHERE id=$1")
         .bind(me).fetch_optional(&state.db).await?.unwrap_or_default();
     match row {
@@ -86,52 +117,6 @@ pub async fn send_friend_request(
 
     if target_id == claims.sub {
         return Err(AppError::BadRequest("Impossible de s'ajouter soi-même".into()));
-    }
-
-    // Bloqué dans un sens ou l'autre -- jamais vérifié ici jusqu'ici (contrairement
-    // aux DMs/messages qui checkent déjà `blocks` ailleurs dans ce fichier)
-    let blocked = sqlx::query_scalar::<_, bool>(
-        "SELECT EXISTS(SELECT 1 FROM blocks WHERE
-         (blocker_id=$1 AND blocked_id=$2) OR (blocker_id=$2 AND blocked_id=$1))"
-    )
-    .bind(claims.sub)
-    .bind(target_id)
-    .fetch_one(&state.db)
-    .await?;
-    if blocked {
-        return Err(AppError::Forbidden);
-    }
-
-    // Réglage de confidentialité du destinataire (`friend_request_from` dans
-    // user_settings) -- jamais appliqué avant, un simple placebo côté UI.
-    let pref: Option<String> = sqlx::query_scalar::<_, String>(
-        "SELECT friend_request_from FROM user_settings WHERE user_id=$1"
-    )
-    .bind(target_id)
-    .fetch_optional(&state.db)
-    .await?;
-    match pref.as_deref() {
-        Some("nobody") => return Err(AppError::Forbidden),
-        Some("friends_of_friends") => {
-            let has_mutual = sqlx::query_scalar::<_, bool>(
-                "SELECT EXISTS(
-                    SELECT 1 FROM friendships f1
-                    JOIN friendships f2 ON
-                        (CASE WHEN f1.user_id=$1 THEN f1.friend_id ELSE f1.user_id END) =
-                        (CASE WHEN f2.user_id=$2 THEN f2.friend_id ELSE f2.user_id END)
-                    WHERE (f1.user_id=$1 OR f1.friend_id=$1) AND f1.status='accepted'
-                      AND (f2.user_id=$2 OR f2.friend_id=$2) AND f2.status='accepted'
-                )"
-            )
-            .bind(claims.sub)
-            .bind(target_id)
-            .fetch_one(&state.db)
-            .await?;
-            if !has_mutual {
-                return Err(AppError::Forbidden);
-            }
-        }
-        _ => {}
     }
 
     let outcome = request_or_accept(&state, claims.sub, target_id, None).await?;
