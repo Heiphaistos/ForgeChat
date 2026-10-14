@@ -100,3 +100,51 @@ async fn srv2_saved_hides_content_after_access_loss() {
     assert_eq!(v.len(), 1);
     assert!(v[0].content.is_none() && v[0].enc.is_none() && v[0].attachments.is_empty() && v[0].channel_name.is_none());
 }
+
+#[tokio::test]
+#[ignore]
+async fn srv2_export_has_new_sections_and_no_secrets() {
+    use axum::response::IntoResponse;
+    let (state, db) = setup().await;
+    let u = user(&db).await;
+    sqlx::query("INSERT INTO saved_messages (user_id, message_id, channel_id, content) VALUES ($1,$2,$3,'mon favori')")
+        .bind(u).bind(Uuid::new_v4()).bind(Uuid::new_v4()).execute(&db).await.expect("saved");
+    sqlx::query("INSERT INTO user_sessions (user_id, refresh_token_hash, device_info) VALUES ($1,'SECRETREFRESHHASH','Firefox')")
+        .bind(u).execute(&db).await.expect("session");
+    sqlx::query("INSERT INTO webauthn_credentials (user_id, credential_id, public_key, name) VALUES ($1, $2, decode('deadbeef','hex'), 'ma cle')")
+        .bind(u).bind(Uuid::new_v4().as_bytes().to_vec()).execute(&db).await.expect("passkey");
+    sqlx::query("INSERT INTO connected_accounts (user_id, platform, platform_username) VALUES ($1,'github','octo')")
+        .bind(u).execute(&db).await.expect("linked");
+    sqlx::query("INSERT INTO user_settings (user_id) VALUES ($1) ON CONFLICT DO NOTHING").bind(u).execute(&db).await.expect("settings");
+    let res = crate::handlers::privacy::export_user_data(State(state.clone()), Extension(claims(u))).await.expect("export").into_response();
+    let body = axum::body::to_bytes(res.into_body(), 10_000_000).await.expect("body");
+    let text = String::from_utf8(body.to_vec()).unwrap();
+    let v: serde_json::Value = serde_json::from_str(&text).unwrap();
+    for k in ["saved_messages", "thread_messages", "forum_posts", "forum_replies", "reports_made", "dm_reports_made",
+              "sessions", "reminders", "settings", "passkeys", "connected_accounts"] {
+        assert!(v[k].is_array(), "section manquante : {k}");
+    }
+    assert_eq!(v["saved_messages"][0]["content"], "mon favori");
+    assert_eq!(v["sessions"][0]["device_info"], "Firefox");
+    assert_eq!(v["passkeys"][0]["name"], "ma cle");
+    assert_eq!(v["connected_accounts"][0]["platform_username"], "octo");
+    for secret in ["SECRETREFRESHHASH", "refresh_token_hash", "password_hash", "public_key", "deadbeef", "totp"] {
+        assert!(!text.contains(secret), "secret exposé : {secret}");
+    }
+}
+
+#[tokio::test]
+#[ignore]
+async fn srv2_bot_invalid_tokens_rate_limited() {
+    let (state, _db) = setup().await;
+    let mut h = axum::http::HeaderMap::new();
+    h.insert("x-real-ip", format!("10.{}.{}.2", rand::random::<u8>(), rand::random::<u8>()).parse().unwrap());
+    h.insert("authorization", "Bot jeton-bidon".parse().unwrap());
+    let addr: std::net::SocketAddr = "127.0.0.1:1".parse().unwrap();
+    let call = || crate::handlers::bots::bot_send_message(State(state.clone()), ConnectInfo(addr), h.clone(),
+        Json(crate::handlers::bots::BotMessageRequest { channel_id: Uuid::new_v4(), server_id: Uuid::new_v4(), content: "x".into() }));
+    for _ in 0..30 {
+        assert!(matches!(call().await, Err(AppError::Unauthorized)));
+    }
+    assert!(matches!(call().await, Err(AppError::TooManyRequests)));
+}
