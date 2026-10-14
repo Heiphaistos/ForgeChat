@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { RotateCcw } from 'lucide-react'
+import { useT } from '../../i18n'
 
 interface Props {
   userId: string
@@ -11,6 +12,7 @@ interface Props {
 }
 
 export default function VolumeSlider({ username, initialVolume = 100, onVolumeChange, onClose }: Props) {
+  const t = useT()
   const [volume, setVolume] = useState(initialVolume)
   const ref = useRef<HTMLDivElement>(null)
 
@@ -41,7 +43,7 @@ export default function VolumeSlider({ username, initialVolume = 100, onVolumeCh
     <div
       ref={ref}
       role="group"
-      aria-label={`Contrôle de volume : ${username}`}
+      aria-label={t('hc.vol.aria', { name: username })}
       className="absolute z-50 bg-fc-channel border border-white/10 rounded-xl shadow-2xl p-3 w-48"
       style={{ left: '100%', top: 0, marginLeft: '8px' }}
     >
@@ -50,8 +52,8 @@ export default function VolumeSlider({ username, initialVolume = 100, onVolumeCh
         <span className="text-xs font-semibold text-white truncate max-w-[100px]">{username}</span>
         <button
           onClick={reset}
-          aria-label="Réinitialiser le volume à 100%"
-          title="Réinitialiser à 100%"
+          aria-label={t('hc.vol.reset')}
+          title={t('hc.vol.reset2')}
           className="p-1 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition flex-shrink-0"
         >
           <RotateCcw size={12} aria-hidden />
@@ -60,7 +62,7 @@ export default function VolumeSlider({ username, initialVolume = 100, onVolumeCh
 
       {/* Label volume */}
       <div className="flex items-center justify-between mb-1.5" aria-hidden>
-        <span className="text-xs text-fc-muted">Volume</span>
+        <span className="text-xs text-fc-muted">{t('hc.vol.label')}</span>
         <span className="text-xs font-mono text-fc-text">{pct}%</span>
       </div>
 

@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback, lazy, Suspense, useSyncExternalStore, type CSSProperties } from 'react'
+import { t as tr } from '../../i18n'
 import { Outlet, useLocation } from 'react-router-dom'
 import ServerSidebar from './ServerSidebar'
 import ChannelSidebar from './ChannelSidebar'
@@ -198,7 +199,7 @@ export default function MainLayout() {
 
           {/* Sidebars — drawer fixe sur mobile, inline sur desktop */}
           <nav
-            aria-label="Navigation"
+            aria-label={tr('hc.p.nav')}
             className={[
               'fc-nav flex flex-col h-full flex-shrink-0',
               'fixed inset-y-0 left-0 z-50',
@@ -241,7 +242,7 @@ export default function MainLayout() {
             className="fc-nav-handle hidden md:flex w-1 flex-shrink-0 cursor-col-resize bg-transparent hover:bg-fc-accent/40 transition-colors group z-10"
             onMouseDown={onResizeStart}
             onDoubleClick={() => { setSidebarWidth(SIDEBAR_DEFAULT); localStorage.setItem('fc_sidebar_width', String(SIDEBAR_DEFAULT)) }}
-            title="Redimensionner la barre latérale (double-clic : largeur par défaut)"
+            title={tr('hc.p.resizeSidebar')}
           >
             <div className="w-px h-full bg-fc-hover group-hover:bg-fc-accent/60 transition-colors" />
           </div>
@@ -275,7 +276,7 @@ export default function MainLayout() {
                 className="hidden md:flex w-1 flex-shrink-0 cursor-col-resize bg-transparent hover:bg-fc-accent/40 transition-colors group/split z-10"
                 onMouseDown={onSplitResizeStart}
                 onDoubleClick={() => { setSplitRatio(0.5); localStorage.setItem('fc_split_ratio', '0.5') }}
-                title="Redimensionner le panneau split (double-clic : 50/50)"
+                title={tr('hc.p.resizeSplit')}
               >
                 <div className="w-px h-full bg-fc-hover group-hover/split:bg-fc-accent/60 transition-colors" />
               </div>

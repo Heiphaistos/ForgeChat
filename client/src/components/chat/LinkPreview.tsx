@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
+import { t as tr } from '../../i18n'
 import api from '../../api/client'
 import { ExternalLink } from 'lucide-react'
 import { isSafeUrl } from '../../utils/safeUrl'
@@ -59,7 +60,7 @@ export default function LinkPreview({ url, data: given }: Props) {
   return (
     <div
       role="complementary"
-      aria-label={`Aperçu du lien : ${data.title ?? data.site_name ?? url}`}
+      aria-label={tr('hc.lp.aria', { name: data.title ?? data.site_name ?? url })}
       className="mt-2 max-w-full sm:max-w-lg rounded-xl border border-fc-hover bg-fc-channel overflow-hidden"
     >
       {safeImage && (

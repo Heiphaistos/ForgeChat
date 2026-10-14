@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useFormError } from '../components/ui/FormError'
 import { Link, useNavigate } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import api from '../api/client'
@@ -39,15 +40,17 @@ function RequestForm() {
   const [loading, setLoading] = useState(false)
   const [sent, setSent] = useState(false)
   const t = useT()
+  const form = useFormError()
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
+    form.clear()
     setLoading(true)
     try {
       await api.post('/auth/forgot-password', { email })
       setSent(true)
     } catch (err: any) {
-      toast.error(err.response?.status === 429 ? t('auth.reset.tooMany') : (err.response?.data?.error ?? t('auth.reset.error')))
+      form.fail(err.response?.status === 429 ? t('auth.reset.tooMany') : (err.response?.data?.error ?? t('auth.reset.error')))
     } finally {
       setLoading(false)
     }
@@ -68,6 +71,7 @@ function RequestForm() {
       <h1 className="text-2xl font-bold text-white text-center mb-2">{t('auth.reset.title')}</h1>
       <p className="text-fc-muted text-center mb-6 text-sm">{t('auth.reset.intro')}</p>
       <form onSubmit={submit} className="space-y-4">
+        {form.el}
         <div>
           <label htmlFor="fp-email" className="block text-xs font-semibold text-fc-muted uppercase mb-1">{t('auth.email')}</label>
           <input id="fp-email" type="email" value={email} onChange={e => setEmail(e.target.value)} required autoFocus
@@ -88,13 +92,15 @@ function ResetForm({ token }: { token: string }) {
   const [loading, setLoading] = useState(false)
   const nav = useNavigate()
   const t = useT()
+  const form = useFormError()
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (pw !== pw2) { toast.error(t('auth.passwordMismatch')); return }
+    form.clear()
+    if (pw !== pw2) { form.fail(t('auth.passwordMismatch')); return }
     setLoading(true)
     const problem = passwordProblem(pw) ?? await pwnedProblem(pw)
-    if (problem) { toast.error(problem); setLoading(false); return }
+    if (problem) { form.fail(problem); setLoading(false); return }
     try {
       // Le nouveau mot de passe ne part pas : seulement sa preuve et le nouveau sel.
       const new_kdf_salt = newKdfSalt()
@@ -104,7 +110,7 @@ function ResetForm({ token }: { token: string }) {
       toast.success(t('auth.reset.done'))
       nav('/login')
     } catch (err: any) {
-      toast.error(err.response?.data?.error ?? t('auth.reset.invalid'))
+      form.fail(err.response?.data?.error ?? t('auth.reset.invalid'))
     } finally {
       setPw(''); setPw2('')
       setLoading(false)
@@ -115,6 +121,7 @@ function ResetForm({ token }: { token: string }) {
     <>
       <h1 className="text-2xl font-bold text-white text-center mb-6">{t('auth.reset.newPassword')}</h1>
       <form onSubmit={submit} className="space-y-4">
+        {form.el}
         <div>
           <label htmlFor="rp-pw" className="block text-xs font-semibold text-fc-muted uppercase mb-1">{t('auth.reset.newPassword')}</label>
           <input id="rp-pw" type="password" value={pw} onChange={e => setPw(e.target.value)} required minLength={MIN_PASSWORD} maxLength={128} placeholder={t('auth.register.passwordPlaceholder')}

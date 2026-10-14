@@ -6,7 +6,7 @@ import {
 import { formatDistanceToNow } from 'date-fns'
 import api, { mediaUrl } from '../api/client'
 import { useMobile } from '../contexts/MobileContext'
-import { dateLocale } from '../i18n'
+import { dateLocale, t as tr, useT, type Key } from '../i18n'
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -43,8 +43,8 @@ const TYPE_CONFIG: Record<
     label: (item) => (
       <>
         <strong className="text-white">@{item.actor.username}</strong>
-        {' a rejoint '}
-        <strong className="text-fc-accent">{item.server?.name ?? 'un serveur'}</strong>
+        {` ${tr('hc.act.joined')} `}
+        <strong className="text-fc-accent">{item.server?.name ?? tr('hc.act.aServer')}</strong>
       </>
     ),
   },
@@ -54,9 +54,9 @@ const TYPE_CONFIG: Record<
     label: (item) => (
       <>
         <strong className="text-white">@{item.actor.username}</strong>
-        {' a épinglé un message dans '}
-        <strong className="text-fc-accent">#{item.channel?.name ?? 'un canal'}</strong>
-        {item.server ? <> sur <strong className="text-fc-text">{item.server.name}</strong></> : null}
+        {` ${tr('hc.act.pinned')} `}
+        <strong className="text-fc-accent">#{item.channel?.name ?? tr('hc.act.aChannel')}</strong>
+        {item.server ? <> {tr('hc.act.on')} <strong className="text-fc-text">{item.server.name}</strong></> : null}
       </>
     ),
   },
@@ -66,8 +66,8 @@ const TYPE_CONFIG: Record<
     label: (item) => (
       <>
         <strong className="text-white">@{item.actor.username}</strong>
-        {' (ami) a rejoint '}
-        <strong className="text-fc-accent">{item.server?.name ?? 'un serveur'}</strong>
+        {` ${tr('hc.act.friendJoined')} `}
+        <strong className="text-fc-accent">{item.server?.name ?? tr('hc.act.aServer')}</strong>
       </>
     ),
   },
@@ -77,10 +77,10 @@ const TYPE_CONFIG: Record<
 
 export type Filter = 'all' | 'friends' | 'servers'
 
-export const FILTERS: { key: Filter; label: string }[] = [
-  { key: 'all', label: 'Tout' },
-  { key: 'friends', label: 'Amis' },
-  { key: 'servers', label: 'Serveurs' },
+export const FILTERS: { key: Filter; label: Key }[] = [
+  { key: 'all', label: 'hc.act.f.all' },
+  { key: 'friends', label: 'hc.act.f.friends' },
+  { key: 'servers', label: 'hc.act.f.servers' },
 ]
 
 export function filterItems(items: ActivityItem[], filter: Filter): ActivityItem[] {
@@ -94,6 +94,7 @@ export function filterItems(items: ActivityItem[], filter: Filter): ActivityItem
 // ─── Composant item ──────────────────────────────────────────────────────────
 
 export function ActivityRow({ item }: { item: ActivityItem }) {
+  useT() // se re-rend au changement de langue (libellés via tr)
   const config = TYPE_CONFIG[item.type]
   if (!config) return null
 
@@ -131,12 +132,13 @@ export function ActivityRow({ item }: { item: ActivityItem }) {
 // ─── Page principale ──────────────────────────────────────────────────────────
 
 export default function ActivityFeedPage() {
+  const t = useT()
   const [filter, setFilter] = useState<Filter>('all')
   const { openSidebar } = useMobile()
 
   useEffect(() => {
     const prefix = document.title.match(/^\(\d+\)\s*/)?.[0] ?? ''
-    document.title = `${prefix}Activité récente | ForgeChat`
+    document.title = `${prefix}${tr('hc.act.title')} | ForgeChat`
     return () => {
       const p = document.title.match(/^\(\d+\)\s*/)?.[0] ?? ''
       document.title = `${p}ForgeChat`
@@ -173,12 +175,12 @@ export default function ActivityFeedPage() {
         <button
           className="flex items-center justify-center min-w-[44px] min-h-[44px] md:min-w-0 md:min-h-0 p-1.5 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition flex-shrink-0 md:hidden"
           onClick={openSidebar}
-          aria-label="Retour"
+          aria-label={t('hc.common.back')}
         >
           <ChevronLeft size={20} />
         </button>
         <Zap size={18} className="text-fc-accent" />
-        <h1 className="font-semibold text-white">Activité</h1>
+        <h1 className="font-semibold text-white">{t('hc.act.page')}</h1>
       </div>
 
       {/* Filtres */}
@@ -193,7 +195,7 @@ export default function ActivityFeedPage() {
                 : 'text-fc-muted hover:text-white hover:bg-fc-hover'
             }`}
           >
-            {f.label}
+            {t(f.label)}
           </button>
         ))}
       </div>
@@ -203,7 +205,7 @@ export default function ActivityFeedPage() {
         {visible.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-fc-muted gap-3">
             <Zap size={40} className="opacity-20" />
-            <p className="text-sm">Aucune activité pour ce filtre</p>
+            <p className="text-sm">{t('hc.act.noneFilter')}</p>
           </div>
         ) : (
           <div className="p-2">
@@ -218,13 +220,13 @@ export default function ActivityFeedPage() {
                 disabled={isFetchingNextPage}
                 className="w-full mt-2 py-2 text-xs text-fc-muted hover:text-white transition text-center"
               >
-                {isFetchingNextPage ? 'Chargement...' : 'Voir plus'}
+                {isFetchingNextPage ? t('common.loading') : t('hc.act.more')}
               </button>
             )}
 
             {isError && (
               <p className="text-center text-xs text-fc-muted py-2">
-                Erreur lors du chargement de l'activité.
+                {t('hc.act.loadFail')}
               </p>
             )}
           </div>

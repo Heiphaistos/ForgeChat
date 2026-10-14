@@ -425,7 +425,7 @@ export default function ChannelSettingsModal({ channel, serverId, onClose, initi
                 <div className="grid grid-cols-2 gap-2 text-xs">
                   <div><span className="text-fc-muted">ID : </span><span className="text-white font-mono streamer-id">{channel.id.slice(0, 18)}...</span></div>
                   <div><span className="text-fc-muted">{t('chset.typeLabel')} </span><span className="text-white">{t(`chtype.${channel.type}` as Key)}</span></div>
-                  <div><span className="text-fc-muted">Position : </span><span className="text-white">{channel.position ?? 'N/A'}</span></div>
+                  <div><span className="text-fc-muted">{t('hc.chset.position')}</span><span className="text-white">{channel.position ?? 'N/A'}</span></div>
                 </div>
               </div>
 

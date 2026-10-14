@@ -53,7 +53,7 @@ export function MessageDisplayPrefs() {
       <H>{t('ux.display.title')}</H>
       <div className="space-y-1.5">
         <label className="text-sm text-fc-text">{t('ux.display.spoilers')}</label>
-        <Select value={spoilers} onChange={v => set({ spoilers: v as UxPrefs['spoilers'] })} className="w-full"
+        <Select label={t('ux.display.spoilers')} value={spoilers} onChange={v => set({ spoilers: v as UxPrefs['spoilers'] })} className="w-full"
           options={[
             { value: 'click', label: t('ux.display.spoilers.click') },
             { value: 'moderated', label: t('ux.display.spoilers.moderated') },
@@ -81,7 +81,7 @@ export function ComposerPrefs() {
       <PrefToggle k="spellcheck" label="ux.composer.spellcheck" />
       <div className="space-y-1.5">
         <label className="text-sm text-fc-text">{t('ux.composer.sendKey')}</label>
-        <Select value={sendKey} onChange={v => set({ sendKey: v as UxPrefs['sendKey'] })} className="w-full"
+        <Select label={t('ux.composer.sendKey')} value={sendKey} onChange={v => set({ sendKey: v as UxPrefs['sendKey'] })} className="w-full"
           options={[
             { value: 'enter', label: t('ux.composer.sendEnter') },
             { value: 'ctrlEnter', label: t('ux.composer.sendCtrlEnter') },

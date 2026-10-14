@@ -35,7 +35,7 @@ export default function AppLockSection() {
       {config ? (
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-sm text-white">{t('lock.after')}</span>
-          <Select value={String(config.delay)} options={delays}
+          <Select value={String(config.delay)} options={delays} label={t('lock.after')}
             onChange={v => useAppLock.getState().setDelay(Number(v) as LockDelay)} />
           <button onClick={() => useAppLock.getState().lockNow()}
             className="px-3 py-2 rounded-lg bg-fc-hover text-white text-sm">{t('lock.now')}</button>
@@ -52,7 +52,7 @@ export default function AppLockSection() {
             className="w-full bg-fc-hover rounded-lg px-3 py-2 text-white text-sm outline-none" />
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-sm text-white">{t('lock.after')}</span>
-            <Select value={String(delay)} options={delays} onChange={v => setDelay(Number(v) as LockDelay)} />
+            <Select value={String(delay)} options={delays} label={t('lock.after')} onChange={v => setDelay(Number(v) as LockDelay)} />
           </div>
           <div className="flex gap-2">
             <button onClick={() => setEditing(false)} className="flex-1 py-2 bg-fc-hover rounded-lg text-fc-muted text-sm">

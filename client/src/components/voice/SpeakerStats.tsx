@@ -1,4 +1,5 @@
 import { mediaUrl } from '../../api/client'
+import { useEscapeKey } from '../../hooks/useEscapeKey'
 import { useMemo } from 'react'
 import { Mic, MicOff, Volume2 } from 'lucide-react'
 import { useT } from '../../i18n'
@@ -37,6 +38,7 @@ function Avatar({ participant }: { participant: Participant }) {
 
 export default function SpeakerStats({ participants, onClose }: Props) {
   const t = useT()
+  useEscapeKey(onClose)
   const sorted = useMemo(
     () => [...participants].sort((a, b) => b.totalSpeakingMs - a.totalSpeakingMs),
     [participants]

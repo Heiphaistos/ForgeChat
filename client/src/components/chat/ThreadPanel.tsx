@@ -504,7 +504,7 @@ export default function ThreadPanel({ serverId, channelId, parentMessageId, thre
         {!threadId && !isLoading && (
           <div className="text-center text-fc-muted text-sm py-8">
             <MessagesSquare size={32} className="mx-auto mb-2 opacity-30" />
-            <p>Pas encore de thread</p>
+            <p>{tr('hc.thr.empty')}</p>
           </div>
         )}
 
@@ -575,7 +575,7 @@ export default function ThreadPanel({ serverId, channelId, parentMessageId, thre
                   const uid = msg.author_id ?? msg.user_id
                   if (uid) setUserPopup({ userId: uid, x: e.clientX, y: e.clientY })
                 }}
-                aria-label={`Voir le profil de ${msg.author?.username ?? msg.author_username ?? 'l\'auteur'}`}
+                aria-label={tr('hc.p.profileOf', { name: msg.author?.username ?? msg.author_username ?? tr('hc.p.theAuthor') })}
                 className="w-6 h-6 rounded-full bg-fc-accent flex items-center justify-center text-xs font-bold text-white flex-shrink-0 mt-0.5 overflow-hidden hover:ring-2 hover:ring-fc-accent/60 transition cursor-pointer"
               >
                 {msg.author?.avatar
@@ -615,14 +615,14 @@ export default function ThreadPanel({ serverId, channelId, parentMessageId, thre
                       <button
                         onClick={() => { setEditingMsgId(msg.id); setEditContent(msg.content) }}
                         className="p-1.5 min-w-[44px] min-h-[44px] flex items-center justify-center text-fc-muted hover:text-white rounded transition"
-                        title="Modifier"
-                        aria-label="Modifier"
+                        title={tr('hc.common.edit')}
+                        aria-label={tr('hc.common.edit')}
                       ><Pencil size={12} /></button>
                       <button
                         onClick={() => deleteMessage.mutate(msg.id)}
                         className="p-1.5 min-w-[44px] min-h-[44px] flex items-center justify-center text-fc-muted hover:text-red-400 rounded transition"
-                        title="Supprimer"
-                        aria-label="Supprimer"
+                        title={tr('hc.common.delete')}
+                        aria-label={tr('hc.common.delete')}
                       ><Trash2 size={12} /></button>
                     </div>
                   )}

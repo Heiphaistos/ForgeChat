@@ -2,6 +2,7 @@
 // avant envoi, upload vers l'endpoint dédié, rendu des pièces jointes reçues.
 // Même table et mêmes validations serveur que les messages de salon.
 import { useState } from 'react'
+import { t as tr } from '../../i18n'
 import { FileText, X } from 'lucide-react'
 import { mediaUrl } from '../../api/client'
 import { desktopDownloadClick } from '../../lib/saveFile'
@@ -67,7 +68,7 @@ export function usePendingFiles() {
 export function PendingFiles({ files, onRemove }: { files: File[]; onRemove: (idx: number) => void }) {
   if (files.length === 0) return null
   return (
-    <div className="flex flex-wrap gap-1.5 mb-2" aria-label="Fichiers à joindre">
+    <div className="flex flex-wrap gap-1.5 mb-2" aria-label={tr('hc.p.toSend')}>
       {files.map((f, i) => (
         <span key={`${f.name}-${i}`} className="flex items-center gap-1 max-w-[180px] px-2 py-1 rounded bg-fc-hover text-xs text-fc-text">
           <FileText size={12} className="flex-shrink-0 text-fc-muted" aria-hidden />

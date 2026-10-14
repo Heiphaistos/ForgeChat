@@ -5,7 +5,7 @@ import { ChevronLeft, Trash2 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import api from '../api/client'
 import { useMobile } from '../contexts/MobileContext'
-import { intlLocale } from '../i18n'
+import { intlLocale, useT } from '../i18n'
 
 /** Rapports d'erreurs des applis (réservé au rôle El Patron). */
 
@@ -34,6 +34,7 @@ const KINDS = ['', 'js_error', 'unhandled_rejection', 'react_crash', 'startup_fa
 const fmt = (d: string) => new Date(d).toLocaleString(intlLocale())
 
 export default function DiagnosticsAdminPage() {
+  const t = useT()
   const nav = useNavigate()
   const qc = useQueryClient()
   const { openSidebar } = useMobile()
@@ -62,9 +63,9 @@ export default function DiagnosticsAdminPage() {
     onSuccess: () => {
       setSelected(null)
       qc.invalidateQueries({ queryKey: ['admin-diagnostics'] })
-      toast.success('Rapport supprimé')
+      toast.success(t('hc.dg.deleted'))
     },
-    onError: () => toast.error('Suppression impossible'),
+    onError: () => toast.error(t('hc.dg.deleteFail')),
   })
 
   // Compte non autorisé : on n'affiche rien.
@@ -79,29 +80,29 @@ export default function DiagnosticsAdminPage() {
         <button
           className="md:hidden min-w-[44px] min-h-[44px] flex items-center justify-center rounded hover:bg-fc-hover text-fc-muted hover:text-white transition flex-shrink-0"
           onClick={openSidebar}
-          aria-label="Ouvrir le menu"
+          aria-label={t('hc.adm.openMenu')}
         >
           <ChevronLeft size={20} />
         </button>
-        <h1 className="text-lg font-bold text-white truncate">Rapports d'erreurs</h1>
+        <h1 className="text-lg font-bold text-white truncate">{t('hc.dg.title')}</h1>
         <button onClick={() => nav(-1)} className="ml-auto text-fc-muted hover:text-white text-sm transition">← Retour</button>
       </div>
 
       <div className="p-4 max-w-5xl mx-auto space-y-4">
         <div className="flex flex-wrap items-center gap-2">
-          <select aria-label="Plateforme" value={platform} className={selectCls}
+          <select aria-label={t('hc.dg.platform')} value={platform} className={selectCls}
             onChange={e => { setPlatform(e.target.value); setOffset(0) }}>
-            {PLATFORMS.map(p => <option key={p} value={p}>{p || 'Toutes plateformes'}</option>)}
+            {PLATFORMS.map(p => <option key={p} value={p}>{p || t('hc.dg.allPlat')}</option>)}
           </select>
-          <select aria-label="Type" value={kind} className={selectCls}
+          <select aria-label={t('hc.dg.type')} value={kind} className={selectCls}
             onChange={e => { setKind(e.target.value); setOffset(0) }}>
-            {KINDS.map(k => <option key={k} value={k}>{k || 'Tous types'}</option>)}
+            {KINDS.map(k => <option key={k} value={k}>{k || t('hc.dg.allKinds')}</option>)}
           </select>
-          <span className="text-xs text-fc-muted ml-auto">{total} rapport(s)</span>
+          <span className="text-xs text-fc-muted ml-auto">{t('hc.dg.count', { n: total })}</span>
         </div>
 
-        {list.isLoading && <p className="text-fc-muted text-sm">Chargement…</p>}
-        {list.data?.items.length === 0 && <p className="text-fc-muted text-sm">Aucun rapport.</p>}
+        {list.isLoading && <p className="text-fc-muted text-sm">{t('hc.thr.loadingShort')}</p>}
+        {list.data?.items.length === 0 && <p className="text-fc-muted text-sm">{t('hc.dg.none')}</p>}
 
         <ul className="space-y-2">
           {list.data?.items.map(r => (
@@ -116,30 +117,30 @@ export default function DiagnosticsAdminPage() {
                   <span>v{r.app_version ?? '?'}</span>
                   <span className="text-yellow-400">{r.kind}</span>
                   {r.count > 1 && <span className="text-fc-red font-semibold">×{r.count}</span>}
-                  {r.has_log && <span>journal</span>}
+                  {r.has_log && <span>{t('hc.dg.log')}</span>}
                 </div>
-                <div className="text-sm text-white mt-1 break-words line-clamp-2">{r.message || '(sans message)'}</div>
+                <div className="text-sm text-white mt-1 break-words line-clamp-2">{r.message || t('hc.dg.noMsg')}</div>
               </button>
               {selected === r.id && (
                 <div className="mt-2 p-3 rounded-xl border border-fc-hover bg-fc-channel space-y-2 text-xs text-fc-muted">
-                  {detail.isLoading && <p>Chargement…</p>}
+                  {detail.isLoading && <p>{t('hc.thr.loadingShort')}</p>}
                   {detail.data && (
                     <>
                       <div className="space-y-0.5 break-words">
-                        <div>Première fois : {fmt(detail.data.created_at)}</div>
+                        <div>{t('hc.dg.first', { d: fmt(detail.data.created_at) })}</div>
                         {detail.data.url && <div>URL : {detail.data.url}</div>}
-                        {detail.data.user_agent && <div>Navigateur : {detail.data.user_agent}</div>}
+                        {detail.data.user_agent && <div>{t('hc.dg.browser', { v: detail.data.user_agent })}</div>}
                       </div>
                       <pre className="whitespace-pre-wrap break-words text-white bg-fc-bg rounded-lg p-2">{detail.data.message}</pre>
                       {detail.data.stack && (
                         <details open>
-                          <summary className="cursor-pointer text-white">Pile d'appels</summary>
+                          <summary className="cursor-pointer text-white">{t('hc.dg.stack')}</summary>
                           <pre tabIndex={0} className="mt-1 whitespace-pre-wrap break-words bg-fc-bg rounded-lg p-2 max-h-80 overflow-auto">{detail.data.stack}</pre>
                         </details>
                       )}
                       {detail.data.log && (
                         <details>
-                          <summary className="cursor-pointer text-white">Journal ({Math.round(detail.data.log.length / 1024)} Ko)</summary>
+                          <summary className="cursor-pointer text-white">{t('hc.dg.logSize', { n: Math.round(detail.data.log.length / 1024) })}</summary>
                           <pre tabIndex={0} className="mt-1 whitespace-pre-wrap break-words bg-fc-bg rounded-lg p-2 max-h-96 overflow-auto">{detail.data.log}</pre>
                         </details>
                       )}
@@ -148,7 +149,7 @@ export default function DiagnosticsAdminPage() {
                         disabled={remove.isPending}
                         className="flex items-center gap-1.5 px-3 py-1.5 bg-fc-red/10 text-fc-red rounded-lg hover:bg-fc-red/20 transition disabled:opacity-50"
                       >
-                        <Trash2 size={12} /> Supprimer
+                        <Trash2 size={12} /> {t('hc.common.delete')}
                       </button>
                     </>
                   )}
@@ -161,10 +162,10 @@ export default function DiagnosticsAdminPage() {
         {total > PAGE && (
           <div className="flex items-center justify-center gap-3 text-sm">
             <button disabled={offset === 0} onClick={() => setOffset(Math.max(0, offset - PAGE))}
-              className="px-3 py-1.5 rounded-lg border border-fc-hover text-fc-muted hover:text-white disabled:opacity-40">Précédent</button>
+              className="px-3 py-1.5 rounded-lg border border-fc-hover text-fc-muted hover:text-white disabled:opacity-40">{t('hc.dg.prev')}</button>
             <span className="text-fc-muted">{offset + 1}–{Math.min(offset + PAGE, total)} / {total}</span>
             <button disabled={offset + PAGE >= total} onClick={() => setOffset(offset + PAGE)}
-              className="px-3 py-1.5 rounded-lg border border-fc-hover text-fc-muted hover:text-white disabled:opacity-40">Suivant</button>
+              className="px-3 py-1.5 rounded-lg border border-fc-hover text-fc-muted hover:text-white disabled:opacity-40">{t('hc.dg.next')}</button>
           </div>
         )}
       </div>

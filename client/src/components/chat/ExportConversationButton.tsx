@@ -1,4 +1,5 @@
 import { useChat } from '../../store/chat'
+import { t as tr } from '../../i18n'
 import { Download } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { displayAttachments } from '../../e2e/files'
@@ -26,7 +27,7 @@ export default function ExportConversationButton({ channelId, channelName }: Exp
 
   const handleExport = async () => {
     if (messages.length === 0) {
-      toast.error('Aucun message à exporter')
+      toast.error(tr('hc.t.exportNone'))
       return
     }
 
@@ -36,9 +37,9 @@ export default function ExportConversationButton({ channelId, channelName }: Exp
     )
 
     const lines: string[] = [
-      `# Conversation — #${channelName}`,
-      `# Exporté le ${formatDate(new Date().toISOString())}`,
-      `# ${sorted.length} message(s)`,
+      tr('hc.ex.title', { name: channelName }),
+      tr('hc.ex.date', { d: formatDate(new Date().toISOString()) }),
+      tr('hc.ex.count', { n: sorted.length }),
       '',
     ]
 
@@ -54,7 +55,7 @@ export default function ExportConversationButton({ channelId, channelName }: Exp
       if (msg.attachments && msg.attachments.length > 0) {
         // Fichier chiffré : son vrai nom vient du message déchiffré (le fichier reste sur le serveur, chiffré).
         for (const att of displayAttachments(msg.attachments, msg.e2e_body)) {
-          lines.push(`[${date}] ${author}: [Pièce jointe: ${att.filename ?? att.url}]`)
+          lines.push(`[${date}] ${author}: ${tr('hc.ex.att', { name: att.filename ?? att.url })}`)
         }
       }
     }
@@ -62,7 +63,7 @@ export default function ExportConversationButton({ channelId, channelName }: Exp
     const name = `forgechat-${channelName}-${new Date().toISOString().slice(0, 10)}.txt`
     // Bureau : saveFile affiche lui-même « Enregistré dans … ».
     if (await saveFile(lines.join('\n'), name, 'text/plain') && !isDesktop) {
-      toast.success(`${sorted.length} messages exportés`)
+      toast.success(tr('hc.t.exported', { n: sorted.length }))
     }
   }
 

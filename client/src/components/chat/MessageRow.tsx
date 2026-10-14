@@ -384,8 +384,8 @@ function MessageRow({
                         <div className="absolute bottom-1 right-1 bg-black/60 text-white text-xs px-1.5 py-0.5 rounded flex items-center gap-1">
                           <Clock size={9} />
                           {new Date(att.expires_at) > new Date()
-                            ? `Expire ${format(new Date(att.expires_at), 'dd/MM HH:mm')}`
-                            : 'Expiré'}
+                            ? t('hc.att.expireShort', { d: format(new Date(att.expires_at), 'dd/MM HH:mm') })
+                            : t('hc.att.expired')}
                         </div>
                       )}
                     </div>
@@ -412,8 +412,8 @@ function MessageRow({
                         <div className="mt-0.5 text-xs text-fc-muted flex items-center gap-1">
                           <Clock size={10} />
                           {new Date(att.expires_at) > new Date()
-                            ? `Expire le ${format(new Date(att.expires_at), 'dd/MM/yyyy HH:mm')}`
-                            : 'Vidéo expirée'}
+                            ? t('hc.att.expireLong', { d: format(new Date(att.expires_at), 'dd/MM/yyyy HH:mm') })
+                            : t('hc.att.videoExpired')}
                         </div>
                       )}
                     </div>

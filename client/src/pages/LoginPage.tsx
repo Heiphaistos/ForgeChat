@@ -1,4 +1,5 @@
 import { useId, useState } from 'react'
+import { useFormError } from '../components/ui/FormError'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { LegalLinks } from './LegalPages'
 import { Eye, EyeOff } from 'lucide-react'
@@ -28,9 +29,11 @@ export default function LoginPage() {
   const [searchParams] = useSearchParams()
   const t = useT()
   const id = useId()
+  const form = useFormError()
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
+    form.clear()
     setLoading(true)
     try {
       await login(email, password, needTotp ? totpCode : undefined)
@@ -47,7 +50,7 @@ export default function LoginPage() {
       } else {
         setPassword('')
         setNeedTotp(false)
-        toast.error(msg || t(err?.message === 'AUTH_DOWNGRADE' ? 'auth.login.downgrade' : 'auth.login.error'))
+        form.fail(msg || t(err?.message === 'AUTH_DOWNGRADE' ? 'auth.login.downgrade' : 'auth.login.error'))
       }
     } finally {
       setLoading(false)
@@ -65,7 +68,7 @@ export default function LoginPage() {
       try {
         assertion = await getPasskey(options)
       } catch {
-        toast.error(t('guard.passkey.failed'))
+        form.fail(t('guard.passkey.failed'))
         return
       }
       try {
@@ -73,7 +76,7 @@ export default function LoginPage() {
       } catch (err: any) {
         if (err.response?.data?.error === 'totp_required') options = err.response.data.passkey ?? null
         setPasskeyOptions(options)
-        toast.error(t('guard.passkey.failed'))
+        form.fail(t('guard.passkey.failed'))
         return
       }
       setPassword('')
@@ -95,6 +98,7 @@ export default function LoginPage() {
 
         <SavedAccountsLogin />
         <form onSubmit={submit} className="space-y-4">
+          {form.el}
           {!needTotp ? (
             <>
               <div>
@@ -131,7 +135,6 @@ export default function LoginPage() {
                   <button
                     type="button"
                     onClick={() => setShowPassword(v => !v)}
-                    tabIndex={-1}
                     className="absolute right-3 top-1/2 -translate-y-1/2 text-fc-muted hover:text-white transition"
                     aria-label={showPassword ? t('auth.hidePassword') : t('auth.showPassword')}
                   >

@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { t as tr } from '../../i18n'
 import ActivityFeedPanel from '../activity/ActivityFeedPanel'
 import { useSwipeRightToClose } from '../../hooks/useSwipeClose'
 
@@ -16,7 +17,7 @@ export default function RightSidebar({ visible, onClose }: Props) {
     <div
       {...swipe}
       role="complementary"
-      aria-label="Activité récente"
+      aria-label={tr('hc.act.title')}
       className="absolute inset-0 z-20 md:relative md:inset-auto md:z-auto md:w-[260px] bg-fc-channel flex-shrink-0 border-l border-fc-bg flex flex-col panel-slide-right"
     >
       <ActivityFeedPanel onClose={onClose} />

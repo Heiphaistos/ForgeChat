@@ -1,3 +1,4 @@
+import { t as tr } from '../i18n'
 import { useState, useEffect } from 'react'
 
 export function useCountdown(expiresAt: string | null): string | null {
@@ -8,7 +9,7 @@ export function useCountdown(expiresAt: string | null): string | null {
 
     const update = () => {
       const diff = new Date(expiresAt).getTime() - Date.now()
-      if (diff <= 0) { setRemaining('Expiré'); return }
+      if (diff <= 0) { setRemaining(tr('hc.t.expired')); return }
       const s = Math.ceil(diff / 1000)
       if (s < 60) setRemaining(`${s}s`)
       else if (s < 3600) setRemaining(`${Math.ceil(s / 60)}min`)

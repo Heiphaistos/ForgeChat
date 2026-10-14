@@ -5,6 +5,7 @@ import { X, MessagesSquare, Plus } from 'lucide-react'
 import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import api from '../../api/client'
 import toast from 'react-hot-toast'
+import { useT } from '../../i18n'
 import ThreadItem from '../threads/ThreadItem'
 import { useWs } from '../../store/ws'
 import type { EncPayload } from '../../e2e/crypto'
@@ -40,6 +41,7 @@ interface NewThreadForm {
 }
 
 export default function ThreadSidebar({ serverId, channelId, onSelectThread, onClose }: Props) {
+  const t = useT()
   useEscapePanel(onClose)
   const [showNewModal, setShowNewModal] = useState(false)
   const [form, setForm] = useState<NewThreadForm>({ title: '', firstMessage: '' })
@@ -75,20 +77,20 @@ export default function ThreadSidebar({ serverId, channelId, onSelectThread, onC
       createThreadE2E(serverId, channelId, payload.title, payload.first_message, undefined,
         body => api.post(`/servers/${serverId}/channels/${channelId}/threads`, body)),
     onSuccess: (res) => {
-      toast.success('Fil créé !')
+      toast.success(t('hc.thr.created'))
       qc.invalidateQueries({ queryKey: ['threads', channelId] })
       setShowNewModal(false)
       setForm({ title: '', firstMessage: '' })
       const tid: string | undefined = res.data?.thread?.id
       if (tid) onSelectThread(tid)
     },
-    onError: (e: any) => toast.error(channelSendError(e, e.response?.data?.error ?? 'Erreur lors de la création')),
+    onError: (e: any) => toast.error(channelSendError(e, e.response?.data?.error ?? t('hc.thr.createFail'))),
   })
 
   const handleCreate = () => {
-    if (!form.firstMessage.trim()) { toast.error('Le premier message est requis'); return }
+    if (!form.firstMessage.trim()) { toast.error(t('hc.thr.firstReq')); return }
     createThread.mutate({
-      title: form.title.trim() || 'Nouveau fil',
+      title: form.title.trim() || t('hc.thr.newDefault'),
       first_message: form.firstMessage.trim(),
     })
   }
@@ -97,26 +99,26 @@ export default function ThreadSidebar({ serverId, channelId, onSelectThread, onC
     <div
       {...useSwipeRightToClose(onClose)}
       role="complementary"
-      aria-label="Fils de discussion"
+      aria-label={t('hc.thr.title')}
       className="absolute inset-0 z-10 md:relative md:inset-auto md:z-auto md:w-80 bg-fc-channel border-l border-fc-hover flex flex-col flex-shrink-0"
     >
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-fc-hover flex-shrink-0">
         <div className="flex items-center gap-2">
           <MessagesSquare size={16} className="text-fc-accent" aria-hidden />
-          <span className="font-semibold text-white text-sm">Fils de discussion</span>
+          <span className="font-semibold text-white text-sm">{t('hc.thr.title')}</span>
         </div>
         <div className="flex items-center gap-1">
           <button
             onClick={() => setShowNewModal(true)}
-            aria-label="Créer un nouveau fil de discussion"
+            aria-label={t('hc.thr.createAria')}
             className="p-1.5 text-fc-muted hover:text-fc-accent rounded hover:bg-fc-hover transition"
           >
             <Plus size={16} aria-hidden />
           </button>
           <button
             onClick={onClose}
-            aria-label="Fermer les fils de discussion"
+            aria-label={t('hc.thr.closeAria')}
             className="p-1.5 text-fc-muted hover:text-white rounded hover:bg-fc-hover transition"
           >
             <X size={16} aria-hidden />
@@ -141,11 +143,11 @@ export default function ThreadSidebar({ serverId, channelId, onSelectThread, onC
             <div className="flex items-center justify-between px-5 py-4 border-b border-fc-hover">
               <div className="flex items-center gap-2">
                 <MessagesSquare size={15} className="text-fc-accent" aria-hidden />
-                <h3 id="ts-new-thread-title" className="font-semibold text-white text-sm">Nouveau fil</h3>
+                <h3 id="ts-new-thread-title" className="font-semibold text-white text-sm">{t('hc.thr.newDefault')}</h3>
               </div>
               <button
                 onClick={() => setShowNewModal(false)}
-                aria-label="Fermer la fenêtre de création de fil"
+                aria-label={t('hc.thr.closeCreate')}
                 className="p-1 text-fc-muted hover:text-white rounded hover:bg-fc-hover transition"
               >
                 <X size={15} aria-hidden />
@@ -161,7 +163,7 @@ export default function ThreadSidebar({ serverId, channelId, onSelectThread, onC
                   id="ts-thread-title"
                   value={form.title}
                   onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
-                  placeholder="Ex: Question sur la config"
+                  placeholder={t('hc.thr.titlePh')}
                   enterKeyHint="next"
                   autoCapitalize="sentences"
                   className="w-full px-3 py-2 bg-fc-input border border-fc-hover rounded-lg text-sm text-white outline-none focus:ring-2 focus:ring-fc-accent placeholder-fc-muted"
@@ -180,11 +182,11 @@ export default function ThreadSidebar({ serverId, channelId, onSelectThread, onC
                   onKeyDown={e => {
                     if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) handleCreate()
                   }}
-                  placeholder="Écrivez votre premier message..."
+                  placeholder={t('hc.thr.firstPh')}
                   rows={4}
                   className="w-full px-3 py-2 bg-fc-input border border-fc-hover rounded-lg text-sm text-white outline-none focus:ring-2 focus:ring-fc-accent resize-none placeholder-fc-muted"
                 />
-                <p className="text-xs text-fc-muted mt-1">Ctrl+Entrée pour valider</p>
+                <p className="text-xs text-fc-muted mt-1">{t('hc.thr.ctrlEnter')}</p>
               </div>
             </div>
 
@@ -201,7 +203,7 @@ export default function ThreadSidebar({ serverId, channelId, onSelectThread, onC
                 aria-busy={createThread.isPending}
                 className="px-4 py-2 text-sm bg-fc-accent hover:bg-indigo-500 text-white rounded-lg font-medium transition disabled:opacity-40"
               >
-                {createThread.isPending ? 'Création...' : 'Créer le fil'}
+                {createThread.isPending ? t('hc.thr.creating') : t('hc.thr.create')}
               </button>
             </div>
           </div>
@@ -211,7 +213,7 @@ export default function ThreadSidebar({ serverId, channelId, onSelectThread, onC
       {/* Liste des threads */}
       <div className="flex-1 overflow-y-auto overscroll-contain p-2">
         {isLoading && (
-          <div role="status" aria-label="Chargement des fils de discussion" className="flex items-center justify-center py-10">
+          <div role="status" aria-label={t('hc.thr.loading')} className="flex items-center justify-center py-10">
             <div aria-hidden className="w-5 h-5 border-2 border-fc-accent border-t-transparent rounded-full animate-spin" />
           </div>
         )}
@@ -219,9 +221,9 @@ export default function ThreadSidebar({ serverId, channelId, onSelectThread, onC
         {!isLoading && threads.length === 0 && (
           <div role="status" className="flex flex-col items-center justify-center py-12 text-center px-4">
             <MessagesSquare size={36} className="text-fc-muted/30 mb-3" aria-hidden />
-            <p className="text-sm text-fc-muted">Aucun fil de discussion</p>
+            <p className="text-sm text-fc-muted">{t('hc.thr.none')}</p>
             <p className="text-xs text-fc-muted/70 mt-1">
-              Cliquez sur <strong className="text-fc-muted">+</strong> pour en créer un
+              {t('hc.thr.clickPlus')}
             </p>
           </div>
         )}
@@ -246,7 +248,7 @@ export default function ThreadSidebar({ serverId, channelId, onSelectThread, onC
             disabled={isFetchingNextPage}
             className="w-full py-2 text-xs text-fc-accent hover:underline disabled:opacity-50"
           >
-            {isFetchingNextPage ? 'Chargement…' : 'Afficher plus de fils'}
+            {isFetchingNextPage ? t('hc.thr.loadingShort') : t('hc.thr.more')}
           </button>
         )}
       </div>
@@ -255,11 +257,11 @@ export default function ThreadSidebar({ serverId, channelId, onSelectThread, onC
       <div className="p-3 border-t border-fc-hover flex-shrink-0">
         <button
           onClick={() => setShowNewModal(true)}
-          aria-label="Créer un nouveau fil de discussion"
+          aria-label={t('hc.thr.createAria')}
           className="w-full flex items-center justify-center gap-2 py-2 rounded-lg bg-fc-hover hover:bg-fc-input text-sm text-fc-muted hover:text-white transition"
         >
           <Plus size={14} aria-hidden />
-          Nouveau fil
+          {t('hc.thr.newDefault')}
         </button>
       </div>
     </div>

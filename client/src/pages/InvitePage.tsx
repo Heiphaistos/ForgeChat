@@ -5,8 +5,10 @@ import api, { mediaUrl } from '../api/client'
 import ProfileBanner from '../components/ui/ProfileBanner'
 import { useAuth } from '../store/auth'
 import toast from 'react-hot-toast'
+import { useT } from '../i18n'
 
 export default function InvitePage() {
+  const t = useT()
   const { code } = useParams<{ code: string }>()
   const { user, loading } = useAuth()
   const nav = useNavigate()
@@ -16,7 +18,7 @@ export default function InvitePage() {
   useEffect(() => {
     api.get(`/invites/${code}`)
       .then(r => setServerInfo(r.data))
-      .catch(() => toast.error('Invitation invalide ou expirée'))
+      .catch(() => toast.error(t('hc.inv.invalidToast')))
       .finally(() => setLoadingInfo(false))
   }, [code])
 
@@ -25,15 +27,15 @@ export default function InvitePage() {
     mutationFn: () => api.post(`/servers/join/${code}`),
     onSuccess: (res) => {
       qc.invalidateQueries({ queryKey: ['servers'] })
-      toast.success(`Bienvenue sur ${res.data.name} !`)
+      toast.success(t('hc.inv.welcome', { name: res.data.name }))
       nav(`/servers/${res.data.id}`)
     },
-    onError: (e: any) => toast.error(e.response?.data?.error ?? 'Erreur'),
+    onError: (e: any) => toast.error(e.response?.data?.error ?? t('common.error')),
   })
 
   if (loading || loadingInfo) {
     return (
-      <div role="status" aria-label="Chargement de l'invitation" className="flex items-center justify-center min-h-screen bg-fc-bg">
+      <div role="status" aria-label={t('hc.inv.loading')} className="flex items-center justify-center min-h-screen bg-fc-bg">
         <div aria-hidden className="w-8 h-8 border-2 border-fc-accent border-t-transparent rounded-full animate-spin" />
       </div>
     )
@@ -42,10 +44,10 @@ export default function InvitePage() {
   if (!serverInfo) {
     return (
       <div role="alert" className="flex flex-col items-center justify-center min-h-screen bg-fc-bg text-fc-muted px-4 text-center">
-        <p className="text-xl font-semibold text-white mb-2">Invitation invalide</p>
-        <p className="mb-4">Ce lien a expiré ou n'existe pas.</p>
+        <p className="text-xl font-semibold text-white mb-2">{t('hc.inv.invalid')}</p>
+        <p className="mb-4">{t('hc.inv.expired')}</p>
         <button onClick={() => nav('/')} className="px-4 py-2 bg-fc-accent text-white rounded text-sm">
-          Retour à l'accueil
+          {t('hc.inv.home')}
         </button>
       </div>
     )
@@ -76,9 +78,9 @@ export default function InvitePage() {
             ? <img src={mediaUrl(serverInfo.server.icon)} alt={serverInfo.server.name} loading="lazy" decoding="async" className="w-full h-full rounded-2xl object-cover" />
             : <span aria-hidden>{serverInfo.server.name.charAt(0)}</span>}
         </div>
-        <p className="text-fc-muted text-sm mb-1">Tu as été invité(e) à rejoindre</p>
+        <p className="text-fc-muted text-sm mb-1">{t('hc.inv.invitedTo')}</p>
         <h1 id="invite-server-name" className="text-2xl font-bold text-white mb-1">{serverInfo.server.name}</h1>
-        <p className="text-fc-muted text-sm mb-6">{serverInfo.server.member_count} membre(s)</p>
+        <p className="text-fc-muted text-sm mb-6">{t('hc.inv.members', { n: serverInfo.server.member_count })}</p>
         {serverInfo.server.description && (
           <p className="text-sm text-fc-text/90 -mt-4 mb-6 line-clamp-3">{serverInfo.server.description}</p>
         )}
@@ -88,19 +90,19 @@ export default function InvitePage() {
             onClick={() => join.mutate()}
             disabled={join.isPending}
             aria-busy={join.isPending}
-            aria-label={`Accepter l'invitation et rejoindre ${serverInfo.server.name}`}
+            aria-label={t('hc.inv.acceptJoin', { name: serverInfo.server.name })}
             className="w-full py-2.5 bg-fc-green hover:bg-green-600 text-white font-semibold rounded-lg transition disabled:opacity-50"
           >
-            {join.isPending ? 'Connexion...' : 'Accepter l\'invitation'}
+            {join.isPending ? t('hc.inv.connecting') : t('hc.inv.accept')}
           </button>
         ) : (
           <div className="space-y-2">
-            <p className="text-fc-muted text-sm">Connecte-toi pour rejoindre ce serveur.</p>
+            <p className="text-fc-muted text-sm">{t('hc.inv.loginToJoin')}</p>
             <button
               onClick={() => nav(`/login?redirect=/invite/${code}`)}
               className="w-full py-2.5 bg-fc-accent hover:bg-indigo-500 text-white font-semibold rounded-lg transition"
             >
-              Se connecter
+              {t('hc.inv.login')}
             </button>
           </div>
         )}

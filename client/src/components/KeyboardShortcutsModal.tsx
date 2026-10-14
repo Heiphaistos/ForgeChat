@@ -20,26 +20,26 @@ interface ShortcutGroup {
 }
 
 // Raccourcis fixes (saisie) ; les raccourcis réglables viennent des Réglages.
-const GROUPS: ShortcutGroup[] = [
+const fixedGroups = (t: (k: Key) => string): ShortcutGroup[] => [
   {
-    title: 'Messages',
+    title: t('hc.ks.messages'),
     shortcuts: [
-      { keys: ['a–z'], description: 'Écrire directement (focus le composer)' },
-      { keys: ['↑'], description: 'Modifier le dernier message' },
-      { keys: ['Ctrl', 'Enter'], description: 'Envoyer le message' },
-      { keys: ['Shift', 'Enter'], description: 'Saut de ligne' },
-      { keys: ['PgUp', '/', 'PgDn'], description: "Défiler d'un écran" },
-      { keys: ['Home', '/', 'End'], description: 'Haut / bas de la conversation' },
+      { keys: ['a–z'], description: t('hc.ks.write') },
+      { keys: ['↑'], description: t('hc.ks.editLast') },
+      { keys: ['Ctrl', 'Enter'], description: t('hc.ks.send') },
+      { keys: ['Shift', 'Enter'], description: t('hc.ks.newline') },
+      { keys: ['PgUp', '/', 'PgDn'], description: t('hc.ks.page') },
+      { keys: ['Home', '/', 'End'], description: t('hc.ks.topBottom') },
     ],
   },
   {
-    title: 'Formatage messages',
+    title: t('hc.ks.fmt'),
     shortcuts: [
-      { keys: ['Ctrl', 'B'], description: 'Gras (**texte**)' },
-      { keys: ['Ctrl', 'I'], description: 'Italique (*texte*)' },
-      { keys: ['Ctrl', 'U'], description: 'Souligné (__texte__)' },
-      { keys: ['Ctrl', 'Shift', 'X'], description: 'Barré (~~texte~~)' },
-      { keys: ['Ctrl', 'K'], description: 'Insérer un lien (dans le composer)' },
+      { keys: ['Ctrl', 'B'], description: t('hc.ks.bold') },
+      { keys: ['Ctrl', 'I'], description: t('hc.ks.italic') },
+      { keys: ['Ctrl', 'U'], description: t('hc.ks.underline') },
+      { keys: ['Ctrl', 'Shift', 'X'], description: t('hc.ks.strike') },
+      { keys: ['Ctrl', 'K'], description: t('hc.ks.link') },
     ],
   },
 ]
@@ -85,10 +85,10 @@ export default function KeyboardShortcutsModal({ onClose }: Props) {
       >
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-white/10">
-          <h2 id="kbd-shortcuts-title" className="text-white font-bold text-base">Raccourcis clavier</h2>
+          <h2 id="kbd-shortcuts-title" className="text-white font-bold text-base">{t('hc.ks.title')}</h2>
           <button
             onClick={onClose}
-            aria-label="Fermer les raccourcis clavier"
+            aria-label={t('hc.ks.close')}
             className="p-1 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition"
           >
             <X size={16} />
@@ -97,7 +97,7 @@ export default function KeyboardShortcutsModal({ onClose }: Props) {
 
         {/* Contenu */}
         <div className="overflow-y-auto overscroll-contain max-h-[70vh] p-5 grid gap-5">
-          {[...custom, ...GROUPS].map(group => (
+          {[...custom, ...fixedGroups(t)].map(group => (
             <div key={group.title}>
               <p className="text-[11px] font-semibold text-fc-muted uppercase tracking-widest mb-2">
                 {group.title}

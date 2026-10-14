@@ -2,6 +2,7 @@
 // notifie l'auteur du fil et ses participants (liste fournie par le serveur)
 // quand le fil n'est pas ouvert à l'écran.
 import { useEffect } from 'react'
+import { t as tr } from '../i18n'
 import { useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import toast from 'react-hot-toast'
@@ -48,8 +49,8 @@ export function useThreadNotifications() {
         text = (await openThreadMessages(d.channel_id, th, [msg]))[0]?.content ?? lockedText()
       }
       const go = () => nav(`/servers/${d.server_id}/channels/${d.channel_id}?thread=${d.thread_id}`)
-      const title = `${msg.author_username ?? "Quelqu'un"} dans « ${threadTitle} »`
-      const body = (text || 'Pièce jointe').slice(0, 80)
+      const title = tr('hc.tn.title', { name: msg.author_username ?? tr('hc.tn.someone'), thread: threadTitle })
+      const body = (text || tr('common.attachment')).slice(0, 80)
       if (document.hasFocus()) {
         toast(t => (
           <button

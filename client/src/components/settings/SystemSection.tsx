@@ -91,6 +91,7 @@ export default function SystemSection({ onOpenKeybindings }: { onOpenKeybindings
         <H>{t('system.close.title')}</H>
         <Select
           className="w-full"
+          label={t('system.close.title')}
           value={sys.close_to_tray ? 'tray' : 'quit'}
           onChange={v => update({ close_to_tray: v === 'tray' })}
           options={[

@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import api from '../api/client'
 import { Users, MessageSquare, Server, Hash, ChevronLeft } from 'lucide-react'
 import { useMobile } from '../contexts/MobileContext'
-import { intlLocale } from '../i18n'
+import { intlLocale, useT } from '../i18n'
 
 interface AdminStats {
   total_users: number
@@ -16,6 +16,7 @@ interface AdminStats {
 }
 
 export default function AdminPage() {
+  const t = useT()
   const nav = useNavigate()
   const { openSidebar } = useMobile()
   const { data: stats, isLoading, error } = useQuery<AdminStats>({
@@ -33,17 +34,17 @@ export default function AdminPage() {
 
   if (error) return (
     <div className="flex flex-col items-center justify-center h-full bg-fc-bg gap-3">
-      <p className="text-fc-muted">Accès refusé ou erreur</p>
-      <button onClick={() => nav(-1)} className="text-fc-accent text-sm hover:underline">← Retour</button>
+      <p className="text-fc-muted">{t('hc.adm.denied')}</p>
+      <button onClick={() => nav(-1)} className="text-fc-accent text-sm hover:underline">{t('hc.adm.back')}</button>
     </div>
   )
 
   const cards = [
-    { label: 'Utilisateurs', value: stats?.total_users ?? 0, icon: <Users size={20} />, color: 'text-fc-accent' },
-    { label: 'Messages', value: stats?.total_messages ?? 0, icon: <MessageSquare size={20} />, color: 'text-green-400' },
-    { label: "Aujourd'hui", value: stats?.messages_today ?? 0, icon: <MessageSquare size={20} />, color: 'text-yellow-400' },
-    { label: 'Serveurs', value: stats?.total_servers ?? 0, icon: <Server size={20} />, color: 'text-purple-400' },
-    { label: 'Canaux', value: stats?.total_channels ?? 0, icon: <Hash size={20} />, color: 'text-blue-400' },
+    { label: t('hc.adm.users'), value: stats?.total_users ?? 0, icon: <Users size={20} />, color: 'text-fc-accent' },
+    { label: t('hc.adm.messages'), value: stats?.total_messages ?? 0, icon: <MessageSquare size={20} />, color: 'text-green-400' },
+    { label: t('hc.adm.today'), value: stats?.messages_today ?? 0, icon: <MessageSquare size={20} />, color: 'text-yellow-400' },
+    { label: t('hc.adm.servers'), value: stats?.total_servers ?? 0, icon: <Server size={20} />, color: 'text-purple-400' },
+    { label: t('hc.adm.channels'), value: stats?.total_channels ?? 0, icon: <Hash size={20} />, color: 'text-blue-400' },
   ]
 
   const maxMsgs = Math.max(1, ...(stats?.messages_per_day.map(d => d.count) ?? [1]))
@@ -54,12 +55,12 @@ export default function AdminPage() {
         <button
           className="md:hidden min-w-[44px] min-h-[44px] flex items-center justify-center rounded hover:bg-fc-hover text-fc-muted hover:text-white transition flex-shrink-0"
           onClick={openSidebar}
-          aria-label="Ouvrir le menu"
+          aria-label={t('hc.adm.openMenu')}
         >
           <ChevronLeft size={20} />
         </button>
-        <h1 className="text-lg font-bold text-white">Dashboard Admin</h1>
-        <button onClick={() => nav(-1)} className="ml-auto text-fc-muted hover:text-white text-sm transition">← Retour</button>
+        <h1 className="text-lg font-bold text-white">{t('hc.adm.title')}</h1>
+        <button onClick={() => nav(-1)} className="ml-auto text-fc-muted hover:text-white text-sm transition">{t('hc.adm.back')}</button>
       </div>
       <div className="p-6">
       <div className="max-w-4xl mx-auto space-y-6">
@@ -75,7 +76,7 @@ export default function AdminPage() {
         </div>
 
         <div className="p-4 bg-fc-channel rounded-xl border border-fc-hover">
-          <h2 className="text-sm font-semibold text-white mb-4">Messages — 7 derniers jours</h2>
+          <h2 className="text-sm font-semibold text-white mb-4">{t('hc.adm.last7')}</h2>
           <div className="flex items-end gap-1 h-24">
             {(stats?.messages_per_day ?? []).map(d => (
               <div key={d.day} className="flex-1 flex flex-col items-center gap-1">
@@ -92,13 +93,13 @@ export default function AdminPage() {
 
         {(stats?.top_servers?.length ?? 0) > 0 && (
           <div className="p-4 bg-fc-channel rounded-xl border border-fc-hover">
-            <h2 className="text-sm font-semibold text-white mb-3">Top serveurs (7 jours)</h2>
+            <h2 className="text-sm font-semibold text-white mb-3">{t('hc.adm.top')}</h2>
             <div className="space-y-2">
               {stats!.top_servers.map((s, i) => (
                 <div key={s.name} className="flex items-center gap-3">
                   <span className="text-fc-muted text-sm w-5 text-right">{i + 1}.</span>
                   <span className="text-white text-sm flex-1">{s.name}</span>
-                  <span className="text-fc-accent text-sm font-medium">{s.messages.toLocaleString(intlLocale())} msgs</span>
+                  <span className="text-fc-accent text-sm font-medium">{t('hc.adm.msgs', { n: s.messages.toLocaleString(intlLocale()) })}</span>
                 </div>
               ))}
             </div>

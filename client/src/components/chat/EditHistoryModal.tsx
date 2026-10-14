@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
+import { t as tr } from '../../i18n'
 import { X, History } from 'lucide-react'
 import api from '../../api/client'
 import { useFormatDate } from '../../hooks/useFormatDate'
@@ -40,7 +41,7 @@ export default function EditHistoryModal({ messageId, onClose }: Props) {
           </h2>
           <button
             onClick={onClose}
-            aria-label="Fermer"
+            aria-label={tr('hc.p.close')}
             className="p-1.5 text-fc-muted hover:text-white rounded hover:bg-fc-hover transition"
           >
             <X size={16} />

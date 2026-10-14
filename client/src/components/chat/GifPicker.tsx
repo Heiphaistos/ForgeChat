@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { useT } from '../../i18n'
 import { useEscapeKey } from '../../hooks/useEscapeKey'
 import PickerShell from '../ui/PickerShell'
 import { Search, X, Loader2 } from 'lucide-react'
@@ -36,6 +37,7 @@ interface Props {
 }
 
 export default function GifPicker({ onPick, onClose }: Props) {
+  const t = useT()
   useEscapeKey(onClose)
   const [search, setSearch] = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
@@ -46,7 +48,7 @@ export default function GifPicker({ onPick, onClose }: Props) {
   const [hasMore, setHasMore] = useState(true)
   const [demoMode, setDemoMode] = useState(false)
   // Source annoncée par le serveur (texte du champ et mention exigée par GIPHY).
-  const [source, setSource] = useState({ placeholder: 'Rechercher un GIF', attribution: '' })
+  const [source, setSource] = useState({ placeholder: t('hc.gif.search'), attribution: '' })
   useEffect(() => {
     api.get('/gifs/status').then(({ data }) => setSource({
       placeholder: typeof data?.search_placeholder === 'string' ? data.search_placeholder : 'Rechercher un GIF',
@@ -137,7 +139,7 @@ export default function GifPicker({ onPick, onClose }: Props) {
       desktopStyle={{ maxHeight: '420px' }}
     >
       {/* Header */}
-      <div role="search" aria-label="Chercher un GIF" className="p-2 border-b border-fc-hover flex-shrink-0">
+      <div role="search" aria-label={t('hc.p.gifSearch')} className="p-2 border-b border-fc-hover flex-shrink-0">
         <div className="flex items-center gap-2 bg-fc-input rounded-lg px-2 py-1.5">
           <Search size={14} aria-hidden className="text-fc-muted flex-shrink-0" />
           <input
@@ -145,7 +147,7 @@ export default function GifPicker({ onPick, onClose }: Props) {
             value={search}
             onChange={e => setSearch(e.target.value)}
             placeholder={source.placeholder}
-            aria-label="Chercher un GIF"
+            aria-label={t('hc.p.gifSearch')}
             enterKeyHint="search"
             inputMode="search"
             autoComplete="off"
@@ -153,13 +155,13 @@ export default function GifPicker({ onPick, onClose }: Props) {
             className="bg-transparent text-sm text-white outline-none flex-1 placeholder-fc-muted"
           />
           {search && (
-            <button onClick={() => setSearch('')} aria-label="Effacer la recherche" className="text-fc-muted hover:text-white transition">
+            <button onClick={() => setSearch('')} aria-label={t('hc.p.clearSearch')} className="text-fc-muted hover:text-white transition">
               <X size={12} aria-hidden />
             </button>
           )}
         </div>
         {demoMode && (
-          <p className="text-xs text-fc-muted mt-1 text-center">GIF indisponibles (non configurés sur le serveur)</p>
+          <p className="text-xs text-fc-muted mt-1 text-center">{t('hc.gif.off')}</p>
         )}
         {!demoMode && !search && (
           <p className="text-xs text-fc-muted mt-1 text-center font-medium" aria-hidden>Trending</p>
@@ -174,14 +176,14 @@ export default function GifPicker({ onPick, onClose }: Props) {
         style={{ minHeight: 0 }}
       >
         {loading ? (
-          <div role="status" aria-label="Chargement des GIFs" className="flex flex-col items-center justify-center gap-2 py-10 text-fc-muted">
+          <div role="status" aria-label={t('hc.gif.loading')} className="flex flex-col items-center justify-center gap-2 py-10 text-fc-muted">
             <Loader2 size={24} aria-hidden className="animate-spin" />
-            <span className="text-xs" aria-hidden>Chargement...</span>
+            <span className="text-xs" aria-hidden>{t('common.loading')}</span>
           </div>
         ) : gifs.length === 0 ? (
           <div role="status" className="flex flex-col items-center justify-center gap-2 py-10 text-fc-muted">
             <span className="text-3xl" aria-hidden>🔍</span>
-            <span className="text-xs">Aucun GIF trouvé</span>
+            <span className="text-xs">{t('hc.gif.none')}</span>
           </div>
         ) : demoMode ? (
           // Mode démo : grille d'emojis géants
@@ -242,7 +244,7 @@ export default function GifPicker({ onPick, onClose }: Props) {
 
         {/* Loader infinite scroll */}
         {loadingMore && (
-          <div role="status" aria-label="Chargement de GIFs supplémentaires" className="flex justify-center py-3">
+          <div role="status" aria-label={t('hc.gif.more')} className="flex justify-center py-3">
             <Loader2 size={16} aria-hidden className="animate-spin text-fc-muted" />
           </div>
         )}

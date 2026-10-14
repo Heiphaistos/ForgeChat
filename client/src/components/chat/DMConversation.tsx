@@ -10,6 +10,7 @@
  * Les read receipts sont affichés dans une zone dédiée sous la liste.
  */
 import { useEffect, useRef, useState, useCallback } from 'react'
+import { t as tr } from '../../i18n'
 import { useQueryClient } from '@tanstack/react-query'
 import { useWs } from '../../store/ws'
 import { useAuth } from '../../store/auth'
@@ -46,8 +47,8 @@ function TypingIndicator({ users }: { users: TypingUser[] }) {
 
   const label =
     users.length === 1
-      ? `${users[0].username} est en train d'écrire...`
-      : `${users.map(u => u.username).join(', ')} sont en train d'écrire...`
+      ? tr('channel.typingOne', { name: users[0].username })
+      : tr('channel.typingFew', { names: users.map(u => u.username).join(', ') })
 
   return (
     <div
@@ -276,7 +277,7 @@ export default function DMConversation({ dmId, partnerName, onSend, onLoadMore, 
     try {
       await api.delete(`/dms/${dmId}/messages/${msgId}`)
     } catch {
-      toast.error('Impossible de supprimer ce message')
+      toast.error(tr('hc.t.delFail'))
     }
   }, [dmId])
 
@@ -294,7 +295,7 @@ export default function DMConversation({ dmId, partnerName, onSend, onLoadMore, 
     try {
       await api.put(`/dms/${dmId}/messages/${msgId}/reactions/${encodeURIComponent(emoji)}`)
     } catch {
-      toast.error('Impossible d\'ajouter la réaction')
+      toast.error(tr('hc.t.reactFail'))
     }
   }, [dmId])
 

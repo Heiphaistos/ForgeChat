@@ -19,6 +19,14 @@ import * as serverLook from './parts/serverLook.ts'
 import * as profileDecorMore from './parts/profileDecorMore.ts'
 import * as profileDecorExtra from './parts/profileDecorExtra.ts'
 import * as auditUi from './parts/auditUi.ts'
+import * as serverAdminPage from './parts/serverAdminPage.ts'
+import * as hardcoded from './parts/hardcoded.ts'
+import * as hardcoded7 from './parts/hardcoded7.ts'
+import * as hardcoded6 from './parts/hardcoded6.ts'
+import * as hardcoded5 from './parts/hardcoded5.ts'
+import * as hardcoded4 from './parts/hardcoded4.ts'
+import * as hardcoded3 from './parts/hardcoded3.ts'
+import * as hardcoded2 from './parts/hardcoded2.ts'
 import * as auditChat from './parts/auditChat.ts'
 import * as siteAdmin from './parts/siteAdmin.ts'
 import * as discordFeatures from './parts/discordFeatures.ts'
@@ -59,6 +67,14 @@ export const en: Partial<Record<Key, string>> = {
   ...profileDecorMore.en,
   ...profileDecorExtra.en,
   ...auditUi.en,
+  ...serverAdminPage.en,
+  ...hardcoded.en,
+  ...hardcoded7.en,
+  ...hardcoded6.en,
+  ...hardcoded5.en,
+  ...hardcoded4.en,
+  ...hardcoded3.en,
+  ...hardcoded2.en,
   ...auditChat.en,
   ...siteAdmin.en,
   ...discordFeatures.en,

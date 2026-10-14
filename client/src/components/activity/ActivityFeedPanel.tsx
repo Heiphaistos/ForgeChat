@@ -5,6 +5,7 @@ import api from '../../api/client'
 // Même contrat serveur que la page Activité (server_join, friend_join_server, message_pin) :
 // on réutilise son rendu plutôt que d'en maintenir un second qui dérive.
 import { ActivityRow, FILTERS, filterItems, type ActivityItem, type Filter } from '../../pages/ActivityFeedPage'
+import { useT } from '../../i18n'
 
 function SkeletonRow() {
   return (
@@ -24,6 +25,7 @@ interface Props {
 }
 
 export default function ActivityFeedPanel({ onClose }: Props) {
+  const t = useT()
   const [filter, setFilter] = useState<Filter>('all')
 
   const { data: items = [], isLoading } = useQuery<ActivityItem[]>({
@@ -43,11 +45,11 @@ export default function ActivityFeedPanel({ onClose }: Props) {
       <div className="flex items-center justify-between px-3 py-3 border-b border-fc-bg flex-shrink-0">
         <div className="flex items-center gap-2">
           <Activity size={16} className="text-fc-accent" aria-hidden />
-          <span className="font-semibold text-white text-sm">Activité récente</span>
+          <span className="font-semibold text-white text-sm">{t('hc.act.title')}</span>
         </div>
         <button
           onClick={onClose}
-          aria-label="Fermer l'activité récente"
+          aria-label={t('hc.act.close')}
           className="p-1 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition"
         >
           <X size={14} aria-hidden />
@@ -55,7 +57,7 @@ export default function ActivityFeedPanel({ onClose }: Props) {
       </div>
 
       {/* Filtres */}
-      <div role="tablist" aria-label="Filtrer l'activité" className="flex gap-1 px-2 py-2 border-b border-fc-bg flex-shrink-0">
+      <div role="tablist" aria-label={t('hc.act.filter')} className="flex gap-1 px-2 py-2 border-b border-fc-bg flex-shrink-0">
         {FILTERS.map(f => (
           <button
             key={f.key}
@@ -68,7 +70,7 @@ export default function ActivityFeedPanel({ onClose }: Props) {
                 : 'text-fc-muted hover:text-white hover:bg-fc-hover'
             }`}
           >
-            {f.label}
+            {t(f.label)}
           </button>
         ))}
       </div>
@@ -76,7 +78,7 @@ export default function ActivityFeedPanel({ onClose }: Props) {
       {/* Liste */}
       <div className="flex-1 overflow-y-auto overscroll-contain p-1">
         {isLoading && (
-          <div className="space-y-1 p-1" aria-busy="true" aria-label="Chargement de l'activité">
+          <div className="space-y-1 p-1" aria-busy="true" aria-label={t('hc.act.loading')}>
             {Array.from({ length: 6 }).map((_, i) => <SkeletonRow key={i} />)}
           </div>
         )}
@@ -84,9 +86,9 @@ export default function ActivityFeedPanel({ onClose }: Props) {
         {!isLoading && sliced.length === 0 && (
           <div className="flex flex-col items-center justify-center h-full py-12 px-4 text-center">
             <Activity size={32} className="text-fc-muted opacity-30 mb-3" aria-hidden />
-            <p className="text-sm text-fc-muted">Aucune activité récente</p>
+            <p className="text-sm text-fc-muted">{t('hc.act.none')}</p>
             <p className="text-xs text-fc-muted/60 mt-1">
-              {filter !== 'all' ? 'Essayez le filtre "Tout"' : 'Arrivées dans vos serveurs et messages épinglés'}
+              {filter !== 'all' ? t('hc.act.hintFilter') : t('hc.act.hintAll')}
             </p>
           </div>
         )}
@@ -101,7 +103,7 @@ export default function ActivityFeedPanel({ onClose }: Props) {
 
         {!isLoading && filtered.length > 50 && (
           <p className="text-center text-[10px] text-fc-muted py-2">
-            Affichage des 50 derniers événements
+            {t('hc.act.last50')}
           </p>
         )}
       </div>

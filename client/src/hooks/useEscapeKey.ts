@@ -1,13 +1,15 @@
 import { useEffect } from 'react'
 
-export function useEscapeKey(onClose: () => void): void {
+/** `enabled=false` : n'écoute pas (modale rendue conditionnellement dans un composant toujours monté). */
+export function useEscapeKey(onClose: () => void, enabled = true): void {
   useEffect(() => {
+    if (!enabled) return
     const handler = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose()
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [onClose])
+  }, [onClose, enabled])
 }
 
 // Variante pour les panneaux latéraux avec champs de saisie : si un input/

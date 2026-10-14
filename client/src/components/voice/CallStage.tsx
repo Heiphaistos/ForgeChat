@@ -7,7 +7,7 @@
 // - Épingler une tuile (bouton punaise) la met en grand ; la désépingler revient à la grille.
 import { useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { Pin, PinOff } from 'lucide-react'
-import { useT } from '../../i18n'
+import { useT, t as tr } from '../../i18n'
 
 export type ViewMode = 'auto' | 'grid' | 'spotlight' | 'sidebar' | 'focus' | 'filmstrip'
 export type ThumbSize = 's' | 'm' | 'l'
@@ -118,7 +118,7 @@ function Strip({ tiles, size, onPick, render, vertical = false }: {
     <div className={`flex gap-2 ${vertical ? 'flex-col overflow-y-auto' : 'overflow-x-auto justify-center'} overscroll-contain pb-1 flex-shrink-0`}>
       {tiles.map(t => (
         <div key={t.key} role="button" tabIndex={0}
-          aria-label={`Mettre en avant ${t.username}${t.kind === 'screen' ? ' (écran partagé)' : ''}`}
+          aria-label={tr(t.kind === 'screen' ? 'hc.cs.pinScreen' : 'hc.cs.pin', { name: t.username })}
           style={{ width, height: Math.round((width * 9) / 16) }}
           className="flex-shrink-0 cursor-pointer rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-fc-accent"
           onClick={() => onPick(t.key)}
@@ -131,9 +131,10 @@ function Strip({ tiles, size, onPick, render, vertical = false }: {
 }
 
 function ThumbSizePicker({ size, onChange }: { size: ThumbSize; onChange: (s: ThumbSize) => void }) {
+  const t = useT()
   return (
-    <div className="flex items-center gap-1 text-[10px] text-fc-muted" role="group" aria-label="Taille des miniatures">
-      <span className="mr-1">Miniatures</span>
+    <div className="flex items-center gap-1 text-[10px] text-fc-muted" role="group" aria-label={t('hc.cs.thumbSize')}>
+      <span className="mr-1">{t('hc.cs.thumbs')}</span>
       {(['s', 'm', 'l'] as const).map(s => (
         <button key={s} onClick={() => onChange(s)} aria-pressed={size === s}
           className={`w-6 h-6 rounded ${size === s ? 'bg-fc-accent text-white' : 'bg-fc-channel hover:text-white'}`}>

@@ -125,8 +125,8 @@ export default function MessageList({
   const formatTs = (dateStr: string) => {
     const d = new Date(dateStr)
     const timeFmt = timeFormat === '12h' ? 'hh:mm a' : 'HH:mm'
-    if (isToday(d)) return `Aujourd'hui à ${format(d, timeFmt)}`
-    if (isYesterday(d)) return `Hier à ${format(d, timeFmt)}`
+    if (isToday(d)) return t('date.todayAt', { time: format(d, timeFmt) })
+    if (isYesterday(d)) return t('date.yesterdayAt', { time: format(d, timeFmt) })
     const dateFmt = dateFormat === 'MM/DD/YYYY' ? 'MM/dd/yyyy' : dateFormat === 'YYYY-MM-DD' ? 'yyyy-MM-dd' : 'dd/MM/yyyy'
     return format(d, `${dateFmt} ${timeFmt}`, { locale: dateLocale() })
   }
@@ -711,7 +711,7 @@ export default function MessageList({
       <div
         ref={containerRef}
         role="log"
-        aria-label="Historique des messages"
+        aria-label={t('hc.p.history')}
         aria-live="polite"
         aria-busy={loadingMore}
         className="flex-1 overflow-y-auto overscroll-contain px-2 md:px-4 py-2 space-y-0.5 message-list-container"
@@ -733,7 +733,7 @@ export default function MessageList({
       >
         {/* Loader "plus de messages" */}
         {loadingMore && (
-          <div className="flex justify-center py-3" role="status" aria-label="Chargement des messages précédents">
+          <div className="flex justify-center py-3" role="status" aria-label={t('hc.p.loadingOlder')}>
             <Loader2 size={18} className="animate-spin text-fc-muted" aria-hidden />
           </div>
         )}
@@ -861,8 +861,8 @@ export default function MessageList({
         {typing && Object.keys(typing).length > 0 && (() => {
           const names = Object.values(typing)
           const label = names.length === 1
-            ? `${names[0]} est en train d'écrire...`
-            : `${names.slice(0, 2).join(', ')} sont en train d'écrire...`
+            ? t('channel.typingOne', { name: names[0] })
+            : t('channel.typingFew', { names: names.slice(0, 2).join(', ') })
           return (
             <div className="text-xs text-fc-muted px-2 py-1 flex items-center gap-1.5 h-6">
               <div className="flex gap-0.5 items-center">
@@ -881,14 +881,14 @@ export default function MessageList({
             <div className="w-16 h-16 rounded-2xl bg-red-500/15 flex items-center justify-center text-3xl" aria-hidden>
               ⚠️
             </div>
-            <p className="text-base font-semibold text-white">Impossible de charger les messages</p>
-            <p className="text-sm text-fc-muted">Problème réseau ou serveur.</p>
+            <p className="text-base font-semibold text-white">{t('hc.ml.loadFail')}</p>
+            <p className="text-sm text-fc-muted">{t('hc.ml.loadFailHint')}</p>
             {onRetryLoad && (
               <button
                 onClick={onRetryLoad}
                 className="mt-1 px-4 py-2 min-h-[44px] bg-fc-accent hover:bg-indigo-500 text-white text-sm font-medium rounded-lg transition"
               >
-                Réessayer
+                {t('hc.up.retry')}
               </button>
             )}
           </div>
@@ -911,12 +911,12 @@ export default function MessageList({
 
         {/* État vide : canal sans messages */}
         {!loadError && showEmpty && !loadingMore && (
-          <div className="flex flex-col items-center justify-center h-full py-16 gap-3 select-none" aria-label="Aucun message">
+          <div className="flex flex-col items-center justify-center h-full py-16 gap-3 select-none" aria-label={t('hc.p.noMessage')}>
             <div className="w-16 h-16 rounded-2xl bg-fc-accent/20 flex items-center justify-center text-3xl" aria-hidden>
               💬
             </div>
             <p className="text-base font-semibold text-white">Aucun message ici… pour l'instant.</p>
-            <p className="text-sm text-fc-muted">Soyez le premier à envoyer un message !</p>
+            <p className="text-sm text-fc-muted">{t('hc.ml.first')}</p>
           </div>
         )}
 

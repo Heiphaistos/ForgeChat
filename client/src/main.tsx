@@ -16,6 +16,7 @@ import './responsive.css'
 import { initFaviconAnimation } from './faviconAnimator'
 import { initAppIcon } from './lib/appIcon'
 import { installDragDropGuard } from './lib/dragDropGuard'
+import { installFocusTrap } from './lib/focusTrap'
 
 // Exporté pour permettre à des utilitaires hors-composant (ex. sendNativeNotification)
 // de lire le cache sans avoir à traverser le contexte React.
@@ -64,6 +65,8 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
     <QueryClientProvider client={queryClient}>
       <App />
       <Toaster position="bottom-right" toastOptions={{
+        // Erreurs (dont celles de formulaire) annoncées tout de suite par les lecteurs d'écran.
+        error: { ariaProps: { role: 'alert', 'aria-live': 'assertive' } },
         style: { background: 'rgb(var(--fc-channel-rgb))', color: 'rgb(var(--fc-text-rgb))', border: '1px solid rgb(var(--fc-border-rgb))' }
       }} />
     </QueryClientProvider>

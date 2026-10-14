@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useT } from '../i18n'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ChevronLeft, Download, Loader2 } from 'lucide-react'
@@ -24,7 +25,8 @@ const writeStored = (id: string | null) => {
 }
 
 export default function ImportDiscordPage() {
-  usePageTitle('Importer depuis Discord')
+  const t = useT()
+  usePageTitle(t('hc.imp.title'))
   const nav = useNavigate()
   const qc = useQueryClient()
   const { openSidebar } = useMobile()
@@ -35,7 +37,7 @@ export default function ImportDiscordPage() {
   const start = useMutation({
     mutationFn: (u: string) => api.post('/servers/import-discord', { url: u }).then(r => r.data.import_id as string),
     onSuccess: id => { writeStored(id); setImportId(id) },
-    onError: (e: any) => toast.error(e.response?.data?.error ?? "Impossible de lancer l'import"),
+    onError: (e: any) => toast.error(e.response?.data?.error ?? t('hc.imp.startFail')),
   })
 
   const { data: job, error: pollError } = useQuery<ImportStatus>({
@@ -54,7 +56,7 @@ export default function ImportDiscordPage() {
     if (job?.status === 'completed' && job.server_id) {
       writeStored(null)
       qc.invalidateQueries({ queryKey: ['servers'] })
-      toast.success('Serveur importé !')
+      toast.success(t('hc.imp.done'))
       nav(`/servers/${job.server_id}`)
     }
   }, [job?.status, job?.server_id, nav, qc])
@@ -70,20 +72,18 @@ export default function ImportDiscordPage() {
         <button
           className="md:hidden flex items-center justify-center min-w-[44px] min-h-[44px] p-1.5 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition flex-shrink-0"
           onClick={openSidebar}
-          aria-label="Retour"
+          aria-label={t('hc.common.back')}
         >
           <ChevronLeft size={20} />
         </button>
         <Download size={20} className="text-fc-accent flex-shrink-0" aria-hidden />
-        <h1 className="text-lg font-bold text-white truncate">Importer depuis Discord</h1>
+        <h1 className="text-lg font-bold text-white truncate">{t('hc.imp.title')}</h1>
       </div>
 
       <div className="flex-1 overflow-y-auto px-4 py-6">
         <div className="max-w-lg mx-auto bg-fc-channel rounded-xl p-5 space-y-4">
           <p className="text-sm text-fc-muted leading-relaxed">
-            Exportez votre serveur avec <span className="text-white font-medium">ArchiveForge</span>, puis collez ici le
-            lien de transfert qu'il fournit. Un nouveau serveur est créé avec les catégories, salons, rôles, droits,
-            fils, forums, messages, pièces jointes et emojis du serveur Discord.
+            {t('hc.imp.intro1')} <span className="text-white font-medium">ArchiveForge</span>, {t('hc.imp.intro2')}
           </p>
 
           {!running && !failed && (
@@ -92,7 +92,7 @@ export default function ImportDiscordPage() {
               onSubmit={e => { e.preventDefault(); if (url.trim()) start.mutate(url.trim()) }}
             >
               <label htmlFor="af-url" className="block text-xs font-semibold text-fc-muted uppercase tracking-wide">
-                Lien de transfert ArchiveForge
+                {t('hc.imp.link')}
               </label>
               <input
                 id="af-url"
@@ -111,7 +111,7 @@ export default function ImportDiscordPage() {
                 className="w-full min-h-[44px] bg-fc-accent hover:bg-fc-accent/80 disabled:opacity-50 text-white font-semibold rounded-lg transition flex items-center justify-center gap-2"
               >
                 {start.isPending && <Loader2 size={16} className="animate-spin" aria-hidden />}
-                Importer
+                {t('hc.imp.go')}
               </button>
             </form>
           )}
@@ -119,7 +119,7 @@ export default function ImportDiscordPage() {
           {running && (
             <div className="space-y-2" role="status" aria-live="polite">
               <div className="flex items-center justify-between gap-3 text-sm">
-                <span className="text-white truncate">{job?.label ?? 'Démarrage…'}</span>
+                <span className="text-white truncate">{job?.label ?? t('hc.imp.starting')}</span>
                 <span className="text-fc-muted tabular-nums flex-shrink-0">{job?.progress ?? 0} %</span>
               </div>
               <div
@@ -132,8 +132,7 @@ export default function ImportDiscordPage() {
                 <div className="h-full bg-fc-accent transition-all duration-500" style={{ width: `${job?.progress ?? 0}%` }} />
               </div>
               <p className="text-xs text-fc-muted">
-                Un gros serveur peut prendre du temps. Vous pouvez quitter cette page : l'import continue et le
-                suivi reprend quand vous revenez ici.
+                {t('hc.imp.long')}
               </p>
             </div>
           )}
@@ -141,13 +140,13 @@ export default function ImportDiscordPage() {
           {failed && (
             <div className="space-y-3">
               <div role="alert" className="text-sm text-red-300 bg-red-500/10 border border-red-500/30 rounded-lg px-3 py-2 break-words">
-                {job?.error ?? "L'import a échoué."}
+                {job?.error ?? t('hc.imp.failed')}
               </div>
               <button
                 onClick={reset}
                 className="w-full min-h-[44px] bg-fc-bg hover:bg-fc-hover text-white text-sm font-medium rounded-lg transition"
               >
-                Réessayer avec un autre lien
+                {t('hc.imp.retry')}
               </button>
             </div>
           )}

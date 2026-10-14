@@ -1,10 +1,13 @@
-import React from 'react'
+import React, { createContext, useContext } from 'react'
+
+/** Libellé du `Field` englobant : repris par `Select` en aria-label (le <label> n'est pas lié au contrôle). */
+const FieldLabelCtx = createContext<string | undefined>(undefined)
 
 export function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
   return (
     <div className="space-y-1.5">
       <label className="text-xs font-semibold text-fc-muted uppercase tracking-wide">{label}</label>
-      {children}
+      <FieldLabelCtx.Provider value={label}>{children}</FieldLabelCtx.Provider>
       {hint && <p className="text-xs text-fc-muted">{hint}</p>}
     </div>
   )
@@ -27,12 +30,16 @@ export function Toggle({ value, onChange, label, disabled }: { value: boolean; o
   )
 }
 
-export function Select({ value, onChange, options, className = '' }: {
+export function Select({ value, onChange, options, className = '', label }: {
   value: string; onChange: (v: string) => void
   options: { value: string; label: string }[]; className?: string
+  /** Nom accessible ; par défaut le libellé du `Field` englobant. */
+  label?: string
 }) {
+  const fieldLabel = useContext(FieldLabelCtx)
   return (
     <select
+      aria-label={label ?? fieldLabel}
       value={value}
       onChange={e => onChange(e.target.value)}
       className={`bg-fc-channel border border-fc-hover rounded-lg px-3 py-2 text-sm text-white focus:border-fc-accent outline-none ${className}`}

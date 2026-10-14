@@ -125,7 +125,7 @@ export default function PollDisplay({ pollId, serverId, channelId }: Props) {
     mutationFn: () =>
       api.post(`/servers/${serverId}/channels/${channelId}/polls/${pollId}/close`),
     onSuccess: () => {
-      toast.success('Sondage terminé')
+      toast.success(tr('hc.t.pollEnded'))
       queryClient.invalidateQueries({ queryKey: ['poll', pollId] })
     },
     onError: (e: any) => {
@@ -187,7 +187,7 @@ export default function PollDisplay({ pollId, serverId, channelId }: Props) {
           <button
             onClick={() => closeMutation.mutate()}
             disabled={closeMutation.isPending}
-            aria-label="Terminer le sondage"
+            aria-label={tr('hc.p.endPoll')}
             className="flex-shrink-0 p-1 rounded text-fc-muted hover:text-red-400 hover:bg-red-400/10 transition disabled:opacity-50"
           >
             {closeMutation.isPending
@@ -226,7 +226,7 @@ export default function PollDisplay({ pollId, serverId, channelId }: Props) {
                         ? <Loader2 size={11} className="animate-spin" aria-hidden />
                         : isMyVote && <CheckCircle2 size={13} className="text-fc-accent flex-shrink-0" aria-hidden />}
                       <span className={isMyVote ? 'text-white font-medium' : undefined}>
-                        {isMyVote && <span className="sr-only">Votre vote : </span>}
+                        {isMyVote && <span className="sr-only">{tr('hc.poll.myVote')}</span>}
                         {option.text}
                       </span>
                     </span>
@@ -237,7 +237,7 @@ export default function PollDisplay({ pollId, serverId, channelId }: Props) {
                       <CheckCircle2 size={13} className="text-fc-accent flex-shrink-0" aria-hidden />
                     )}
                     <span className={isMyVote ? 'text-white font-medium' : 'text-fc-text'}>
-                      {isMyVote && <span className="sr-only">Votre vote : </span>}
+                      {isMyVote && <span className="sr-only">{tr('hc.poll.myVote')}</span>}
                       {option.text}
                     </span>
                   </div>
@@ -276,7 +276,7 @@ export default function PollDisplay({ pollId, serverId, channelId }: Props) {
 
       {/* Footer état */}
       {isExpired && (
-        <p className="text-xs text-red-400/80 mt-2 text-center">Ce sondage est terminé.</p>
+        <p className="text-xs text-red-400/80 mt-2 text-center">{tr('hc.poll.ended')}</p>
       )}
       {hasVoted && !isExpired && (
         <p className="text-xs text-fc-muted mt-2 text-center">

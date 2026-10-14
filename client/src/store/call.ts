@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { t as tr } from '../i18n'
 import { useWs } from './ws'
 import api from '../api/client'
 import { webrtcMissing, openInBrowser, NO_WEBRTC_MESSAGE } from '../lib/webrtcSupport'
@@ -153,13 +154,13 @@ async function _connectNative(lk: LkAccess, set: SetFn, get: () => CallStore) {
       onSpeakers: () => {},
       onState: e => {
         if (e.status === 'disconnected' && _native) {
-          toast.error('Appel interrompu : connexion au serveur audio/vidéo perdue.')
+          toast.error(tr('hc.t.callLost'))
           _endCall(set, get)
         }
       },
       // Un salon vocal rejoint reprend la session native (une seule à la fois).
       onEvicted: () => {
-        toast('Appel privé terminé : vous avez rejoint un salon vocal.')
+        toast(tr('hc.t.callPrivEnded'))
         _endCall(set, get)
       },
     }, keys?.first ?? null)
@@ -169,7 +170,7 @@ async function _connectNative(lk: LkAccess, set: SetFn, get: () => CallStore) {
     }
     if (get().deafened) void nativeSetDeafen(true)
   } catch (e) {
-    toast.error(`Appel impossible : ${String(e)}`)
+    toast.error(tr('hc.t.callFail', { e: String(e) }))
     _endCall(set, get)
   }
 }
@@ -218,7 +219,7 @@ async function _connect(lk: LkAccess, set: SetFn, get: () => CallStore) {
     .on(RoomEvent.Disconnected, reason => {
       if (_room !== room) return
       if (reason !== DisconnectReason.CLIENT_INITIATED) {
-        toast.error('Appel interrompu : connexion au serveur audio/vidéo perdue.')
+        toast.error(tr('hc.t.callLost'))
         _endCall(set, get)
       }
     })
@@ -228,7 +229,7 @@ async function _connect(lk: LkAccess, set: SetFn, get: () => CallStore) {
     await room.connect(lk.url, lk.token, { autoSubscribe: true, rtcConfig: res ? { iceServers: res.data.ice_servers } : undefined })
   } catch (e) {
     console.warn('[dm-call] connexion SFU', e)
-    if (_room === room) { toast.error('Impossible de joindre le serveur audio/vidéo.'); _endCall(set, get) }
+    if (_room === room) { toast.error(tr('hc.t.avDown')); _endCall(set, get) }
     return
   }
   if (_room !== room) return
@@ -281,7 +282,7 @@ async function _getRawCallMedia(type: 'voice' | 'video'): Promise<MediaStream> {
     if (type === 'video') {
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ audio })
-        toast('Caméra indisponible — appel en audio seul', { icon: '🎤', duration: 4000 })
+        toast(tr('hc.t.camOff'), { icon: '🎤', duration: 4000 })
         return stream
       } catch { /* périphérique choisi introuvable : repli plus bas */ }
     }
@@ -343,7 +344,7 @@ export const useCallStore = create<CallStore>((set, get) => ({
       // Appels croisés : sa sonnerie chez nous n'a plus lieu d'être.
       if (get().incomingCall?.dmId === d.dm_id) set({ incomingCall: null })
       set({ callState: 'ringing' })
-      if (!d.livekit?.url || !d.livekit?.token) { toast.error('Serveur audio/vidéo indisponible.'); _cleanup(set); return }
+      if (!d.livekit?.url || !d.livekit?.token) { toast.error(tr('hc.t.avUnavail')); _cleanup(set); return }
       await _connect(d.livekit, set, get)
     })
 
@@ -355,7 +356,7 @@ export const useCallStore = create<CallStore>((set, get) => ({
       // notre propre délai d'appel sans réponse ne doit plus raccrocher.
       if (_callTimeout) { clearTimeout(_callTimeout); _callTimeout = null }
       if (get().incomingCall?.dmId === d.dm_id) set({ incomingCall: null })
-      if (!d.livekit?.url || !d.livekit?.token) { toast.error('Serveur audio/vidéo indisponible.'); _cleanup(set); return }
+      if (!d.livekit?.url || !d.livekit?.token) { toast.error(tr('hc.t.avUnavail')); _cleanup(set); return }
       await _connect(d.livekit, set, get)
     })
 
@@ -390,7 +391,7 @@ export const useCallStore = create<CallStore>((set, get) => ({
     // et fermé la sonnerie du correspondant. On sonnait sinon dans le vide 45 s.
     const offOpen = ws.onOpen(() => {
       if (get().callState !== 'calling') return
-      toast('Appel interrompu : connexion perdue pendant la sonnerie.', { icon: '📵' })
+      toast(tr('hc.t.ringLost'), { icon: '📵' })
       _endCall(set, get)
     })
 
@@ -421,7 +422,7 @@ export const useCallStore = create<CallStore>((set, get) => ({
       _callTimeout = setTimeout(() => {
         useWs.getState().send({ type: 'DM_CALL_HANGUP', to: partnerId, dm_id: dmId })
         _cleanup(set)
-        toast(`Appel ${type === 'video' ? 'vidéo' : 'vocal'} — sans réponse`, { icon: '📵', duration: 5000 })
+        toast(tr(type === 'video' ? 'hc.t.noAnswerVideo' : 'hc.t.noAnswerVoice'), { icon: '📵', duration: 5000 })
       }, 45_000)
     } catch {
       _cleanup(set)
@@ -438,7 +439,7 @@ export const useCallStore = create<CallStore>((set, get) => ({
         useWs.getState().send({ type: 'DM_CALL_ACCEPT', to: fromUserId, dm_id: dmId, ...e2eeClaim() })
         set({ callState: 'ringing' })
       } else {
-        toast.error('Terminez d\'abord l\'appel en cours.')
+        toast.error(tr('hc.t.endCallFirst'))
       }
       return
     }
@@ -458,7 +459,7 @@ export const useCallStore = create<CallStore>((set, get) => ({
     } catch {
       // Micro inaccessible : décliner proprement pour que l'appelant ne sonne pas dans le vide
       useWs.getState().send({ type: 'DM_CALL_DECLINE', to: fromUserId, dm_id: dmId })
-      toast.error('Impossible d\'accéder au microphone — appel refusé')
+      toast.error(tr('hc.t.micDenied'))
       _cleanup(set)
     }
   },
@@ -497,7 +498,7 @@ export const useCallStore = create<CallStore>((set, get) => ({
         const url = await nativeSetCamera(get().camOff)
         set({ camOff: !url, localVideoUrl: url })
       } catch {
-        toast.error("Impossible d'accéder à la caméra.")
+        toast.error(tr('hc.t.camDenied'))
       }
       return
     }
@@ -521,7 +522,7 @@ export const useCallStore = create<CallStore>((set, get) => ({
       if (_room?.state === 'connected') _camPub = await _room.localParticipant.publishTrack(vt, { source: Track.Source.Camera, ...camPublishOptions(get().e2ee) })
       set({ camOff: false, localStream: new MediaStream([...localStream.getAudioTracks(), vt]) })
     } catch {
-      toast.error("Impossible d'accéder à la caméra.")
+      toast.error(tr('hc.t.camDenied'))
     }
   },
 

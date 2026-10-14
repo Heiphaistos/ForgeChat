@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { t as tr } from '../../i18n'
 import { Plus, Trash2, Zap } from 'lucide-react'
 import PickerShell from '../ui/PickerShell'
 
@@ -66,13 +67,13 @@ export default function QuickReplies({ onPick, onClose }: Props) {
       <div className="px-4 py-3 border-b border-fc-hover flex items-center justify-between">
         <div className="flex items-center gap-2 text-sm font-semibold text-white">
           <Zap size={14} className="text-fc-accent" aria-hidden />
-          Réponses rapides
+          {tr('hc.qr.title')}
         </div>
         <div className="flex items-center gap-2">
           {!editing ? (
             <button
               onClick={() => setEditing(true)}
-              aria-label="Modifier les réponses rapides"
+              aria-label={tr('hc.p.qrEdit')}
               className="text-xs text-fc-muted hover:text-white transition"
             >
               Modifier
@@ -80,7 +81,7 @@ export default function QuickReplies({ onPick, onClose }: Props) {
           ) : (
             <button
               onClick={handleSave}
-              aria-label="Sauvegarder les réponses rapides"
+              aria-label={tr('hc.p.qrSave')}
               className="text-xs text-fc-accent hover:text-white transition"
             >
               Sauvegarder
@@ -88,7 +89,7 @@ export default function QuickReplies({ onPick, onClose }: Props) {
           )}
           <button
             onClick={onClose}
-            aria-label="Fermer les réponses rapides"
+            aria-label={tr('hc.p.qrClose')}
             className="text-fc-muted hover:text-white transition"
           >
             <span className="text-sm leading-none" aria-hidden>✕</span>
@@ -102,7 +103,7 @@ export default function QuickReplies({ onPick, onClose }: Props) {
             {!editing ? (
               <button
                 onClick={() => handlePick(reply.content)}
-                aria-label={`Répondre : ${reply.label || reply.content || '(vide)'}`}
+                aria-label={tr('hc.qr.reply', { x: reply.label || reply.content || tr('hc.qr.empty') })}
                 className="w-full text-left px-3 py-2 rounded-lg text-sm text-fc-muted hover:text-white hover:bg-fc-hover transition truncate"
               >
                 {reply.label || reply.content || '(vide)'}
@@ -113,15 +114,15 @@ export default function QuickReplies({ onPick, onClose }: Props) {
                   <input
                     value={reply.label}
                     onChange={e => handleChange(reply.id, 'label', e.target.value)}
-                    placeholder="Label"
-                    aria-label="Libellé de la réponse rapide"
+                    placeholder={tr('hc.p.qrLabelPh')}
+                    aria-label={tr('hc.p.qrLabel')}
                     enterKeyHint="next"
                     autoCapitalize="sentences"
                     className="flex-1 bg-fc-input text-white text-xs rounded px-2 py-1 outline-none border border-fc-hover focus:border-fc-accent"
                   />
                   <button
                     onClick={() => handleDelete(reply.id)}
-                    aria-label="Supprimer cette réponse rapide"
+                    aria-label={tr('hc.p.qrDelete')}
                     className="p-1 text-fc-muted hover:text-red-400 transition flex-shrink-0"
                   >
                     <Trash2 size={14} aria-hidden />
@@ -130,8 +131,8 @@ export default function QuickReplies({ onPick, onClose }: Props) {
                 <textarea
                   value={reply.content}
                   onChange={e => handleChange(reply.id, 'content', e.target.value)}
-                  placeholder="Contenu"
-                  aria-label="Contenu de la réponse rapide"
+                  placeholder={tr('hc.p.qrContentPh')}
+                  aria-label={tr('hc.p.qrContent')}
                   rows={2}
                   className="w-full bg-fc-input text-white text-xs rounded px-2 py-1 outline-none border border-fc-hover focus:border-fc-accent resize-none"
                 />
@@ -145,7 +146,7 @@ export default function QuickReplies({ onPick, onClose }: Props) {
         <div className="px-3 pb-3">
           <button
             onClick={handleAdd}
-            aria-label="Ajouter une réponse rapide"
+            aria-label={tr('hc.p.qrAdd')}
             className="flex items-center gap-1.5 text-xs text-fc-muted hover:text-white transition w-full px-2 py-1.5 rounded-lg hover:bg-fc-hover"
           >
             <Plus size={13} aria-hidden />

@@ -5,6 +5,7 @@ import { useAuth } from '../store/auth'
 import api, { mediaUrl } from '../api/client'
 import toast from 'react-hot-toast'
 import { UserPlus } from 'lucide-react'
+import { useT } from '../i18n'
 
 interface InviteInfo {
   code: string
@@ -18,6 +19,7 @@ interface InviteInfo {
 }
 
 export default function FriendInvitePage() {
+  const t = useT()
   const { code } = useParams<{ code: string }>()
   const nav = useNavigate()
   const qc = useQueryClient()
@@ -29,7 +31,7 @@ export default function FriendInvitePage() {
   useEffect(() => {
     api.get(`/friend-invite/${code}`)
       .then(r => setInfo(r.data))
-      .catch(() => toast.error('Invitation invalide ou expirée'))
+      .catch(() => toast.error(t('hc.inv.invalidToast')))
       .finally(() => setLoading(false))
   }, [code])
 
@@ -43,21 +45,21 @@ export default function FriendInvitePage() {
       await api.post(`/friend-invite/${code}/accept`)
       // FRIEND_ACCEPTED n'est envoyé qu'à l'inviteur : rafraîchir notre propre liste.
       qc.invalidateQueries({ queryKey: ['friends'] })
-      toast.success(`Tu es maintenant ami(e) avec ${info?.user.username} !`)
+      toast.success(t('hc.fi.friends', { name: info?.user.username ?? '' }))
       nav('/')
     } catch (err: any) {
-      toast.error(err.response?.data?.error ?? 'Erreur')
+      toast.error(err.response?.data?.error ?? t('common.error'))
     } finally {
       setAccepting(false)
     }
   }
 
   const statusLabel = (s: string) =>
-    s === 'online' ? 'En ligne' : s === 'idle' ? 'Absent' : s === 'dnd' ? 'Ne pas déranger' : 'Hors ligne'
+    s === 'online' ? t('hc.fi.online') : s === 'idle' ? t('hc.fi.idle') : s === 'dnd' ? t('hc.fi.dnd') : t('hc.fi.offline')
 
   if (loading) {
     return (
-      <div role="status" aria-label="Chargement de l'invitation" className="flex items-center justify-center min-h-screen bg-fc-bg">
+      <div role="status" aria-label={t('hc.inv.loading')} className="flex items-center justify-center min-h-screen bg-fc-bg">
         <div aria-hidden className="w-8 h-8 border-2 border-fc-accent border-t-transparent rounded-full animate-spin" />
       </div>
     )
@@ -68,10 +70,10 @@ export default function FriendInvitePage() {
       <div role="alert" className="flex items-center justify-center min-h-screen bg-fc-bg">
         <div className="bg-fc-channel p-8 rounded-lg text-center max-w-sm w-full">
           <div className="text-4xl mb-4" aria-hidden>😕</div>
-          <h2 className="text-white font-bold text-xl mb-2">Invitation invalide</h2>
-          <p className="text-fc-muted text-sm mb-4">Ce lien est expiré ou n'existe pas.</p>
+          <h2 className="text-white font-bold text-xl mb-2">{t('hc.inv.invalid')}</h2>
+          <p className="text-fc-muted text-sm mb-4">{t('hc.fi.expired')}</p>
           <button onClick={() => nav('/')} className="px-4 py-2 bg-fc-accent hover:bg-indigo-500 text-white rounded text-sm transition">
-            Retour à l'accueil
+            {t('hc.inv.home')}
           </button>
         </div>
       </div>
@@ -87,7 +89,7 @@ export default function FriendInvitePage() {
         aria-labelledby="friend-invite-name"
         className="bg-fc-channel p-8 rounded-lg shadow-xl w-full max-w-sm text-center"
       >
-        <p className="text-fc-muted text-sm mb-6">t'invite à rejoindre ses amis sur</p>
+        <p className="text-fc-muted text-sm mb-6">{t('hc.fi.invitesYou')}</p>
         <div className="text-2xl font-bold text-white mb-6">ForgeChat</div>
 
         {/* Avatar */}
@@ -113,28 +115,28 @@ export default function FriendInvitePage() {
 
         {isOwn ? (
           <div role="status" className="text-fc-muted text-sm p-3 bg-fc-hover rounded-lg mb-4">
-            C'est ton propre lien d'invitation.
+            {t('hc.fi.own')}
           </div>
         ) : (
           <button
             onClick={accept}
             disabled={accepting}
             aria-busy={accepting}
-            aria-label={accepting ? 'Ajout en cours...' : user ? `Accepter l'invitation de ${info.user.username}` : 'Se connecter pour accepter l\'invitation'}
+            aria-label={accepting ? t('hc.fi.adding') : user ? t('hc.fi.acceptFrom', { name: info.user.username }) : t('hc.fi.loginAccept')}
             className="w-full py-2.5 bg-fc-accent hover:bg-indigo-500 text-white font-medium rounded
                        transition disabled:opacity-50 flex items-center justify-center gap-2"
           >
             <UserPlus size={18} aria-hidden />
             {accepting
-              ? 'Ajout...'
+              ? t('hc.fi.addingShort')
               : user
-              ? 'Accepter l\'invitation'
-              : 'Se connecter pour accepter'}
+              ? t('hc.inv.accept')
+              : t('hc.fi.loginAcceptShort')}
           </button>
         )}
 
         <button onClick={() => nav('/')} className="mt-3 text-sm text-fc-muted hover:text-white transition">
-          Retour à l'accueil
+          {t('hc.inv.home')}
         </button>
       </div>
     </div>
