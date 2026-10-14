@@ -12,6 +12,47 @@ use crate::{
     state::AppState,
 };
 
+/// Bornes mémoire des sections ajoutées à l'export (aucune requête non bornée).
+const EXPORT_SECTION_LIMIT: i64 = 50_000;
+
+/// Sections « données personnelles » ajoutées à l'export. Chaque requête choisit ses colonnes :
+/// jamais de hash de mot de passe, de jeton de session, de clé publique/privée ni de secret TOTP.
+async fn extra_sections(state: &AppState, uid: Uuid) -> Result<serde_json::Value> {
+    let q = |sql: &'static str| {
+        let db = state.db.clone();
+        async move {
+            let sql = format!("SELECT COALESCE(jsonb_agg(t), '[]'::jsonb) FROM ({sql} LIMIT {EXPORT_SECTION_LIMIT}) t");
+            sqlx::query_scalar::<_, serde_json::Value>(&sql).bind(uid).fetch_one(&db).await
+        }
+    };
+    let (saved, threads, posts, replies, reports, dm_reports, sessions, reminders, settings, passkeys, linked) = tokio::try_join!(
+        q("SELECT content, author_username, channel_id, saved_at FROM saved_messages WHERE user_id=$1 ORDER BY saved_at DESC"),
+        q("SELECT content, thread_id, created_at FROM thread_messages WHERE user_id=$1 ORDER BY created_at DESC"),
+        q("SELECT title, content, tags, channel_id, created_at FROM forum_posts WHERE creator_id=$1 ORDER BY created_at DESC"),
+        q("SELECT content, post_id, created_at FROM forum_replies WHERE user_id=$1 ORDER BY created_at DESC"),
+        q("SELECT reason, comment, status, created_at FROM message_reports WHERE reporter_id=$1 ORDER BY created_at DESC"),
+        q("SELECT reason, comment, status, created_at FROM dm_reports WHERE reporter_id=$1 ORDER BY created_at DESC"),
+        q("SELECT device_info, last_seen, created_at FROM user_sessions WHERE user_id=$1 ORDER BY last_seen DESC"),
+        q("SELECT message_id, remind_at, sent, created_at FROM message_reminders WHERE user_id=$1 ORDER BY remind_at DESC"),
+        q("SELECT (to_jsonb(s) - 'user_id') AS settings FROM user_settings s WHERE user_id=$1"),
+        q("SELECT name, created_at, last_used_at FROM webauthn_credentials WHERE user_id=$1 ORDER BY created_at"),
+        q("SELECT platform, platform_username, platform_url, verified, created_at FROM connected_accounts WHERE user_id=$1 ORDER BY created_at"),
+    )?;
+    Ok(serde_json::json!({
+        "saved_messages": saved,
+        "thread_messages": threads,
+        "forum_posts": posts,
+        "forum_replies": replies,
+        "reports_made": reports,
+        "dm_reports_made": dm_reports,
+        "sessions": sessions,
+        "reminders": reminders,
+        "settings": settings,
+        "passkeys": passkeys,
+        "connected_accounts": linked,
+    }))
+}
+
 pub async fn export_user_data(
     State(state): State<AppState>,
     Extension(claims): Extension<Claims>,
@@ -85,7 +126,8 @@ pub async fn export_user_data(
     let servers = servers?;
     let friends = friends?;
 
-    let export = serde_json::json!({
+    let extra = extra_sections(&state, uid).await?;
+    let mut export = serde_json::json!({
         "exported_at": chrono::Utc::now().to_rfc3339(),
         "profile": {
             "username": user.get::<String, _>("username"),
@@ -118,6 +160,9 @@ pub async fn export_user_data(
         "friends": friends.iter().map(|f| f.get::<String, _>("username")).collect::<Vec<String>>(),
     });
 
+    if let (Some(e), Some(x)) = (export.as_object_mut(), extra.as_object()) {
+        e.extend(x.iter().map(|(k, v)| (k.clone(), v.clone())));
+    }
     let json_str = serde_json::to_string_pretty(&export)
         .map_err(|e| AppError::Internal(anyhow::anyhow!("Sérialisation: {}", e)))?;
 
