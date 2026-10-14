@@ -15,7 +15,7 @@ import { useUnread } from '../../store/unread'
 import { useChannelNotif } from '../../store/channelNotif'
 import { useMobile } from '../../contexts/MobileContext'
 import { createPortal } from 'react-dom'
-import { useT, intlLocale, type Key } from '../../i18n'
+import { useT, intlLocale, t as tr, type Key } from '../../i18n'
 import { acceptsInto, applyDrop, dissolveFolder, FOLDER_COLORS, newFolderId, topLevel, type Drag, type Folders, type RailLayout, type Target, type Zone } from './railLayout'
 
 // ─── Dossiers (localStorage = cache, le compte fait foi) ─────
@@ -170,7 +170,7 @@ export default function ServerSidebar() {
   useEffect(() => {
     if (!layoutLoaded.current) return
     const t = setTimeout(() => {
-      api.put('/users/me/server-layout', { order: serverOrder, folders }).catch(() => {})
+      api.put('/users/me/server-layout', { order: serverOrder, folders }).catch(() => toast.error(tr('msg.saveFailed')))
     }, 800)
     return () => clearTimeout(t)
   }, [folders, serverOrder])

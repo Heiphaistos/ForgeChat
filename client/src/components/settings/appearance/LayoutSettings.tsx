@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { ChevronDown, RotateCcw } from 'lucide-react'
+import toast from 'react-hot-toast'
 import api from '../../../api/client'
 import { useT, type Key } from '../../../i18n'
 import { DEFAULT_LAYOUT, LAYOUT_CHOICES, LAYOUT_RANGES, type LayoutPrefs } from '../../../theme/applyTheme'
@@ -41,7 +42,7 @@ export function DensityChoice() {
   const setDensity = useThemeStore(s => s.setDensity)
   return (
     <Choice title={t('layout.messages')} value={density} options={DENSITIES}
-      onChange={d => { setDensity(d); api.put('/user/settings', { interface_density: d }).catch(() => {}) }} />
+      onChange={d => { setDensity(d); api.put('/user/settings', { interface_density: d }).catch(() => toast.error(t('msg.saveFailed'))) }} />
   )
 }
 

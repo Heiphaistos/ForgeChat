@@ -1,5 +1,7 @@
 import { create } from 'zustand'
+import toast from 'react-hot-toast'
 import api from '../api/client'
+import { t as tr } from '../i18n'
 import { applyUnreadPatch, parseUnreadEvent } from '../lib/discordFeatures'
 
 // Non-lus (point blanc) et mentions (pastille rouge chiffrée) séparés, comme
@@ -137,7 +139,7 @@ export const useUnread = create<UnreadState>((set, get) => ({
 
   markAllRead: () => {
     get().clearAll()
-    api.post('/unread/mark-all').catch(() => {})
+    api.post('/unread/mark-all').catch(() => toast.error(tr('common.error')))
   },
 
   clearAll: () => set({ counts: {}, serverCounts: {}, mentionCounts: {}, serverMentionCounts: {} }),
