@@ -5,7 +5,8 @@ import { create } from 'zustand'
 import { useAuth } from '../store/auth'
 import { useAccountKey } from './accountKey'
 import api from '../api/client'
-import { checkServerKey, fpOf, ownerVouches, serverSubject, sortMembers, type Pin, type SignedServerKey } from './keyPinsCore'
+import { contactKeyLogged, type KtEntry } from './keyTransparency'
+import { checkServerKey, envelopeSender, fpOf, ownerVouches, serverSubject, sortMembers, type Pin, type SignedServerKey } from './keyPinsCore'
 
 export { fpOf } from './keyPinsCore'
 
@@ -133,6 +134,21 @@ export async function markVerified(userId: string, pub: string): Promise<boolean
 interface MemberLike { user_id: string; username?: string; public: string | null }
 
 /**
+ * Clé jamais vue d'un contact : inscrite au journal de transparence ? `false` = le journal contredit la
+ * clé servie ; `null` = indéterminé (ancienne clé sans entrée, erreur réseau : l'envoi n'est pas bloqué).
+ */
+async function keyLogged(userId: string, pub: string): Promise<boolean | null> {
+  try {
+    const { data } = await api.get<{ kt_seq?: number | null }>(`/users/${userId}/keys/public`)
+    if (typeof data.kt_seq !== 'number') return null
+    const entry = (await api.get<KtEntry>(`/keys/log/${data.kt_seq}`)).data
+    return await contactKeyLogged(userId, pub, entry)
+  } catch {
+    return null
+  }
+}
+
+/**
  * Membres vers lesquels on peut chiffrer : empreinte recalculée, nouvelle clé épinglée,
  * clé changée exclue (et signalée). Seul chemin vers wrapFor.
  */
@@ -140,9 +156,26 @@ export async function trustedMembers<T extends MemberLike>(list: T[]) {
   const account = me()
   if (!account) return []
   const { trusted, changed, fresh } = await sortMembers(list, account, useAccountKey.getState().pub, s => getPin(account, s))
-  for (const f of fresh) await savePin(account, f.subject, { fp: f.fp })
+  const unlogged = new Set<string>()
+  for (const f of fresh) {
+    const m = trusted.find(x => x.user_id === f.subject)
+    if (m && (await keyLogged(m.user_id, m.public)) === false) {
+      // Le journal de transparence contredit la clé servie : traitée comme une clé changée (non épinglée, exclue).
+      unlogged.add(m.user_id)
+      raise({ subject: m.user_id, name: m.username ?? m.user_id, kind: 'user', pub: m.public, fp: m.fingerprint, verified: false })
+    } else await savePin(account, f.subject, { fp: f.fp })
+  }
   for (const m of changed) raise({ subject: m.user_id, name: m.username ?? m.user_id, kind: 'user', pub: m.public, fp: m.fingerprint, verified: m.verified })
-  return trusted
+  return trusted.filter(m => !unlogged.has(m.user_id))
+}
+
+/** L'émetteur d'une enveloppe est-il moi, ou un contact à la clé épinglée ? (1re vue : épinglée, acceptée). */
+export async function trustEnvelopeSender(by: string, byPub: string): Promise<boolean> {
+  const account = me()
+  if (!account) return false
+  const r = await envelopeSender(by, byPub, account, useAccountKey.getState().pub, s => getPin(account, s))
+  if (r.fresh) await savePin(account, by, { fp: r.fresh })
+  return r.ok
 }
 
 /**

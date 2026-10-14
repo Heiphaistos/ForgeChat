@@ -36,8 +36,14 @@ jest.mock('@/lib/secureStorage', () => ({
 }))
 
 import { forgetConv, openRaw, seal, sealBody } from '@/e2e/conversations'
+import { acceptKey, fpOf } from '@/e2e/keyPins'
 
-beforeEach(() => {
+// Le registre d'épingles garde un cache mémoire : on fixe l'épingle de A (émetteur de l'enveloppe) à chaque test.
+const pinA = async (fp?: string) =>
+  acceptKey({ subject: mockIds.a, name: 'a', kind: 'user', pub: mockV.ecdh.pubA, fp: fp ?? (await fpOf(mockV.ecdh.pubA)), verified: false })
+
+beforeEach(async () => {
+  await pinA()
   forgetConv()
   mockGet.mockReset()
   mockPost.mockReset()
@@ -96,7 +102,7 @@ test('chiffrement obligatoire : un membre sans clé ne bloque pas, l\'époque es
 
 const changedKeyMembers = () => {
   // Empreinte épinglée d'une AUTRE clé pour A (le serveur sert maintenant pubA).
-  mockPins.set(`fc_e2e_fp_${mockIds.b}_${mockIds.a}`, JSON.stringify({ fp: 'ancienne-empreinte' }))
+  void pinA('ancienne-empreinte')
   mockGet.mockImplementation(async (url: string) => url.endsWith('/members')
     ? [
         { user_id: mockIds.b, username: 'moi', public: mockV.ecdh.pubB, fingerprint: 'menteur' },
@@ -154,3 +160,16 @@ test("rechiffrement de l'ancien texte d'un autre membre : l'AAD garde son auteur
   expect((await openRaw('group', groupId, { ...raw, sender_id: mockIds.b })).e2e).toBe('locked')
 })
 
+
+test("enveloppe d'un émetteur dont la clé diffère de son épingle : refusée (illisible), clé de conversation non adoptée", async () => {
+  await pinA('ancienne-empreinte')
+  const o = await openRaw('group', groupId, msg())
+  expect(o.e2e).toBe('locked')
+  expect(mockPost).toHaveBeenCalledWith(`/e2e/conversations/group/${groupId}/keys/unreadable`, { epoch: 2 })
+})
+
+test("mustEncrypt : clé de compte ouverte = toujours chiffré, même si le serveur répond encrypt:false", async () => {
+  const { mustEncrypt } = jest.requireActual('@/e2e/conversations')
+  mockGet.mockResolvedValue({ current_epoch: null, rotate_needed: false, all_keyed: false, encrypt: false, envelopes: [] })
+  expect(await mustEncrypt('dm', groupId)).toBe(true)
+})
