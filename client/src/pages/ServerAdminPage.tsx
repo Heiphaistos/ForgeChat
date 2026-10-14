@@ -295,7 +295,7 @@ export default function ServerAdminPage() {
           <button
             key={id}
             onClick={() => setTab(id)}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium whitespace-nowrap transition ${
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium whitespace-nowrap flex-shrink-0 transition ${
               tab === id
                 ? 'bg-fc-accent text-white'
                 : 'text-fc-muted hover:text-white hover:bg-fc-hover'
