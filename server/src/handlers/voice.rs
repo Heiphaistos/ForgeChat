@@ -230,6 +230,16 @@ pub async fn livekit_webhook(State(state): State<AppState>, headers: HeaderMap, 
     match ev["event"].as_str() {
         Some("participant_joined") => {
             sfu_absents().lock().unwrap_or_else(|e| e.into_inner()).remove(&key);
+            // Révocation : un client exclu/sorti garde un jeton (initial ou rafraîchi par le SFU)
+            // valable ~10 min. Tout (re)join au SFU sans présence ForgeChat dans ce salon
+            // (VOICE_JOIN fait foi, droits revérifiés) est éjecté aussitôt.
+            if !group_call && state.user_voice.read().await.get(&user_id) != Some(&channel_id) {
+                tracing::warn!(user_id = %user_id, channel_id = %channel_id, "join SFU sans présence ForgeChat : éjecté");
+                let http = state.http_client.clone();
+                tokio::spawn(async move {
+                    crate::livekit::remove_participant(&http, &lk, &crate::livekit::room_for_channel(channel_id), &user_id.to_string()).await;
+                });
+            }
         }
         Some("participant_left") => {
             let marker = SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_nanos() as u64).unwrap_or(0);

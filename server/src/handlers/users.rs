@@ -401,10 +401,18 @@ pub async fn delete_account(
     .await?;
 
     let files = crate::handlers::uploads::user_upload_candidates(&state.db, claims.sub).await;
+    // Tables sans clé étrangère vers users (RGPD) : surcharges de salon visant ce membre et
+    // compteurs anti-spam, supprimées dans la même transaction que le compte.
+    let mut tx = state.db.begin().await?;
+    sqlx::query("DELETE FROM channel_permissions WHERE target_type='member' AND target_id=$1")
+        .bind(claims.sub).execute(&mut *tx).await?;
+    sqlx::query("DELETE FROM message_spam_track WHERE user_id=$1")
+        .bind(claims.sub).execute(&mut *tx).await?;
     sqlx::query("DELETE FROM users WHERE id=$1")
         .bind(claims.sub)
-        .execute(&state.db)
+        .execute(&mut *tx)
         .await?;
+    tx.commit().await?;
     crate::handlers::uploads::remove_unreferenced(&state, files).await;
     // Compte supprimé : plus aucun jeton ni socket ne doit survivre.
     crate::middleware::auth::revoke_all_tokens_strict(&state, claims.sub).await?;

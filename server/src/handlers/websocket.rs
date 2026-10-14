@@ -631,12 +631,46 @@ async fn accept_dm_call(
 pub(crate) async fn rate_ok(state: &AppState, key: String, limit: i64, window_s: i64) -> bool {
     use redis::AsyncCommands;
     let mut redis = state.redis.lock().await;
-    let count: i64 = redis.incr(&key, 1i64).await.unwrap_or(0);
-    if count == 1 {
-        let _: () = redis.expire(&key, window_s).await.unwrap_or(());
+    let Ok(count) = redis.incr::<_, _, i64>(&key, 1i64).await else {
+        // Redis KO : repli local (par processus) plutôt que fail-open total -- le vocal légitime
+        // passe tant que la limite n'est pas atteinte, un flood reste borné.
+        drop(redis);
+        return local_rate_ok(&key, limit, window_s);
+    };
+    if count == 1 && redis.expire::<_, bool>(&key, window_s).await.is_err() {
+        // Sans TTL le compteur bloquerait la clé à vie.
+        let _: std::result::Result<i64, _> = redis.del(&key).await;
     }
-    // count == 0 => Redis indisponible : on laisse passer plutôt que de couper le vocal.
-    count == 0 || count <= limit
+    count <= limit
+}
+
+/// Compteur à fenêtre fixe en mémoire (repli quand Redis est injoignable).
+fn local_rate_ok(key: &str, limit: i64, window_s: i64) -> bool {
+    use std::{collections::HashMap, sync::{Mutex, OnceLock}, time::{Duration, Instant}};
+    static LOCAL: OnceLock<Mutex<HashMap<String, (Instant, i64)>>> = OnceLock::new();
+    let mut m = LOCAL.get_or_init(Default::default).lock().unwrap_or_else(|e| e.into_inner());
+    let now = Instant::now();
+    if m.len() > 10_000 {
+        m.retain(|_, (t, _)| now.duration_since(*t) < Duration::from_secs(3600));
+    }
+    let e = m.entry(key.to_string()).or_insert((now, 0));
+    if now.duration_since(e.0) >= Duration::from_secs(window_s.max(1) as u64) {
+        *e = (now, 0);
+    }
+    e.1 += 1;
+    e.1 <= limit
+}
+
+#[cfg(test)]
+mod local_rate_tests {
+    use super::local_rate_ok;
+    #[test]
+    fn local_fallback_caps_flood() {
+        let k = "rl:test:local_fallback";
+        for _ in 0..3 { assert!(local_rate_ok(k, 3, 60)); }
+        assert!(!local_rate_ok(k, 3, 60));
+        assert!(local_rate_ok("rl:test:other", 3, 60));
+    }
 }
 
 /// Permissions effectives de `user_id` sur `channel_id`, overrides de canal
@@ -1551,23 +1585,14 @@ async fn handle_ws_message(
             // Rate limit : max 5 appels par minute par paire d'utilisateurs.
             // IMPORTANT : répondre DM_CALL_ERROR, jamais un drop muet — l'appelant
             // sonnerait dans le vide sans aucun feedback (flaky E2E du 2026-07-14).
-            {
-                use redis::AsyncCommands;
-                let rate_key = format!("call_rate:{}:{}", user_id, to);
-                let mut redis = state.redis.lock().await;
-                let count: i64 = redis.incr(&rate_key, 1i64).await.unwrap_or(0);
-                if count == 1 {
-                    let _: () = redis.expire(&rate_key, 60).await.unwrap_or(());
-                }
-                if count > 5 {
-                    let err = serde_json::json!({
-                        "type": "DM_CALL_ERROR",
-                        "reason": "rate_limited",
-                        "dm_id": msg["dm_id"],
-                    });
-                    state.broadcast_to_user(user_id, err.to_string()).await;
-                    return;
-                }
+            if !rate_ok(state, format!("call_rate:{}:{}", user_id, to), 5, 60).await {
+                let err = serde_json::json!({
+                    "type": "DM_CALL_ERROR",
+                    "reason": "rate_limited",
+                    "dm_id": msg["dm_id"],
+                });
+                state.broadcast_to_user(user_id, err.to_string()).await;
+                return;
             }
             // Vérifier que les deux utilisateurs ont un canal DM ouvert (anti-spam)
             if !users_share_dm(state, user_id, to).await { return; }

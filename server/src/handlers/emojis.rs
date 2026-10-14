@@ -140,13 +140,11 @@ pub async fn create_emoji(
                 let limit_kb = max_size / 1024;
                 return Err(AppError::BadRequest(format!("Emoji trop volumineux (max {}KB)", limit_kb)));
             }
-            let ext = match ct.as_str() {
-                "image/gif" => "gif",
-                "image/png" => "png",
-                "image/jpeg" => "jpg",
-                "image/webp" => "webp",
-                _ => "png",
-            };
+            // Format réel lu dans les octets : ni SVG ni faux type MIME enregistré.
+            let ext = crate::handlers::image_probe::probe(&data)
+                .map(|(p, _)| p.ext)
+                .map_err(|e| AppError::BadRequest(e.into()))?;
+            let ct = match ext { "gif" => "image/gif", "jpg" => "image/jpeg", "webp" => "image/webp", _ => "image/png" }.to_string();
             let file_id = Uuid::new_v4();
             let filename = format!("emoji_{}.{}", file_id, ext);
             let file_path = upload_dir.join(&filename);

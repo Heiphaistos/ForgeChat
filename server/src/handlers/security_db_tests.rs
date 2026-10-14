@@ -717,7 +717,7 @@ async fn security_audit_2026_10_14() {
         async move {
             let mut h = HeaderMap::new();
             h.insert("authorization", format!("Bot {token}").parse().unwrap());
-            bots::bot_send_message(State(state), h, Json(bots::BotMessageRequest { channel_id, server_id: s, content: "salut".into() })).await
+            bots::bot_send_message(State(state), axum::extract::ConnectInfo("127.0.0.1:1".parse().unwrap()), h, Json(bots::BotMessageRequest { channel_id, server_id: s, content: "salut".into() })).await
         }
     };
     assert!(post(open).await.is_ok());

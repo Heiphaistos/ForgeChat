@@ -1,4 +1,5 @@
-use axum::{extract::{Path, State}, Extension, Json};
+use axum::{extract::{ConnectInfo, Path, State}, Extension, Json};
+use std::net::SocketAddr;
 use chrono::Utc;
 use rand::Rng;
 use uuid::Uuid;
@@ -90,8 +91,12 @@ pub async fn delete_invite(
 
 pub async fn get_invite_info(
     State(state): State<AppState>,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    headers: axum::http::HeaderMap,
     Path(code): Path<String>,
 ) -> Result<Json<serde_json::Value>> {
+    // Route publique : limite par IP (fail-closed) contre l'énumération des codes.
+    crate::handlers::auth_v2::hit(&state, &format!("invite_info:{}", crate::privacy::client_key(&headers, &addr)), 60, 900).await?;
     let invite = sqlx::query_as::<_, Invite>(
         "SELECT * FROM invites WHERE code=$1"
     )

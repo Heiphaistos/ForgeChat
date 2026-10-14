@@ -106,6 +106,24 @@ pub async fn save_message(
     Ok(Json(serde_json::json!({ "ok": true })))
 }
 
+/// Lecture encore permise (fail-closed : toute erreur => non).
+async fn can_still_read(state: &AppState, user: Uuid, server_id: Option<Uuid>, channel_id: Uuid) -> bool {
+    match server_id {
+        Some(sid) => {
+            require_member_and_channel(state, user, sid, channel_id).await.is_ok()
+                && crate::handlers::servers::can_read_history(state, user, channel_id).await
+        }
+        None => sqlx::query_scalar(
+            "SELECT EXISTS(SELECT 1 FROM dm_channels WHERE id=$1 AND (user1_id=$2 OR user2_id=$2))",
+        )
+        .bind(channel_id)
+        .bind(user)
+        .fetch_one(&state.db)
+        .await
+        .unwrap_or(false),
+    }
+}
+
 pub async fn get_saved(
     State(state): State<AppState>,
     Extension(claims): Extension<Claims>,
@@ -142,8 +160,37 @@ pub async fn get_saved(
     .await
     .unwrap_or_default();
 
+    // Droits de lecture ACTUELS par salon/MP : exclu, salon masqué ou READ_HISTORY retiré => l'entrée
+    // reste listée mais sans contenu (ni chiffré, ni pièces jointes, ni noms).
+    let mut readable: std::collections::HashMap<Uuid, bool> = std::collections::HashMap::new();
+    for r in &rows {
+        let cid: Uuid = r.get("channel_id");
+        if readable.contains_key(&cid) { continue; }
+        let sid: Option<Uuid> = r.get("server_id");
+        readable.insert(cid, can_still_read(&state, claims.sub, sid, cid).await);
+    }
     let items = rows.iter().map(|r| {
         let mid: Uuid = r.get("message_id");
+        let ok = readable.get(&r.get::<Uuid, _>("channel_id")).copied().unwrap_or(false);
+        if !ok {
+            return SavedMessage {
+                id: r.get("id"),
+                message_id: mid,
+                channel_id: r.get("channel_id"),
+                server_id: r.get("server_id"),
+                content: None,
+                author_username: None,
+                author_avatar: None,
+                saved_at: r.get("saved_at"),
+                created_at: r.get("saved_at"),
+                channel_name: None,
+                server_name: None,
+                attachments: Vec::new(),
+                enc: None,
+                client_msg_id: None,
+                author_id: None,
+            };
+        }
         SavedMessage {
             id: r.get("id"),
             message_id: mid,

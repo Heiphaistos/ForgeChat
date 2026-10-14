@@ -87,6 +87,8 @@ pub mod onboarding;
 pub mod event_tools;
 pub mod levels;
 pub mod community;
+#[cfg(test)]
+mod srv2_db_tests;
 pub mod automod;
 pub mod audit_search;
 pub mod directory;

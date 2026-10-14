@@ -139,11 +139,12 @@ pub async fn create_sticker(
                         "Sticker trop volumineux (max 512KB)".into()
                     ));
                 }
-                let ext = match ct.as_str() {
-                    "image/gif"  => "gif",
-                    "image/webp" => "webp",
-                    _            => "png",
-                };
+                // Format réel lu dans les octets (jamais le Content-Type client).
+                let ext = crate::handlers::image_probe::probe(&data)
+                    .map(|(p, _)| p.ext)
+                    .ok()
+                    .filter(|e| ["png", "gif", "webp"].contains(e))
+                    .ok_or_else(|| AppError::BadRequest("Image illisible ou format non supporté".into()))?;
                 let file_id = Uuid::new_v4();
                 let filename = format!("sticker_{}.{}", file_id, ext);
                 let file_path = upload_dir.join(&filename);
