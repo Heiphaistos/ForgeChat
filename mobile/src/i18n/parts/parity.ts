@@ -47,6 +47,8 @@ export const fr = {
   'feed.empty': 'Aucune activité récente',
   'feed.emptyHint': 'Arrivées dans tes serveurs et messages épinglés, sur 48 h.',
   'feed.emptyFilter': 'Essaie le filtre « Tout ».',
+  'waiting.setting': 'Salle d’attente',
+  'waiting.settingHint': 'Les membres sans le droit de déplacer attendent qu’un modérateur les fasse entrer.',
 }
 
 export const en: Record<keyof typeof fr, string> = {
@@ -96,4 +98,6 @@ export const en: Record<keyof typeof fr, string> = {
   'feed.empty': 'No recent activity',
   'feed.emptyHint': 'Joins in your servers and pinned messages over the last 48 h.',
   'feed.emptyFilter': 'Try the "All" filter.',
+  'waiting.setting': 'Waiting room',
+  'waiting.settingHint': 'Members without the move permission wait for a moderator to let them in.',
 }
