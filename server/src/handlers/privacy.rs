@@ -19,6 +19,9 @@ pub async fn export_user_data(
     use sqlx::Row;
 
     let uid: Uuid = claims.sub;
+    // Export complet et sans borne (tous les messages) : 3 par heure et par compte, sinon un jeton
+    // suffisait à répéter la requête la plus lourde du serveur. Redis KO : 503.
+    crate::handlers::auth_v2::hit(&state, &format!("data_export:{uid}"), 3, 3600).await?;
 
     // Toutes les données utilisateur en parallèle. L'export était présenté comme
     // couvrant "vos messages" (conformité RGPD, droit à la portabilité) mais ne

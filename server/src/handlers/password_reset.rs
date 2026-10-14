@@ -84,13 +84,13 @@ pub async fn forgot_password(
         // Un seul lien valide à la fois : la nouvelle demande annule la précédente.
         let old: Option<String> = redis.get(user_key(user_id)).await.unwrap_or(None);
         if let Some(old) = old {
-            let _: () = redis.del(token_key(&old)).await.unwrap_or(());
+            redis.del::<_, ()>(token_key(&old)).await.map_err(|e| AppError::Internal(e.into()))?;
         }
         let _: () = redis
             .set_ex(token_key(&token_hash), user_id.to_string(), TOKEN_TTL_SECS)
             .await
             .map_err(|e| AppError::Internal(e.into()))?;
-        let _: () = redis.set_ex(user_key(user_id), &token_hash, TOKEN_TTL_SECS).await.unwrap_or(());
+        redis.set_ex::<_, _, ()>(user_key(user_id), &token_hash, TOKEN_TTL_SECS).await.map_err(|e| AppError::Internal(e.into()))?;
     }
 
     // Jeton dans le fragment (#) : jamais envoyé au serveur ni dans un Referer.
@@ -186,7 +186,7 @@ pub async fn reset_password(
         let _: () = redis.del(user_key(user_id)).await.unwrap_or(());
     }
     // Les jetons d'accès déjà émis (appareil volé) deviennent invalides.
-    revoke_all_tokens(&state, user_id).await;
+    revoke_all_tokens(&state, user_id).await?;
     state.disconnect_user_sockets(user_id).await;
     Ok(Json(serde_json::json!({ "ok": true })))
 }

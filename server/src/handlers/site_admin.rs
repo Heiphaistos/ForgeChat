@@ -212,18 +212,23 @@ pub async fn sync_banned_set(state: &AppState) {
         .await
         .unwrap_or_default();
     let mut redis = state.redis.lock().await;
-    let _: () = redis.del(BANNED_SET).await.unwrap_or(());
+    if let Err(e) = redis.del::<_, ()>(BANNED_SET).await {
+        tracing::error!("BANNED_SET non rechargé : {e}");
+    }
     for id in ids {
-        let _: () = redis.sadd(BANNED_SET, id.to_string()).await.unwrap_or(());
+        if let Err(e) = redis.sadd::<_, _, ()>(BANNED_SET, id.to_string()).await {
+            tracing::error!("BANNED_SET : ajout de {id} impossible : {e}");
+        }
     }
 }
 
 /// Coupe tout accès d'un compte : jetons de rafraîchissement, sessions, jetons d'accès, WebSocket.
-async fn cut_access(state: &AppState, user_id: Uuid, notify: &str) {
-    let _ = sqlx::query("DELETE FROM refresh_tokens WHERE user_id=$1").bind(user_id).execute(&state.db).await;
-    let _ = sqlx::query("DELETE FROM user_sessions WHERE user_id=$1").bind(user_id).execute(&state.db).await;
-    crate::middleware::auth::revoke_all_tokens_strict(state, user_id).await;
+async fn cut_access(state: &AppState, user_id: Uuid, notify: &str) -> Result<()> {
+    sqlx::query("DELETE FROM refresh_tokens WHERE user_id=$1").bind(user_id).execute(&state.db).await?;
+    sqlx::query("DELETE FROM user_sessions WHERE user_id=$1").bind(user_id).execute(&state.db).await?;
+    crate::middleware::auth::revoke_all_tokens_strict(state, user_id).await?;
     state.broadcast_to_user(user_id, json!({ "type": notify }).to_string()).await;
+    Ok(())
 }
 
 // ─── Aperçu et comptes ─────────────────────────────────────────────────────
@@ -408,14 +413,23 @@ pub async fn ban_user(
         .await?;
     if done.rows_affected() == 0 {
         let exists: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM users WHERE id=$1)").bind(user_id).fetch_one(&state.db).await?;
-        return if exists { Ok(StatusCode::NO_CONTENT) } else { Err(AppError::NotFound("Compte introuvable".into())) };
+        if !exists {
+            return Err(AppError::NotFound("Compte introuvable".into()));
+        }
+        // Déjà banni : on rejoue quand même l'ensemble Redis et la coupure (un ban dont Redis a échoué
+        // doit pouvoir être terminé par un second appel).
     }
     {
         let mut redis = state.redis.lock().await;
-        let _: () = redis.sadd(BANNED_SET, user_id.to_string()).await.unwrap_or(());
+        redis.sadd::<_, _, ()>(BANNED_SET, user_id.to_string()).await.map_err(|e| {
+            tracing::error!("ban {user_id} : BANNED_SET injoignable : {e}");
+            AppError::Unavailable("Service momentanément indisponible, réessayez".into())
+        })?;
     }
-    cut_access(&state, user_id, "ACCOUNT_BANNED").await;
-    audit(&state, claims.sub, "ban", Some(user_id), json!({ "reason": reason })).await;
+    cut_access(&state, user_id, "ACCOUNT_BANNED").await?;
+    if done.rows_affected() > 0 {
+        audit(&state, claims.sub, "ban", Some(user_id), json!({ "reason": reason })).await;
+    }
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -428,7 +442,10 @@ pub async fn unban_user(
     sqlx::query("UPDATE users SET site_banned_at=NULL, site_ban_reason=NULL WHERE id=$1").bind(user_id).execute(&state.db).await?;
     {
         let mut redis = state.redis.lock().await;
-        let _: () = redis.srem(BANNED_SET, user_id.to_string()).await.unwrap_or(());
+        redis.srem::<_, _, ()>(BANNED_SET, user_id.to_string()).await.map_err(|e| {
+            tracing::error!("unban {user_id} : BANNED_SET injoignable : {e}");
+            AppError::Unavailable("Service momentanément indisponible, réessayez".into())
+        })?;
     }
     audit(&state, claims.sub, "unban", Some(user_id), json!({})).await;
     Ok(StatusCode::NO_CONTENT)
@@ -441,7 +458,7 @@ pub async fn force_logout(
     Path(user_id): Path<Uuid>,
 ) -> Result<StatusCode> {
     require_site_admin(&state, &claims).await?;
-    cut_access(&state, user_id, "FORCE_LOGOUT").await;
+    cut_access(&state, user_id, "FORCE_LOGOUT").await?;
     audit(&state, claims.sub, "force_logout", Some(user_id), json!({})).await;
     Ok(StatusCode::NO_CONTENT)
 }

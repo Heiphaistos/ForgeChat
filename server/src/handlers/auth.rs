@@ -622,7 +622,7 @@ pub(crate) async fn rotate_refresh_token(state: &AppState, token: &str) -> Resul
 async fn grace_retry(state: &AppState, token: &str, grace_key: &str) -> Result<(Uuid, String, String)> {
     let sealed: Option<String> = {
         let mut redis = state.redis.lock().await;
-        redis.get(grace_key).await.unwrap_or(None)
+        redis.get(grace_key).await.map_err(|_| AppError::Unavailable("Service momentanément indisponible".into()))?
     };
     let (user_id, issued, sid, successor) = sealed
         .as_deref()
@@ -632,7 +632,8 @@ async fn grace_retry(state: &AppState, token: &str, grace_key: &str) -> Result<(
         .ok_or(AppError::Unauthorized)?;
     let revoked_since: Option<i64> = {
         let mut redis = state.redis.lock().await;
-        redis.get(format!("jwtrevoke:{user_id}")).await.unwrap_or(None)
+        // Redis KO : 503 (jamais un jeton rendu sans avoir pu lire la révocation).
+        redis.get(format!("jwtrevoke:{user_id}")).await.map_err(|_| AppError::Unavailable("Service momentanément indisponible".into()))?
     };
     if revoked_since.is_some_and(|ts| issued < ts) {
         return Err(AppError::Unauthorized);
@@ -710,7 +711,7 @@ mod grace_tests {
         let (u0, _) = open_session(&state, user, &HeaderMap::new()).await.expect("session 2");
         let (_, u1, _) = rotate_refresh_token(&state, &u0).await.expect("rotation 2");
         sqlx::query("DELETE FROM refresh_tokens WHERE user_id=$1").bind(user).execute(&db).await.unwrap();
-        crate::middleware::auth::revoke_all_tokens(&state, user).await;
+        crate::middleware::auth::revoke_all_tokens(&state, user).await.expect("revoke");
         let _ = open_session(&state, user, &HeaderMap::new()).await.expect("reconnexion");
         assert!(rotate_refresh_token(&state, &u0).await.is_err(), "jeton tourné avant la révocation");
         assert!(rotate_refresh_token(&state, &u1).await.is_err(), "successeur supprimé");
@@ -755,10 +756,12 @@ pub async fn change_password(
     if remaining_secs > 0 {
         let access_hash = crate::middleware::auth::hash_token(&raw_token.0);
         let blocklist_key = format!("jwtblock:{}", access_hash);
-        let mut redis = state.redis.lock().await;
-        let _: () = redis.set_ex(&blocklist_key, "1", remaining_secs).await.unwrap_or(());
-        drop(redis);
+        crate::middleware::auth::redis_set_ex_strict(&state, blocklist_key, "1", remaining_secs).await?;
     }
+
+    // Tous les appareils sont déconnectés, pas seulement celui-ci : c'est le but d'un changement de
+    // mot de passe après un vol de session. AVANT la base : si Redis refuse, rien n'est changé (503).
+    crate::middleware::auth::revoke_all_tokens(&state, claims.sub).await?;
 
     let mut tx = state.db.begin().await?;
     sqlx::query("DELETE FROM refresh_tokens WHERE user_id=$1")
@@ -785,9 +788,6 @@ pub async fn change_password(
             .await?;
     }
     tx.commit().await?;
-    // Tous les appareils sont déconnectés, pas seulement celui-ci : c'est le but
-    // d'un changement de mot de passe après un vol de session.
-    crate::middleware::auth::revoke_all_tokens(&state, claims.sub).await;
     state.disconnect_user_sockets(claims.sub).await;
 
     Ok(Json(serde_json::json!({ "ok": true })))
@@ -827,8 +827,7 @@ pub async fn logout(
     if remaining_secs > 0 {
         let access_hash = crate::middleware::auth::hash_token(&raw_token.0);
         let blocklist_key = format!("jwtblock:{}", access_hash);
-        let mut redis = state.redis.lock().await;
-        let _: () = redis.set_ex(&blocklist_key, "1", remaining_secs).await.unwrap_or(());
+        crate::middleware::auth::redis_set_ex_strict(&state, blocklist_key, "1", remaining_secs).await?;
     }
 
     // `scope: "current"` (appli mobile) : seulement la session de cet appareil. Sinon (défaut
@@ -850,7 +849,7 @@ pub async fn logout(
                 .execute(&state.db)
                 .await?;
             // Jetons d'accès des autres appareils et leurs sockets : coupés tout de suite.
-            crate::middleware::auth::revoke_all_tokens(&state, claims.sub).await;
+            crate::middleware::auth::revoke_all_tokens(&state, claims.sub).await?;
             state.disconnect_user_sockets(claims.sub).await;
         }
     }
@@ -945,7 +944,7 @@ pub(crate) async fn end_session(state: &AppState, user_id: Uuid, sid: Uuid) -> R
         .bind(user_id)
         .execute(&state.db)
         .await?;
-    crate::middleware::auth::revoke_session_tokens(state, sid).await;
+    crate::middleware::auth::revoke_session_tokens(state, sid).await?;
     state.disconnect_session_sockets(user_id, sid).await;
     Ok(())
 }

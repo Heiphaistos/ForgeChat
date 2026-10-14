@@ -407,7 +407,7 @@ pub async fn delete_account(
         .await?;
     crate::handlers::uploads::remove_unreferenced(&state, files).await;
     // Compte supprimé : plus aucun jeton ni socket ne doit survivre.
-    crate::middleware::auth::revoke_all_tokens_strict(&state, claims.sub).await;
+    crate::middleware::auth::revoke_all_tokens_strict(&state, claims.sub).await?;
     state.disconnect_user_sockets(claims.sub).await;
     Ok(Json(serde_json::json!({ "ok": true })))
 }

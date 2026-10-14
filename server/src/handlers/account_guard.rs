@@ -172,7 +172,7 @@ pub async fn lock_account(state: &AppState, user_id: Uuid) -> Result<()> {
     sqlx::query("DELETE FROM user_sessions WHERE user_id=$1").bind(user_id).execute(&mut *tx).await?;
     sqlx::query("DELETE FROM known_devices WHERE user_id=$1").bind(user_id).execute(&mut *tx).await?;
     tx.commit().await?;
-    crate::middleware::auth::revoke_all_tokens_strict(state, user_id).await;
+    crate::middleware::auth::revoke_all_tokens_strict(state, user_id).await?;
     state.disconnect_user_sockets(user_id).await;
     crate::security_events::record(state, "panic").await;
     Ok(())

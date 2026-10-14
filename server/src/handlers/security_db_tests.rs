@@ -74,7 +74,7 @@ async fn security_audit_2026_10_10() {
     // M6 / F6 : révocation vue par la revérification périodique des sockets.
     let now = chrono::Utc::now().timestamp();
     assert_eq!(token_state(&state, a, now - 10, None, None).await, TokenState::Valid);
-    crate::middleware::auth::revoke_all_tokens(&state, a).await;
+    crate::middleware::auth::revoke_all_tokens(&state, a).await.expect("revoke");
     assert_eq!(token_state(&state, a, now - 10, None, None).await, TokenState::Revoked);
     assert_eq!(token_state(&state, a, now + 5, None, None).await, TokenState::Valid);
 
@@ -732,6 +732,15 @@ async fn security_audit_2026_10_14() {
     assert!(!sent_in(ro).await, "salon en lecture seule : message programmé annulé");
     assert!(sent_in(open).await, "salon ouvert : envoyé");
 
+    // Message programmé chiffré : époque périmée à l'envoi (aucune époque courante) = non envoyé, motif visible.
+    let enc = serde_json::json!({ "v": 1, "epoch": 3, "iv": "AAAAAAAAAAAAAAAA", "ct": "AAAAAAAAAAAAAAAAAAAAAAAA" });
+    let stale: Uuid = sqlx::query_scalar("INSERT INTO scheduled_messages (channel_id, user_id, content, enc, client_msg_id, send_at) VALUES ($1, $2, NULL, $3, $4, NOW() - INTERVAL '1 minute') RETURNING id")
+        .bind(open).bind(victim).bind(&enc).bind(Uuid::new_v4()).fetch_one(&db).await.expect("scheduled enc");
+    crate::handlers::scheduled::dispatch_scheduled_messages(state.clone()).await;
+    let (sent, reason): (bool, Option<String>) = sqlx::query_as("SELECT sent, failed_reason FROM scheduled_messages WHERE id=$1").bind(stale).fetch_one(&db).await.unwrap();
+    assert!(!sent && reason.as_deref() == Some("EPOCH_STALE"), "époque périmée : pas d'envoi, échec visible");
+    assert!(!sqlx::query_scalar::<_, bool>("SELECT EXISTS(SELECT 1 FROM messages WHERE enc IS NOT NULL AND channel_id=$1 AND user_id=$2)").bind(open).bind(victim).fetch_one(&db).await.unwrap());
+
     // Demande d'ami : blocage et réglage `friend_request_from` valent pour toutes les voies.
     sqlx::query("INSERT INTO blocks (blocker_id, blocked_id) VALUES ($1, $2)").bind(a).bind(b).execute(&db).await.unwrap();
     assert!(friends::request_or_accept(&state, b, a, None).await.is_err(), "bloqué");
@@ -739,4 +748,38 @@ async fn security_audit_2026_10_14() {
     sqlx::query("INSERT INTO user_settings (user_id, friend_request_from) VALUES ($1, 'nobody')").bind(c).execute(&db).await.unwrap();
     assert!(friends::request_or_accept(&state, victim, c, None).await.is_err(), "réglage nobody");
     assert_eq!(friends::request_or_accept(&state, owner, victim, None).await.unwrap(), "sent");
+}
+
+/// Audit 2026-10-14 (2e passe) : sondage sans READ_HISTORY, export de données limité.
+#[tokio::test]
+#[ignore]
+async fn security_audit_2026_10_14b() {
+    use crate::middleware::auth::Claims;
+    use axum::{extract::{Path, State}, Extension};
+    let (state, db) = setup().await;
+    let (owner, victim) = (user(&db).await, user(&db).await);
+    let s: Uuid = sqlx::query_scalar("INSERT INTO servers (name, owner_id) VALUES ('polls', $1) RETURNING id")
+        .bind(owner).fetch_one(&db).await.expect("server");
+    sqlx::query("INSERT INTO roles (server_id, name, permissions, is_everyone) VALUES ($1, '@everyone', $2, TRUE)")
+        .bind(s).bind(Permissions::VIEW_CHANNEL | Permissions::SEND_MESSAGES | Permissions::READ_HISTORY)
+        .execute(&db).await.expect("everyone");
+    for (m, is_owner) in [(owner, true), (victim, false)] {
+        sqlx::query("INSERT INTO server_members (user_id, server_id, is_owner) VALUES ($1, $2, $3)")
+            .bind(m).bind(s).bind(is_owner).execute(&db).await.expect("member");
+    }
+    let ch: Uuid = sqlx::query_scalar("INSERT INTO channels (server_id, name) VALUES ($1, 'p') RETURNING id").bind(s).fetch_one(&db).await.unwrap();
+    sqlx::query("INSERT INTO channel_permissions (channel_id, target_id, target_type, deny) VALUES ($1, $2, 'member', $3)")
+        .bind(ch).bind(victim).bind(Permissions::READ_HISTORY).execute(&db).await.expect("override");
+    let poll: Uuid = sqlx::query_scalar("INSERT INTO polls (channel_id, server_id, creator_id, question) VALUES ($1, $2, $3, 'q') RETURNING id")
+        .bind(ch).bind(s).bind(owner).fetch_one(&db).await.expect("poll");
+    let claims = |u: Uuid| Claims { sub: u, exp: i64::MAX, iss: "forgechat".into(), iat: 0, sid: None };
+    let get = |u: Uuid| crate::handlers::polls::get_poll(State(state.clone()), Extension(claims(u)), Path((s, ch, poll)));
+    assert!(get(victim).await.is_err(), "sans READ_HISTORY le sondage reste fermé");
+    assert!(get(owner).await.is_ok());
+
+    // Export RGPD : 3 par heure, la 4e est refusée.
+    for i in 0..4 {
+        let r = crate::handlers::privacy::export_user_data(State(state.clone()), Extension(claims(victim))).await;
+        assert_eq!(r.is_ok(), i < 3, "export n° {i}");
+    }
 }

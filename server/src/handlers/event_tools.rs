@@ -27,6 +27,22 @@ pub fn validate(recurrence: Option<&str>, reminder_minutes: Option<i32>) -> Resu
     Ok(())
 }
 
+/// Champs libres d'un événement (création ET modification : la modification n'avait aucune borne).
+/// `image_url` : chemin d'envoi du serveur ou https, jamais `javascript:`/`data:` ni une chaîne géante.
+pub fn validate_fields(name: Option<&str>, description: Option<&str>, image_url: Option<&str>, max_attendees: Option<i64>) -> Result<()> {
+    let bad = |m: &str| Err(AppError::BadRequest(m.into()));
+    if name.is_some_and(|n| n.trim().is_empty() || n.chars().count() > 100) || description.is_some_and(|d| d.chars().count() > 2000) {
+        return bad("Nom (1-100) ou description (2000) invalide");
+    }
+    if image_url.is_some_and(|u| !u.is_empty() && (u.len() > 500 || !(u.starts_with("/uploads/") || u.starts_with("https://")))) {
+        return bad("Image invalide");
+    }
+    if max_attendees.is_some_and(|n| !(1..=100_000).contains(&n)) {
+        return bad("Nombre de places invalide");
+    }
+    Ok(())
+}
+
 // ─── Export calendrier (RFC 5545) ────────────────────────────────────────────
 
 pub struct IcsEvent {
@@ -254,6 +270,21 @@ pub async fn tick(state: &AppState) {
 mod tests {
     use super::*;
     use chrono::TimeZone;
+
+    #[test]
+    fn event_fields_are_bounded() {
+        assert!(validate_fields(Some("Soirée"), Some("x"), Some("/uploads/a.png"), Some(10)).is_ok());
+        assert!(validate_fields(None, None, Some("https://cdn.example/a.png"), None).is_ok());
+        assert!(validate_fields(None, None, Some(""), None).is_ok());
+        assert!(validate_fields(Some("  "), None, None, None).is_err());
+        assert!(validate_fields(Some(&"a".repeat(101)), None, None, None).is_err());
+        assert!(validate_fields(None, Some(&"a".repeat(2001)), None, None).is_err());
+        assert!(validate_fields(None, None, Some("javascript:alert(1)"), None).is_err());
+        assert!(validate_fields(None, None, Some("http://x/a.png"), None).is_err());
+        assert!(validate_fields(None, None, Some(&format!("https://{}", "a".repeat(500))), None).is_err());
+        assert!(validate_fields(None, None, None, Some(-1)).is_err());
+        assert!(validate_fields(None, None, None, Some(i64::from(i32::MAX))).is_err());
+    }
 
     #[test]
     fn ics_escapes_folds_and_repeats() {
