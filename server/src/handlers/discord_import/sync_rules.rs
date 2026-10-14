@@ -37,9 +37,13 @@ fn fold_char(c: char, out: &mut String) {
 
 /// Forme de comparaison d'un nom de catégorie : minuscules, sans accents, lettres et
 /// chiffres seulement, sans « s » final (« 📰 Actualités » == « actualite »).
+/// NFKD d'abord : les « polices » Unicode que Discord permet dans les noms (𝗜𝗡𝗙𝗢, 𝙄𝙉𝙁𝙊, 𝐈𝐍𝐅𝐎,
+/// pleine chasse) valent leurs lettres ordinaires ; sans cela, chaque style se lisait comme un
+/// autre nom et la synchronisation recréait toutes les catégories et les salons en double.
 pub fn fold_name(name: &str) -> String {
+    use unicode_normalization::UnicodeNormalization;
     let mut out = String::with_capacity(name.len());
-    for c in name.chars().flat_map(char::to_lowercase) {
+    for c in name.nfkd().flat_map(char::to_lowercase) {
         fold_char(c, &mut out);
     }
     if out.len() > 1 && out.ends_with('s') {

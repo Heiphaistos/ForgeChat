@@ -1377,6 +1377,13 @@ mod tests {
         assert!(same_name("📢・annonces", "Annonces"));
         assert!(same_name("🎮", "🎮"));
         assert!(!same_name("🎮", "🎲"));
+        // « Polices » Unicode : un même nom écrit en gras sans empattement, italique ou serif
+        // est la même catégorie (cause des doublons constatés sur Jötunheim).
+        assert!(same_name("📜 ⭒ ⭒ ⭒ 𝙄𝙉𝙁𝙊𝙍𝙈𝘼𝙏𝙄𝙊𝙉 ⭒ ⭒ ⭒", "📜 ⭒ ⭒ ⭒ 𝗜𝗡𝗙𝗢𝗥𝗠𝗔𝗧𝗜𝗢𝗡 ⭒ ⭒ ⭒"));
+        assert!(same_name("🚨⭒ ⭒ ⭒𝐀𝐢𝐝𝐞⭒ ⭒ ⭒", "🚨⭒ ⭒ ⭒𝗔𝗶𝗱𝗲⭒ ⭒ ⭒"));
+        assert!(same_name("⭒𝐓𝐢𝐜𝐤𝐞𝐭-𝐇𝐞𝐥𝐩🗪", "⭒𝗧𝗶𝗰𝗸𝗲𝘁-𝗛𝗲𝗹𝗽🗪"));
+        assert!(same_name("ＩＮＦＯ", "info"));
+        assert!(!same_name("𝗜𝗡𝗙𝗢𝗥𝗠𝗔𝗧𝗜𝗢𝗡", "𝗜𝗡𝗙𝗢𝗥𝗠𝗔𝗧𝗜𝗤𝗨𝗘"));
         assert_eq!(family("announcement"), family("text"));
         assert_ne!(family("voice"), family("text"));
     }
