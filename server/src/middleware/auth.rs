@@ -139,26 +139,43 @@ fn revoke_key(user_id: Uuid) -> String {
     format!("jwtrevoke:{user_id}")
 }
 
-pub async fn revoke_all_tokens(state: &AppState, user_id: Uuid) {
+pub async fn revoke_all_tokens(state: &AppState, user_id: Uuid) -> Result<(), AppError> {
     revoke_tokens_before(state, user_id, chrono::Utc::now().timestamp()).await
 }
 
 /// Révocation stricte (bannissement, déconnexion forcée par un administrateur) : un jeton émis dans la
 /// seconde même de la décision est coupé aussi.
-pub async fn revoke_all_tokens_strict(state: &AppState, user_id: Uuid) {
+pub async fn revoke_all_tokens_strict(state: &AppState, user_id: Uuid) -> Result<(), AppError> {
     revoke_tokens_before(state, user_id, chrono::Utc::now().timestamp() + 1).await
 }
 
-async fn revoke_tokens_before(state: &AppState, user_id: Uuid, ts: i64) {
-    use redis::AsyncCommands;
-    let mut redis = state.redis.lock().await;
-    let _: () = redis
-        .set_ex(revoke_key(user_id), ts, 2 * 3600)
-        .await
-        .unwrap_or(());
-    drop(redis);
+async fn revoke_tokens_before(state: &AppState, user_id: Uuid, ts: i64) -> Result<(), AppError> {
+    redis_set_ex_strict(state, revoke_key(user_id), ts, 2 * 3600).await?;
     // Téléphones déconnectés : ils ne doivent plus recevoir de notifications.
     crate::mobile_push::forget_devices(state, user_id).await;
+    Ok(())
+}
+
+/// Écriture Redis qui sert à révoquer/bannir : 3 essais puis 503. Une révocation perdue en silence
+/// laisserait un jeton volé valide ; l'appelant renvoie l'erreur et le client peut rejouer (les
+/// opérations de base déjà validées sont idempotentes).
+pub async fn redis_set_ex_strict<V>(state: &AppState, key: String, val: V, ttl: u64) -> Result<(), AppError>
+where
+    V: redis::ToRedisArgs + Send + Sync + Copy,
+{
+    let mut last = String::new();
+    for attempt in 0..3u64 {
+        if attempt > 0 {
+            tokio::time::sleep(std::time::Duration::from_millis(100 * attempt)).await;
+        }
+        let r: redis::RedisResult<()> = state.redis.lock().await.set_ex(&key, val, ttl).await;
+        match r {
+            Ok(()) => return Ok(()),
+            Err(e) => last = e.to_string(),
+        }
+    }
+    tracing::error!("révocation Redis impossible ({key}) : {last}");
+    Err(AppError::Unavailable("Service momentanément indisponible, réessayez".into()))
 }
 
 fn revoke_sid_key(sid: Uuid) -> String {
@@ -168,9 +185,8 @@ fn revoke_sid_key(sid: Uuid) -> String {
 /// Révoque tout de suite les jetons d'accès d'UNE session (déconnexion de cet appareil,
 /// session révoquée depuis la page « Sessions ») : gardé un peu plus que la durée de vie
 /// d'un jeton d'accès (1 h).
-pub async fn revoke_session_tokens(state: &AppState, sid: Uuid) {
-    let mut redis = state.redis.lock().await;
-    let _: () = redis.set_ex(revoke_sid_key(sid), "1", 3600 + 300).await.unwrap_or(());
+pub async fn revoke_session_tokens(state: &AppState, sid: Uuid) -> Result<(), AppError> {
+    redis_set_ex_strict(state, revoke_sid_key(sid), "1", 3600 + 300).await
 }
 
 #[derive(Debug, PartialEq, Eq)]

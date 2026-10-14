@@ -34,6 +34,8 @@ pub struct ScheduledMessage {
     pub created_at: DateTime<Utc>,
     pub enc: Option<serde_json::Value>,
     pub client_msg_id: Option<Uuid>,
+    /// Non envoyé (ex. `EPOCH_STALE` : clé du salon renouvelée depuis le chiffrement) : à rechiffrer.
+    pub failed_reason: Option<String>,
 }
 
 pub async fn create_scheduled(
@@ -131,7 +133,7 @@ pub async fn list_all_scheduled(
 ) -> Result<Json<Vec<serde_json::Value>>> {
     use sqlx::Row;
     let rows = sqlx::query(
-        "SELECT sm.id, sm.channel_id, sm.content, sm.send_at, sm.created_at, sm.enc, sm.client_msg_id,
+        "SELECT sm.id, sm.channel_id, sm.content, sm.send_at, sm.created_at, sm.enc, sm.client_msg_id, sm.failed_reason,
                 c.name AS channel_name, c.server_id, s.name AS server_name
          FROM scheduled_messages sm
          JOIN channels c ON c.id = sm.channel_id
@@ -151,6 +153,7 @@ pub async fn list_all_scheduled(
         "created_at": r.get::<DateTime<Utc>, _>("created_at"),
         "enc": r.get::<Option<serde_json::Value>, _>("enc"),
         "client_msg_id": r.get::<Option<Uuid>, _>("client_msg_id"),
+        "failed_reason": r.get::<Option<String>, _>("failed_reason"),
         "channel_name": r.get::<String, _>("channel_name"),
         "server_id": r.get::<Option<Uuid>, _>("server_id"),
         "server_name": r.get::<String, _>("server_name"),
@@ -215,7 +218,8 @@ pub async fn update_scheduled(
             send_at = COALESCE($3, send_at),
             enc = COALESCE($4, enc),
             client_msg_id = CASE WHEN $4 IS NULL THEN client_msg_id ELSE $5 END,
-            content = CASE WHEN $4 IS NULL THEN content ELSE NULL END
+            content = CASE WHEN $4 IS NULL THEN content ELSE NULL END,
+            failed_reason = CASE WHEN $4 IS NULL THEN failed_reason ELSE NULL END
          WHERE id=$1 AND user_id=$2 AND sent=FALSE RETURNING *"
     )
     .bind(scheduled_id)
@@ -275,7 +279,7 @@ pub async fn dispatch_scheduled_messages(state: AppState) {
          FROM scheduled_messages sm
          JOIN users u ON u.id = sm.user_id
          JOIN channels c ON c.id = sm.channel_id
-         WHERE sm.send_at <= NOW() AND sm.sent = FALSE
+         WHERE sm.send_at <= NOW() AND sm.sent = FALSE AND sm.failed_reason IS NULL
          LIMIT 100"
     )
     .fetch_all(&state.db)
@@ -318,6 +322,28 @@ pub async fn dispatch_scheduled_messages(state: AppState) {
                 sched_id
             );
             continue;
+        }
+
+        // Chiffré : l'époque a pu tourner (départ/expulsion) depuis la programmation. Envoyer avec une
+        // époque périmée publierait un message illisible pour les nouveaux membres et chiffré sous une
+        // clé que les partants détiennent encore : non envoyé, motif visible, à rechiffrer (PATCH).
+        if enc.is_some() {
+            match crate::handlers::e2e_channel::check_content(&state.db, channel_id, false, enc.as_ref(), cmid, false).await {
+                Ok(_) => {}
+                Err(AppError::Conflict(reason)) => {
+                    let _ = sqlx::query("UPDATE scheduled_messages SET failed_reason=$2 WHERE id=$1 AND sent=FALSE")
+                        .bind(sched_id)
+                        .bind(&reason)
+                        .execute(&state.db)
+                        .await;
+                    tracing::warn!("Message programmé {sched_id} non envoyé : {reason}");
+                    continue;
+                }
+                Err(e) => {
+                    tracing::warn!("Message programmé {sched_id} : époque non vérifiable, nouvel essai : {e}");
+                    continue;
+                }
+            }
         }
 
         // Messages éphémères du salon : appliqués à l'heure de l'envoi.
