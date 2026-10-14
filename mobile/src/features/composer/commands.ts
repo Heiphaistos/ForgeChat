@@ -1,3 +1,4 @@
+import { t } from '@/i18n'
 /** Commandes « / » de la barre de saisie (mêmes commandes intégrées que MessageInput.tsx). */
 
 export interface SlashCommand {
@@ -8,14 +9,14 @@ export interface SlashCommand {
 }
 
 export const BUILTIN_COMMANDS: readonly SlashCommand[] = [
-  { name: 'me', description: 'Envoie une action en italique' },
-  { name: 'shrug', description: 'Envoie ¯\\_(ツ)_/¯' },
-  { name: 'tableflip', description: 'Table flip !' },
-  { name: 'unflip', description: 'Remet la table' },
-  { name: 'lenny', description: 'Visage Lenny' },
-  { name: 'clap', description: 'Applaudissements 👏 entre les mots' },
-  { name: 'spoiler', description: 'Cache le texte en spoiler' },
-  { name: 'giphy', description: 'Cherche un GIF' },
+  { name: 'me', get description() { return t('sw.cmd.me') } },
+  { name: 'shrug', get description() { return t('sw.cmd.shrug') } },
+  { name: 'tableflip', get description() { return t('sw.cmd.tableflip') } },
+  { name: 'unflip', get description() { return t('sw.cmd.unflip') } },
+  { name: 'lenny', get description() { return t('sw.cmd.lenny') } },
+  { name: 'clap', get description() { return t('sw.cmd.clap') } },
+  { name: 'spoiler', get description() { return t('sw.cmd.spoiler') } },
+  { name: 'giphy', get description() { return t('sw.cmd.giphy') } },
 ]
 
 /** Commandes qui attendent un texte après leur nom. */

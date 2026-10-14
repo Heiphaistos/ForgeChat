@@ -1,3 +1,4 @@
+import { t } from '@/i18n'
 import { isUuid } from '@/lib/params'
 
 /** Fil de discussion d'un salon (threads.rs::list_threads). */
@@ -28,7 +29,7 @@ export function normalizeThreads(raw: unknown): ThreadSummary[] {
           {
             id: r.id.toLowerCase(),
             parentMessageId: isUuid(r.parent_message_id) ? r.parent_message_id.toLowerCase() : null,
-            title: typeof r.title === 'string' ? r.title : 'Fil',
+            title: typeof r.title === 'string' ? r.title : t('screen.thread'),
             creatorId: isUuid(r.creator_id) ? r.creator_id.toLowerCase() : null,
             messageCount: num(r.message_count),
             unreadCount: num(r.unread_count),

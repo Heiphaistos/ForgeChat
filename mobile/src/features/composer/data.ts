@@ -2,7 +2,7 @@
  * Données de la barre de saisie, identiques au client web (MessageInput, EmojiPicker, StickerPicker,
  * QuickReplies) pour que les deux clients envoient et comprennent les mêmes messages.
  */
-import type { Key } from '@/i18n'
+import { t, type Key } from '@/i18n'
 
 export interface EmojiCategory {
   label: string
@@ -139,7 +139,7 @@ export interface QuickReply {
 
 /** Réponses rapides par défaut du web (tant que l'utilisateur n'en a pas enregistré). */
 export const DEFAULT_QUICK_REPLIES: readonly QuickReply[] = [
-  { id: '1', label: 'Merci', content: 'Merci beaucoup ! 🙏' },
-  { id: '2', label: 'OK', content: 'Ok, compris !' },
-  { id: '3', label: 'Bientôt', content: 'Je reviens vers toi bientôt.' },
+  { id: '1', get label() { return t('sw.qr.thanksLabel') }, get content() { return t('sw.qr.thanks') } },
+  { id: '2', get label() { return t('sw.qr.okLabel') }, get content() { return t('sw.qr.ok') } },
+  { id: '3', get label() { return t('sw.qr.soonLabel') }, get content() { return t('sw.qr.soon') } },
 ]

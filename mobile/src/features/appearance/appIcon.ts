@@ -1,3 +1,4 @@
+import { t } from '@/i18n'
 import { requireOptionalNativeModule } from 'expo'
 import { Platform } from 'react-native'
 import { saveAppearance, useAppearance } from '@/theme/prefs'
@@ -37,7 +38,7 @@ export async function currentAppIcon(): Promise<AppIconId | null> {
  * certains lanceurs Android ferment l'app dès le changement ; annulé si le système refuse.
  */
 export async function applyAppIcon(id: AppIconId | null): Promise<void> {
-  if (!native) throw new Error('ForgeAppIcon indisponible')
+  if (!native) throw new Error(t('sw.icon.unavailable'))
   const previous = useAppearance.getState().appIcon
   saveAppearance({ appIcon: id })
   try {

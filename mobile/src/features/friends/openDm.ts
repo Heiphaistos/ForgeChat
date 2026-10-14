@@ -1,3 +1,4 @@
+import { t } from '@/i18n'
 import { router } from 'expo-router'
 import { Alert } from 'react-native'
 import { dmsApi } from '@/api/dms'
@@ -10,8 +11,8 @@ export async function openDmWith(userId: string, username: string, support = fal
     router.push({ pathname: '/dm/[dmId]', params: { dmId: dm_id, name: username, userId, ...(support ? { support: '1' } : {}) } })
   } catch (e) {
     Alert.alert(
-      'Impossible d’ouvrir la conversation',
-      e instanceof ApiError && e.status === 403 ? `${username} n’accepte pas les messages privés de ta part.` : errorMessage(e),
+      t('sw.dm.openFail'),
+      e instanceof ApiError && e.status === 403 ? t('sw.dm.noDms', { name: username }) : errorMessage(e),
     )
   }
 }

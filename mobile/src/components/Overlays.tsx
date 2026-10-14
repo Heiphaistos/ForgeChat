@@ -127,11 +127,12 @@ export function ApiHealthBanner() {
 
 /** Profil LAN : rappel permanent qu'il s'agit d'un APK de test local (jamais distribué). */
 export function EnvBanner() {
+  const t = useT()
   const insets = useSafeAreaInsets()
   if (!IS_LAN) return null
   return (
-    <View style={[styles.envBanner, { top: insets.top + 2 }]} pointerEvents="none" accessibilityLabel="Version de test local">
-      <Text style={styles.bannerText}>Test local</Text>
+    <View style={[styles.envBanner, { top: insets.top + 2 }]} pointerEvents="none" accessibilityLabel={t('sw.env.label')}>
+      <Text style={styles.bannerText}>{t('sw.env.badge')}</Text>
     </View>
   )
 }

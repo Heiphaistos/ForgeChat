@@ -403,7 +403,7 @@ export default function FriendsPage() {
               <input
                 value={addTag}
                 onChange={e => setAddTag(e.target.value)}
-                placeholder="pseudo  ·  pseudo#0000"
+                placeholder={t('sw.friends.addPh')}
                 aria-label={t('friends.add')}
                 enterKeyHint="send" autoCapitalize="none" autoCorrect="off"
                 className="flex-1 px-3 py-2 bg-fc-input rounded text-white outline-none focus:ring-2 focus:ring-fc-accent text-sm font-mono"

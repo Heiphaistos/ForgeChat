@@ -22,6 +22,7 @@ import * as auditUi from './parts/auditUi.ts'
 import * as serverAdminPage from './parts/serverAdminPage.ts'
 import * as hardcoded from './parts/hardcoded.ts'
 import * as sweep from './parts/sweep.ts'
+import * as appIconNames from './parts/appIconNames.ts'
 import * as hardcoded7 from './parts/hardcoded7.ts'
 import * as hardcoded6 from './parts/hardcoded6.ts'
 import * as hardcoded5 from './parts/hardcoded5.ts'
@@ -71,6 +72,7 @@ export const en: Partial<Record<Key, string>> = {
   ...serverAdminPage.en,
   ...hardcoded.en,
   ...sweep.en,
+  ...appIconNames.en,
   ...hardcoded7.en,
   ...hardcoded6.en,
   ...hardcoded5.en,

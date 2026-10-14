@@ -149,6 +149,7 @@ export const fr = {
   'e2e.backup.notFile': 'Ce fichier n’est pas une sauvegarde ForgeChat.',
   'e2e.backup.badParams': 'Réglages de sauvegarde refusés.',
   'e2e.backup.badPass': 'Phrase secrète incorrecte (ou fichier modifié).',
+  'sw.friends.addPh': 'pseudo  ·  pseudo#0000',
 } as const
 
 export const en: Partial<Record<keyof typeof fr, string>> = {
@@ -301,4 +302,5 @@ export const en: Partial<Record<keyof typeof fr, string>> = {
   'e2e.backup.notFile': 'This file is not a ForgeChat backup.',
   'e2e.backup.badParams': 'Backup settings rejected.',
   'e2e.backup.badPass': 'Wrong passphrase (or the file was modified).',
+  'sw.friends.addPh': 'username  ·  username#0000',
 }
