@@ -5,6 +5,7 @@
 //! l'origine n'est pas celle du site). À la connexion web, l'utilisateur choisit l'une ou l'autre.
 //! Vérification cryptographique : crate::webauthn.
 use axum::{
+    body::Bytes,
     extract::{Path, State},
     Extension, Json,
 };
@@ -36,6 +37,22 @@ fn bad(msg: &str) -> AppError {
     AppError::BadRequest(format!("Clé d'accès refusée : {msg}"))
 }
 
+/// Ré-authentification exigée pour ajouter ou retirer une clé : code TOTP (ou de secours) du
+/// compte, comme la désactivation du 2FA. Corps lu à la main : un ancien client qui n'envoie rien
+/// reçoit un message clair au lieu d'un rejet d'extracteur. Compteur partagé : `totp::check_code`.
+fn extract_code(body: &[u8]) -> Option<String> {
+    serde_json::from_slice::<Value>(body).ok()?["code"].as_str().map(str::to_string).filter(|c| !c.trim().is_empty())
+}
+
+async fn reauth(state: &AppState, user_id: Uuid, body: &[u8]) -> Result<()> {
+    let code = extract_code(body).ok_or_else(|| AppError::BadRequest("Code de double authentification requis (mets à jour l'appli)".into()))?;
+    if !crate::handlers::totp::check_code(state, user_id, &code).await? {
+        crate::security_events::record(state, "totp_failed").await;
+        return Err(AppError::BadRequest("Code invalide".into()));
+    }
+    Ok(())
+}
+
 type KeyRow = (Uuid, String, chrono::DateTime<chrono::Utc>, Option<chrono::DateTime<chrono::Utc>>);
 
 /// GET /auth/passkeys : clés du compte (jamais les clés publiques).
@@ -53,7 +70,7 @@ pub async fn list(State(state): State<AppState>, Extension(claims): Extension<Cl
 }
 
 /// POST /auth/passkeys/register/start : options de `navigator.credentials.create`.
-pub async fn register_start(State(state): State<AppState>, Extension(claims): Extension<Claims>) -> Result<Json<Value>> {
+pub async fn register_start(State(state): State<AppState>, Extension(claims): Extension<Claims>, body: Bytes) -> Result<Json<Value>> {
     hit(&state, &format!("passkey_reg:{}", claims.sub), 10, 3600).await?;
     let (username, totp): (String, bool) = sqlx::query_as("SELECT username, totp_enabled FROM users WHERE id=$1")
         .bind(claims.sub)
@@ -64,6 +81,7 @@ pub async fn register_start(State(state): State<AppState>, Extension(claims): Ex
             "Active d'abord la double authentification par code : elle reste le secours de tes clés d'accès.".into(),
         ));
     }
+    reauth(&state, claims.sub, &body).await?;
     let existing: Vec<Vec<u8>> = sqlx::query_scalar("SELECT credential_id FROM webauthn_credentials WHERE user_id=$1")
         .bind(claims.sub)
         .fetch_all(&state.db)
@@ -149,7 +167,9 @@ pub async fn delete(
     State(state): State<AppState>,
     Extension(claims): Extension<Claims>,
     Path(id): Path<Uuid>,
+    body: Bytes,
 ) -> Result<Json<Value>> {
+    reauth(&state, claims.sub, &body).await?;
     let n = sqlx::query("DELETE FROM webauthn_credentials WHERE id=$1 AND user_id=$2")
         .bind(id)
         .bind(claims.sub)
@@ -254,6 +274,20 @@ pub async fn check_assertion(state: &AppState, user_id: Uuid, a: &Assertion) -> 
         Err(e) => {
             tracing::info!("clé d'accès refusée : {e}");
             Ok(false)
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::extract_code;
+
+    #[test]
+    fn le_code_de_reauth_est_obligatoire() {
+        assert_eq!(extract_code(br#"{"code":"123456"}"#).as_deref(), Some("123456"));
+        // ancien client : corps vide, JSON sans code, code vide ou non texte
+        for b in [&b""[..], b"{}", br#"{"code":"  "}"#, br#"{"code":5}"#, b"pas du json"] {
+            assert!(extract_code(b).is_none());
         }
     }
 }
