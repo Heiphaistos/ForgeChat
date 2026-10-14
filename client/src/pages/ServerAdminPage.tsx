@@ -259,7 +259,7 @@ export default function ServerAdminPage() {
 
   const TABS: { id: Tab; label: string; Icon: React.ElementType }[] = [
     { id: 'stats',      label: t('sadm.tab.stats'),     Icon: BarChart2 },
-    { id: 'audit',      label: t('sadm.tab.audit'), Icon: ScrollText },
+    { id: 'audit',      label: t('sadm.srv.tab.audit'), Icon: ScrollText },
     { id: 'automod',    label: t('sadm.tab.automod'),           Icon: Shield },
     { id: 'events',     label: t('sadm.tab.events'),        Icon: Calendar },
     { id: 'reports',    label: t('sadm.tab.reports'),      Icon: Flag },
@@ -274,19 +274,19 @@ export default function ServerAdminPage() {
         <button
           className="md:hidden flex items-center justify-center min-w-[44px] min-h-[44px] p-1.5 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition flex-shrink-0"
           onClick={openSidebar}
-          aria-label={t('sadm.back')}
+          aria-label={t('sadm.srv.back')}
         >
           <ChevronLeft size={20} />
         </button>
         <button
           onClick={() => nav(-1)}
           className="hidden md:flex p-1.5 text-fc-muted hover:text-white hover:bg-fc-hover rounded transition"
-          title={t('sadm.back')}
-          aria-label={t('sadm.back')}
+          title={t('sadm.srv.back')}
+          aria-label={t('sadm.srv.back')}
         >
           <ArrowLeft size={18} />
         </button>
-        <h1 className="text-white font-semibold text-base">{t('sadm.title')}</h1>
+        <h1 className="text-white font-semibold text-base">{t('sadm.srv.title')}</h1>
       </div>
 
       {/* Tabs */}

@@ -1,9 +1,9 @@
 // Page d'administration d'un serveur (pages/ServerAdminPage.tsx). fr = référence, en = traduction.
 export const fr = {
-  'sadm.title': 'Panel Administration',
-  'sadm.back': 'Retour',
+  'sadm.srv.title': 'Panel Administration',
+  'sadm.srv.back': 'Retour',
   'sadm.tab.stats': 'Statistiques',
-  'sadm.tab.audit': "Journal d'audit",
+  'sadm.srv.tab.audit': "Journal d'audit",
   'sadm.tab.automod': 'AutoMod',
   'sadm.tab.events': 'Événements',
   'sadm.tab.reports': 'Signalements',
@@ -52,10 +52,10 @@ export const fr = {
 } as const
 
 export const en: Partial<Record<keyof typeof fr, string>> = {
-  'sadm.title': 'Administration panel',
-  'sadm.back': 'Back',
+  'sadm.srv.title': 'Administration panel',
+  'sadm.srv.back': 'Back',
   'sadm.tab.stats': 'Statistics',
-  'sadm.tab.audit': 'Audit log',
+  'sadm.srv.tab.audit': 'Audit log',
   'sadm.tab.automod': 'AutoMod',
   'sadm.tab.events': 'Events',
   'sadm.tab.reports': 'Reports',
