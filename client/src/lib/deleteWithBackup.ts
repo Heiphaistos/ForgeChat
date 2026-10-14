@@ -1,4 +1,5 @@
 import toast from 'react-hot-toast'
+import { t as tr } from '../i18n'
 import api from '../api/client'
 import { confirmChoice } from '../components/ui/ConfirmModal'
 import { saveFile } from './saveFile'
@@ -42,7 +43,7 @@ export async function deleteWithBackup(t: Target): Promise<boolean> {
       // Annulé ou échec d'écriture : rien n'est supprimé.
       if (!await saveFile(JSON.stringify(data, null, 2), name, 'application/json')) return false
       if (data?.truncated || data?.channels?.some((c: any) => c?.truncated)) {
-        toast('Sauvegarde limitée aux 50 000 derniers messages par salon.')
+        toast(tr('hc.t.backupLimit'))
       }
     } catch (e: any) {
       toast.error(e?.response?.data?.error ?? 'Sauvegarde impossible : rien n’a été supprimé.')

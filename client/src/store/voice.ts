@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { t as tr } from '../i18n'
 import { useWs } from './ws'
 import { useAuth } from './auth'
 import { hasUxPref } from './uxPrefs'
@@ -540,8 +541,8 @@ export const useVoice = create<VoiceStore>((set, get) => {
         // Comme Discord/Teams : tout le salon est prévenu qu'on l'enregistre.
         const before = get().peers.find(p => p.userId === d.user_id)
         if (before && !!d.recording !== !!before.recording) {
-          if (d.recording) toast(`🔴 ${before.username} a commencé à enregistrer la conversation`, { duration: 8000 })
-          else toast(`${before.username} a arrêté l'enregistrement`, { duration: 4000 })
+          if (d.recording) toast(tr('hc.t.recStart', { name: before.username }), { duration: 8000 })
+          else toast(tr('hc.t.recStop', { name: before.username }), { duration: 4000 })
         }
         set(s => {
           const current = s.roomParticipants[d.channel_id] ?? []
@@ -713,7 +714,7 @@ export const useVoice = create<VoiceStore>((set, get) => {
               noRecord: !!peer.no_record,
               serverMuted: peer.server_muted ?? false, serverDeafened: peer.server_deafened ?? false,
             }, ctx)
-            if (peer.recording) toast(`🔴 ${peer.username ?? 'Un membre'} enregistre cette conversation`, { duration: 8000 })
+            if (peer.recording) toast(tr('hc.t.recNow', { name: peer.username ?? tr('hc.t.aMember') }), { duration: 8000 })
           }
           const lk = d.livekit
           if (!lk?.url || !lk?.token || !lk?.room) {

@@ -575,7 +575,7 @@ export default function ThreadPanel({ serverId, channelId, parentMessageId, thre
                   const uid = msg.author_id ?? msg.user_id
                   if (uid) setUserPopup({ userId: uid, x: e.clientX, y: e.clientY })
                 }}
-                aria-label={`Voir le profil de ${msg.author?.username ?? msg.author_username ?? 'l\'auteur'}`}
+                aria-label={tr('hc.p.profileOf', { name: msg.author?.username ?? msg.author_username ?? tr('hc.p.theAuthor') })}
                 className="w-6 h-6 rounded-full bg-fc-accent flex items-center justify-center text-xs font-bold text-white flex-shrink-0 mt-0.5 overflow-hidden hover:ring-2 hover:ring-fc-accent/60 transition cursor-pointer"
               >
                 {msg.author?.avatar

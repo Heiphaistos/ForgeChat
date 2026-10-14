@@ -1,4 +1,5 @@
 import { mediaUrl } from '../../api/client'
+import { t as tr } from '../../i18n'
 import { useNavigate } from 'react-router-dom'
 import { Hash, Volume2, Video, Megaphone, MessagesSquare, Images, Radio, Users } from 'lucide-react'
 import ProfileBanner from '../ui/ProfileBanner'
@@ -58,7 +59,7 @@ export default function WelcomeScreen({ server, channels }: Props) {
   const banner = hasBanner && style !== 'minimal' && (
     <ProfileBanner
       src={server.banner}
-      alt="Bannière du serveur"
+      alt={tr('hc.p.banner')}
       minHeight={120}
       maxHeight="45vh"
       focus={bannerFocus(look?.banner)}

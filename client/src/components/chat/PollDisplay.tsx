@@ -125,7 +125,7 @@ export default function PollDisplay({ pollId, serverId, channelId }: Props) {
     mutationFn: () =>
       api.post(`/servers/${serverId}/channels/${channelId}/polls/${pollId}/close`),
     onSuccess: () => {
-      toast.success('Sondage terminé')
+      toast.success(tr('hc.t.pollEnded'))
       queryClient.invalidateQueries({ queryKey: ['poll', pollId] })
     },
     onError: (e: any) => {
@@ -187,7 +187,7 @@ export default function PollDisplay({ pollId, serverId, channelId }: Props) {
           <button
             onClick={() => closeMutation.mutate()}
             disabled={closeMutation.isPending}
-            aria-label="Terminer le sondage"
+            aria-label={tr('hc.p.endPoll')}
             className="flex-shrink-0 p-1 rounded text-fc-muted hover:text-red-400 hover:bg-red-400/10 transition disabled:opacity-50"
           >
             {closeMutation.isPending

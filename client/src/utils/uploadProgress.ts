@@ -1,4 +1,5 @@
 import toast from 'react-hot-toast'
+import { t as tr } from '../i18n'
 import api from '../api/client'
 
 // En dessous de ce seuil l'upload est quasi instantané : pas de toast pour éviter le flash
@@ -26,17 +27,17 @@ export async function postWithUploadProgress(url: string, fd: FormData, totalByt
         throw err
       }
     }
-    const tid = toast.loading('Envoi du fichier… 0%')
+    const tid = toast.loading(tr('hc.t.sending', { pct: 0 }))
     try {
       const res = await api.post(url, fd, {
         onUploadProgress: e => {
           if (e.total) {
             const pct = Math.min(100, Math.round((e.loaded / e.total) * 100))
-            toast.loading(`Envoi du fichier… ${pct}%`, { id: tid })
+            toast.loading(tr('hc.t.sending', { pct }), { id: tid })
           }
         },
       })
-      toast.success('Fichier envoyé', { id: tid })
+      toast.success(tr('hc.t.sent'), { id: tid })
       return res
     } catch (err: any) {
       // Message serveur si disponible (type refusé, taille, permission...)

@@ -711,7 +711,7 @@ export default function MessageList({
       <div
         ref={containerRef}
         role="log"
-        aria-label="Historique des messages"
+        aria-label={t('hc.p.history')}
         aria-live="polite"
         aria-busy={loadingMore}
         className="flex-1 overflow-y-auto overscroll-contain px-2 md:px-4 py-2 space-y-0.5 message-list-container"
@@ -733,7 +733,7 @@ export default function MessageList({
       >
         {/* Loader "plus de messages" */}
         {loadingMore && (
-          <div className="flex justify-center py-3" role="status" aria-label="Chargement des messages précédents">
+          <div className="flex justify-center py-3" role="status" aria-label={t('hc.p.loadingOlder')}>
             <Loader2 size={18} className="animate-spin text-fc-muted" aria-hidden />
           </div>
         )}
@@ -911,7 +911,7 @@ export default function MessageList({
 
         {/* État vide : canal sans messages */}
         {!loadError && showEmpty && !loadingMore && (
-          <div className="flex flex-col items-center justify-center h-full py-16 gap-3 select-none" aria-label="Aucun message">
+          <div className="flex flex-col items-center justify-center h-full py-16 gap-3 select-none" aria-label={t('hc.p.noMessage')}>
             <div className="w-16 h-16 rounded-2xl bg-fc-accent/20 flex items-center justify-center text-3xl" aria-hidden>
               💬
             </div>

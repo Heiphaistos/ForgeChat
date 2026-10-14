@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { t as tr } from '../i18n'
 import toast from 'react-hot-toast'
 import { intlLocale } from '../i18n'
 
@@ -96,8 +97,8 @@ export function DesktopUpdateToast({ info, onClose }: { info: DesktopUpdateInfo;
         {phase !== 'downloading' && (
           <button
             onClick={onClose}
-            aria-label="Plus tard"
-            title="Plus tard"
+            aria-label={tr('hc.p.later')}
+            title={tr('hc.p.later')}
             className="text-fc-muted hover:text-fc-text leading-none px-1"
           >
             ✕

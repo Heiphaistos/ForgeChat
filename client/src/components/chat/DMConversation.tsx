@@ -10,6 +10,7 @@
  * Les read receipts sont affichés dans une zone dédiée sous la liste.
  */
 import { useEffect, useRef, useState, useCallback } from 'react'
+import { t as tr } from '../../i18n'
 import { useQueryClient } from '@tanstack/react-query'
 import { useWs } from '../../store/ws'
 import { useAuth } from '../../store/auth'
@@ -276,7 +277,7 @@ export default function DMConversation({ dmId, partnerName, onSend, onLoadMore, 
     try {
       await api.delete(`/dms/${dmId}/messages/${msgId}`)
     } catch {
-      toast.error('Impossible de supprimer ce message')
+      toast.error(tr('hc.t.delFail'))
     }
   }, [dmId])
 
@@ -294,7 +295,7 @@ export default function DMConversation({ dmId, partnerName, onSend, onLoadMore, 
     try {
       await api.put(`/dms/${dmId}/messages/${msgId}/reactions/${encodeURIComponent(emoji)}`)
     } catch {
-      toast.error('Impossible d\'ajouter la réaction')
+      toast.error(tr('hc.t.reactFail'))
     }
   }, [dmId])
 

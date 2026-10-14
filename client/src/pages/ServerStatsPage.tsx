@@ -1,4 +1,5 @@
 import { BarChart2, Users, Wifi, MessageSquare, TrendingUp, Hash, UserPlus } from 'lucide-react'
+import { t as tr } from '../i18n'
 import { useQuery } from '@tanstack/react-query'
 import api from '../api/client'
 import { intlLocale } from '../i18n'
@@ -55,7 +56,7 @@ function MetricCard({ icon, iconBg, label, value, sub, loading }: MetricCardProp
 function BarChart({ data }: { data: number[] }) {
   const max = Math.max(...data, 1)
   return (
-    <div role="img" aria-label="Graphique d'activité par heure" className="flex items-end gap-0.5 h-16">
+    <div role="img" aria-label={tr('hc.p.hourChart')} className="flex items-end gap-0.5 h-16">
       {data.map((v, i) => {
         const pct = (v / max) * 100
         const isActive = pct > 60
@@ -153,7 +154,7 @@ export default function ServerStatsPage({ serverId }: Props) {
             <div className="flex-1 h-2 bg-fc-hover rounded-full overflow-hidden">
               <div
                 role="progressbar"
-                aria-label="Taux de membres en ligne"
+                aria-label={tr('hc.p.onlineRate')}
                 aria-valuemin={0}
                 aria-valuemax={100}
                 aria-valuenow={onlineRatio}

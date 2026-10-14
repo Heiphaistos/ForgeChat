@@ -139,7 +139,7 @@ export default function GifPicker({ onPick, onClose }: Props) {
       desktopStyle={{ maxHeight: '420px' }}
     >
       {/* Header */}
-      <div role="search" aria-label="Chercher un GIF" className="p-2 border-b border-fc-hover flex-shrink-0">
+      <div role="search" aria-label={t('hc.p.gifSearch')} className="p-2 border-b border-fc-hover flex-shrink-0">
         <div className="flex items-center gap-2 bg-fc-input rounded-lg px-2 py-1.5">
           <Search size={14} aria-hidden className="text-fc-muted flex-shrink-0" />
           <input
@@ -147,7 +147,7 @@ export default function GifPicker({ onPick, onClose }: Props) {
             value={search}
             onChange={e => setSearch(e.target.value)}
             placeholder={source.placeholder}
-            aria-label="Chercher un GIF"
+            aria-label={t('hc.p.gifSearch')}
             enterKeyHint="search"
             inputMode="search"
             autoComplete="off"
@@ -155,7 +155,7 @@ export default function GifPicker({ onPick, onClose }: Props) {
             className="bg-transparent text-sm text-white outline-none flex-1 placeholder-fc-muted"
           />
           {search && (
-            <button onClick={() => setSearch('')} aria-label="Effacer la recherche" className="text-fc-muted hover:text-white transition">
+            <button onClick={() => setSearch('')} aria-label={t('hc.p.clearSearch')} className="text-fc-muted hover:text-white transition">
               <X size={12} aria-hidden />
             </button>
           )}

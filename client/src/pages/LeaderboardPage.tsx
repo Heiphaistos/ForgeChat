@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { t as tr } from '../i18n'
 import { usePageTitle } from '../hooks/usePageTitle'
 import { useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
@@ -61,13 +62,13 @@ export default function LeaderboardPage() {
             <button
               className="md:hidden flex items-center justify-center min-w-[44px] min-h-[44px] p-1.5 rounded hover:bg-fc-hover text-fc-muted hover:text-white transition flex-shrink-0"
               onClick={openSidebar}
-              aria-label="Retour"
+              aria-label={tr('hc.common.back')}
             >
               <ChevronLeft size={20} />
             </button>
             <h1 className="text-2xl font-bold text-white">Classement</h1>
           </div>
-          <div role="tablist" aria-label="Période du classement" className="flex gap-1 bg-fc-channel rounded-lg p-1">
+          <div role="tablist" aria-label={tr('hc.p.period')} className="flex gap-1 bg-fc-channel rounded-lg p-1">
             {PERIODS.map(p => (
               <button
                 key={p.value}

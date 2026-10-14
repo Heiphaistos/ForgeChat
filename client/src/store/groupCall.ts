@@ -2,6 +2,7 @@
 // par le serveur aux seuls membres du groupe. Comme store/call.ts, l'état vit hors des
 // composants pour que l'appel survive à la navigation.
 import { create } from 'zustand'
+import { t as tr } from '../i18n'
 import { Room, RoomEvent, Track, DisconnectReason, type RemoteParticipant, type RemoteTrack } from 'livekit-client'
 import toast from 'react-hot-toast'
 import api from '../api/client'
@@ -152,12 +153,12 @@ async function _connect(lk: { url: string; token: string; e2ee?: boolean }, set:
       // Même compte rejoint depuis un autre appareil : c'est lui qui est dans
       // l'appel désormais, un GROUP_CALL_LEAVE l'en sortirait.
       if (reason === DisconnectReason.DUPLICATE_IDENTITY) {
-        toast('Appel de groupe repris sur un autre appareil.')
+        toast(tr('hc.t.gcMoved'))
         _cleanup(set)
         return
       }
-      if (reason === DisconnectReason.PARTICIPANT_REMOVED) toast('Vous avez quitté l\'appel de groupe.')
-      else if (reason !== DisconnectReason.CLIENT_INITIATED) toast.error('Appel interrompu : connexion au serveur audio/vidéo perdue.')
+      if (reason === DisconnectReason.PARTICIPANT_REMOVED) toast(tr('hc.t.gcLeft'))
+      else if (reason !== DisconnectReason.CLIENT_INITIATED) toast.error(tr('hc.t.callLost'))
       useWs.getState().send({ type: 'GROUP_CALL_LEAVE', group_id: get().groupId })
       _cleanup(set)
     })
@@ -166,7 +167,7 @@ async function _connect(lk: { url: string; token: string; e2ee?: boolean }, set:
     await room.connect(lk.url, lk.token, { autoSubscribe: true, rtcConfig: res ? { iceServers: res.data.ice_servers } : undefined })
   } catch {
     if (_room === room) {
-      toast.error('Impossible de joindre le serveur audio/vidéo.')
+      toast.error(tr('hc.t.avDown'))
       useWs.getState().send({ type: 'GROUP_CALL_LEAVE', group_id: get().groupId })
       _cleanup(set)
     }
@@ -216,7 +217,7 @@ export const useGroupCall = create<GroupCallStore>((set, get) => ({
     const offMedia = ws.on('GROUP_CALL_MEDIA', async (d: any) => {
       if (d.group_id !== get().groupId || get().status !== 'connecting') return
       if (d.session_id && _mySessionId && d.session_id !== _mySessionId) return
-      if (!d.livekit?.url || !d.livekit?.token) { toast.error('Serveur audio/vidéo indisponible.'); _cleanup(set); return }
+      if (!d.livekit?.url || !d.livekit?.token) { toast.error(tr('hc.t.avUnavail')); _cleanup(set); return }
       await _connect(d.livekit, set, get)
     })
     const offUpdate = ws.on('GROUP_CALL_UPDATE', (d: any) => {
@@ -247,9 +248,9 @@ export const useGroupCall = create<GroupCallStore>((set, get) => ({
 
   join: async (groupId, type) => {
     if (get().groupId === groupId) return
-    if (useCallStore.getState().callState !== 'idle') { toast.error('Terminez d\'abord l\'appel en cours.'); return }
+    if (useCallStore.getState().callState !== 'idle') { toast.error(tr('hc.t.endCallFirst')); return }
     // ponytail: pas de vocal natif Linux pour les groupes (le 1:1 l'a) ; l'app propose le navigateur.
-    if (webrtcMissing()) { toast.error('Appels de groupe indisponibles ici : ouvrez ForgeChat dans votre navigateur.'); return }
+    if (webrtcMissing()) { toast.error(tr('hc.t.gcUnavail')); return }
     if (get().groupId) get().leave()
     set({ groupId, status: 'connecting', ring: null, camOff: type !== 'video' })
     try {
@@ -267,7 +268,7 @@ export const useGroupCall = create<GroupCallStore>((set, get) => ({
       set({ localStream: stream })
       useWs.getState().send({ type: 'GROUP_CALL_JOIN', group_id: groupId, call_type: type, ...e2eeClaim() })
     } catch {
-      toast.error('Accès au micro refusé')
+      toast.error(tr('hc.t.micRefused'))
       _cleanup(set)
     }
   },
@@ -304,7 +305,7 @@ export const useGroupCall = create<GroupCallStore>((set, get) => ({
       if (_room?.state === 'connected') await _room.localParticipant.publishTrack(vt, { source: Track.Source.Camera, ...camPublishOptions(get().e2ee) })
       set({ camOff: false, localStream: new MediaStream([...localStream.getAudioTracks(), vt]) })
     } catch {
-      toast.error("Impossible d'accéder à la caméra.")
+      toast.error(tr('hc.t.camDenied'))
     }
   },
 }))

@@ -1,4 +1,5 @@
 import toast from 'react-hot-toast'
+import { t as tr } from '../i18n'
 import { useWs } from './ws'
 import { useAuth } from './auth'
 import type { VoicePeer, VoiceRoomParticipant } from './voice'
@@ -44,12 +45,12 @@ export function initVoiceModeration(
     if (d.user_id !== useAuth.getState().user?.id) return
     const inChannel = get().joined && (!d.channel_id || d.channel_id === get().channelId)
     if (inChannel) applyImposed(flags.serverMuted, flags.serverDeafened)
-    if (flags.serverDeafened) toast('Un modérateur vous a mis en sourdine sur ce serveur.')
-    else if (flags.serverMuted) toast('Un modérateur vous a rendu muet sur ce serveur.')
+    if (flags.serverDeafened) toast(tr('hc.t.modDeaf'))
+    else if (flags.serverMuted) toast(tr('hc.t.modMute'))
     // Le micro reste coupé localement après la levée : le dire, au lieu
     // d'annoncer un micro « rétabli » qui ne transmet rien.
-    else if (inChannel && get().muted) toast('Un modérateur a levé votre muet : réactivez votre micro pour parler.')
-    else toast('Un modérateur a levé votre muet sur ce serveur.')
+    else if (inChannel && get().muted) toast(tr('hc.t.modUnmuteRe'))
+    else toast(tr('hc.t.modUnmute'))
   })
 
   const offMove = ws.on('VOICE_MOVE', (d: any) => {
@@ -58,7 +59,7 @@ export function initVoiceModeration(
     const listenOnly = s.listenOnly
     s.leave()
     void get().join(d.channel_id, d.server_id, false, undefined, d.channel_name ?? undefined, listenOnly)
-    toast(`Un modérateur vous a déplacé vers « ${d.channel_name ?? 'un autre salon'} ».`)
+    toast(tr('hc.t.modMoved', { name: d.channel_name ?? tr('hc.t.anotherChannel') }))
   })
 
   const offDisconnect = ws.on('VOICE_FORCE_DISCONNECT', (d: any) => {

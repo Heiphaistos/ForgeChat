@@ -1,4 +1,5 @@
 import { useChat } from '../../store/chat'
+import { t as tr } from '../../i18n'
 import { Download } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { displayAttachments } from '../../e2e/files'
@@ -26,7 +27,7 @@ export default function ExportConversationButton({ channelId, channelName }: Exp
 
   const handleExport = async () => {
     if (messages.length === 0) {
-      toast.error('Aucun message à exporter')
+      toast.error(tr('hc.t.exportNone'))
       return
     }
 
@@ -62,7 +63,7 @@ export default function ExportConversationButton({ channelId, channelName }: Exp
     const name = `forgechat-${channelName}-${new Date().toISOString().slice(0, 10)}.txt`
     // Bureau : saveFile affiche lui-même « Enregistré dans … ».
     if (await saveFile(lines.join('\n'), name, 'text/plain') && !isDesktop) {
-      toast.success(`${sorted.length} messages exportés`)
+      toast.success(tr('hc.t.exported', { n: sorted.length }))
     }
   }
 

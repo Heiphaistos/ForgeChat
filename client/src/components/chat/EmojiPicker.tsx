@@ -127,7 +127,7 @@ export default function EmojiPicker({ onPick, onClose, serverId }: Props) {
 
       {/* Onglets Standard / Mes serveurs */}
       {allEmojis.length > 0 && (
-        <div role="tablist" aria-label="Type d'emojis" className="flex border-b border-fc-hover">
+        <div role="tablist" aria-label={t('hc.p.emojiType')} className="flex border-b border-fc-hover">
           <button
             role="tab"
             aria-selected={tab === 'standard'}
