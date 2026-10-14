@@ -186,6 +186,13 @@ export function bindRealtime(): () => void {
       if (tid) void queryClient.invalidateQueries({ queryKey: qk.threadMessages(tid) })
     })
   }
+  // Tâches du salon (moderation.rs).
+  for (const t of ['TASK_CREATE', 'TASK_UPDATE', 'TASK_DELETE']) {
+    on(t, (e) => {
+      const cid = str(e.channel_id)
+      if (cid) void queryClient.invalidateQueries({ queryKey: qk.tasks(cid) })
+    })
+  }
   // Forums (forum.rs) : liste des publications du salon et publication ouverte.
   for (const t of ['FORUM_POST_CREATE', 'FORUM_POST_UPDATE', 'FORUM_POST_DELETE', 'FORUM_REPLY_CREATE', 'FORUM_REPLY_DELETE']) {
     on(t, (e) => {

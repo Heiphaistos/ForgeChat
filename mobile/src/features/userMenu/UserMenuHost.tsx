@@ -324,7 +324,7 @@ function TextEditor({ editor, name, onClose, onSave }: { editor: Editor; name: s
         <View style={styles.card}>
           <Text style={styles.title}>{editor?.kind === 'note' ? `🔒 ${t('ux.um.note')}` : t('ux.um.friendNick')} · {name}</Text>
           <Text style={styles.hint}>{t('ux.um.onlyYou')}</Text>
-          <TextField value={text} onChangeText={setText} multiline={editor?.kind === 'note'} maxLength={editor?.kind === 'note' ? 2000 : 64} autoFocus />
+          <TextField value={text} onChangeText={setText} accessibilityLabel={editor?.kind === 'note' ? t('ux.um.note') : t('ux.um.friendNick')} multiline={editor?.kind === 'note'} maxLength={editor?.kind === 'note' ? 2000 : 64} autoFocus />
           <View style={styles.buttons}>
             <Button title={t('common.cancel')} variant="ghost" onPress={onClose} />
             <Button title={t('ux.um.save')} onPress={() => onSave(text)} />

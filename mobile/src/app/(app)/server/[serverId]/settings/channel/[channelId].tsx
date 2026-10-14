@@ -12,6 +12,7 @@ import { ChoiceRow } from '@/features/servers/ChoiceRow'
 import { ChannelMessagingSection } from '@/features/servers/ChannelMessagingSection'
 import { confirmDeleteChannel, useServerPerms } from '@/features/servers/menus'
 import { PERM } from '@/features/servers/perms'
+import { supportsWaitingRoom, waitingRoomChange } from '@/features/voice/waitingRoom'
 import { useT, type Key } from '@/i18n'
 import { errorMessage } from '@/lib/http'
 import { useRouteParams } from '@/lib/params'
@@ -69,6 +70,7 @@ function ChannelForm({ serverId, channel, categories }: { serverId: string; chan
   const [password, setPassword] = useState('')
   const [removePassword, setRemovePassword] = useState(false)
   const [autoCreate, setAutoCreate] = useState(!!channel.is_auto_create)
+  const [waitingRoom, setWaitingRoom] = useState(!!channel.waiting_room)
   const [autoName, setAutoName] = useState(channel.auto_create_name ?? '')
   const [sort, setSort] = useState(channel.default_sort || 'latest_activity')
   const [requireTag, setRequireTag] = useState(!!channel.require_tag)
@@ -94,6 +96,8 @@ function ChannelForm({ serverId, channel, categories }: { serverId: string; chan
     setError(null)
     try {
       await channelsApi.update(serverId, channel.id, patch)
+      const wr = waitingRoomChange(ty, channel.waiting_room, waitingRoom)
+      if (wr !== null) await channelsApi.setWaitingRoom(serverId, channel.id, wr)
       if (categoryId !== channel.category_id) await serversApi.moveChannel(channel.id, categoryId)
       await refresh()
       router.back()
@@ -183,6 +187,7 @@ function ChannelForm({ serverId, channel, categories }: { serverId: string; chan
               options={LIMITS.map((n) => ({ value: n, label: n ? t('serverSettings.channel.people', { n }) : t('serverSettings.noLimit') }))} onChange={setLimit} />
             <ChoiceRow icon="pulse-outline" title={t('serverSettings.channel.bitrate')} value={bitrate} options={BITRATES} onChange={setBitrate} />
             <SwitchRow icon="add-circle-outline" title={t('serverSettings.channel.autoCreate')} value={autoCreate} onValueChange={setAutoCreate} />
+            {supportsWaitingRoom(ty) ? <SwitchRow icon="hourglass-outline" title={t('waiting.setting')} subtitle={t('waiting.settingHint')} value={waitingRoom} onValueChange={setWaitingRoom} /> : null}
           </>
         ) : null}
         {ty === 'forum' ? (

@@ -553,7 +553,7 @@ ${t('e2e.report.notice')}` : t('chat.reportReason'), [
         />
 
         <Modal visible={!!paletteFor} transparent animationType="fade" onRequestClose={() => setPaletteFor(null)}>
-          <Pressable style={styles.paletteBackdrop} onPress={() => setPaletteFor(null)}>
+          <Pressable style={styles.paletteBackdrop} onPress={() => setPaletteFor(null)} accessibilityRole="button" accessibilityLabel={t('common.close')}>
             <View style={styles.palette}>
               {EMOJI_PALETTE.map((e) => (
                 <Pressable

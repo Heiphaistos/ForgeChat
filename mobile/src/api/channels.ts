@@ -9,6 +9,8 @@ export interface ChannelFull extends Channel {
   is_temporary?: boolean
   default_sort?: string
   require_tag?: boolean
+  /** Salle d'attente vocale (voice_waiting.rs) : sans MOVE_MEMBERS, on attend d'être admis. */
+  waiting_room?: boolean
 }
 
 /** PATCH /servers/:sid/channels/:cid (UpdateChannelRequest). `user_limit` null ou 0 : sans limite. */
@@ -37,6 +39,9 @@ export interface ChannelOverride {
 
 export const channelsApi = {
   update: (serverId: string, channelId: string, patch: ChannelPatch) => http.patch<Channel>(path`/servers/${serverId}/channels/${channelId}`, patch),
+  /** Salle d'attente d'un salon vocal ou d'une scène (MANAGE_CHANNELS | EDIT_CHANNELS). */
+  setWaitingRoom: (serverId: string, channelId: string, enabled: boolean) =>
+    http.put(path`/servers/${serverId}/channels/${channelId}/waiting-room`, { enabled }),
   /** Bascule archivé / restauré ; renvoie le nouvel état. */
   toggleArchive: (serverId: string, channelId: string) => http.patch<{ archived: boolean }>(path`/servers/${serverId}/channels/${channelId}/archive`),
   /** Positions 0..n dans l'ordre donné (features/servers/reorder). */

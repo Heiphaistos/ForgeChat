@@ -64,6 +64,7 @@ export function ChannelActions({ serverId, channelId, name, isAnnouncement }: { 
         actions={[
           { label: t('conv.search'), icon: 'search-outline', onPress: () => router.push({ pathname: '/search', params: ref }) },
           { label: t('conv.pins'), icon: 'pin-outline', onPress: () => router.push({ pathname: '/pins', params: ref }) },
+          { label: t('tasks.menu'), icon: 'checkbox-outline', onPress: () => router.push(`/tasks/${serverId}/${channelId}`) },
           ...(isAnnouncement
             ? [{ label: t('conv.follow'), icon: 'megaphone-outline' as const, onPress: () => router.push({ pathname: '/server/[serverId]/follow', params: { serverId, channelId, name } }) }]
             : []),
