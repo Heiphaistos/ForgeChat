@@ -1033,6 +1033,7 @@ pub(crate) async fn notify_permission_change(state: &AppState, channel_id: Uuid,
         "channel_id": channel_id,
         "server_id": server_id,
     }).to_string()).await;
+    crate::handlers::voice_moderation::evict_unauthorized_voice(state, server_id).await;
 }
 
 #[cfg(test)]

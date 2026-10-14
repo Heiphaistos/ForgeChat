@@ -230,6 +230,7 @@ pub async fn update_role(
     ).await;
 
     state.broadcast_to_server_members(server_id, role_update_event(server_id, &role)).await;
+    crate::handlers::voice_moderation::evict_unauthorized_voice(&state, server_id).await;
 
     Ok(Json(role))
 }
@@ -329,6 +330,7 @@ pub async fn delete_role(
         "server_id": server_id,
         "role_id": role_id,
     }).to_string()).await;
+    crate::handlers::voice_moderation::evict_unauthorized_voice(&state, server_id).await;
 
     Ok(Json(serde_json::json!({ "ok": true })))
 }
@@ -402,6 +404,7 @@ pub async fn assign_role(
         "server_id": server_id,
         "user_id": user_id,
     }).to_string()).await;
+    crate::handlers::voice_moderation::evict_unauthorized_voice(&state, server_id).await;
 
     Ok(Json(serde_json::json!({ "ok": true })))
 }
@@ -431,6 +434,7 @@ pub async fn remove_role(
         "server_id": server_id,
         "user_id": user_id,
     }).to_string()).await;
+    crate::handlers::voice_moderation::evict_unauthorized_voice(&state, server_id).await;
 
     Ok(Json(serde_json::json!({ "ok": true })))
 }

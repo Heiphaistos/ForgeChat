@@ -22,9 +22,11 @@ export default function PasskeysSection() {
     staleTime: 60_000,
   })
   const [naming, setNaming] = useState(false)
+  // Ré-authentification (code TOTP) exigée avant d'ajouter ou de retirer une clé.
+  const [ask, setAsk] = useState<{ add: string } | { del: string } | null>(null)
   const add = useMutation({
-    mutationFn: async (name: string) => {
-      const options = (await api.post('/auth/passkeys/register/start')).data
+    mutationFn: async ({ name, code }: { name: string; code: string }) => {
+      const options = (await api.post('/auth/passkeys/register/start', { code })).data
       const created = await createPasskey(options)
       return api.post('/auth/passkeys/register/finish', { name, ...created })
     },
@@ -35,7 +37,7 @@ export default function PasskeysSection() {
     onError: (e: any) => toast.error(e.response?.data?.error ?? t('guard.passkey.failed')),
   })
   const remove = useMutation({
-    mutationFn: (id: string) => api.delete(`/auth/passkeys/${id}`),
+    mutationFn: ({ id, code }: { id: string; code: string }) => api.delete(`/auth/passkeys/${id}`, { data: { code } }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['passkeys'] }),
     onError: (e: any) => toast.error(e.response?.data?.error ?? t('guard.passkey.removeFailed')),
   })
@@ -60,7 +62,7 @@ export default function PasskeysSection() {
               </p>
             </div>
             <button
-              onClick={() => { void confirm({ message: t('guard.passkey.removeConfirm'), danger: true, confirmLabel: t('guard.passkey.remove') }).then(ok => { if (ok) remove.mutate(k.id) }) }}
+              onClick={() => { void confirm({ message: t('guard.passkey.removeConfirm'), danger: true, confirmLabel: t('guard.passkey.remove') }).then(ok => { if (ok) setAsk({ del: k.id }) }) }}
               className="p-1.5 text-fc-muted hover:text-fc-red rounded-lg hover:bg-fc-red/10"
               aria-label={t('guard.passkey.remove')}
               title={t('guard.passkey.remove')}
@@ -84,7 +86,13 @@ export default function PasskeysSection() {
       {naming && (
         <TextPromptDialog title={t('guard.passkey.add')} label={t('guard.passkey.namePrompt')} maxLength={64}
           submitLabel={t('guard.passkey.continue')}
-          onSubmit={name => { setNaming(false); add.mutate(name) }} onClose={() => setNaming(false)} />
+          onSubmit={name => { setNaming(false); setAsk({ add: name }) }} onClose={() => setNaming(false)} />
+      )}
+      {ask && (
+        <TextPromptDialog title={t('guard.passkey.title')} label={t('guard.passkey.codePrompt')} maxLength={32}
+          placeholder="123456" submitLabel={t('guard.passkey.continue')}
+          onSubmit={code => { const a = ask; setAsk(null); if ('add' in a) add.mutate({ name: a.add, code }); else remove.mutate({ id: a.del, code }) }}
+          onClose={() => setAsk(null)} />
       )}
     </div>
   )
