@@ -196,7 +196,7 @@ export default function CreateChannelModal({ serverId, onClose, defaultCategoryI
                     <span>{t('createChannel.userLimit')}</span>
                     <span className="text-white font-medium">{userLimit === 0 ? t('invite.unlimited') : userLimit}</span>
                   </div>
-                  <input type="range" min={0} max={99} value={userLimit}
+                  <input aria-label={t('createChannel.userLimit')} type="range" min={0} max={99} value={userLimit}
                     onChange={e => setUserLimit(Number(e.target.value))}
                     className="w-full accent-fc-accent" />
                 </div>

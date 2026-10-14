@@ -160,7 +160,7 @@ export default function ConnectedAccountsSection() {
 
       {/* Modal d'ajout */}
       {adding && platformMeta && (
-        <div role="dialog" aria-modal="true" aria-label={t('settings.connected.title', { name: platformMeta.label })} className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center" onClick={() => setAdding(null)}>
+        <div role="dialog" aria-modal="true" aria-label={t('settings.connected.title', { name: platformMeta.label })} className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center" onClick={() => setAdding(null)} onKeyDown={e => { if (e.key === 'Escape') setAdding(null) }}>
           <div
             className="bg-fc-sidebar rounded-2xl p-6 w-full max-w-sm shadow-2xl space-y-4"
             onClick={e => e.stopPropagation()}
@@ -173,6 +173,7 @@ export default function ConnectedAccountsSection() {
               <label className="text-xs text-fc-muted mb-1 block">{t('settings.account.username')}</label>
               <input
                 autoFocus
+                aria-label={t('settings.account.username')}
                 value={username}
                 onChange={e => setUsername(e.target.value)}
                 placeholder={t(platformMeta.placeholder as Key)}
@@ -185,6 +186,7 @@ export default function ConnectedAccountsSection() {
             <div>
               <label className="text-xs text-fc-muted mb-1 block">{t('settings.connected.url')}</label>
               <input
+                aria-label={t('settings.connected.url')}
                 value={url}
                 onChange={e => setUrl(e.target.value)}
                 placeholder="https://..."

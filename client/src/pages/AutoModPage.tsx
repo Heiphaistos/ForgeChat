@@ -85,6 +85,7 @@ function SliderRow({ label, description, value, min, max, step = 1, unit = '', z
           />
         </div>
         <input
+          aria-label={label}
           type="range"
           min={min}
           max={max}

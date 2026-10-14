@@ -116,7 +116,7 @@ export default function InviteModal({ serverId, serverName, onClose }: Props) {
                 <Clock size={9} className="inline mr-1" />{t('invite.expiry')}
               </label>
               <div className="relative">
-                <select
+                <select aria-label={t('invite.expiry')}
                   value={expiryHours ?? ''}
                   onChange={e => setExpiryHours(e.target.value === '' ? null : Number(e.target.value))}
                   className="w-full appearance-none bg-fc-input text-white text-sm px-3 py-2 rounded outline-none focus:ring-2 focus:ring-fc-accent pr-7"
@@ -135,7 +135,7 @@ export default function InviteModal({ serverId, serverName, onClose }: Props) {
                 <Users size={9} className="inline mr-1" />{t('invite.maxUses')}
               </label>
               <div className="relative">
-                <select
+                <select aria-label={t('invite.maxUses')}
                   value={maxUses ?? ''}
                   onChange={e => setMaxUses(e.target.value === '' ? null : Number(e.target.value))}
                   className="w-full appearance-none bg-fc-input text-white text-sm px-3 py-2 rounded outline-none focus:ring-2 focus:ring-fc-accent pr-7"

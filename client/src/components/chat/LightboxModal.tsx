@@ -102,7 +102,7 @@ export default function LightboxModal({ images, initialIndex, onClose }: Props) 
         )}
         <button onClick={share} aria-label={t('lightbox.share')} title={t('lightbox.share')} className="p-2 bg-white/10 hover:bg-white/20 rounded-lg text-white transition"><Share2 size={18} aria-hidden /></button>
         <button onClick={download} aria-label={t('lightbox.download')} className="p-2 bg-white/10 hover:bg-white/20 rounded-lg text-white transition"><Download size={18} aria-hidden /></button>
-        <button onClick={onClose} aria-label={t('common.close')} className="p-2 bg-white/10 hover:bg-white/20 rounded-lg text-white transition"><X size={18} aria-hidden /></button>
+        <button autoFocus onClick={onClose} aria-label={t('common.close')} className="p-2 bg-white/10 hover:bg-white/20 rounded-lg text-white transition"><X size={18} aria-hidden /></button>
       </div>
 
       {images.length > 1 && (

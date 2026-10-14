@@ -440,7 +440,7 @@ export default function ServerSettingsModal({ server, onClose, isAdmin = false, 
 
                 <div>
                   <label className="block text-xs font-semibold text-fc-muted uppercase tracking-wide mb-2">{t('servers.create.name')}</label>
-                  <input value={name} onChange={e => setName(e.target.value)} maxLength={100}
+                  <input aria-label={t('servers.create.name')} value={name} onChange={e => setName(e.target.value)} maxLength={100}
                     enterKeyHint="done"
                     autoCapitalize="sentences"
                     className="w-full px-3 py-2 bg-fc-input rounded text-white outline-none focus:ring-2 focus:ring-fc-accent"
@@ -537,7 +537,7 @@ export default function ServerSettingsModal({ server, onClose, isAdmin = false, 
                 <div>
                   <label className="block text-xs font-semibold text-fc-muted uppercase tracking-wide mb-2">{t('createChannel.category')}</label>
                   <p className="text-xs text-fc-muted mb-2">{t('srv.categoryDesc')}</p>
-                  <select value={serverCategory} onChange={e => setServerCategory(e.target.value)}
+                  <select aria-label={t('createChannel.category')} value={serverCategory} onChange={e => setServerCategory(e.target.value)}
                     className="w-full px-3 py-2 bg-fc-input rounded text-white outline-none text-sm">
                     <option value="">{t('settings.cosmetics.noneF')}</option>
                     <option value="gaming">Gaming</option>
@@ -556,7 +556,7 @@ export default function ServerSettingsModal({ server, onClose, isAdmin = false, 
                   <div>
                     <label className="block text-xs font-semibold text-fc-muted uppercase tracking-wide mb-2">{t('srv.systemChannel')}</label>
                     <p className="text-xs text-fc-muted mb-2">{t('srv.systemChannelDesc')}</p>
-                    <select value={systemChannelId} onChange={e => setSystemChannelId(e.target.value)}
+                    <select aria-label={t('srv.systemChannel')} value={systemChannelId} onChange={e => setSystemChannelId(e.target.value)}
                       className="w-full px-3 py-2 bg-fc-input rounded text-white outline-none text-sm">
                       <option value="">{t('settings.access.none')}</option>
                       {channels.filter((c: any) => c.type === 'text').map((c: any) => (
@@ -568,7 +568,7 @@ export default function ServerSettingsModal({ server, onClose, isAdmin = false, 
                   <div>
                     <label className="block text-xs font-semibold text-fc-muted uppercase tracking-wide mb-2">{t('srv.rulesChannel')}</label>
                     <p className="text-xs text-fc-muted mb-2">{t('srv.rulesChannelDesc')}</p>
-                    <select value={rulesChannelId} onChange={e => setRulesChannelId(e.target.value)}
+                    <select aria-label={t('srv.rulesChannel')} value={rulesChannelId} onChange={e => setRulesChannelId(e.target.value)}
                       className="w-full px-3 py-2 bg-fc-input rounded text-white outline-none text-sm">
                       <option value="">{t('settings.access.none')}</option>
                       {channels.filter((c: any) => c.type === 'text').map((c: any) => (
@@ -578,7 +578,7 @@ export default function ServerSettingsModal({ server, onClose, isAdmin = false, 
                   </div>
                   <div>
                     <label className="block text-xs font-semibold text-fc-muted uppercase tracking-wide mb-2">{t('srv.afkChannel')}</label>
-                    <select value={afkChannelId} onChange={e => setAfkChannelId(e.target.value)}
+                    <select aria-label={t('srv.afkChannel')} value={afkChannelId} onChange={e => setAfkChannelId(e.target.value)}
                       className="w-full px-3 py-2 bg-fc-input rounded text-white outline-none text-sm">
                       <option value="">{t('settings.access.none')}</option>
                       {channels.filter((c: any) => c.type === 'voice').map((c: any) => (
@@ -591,7 +591,7 @@ export default function ServerSettingsModal({ server, onClose, isAdmin = false, 
                       <label className="block text-xs font-semibold text-fc-muted uppercase tracking-wide mb-2">
                         {t('srv.afkTimeout')} — {afkTimeout >= 3600 ? `${afkTimeout/3600}h` : `${afkTimeout/60} min`}
                       </label>
-                      <select value={afkTimeout} onChange={e => setAfkTimeout(Number(e.target.value))}
+                      <select aria-label={t('srv.afkTimeout')} value={afkTimeout} onChange={e => setAfkTimeout(Number(e.target.value))}
                         className="w-full px-3 py-2 bg-fc-input rounded text-white outline-none text-sm">
                         {[60, 120, 300, 600, 900, 1800, 3600].map(s => (
                           <option key={s} value={s}>{s >= 3600 ? `${s/3600}h` : `${s/60} min`}</option>
@@ -606,7 +606,7 @@ export default function ServerSettingsModal({ server, onClose, isAdmin = false, 
                   <h3 className="text-sm font-semibold text-white">{t('srv.group.moderation')}</h3>
                   <div>
                     <label className="block text-xs font-semibold text-fc-muted uppercase tracking-wide mb-2">{t('settings.privacy.explicit')}</label>
-                    <select value={explicitFilter} onChange={e => setExplicitFilter(e.target.value)}
+                    <select aria-label={t('settings.privacy.explicit')} value={explicitFilter} onChange={e => setExplicitFilter(e.target.value)}
                       className="w-full px-3 py-2 bg-fc-input rounded text-white outline-none text-sm">
                       <option value="none">{t('settings.privacy.off')}</option>
                       <option value="no_role">{t('settings.privacy.noRoles')}</option>

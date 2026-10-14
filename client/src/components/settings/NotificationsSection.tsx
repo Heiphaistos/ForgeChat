@@ -197,12 +197,12 @@ export default function NotificationsSection() {
           <div className="grid grid-cols-2 gap-3 pt-2 border-t border-fc-hover">
             <div>
               <label className="text-xs text-fc-muted mb-1 block">{t('settings.notif.start')}</label>
-              <input type="time" value={quietStart} onChange={e => setQuietStart(e.target.value)}
+              <input aria-label={t('settings.notif.start')} type="time" value={quietStart} onChange={e => setQuietStart(e.target.value)}
                 className="w-full bg-fc-bg border border-fc-hover rounded-lg px-3 py-2 text-sm text-white" />
             </div>
             <div>
               <label className="text-xs text-fc-muted mb-1 block">{t('settings.notif.end')}</label>
-              <input type="time" value={quietEnd} onChange={e => setQuietEnd(e.target.value)}
+              <input aria-label={t('settings.notif.end')} type="time" value={quietEnd} onChange={e => setQuietEnd(e.target.value)}
                 className="w-full bg-fc-bg border border-fc-hover rounded-lg px-3 py-2 text-sm text-white" />
             </div>
             <div className="col-span-2">

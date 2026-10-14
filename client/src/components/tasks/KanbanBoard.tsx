@@ -96,7 +96,7 @@ function CreateTaskForm({ channelId, onClose, onCreated }: CreateFormProps) {
         className="w-full bg-transparent text-white text-xs outline-none placeholder:text-fc-muted resize-none"
       />
       <div className="flex items-center justify-between gap-2">
-        <select
+        <select aria-label={tr('kanban.priority')}
           value={priority}
           onChange={e => setPriority(e.target.value as Task['priority'])}
           className="bg-fc-hover text-white text-xs rounded px-2 py-1 outline-none"
