@@ -482,9 +482,15 @@ async fn security_passkey_second_factor() {
     let origin = "https://forgechat.example";
 
     // Sans TOTP : refus (le code reste le secours).
-    assert!(crate::handlers::passkeys::register_start(axum::extract::State(state.clone()), claims()).await.is_err());
-    sqlx::query("UPDATE users SET totp_enabled=TRUE WHERE id=$1").bind(u).execute(&db).await.unwrap();
-    let opts = crate::handlers::passkeys::register_start(axum::extract::State(state.clone()), claims()).await.unwrap().0;
+    let bytes = |s: &str| axum::body::Bytes::from(s.to_string());
+    assert!(crate::handlers::passkeys::register_start(axum::extract::State(state.clone()), claims(), bytes("{}")).await.is_err());
+    let backup = "aaaa-bbbb-cccc-dddd";
+    sqlx::query("UPDATE users SET totp_enabled=TRUE, totp_backup_codes=ARRAY[$2]::text[] WHERE id=$1")
+        .bind(u).bind(crate::handlers::totp::hash_backup(backup)).execute(&db).await.unwrap();
+    // Ré-authentification : ancien client (corps vide) et mauvais code refusés.
+    assert!(crate::handlers::passkeys::register_start(axum::extract::State(state.clone()), claims(), bytes("")).await.is_err());
+    assert!(crate::handlers::passkeys::register_start(axum::extract::State(state.clone()), claims(), bytes(r#"{"code":"zzzz-zzzz-zzzz-zzzz"}"#)).await.is_err());
+    let opts = crate::handlers::passkeys::register_start(axum::extract::State(state.clone()), claims(), bytes(&format!(r#"{{"code":"{backup}"}}"#))).await.unwrap().0;
     let ch = opts["challenge"].as_str().unwrap().to_string();
     assert_eq!(opts["rp"]["id"], "forgechat.example");
     let mut key = SoftKey::new();
@@ -495,6 +501,10 @@ async fn security_passkey_second_factor() {
         attestation_object: b(&key.attestation("forgechat.example")),
     };
     let _ = crate::handlers::passkeys::register_finish(axum::extract::State(state.clone()), claims(), axum::Json(body)).await.expect("enregistrée");
+    // Retrait : exige aussi un code valide.
+    let kid: Uuid = sqlx::query_scalar("SELECT id FROM webauthn_credentials WHERE user_id=$1").bind(u).fetch_one(&db).await.unwrap();
+    assert!(crate::handlers::passkeys::delete(axum::extract::State(state.clone()), claims(), axum::extract::Path(kid), bytes("")).await.is_err());
+    assert_eq!(sqlx::query_scalar::<_, i64>("SELECT count(*) FROM webauthn_credentials WHERE user_id=$1").bind(u).fetch_one(&db).await.unwrap(), 1);
 
     // Connexion : options liées au compte, assertion acceptée une fois.
     let opts = crate::handlers::passkeys::login_options(&state, u).await.unwrap().expect("options");
