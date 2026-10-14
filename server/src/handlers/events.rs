@@ -405,7 +405,9 @@ pub async fn attend_event(
         return Err(AppError::BadRequest("Événement terminé".into()));
     }
 
-    // Vérifier la limite max_attendees pour le statut "going"
+    // Verrou de ligne sur l'événement : deux "going" concurrents se sérialisent, la limite
+    // max_attendees ne peut plus être dépassée. Toute erreur DB => refus (fail-closed).
+    let mut tx = state.db.begin().await?;
     if body.status == "going" {
         let at_limit: bool = sqlx::query_scalar(
             "SELECT COALESCE(max_attendees, 2147483647) <= (
@@ -413,13 +415,12 @@ pub async fn attend_event(
                WHERE event_id=$1 AND status='going'
                AND user_id != $2
              )
-             FROM server_events WHERE id=$1"
+             FROM server_events WHERE id=$1 FOR UPDATE"
         )
         .bind(event_id)
         .bind(claims.sub)
-        .fetch_one(&state.db)
-        .await
-        .unwrap_or(false);
+        .fetch_one(&mut *tx)
+        .await?;
 
         if at_limit {
             return Err(AppError::BadRequest("Événement complet".into()));
@@ -434,8 +435,9 @@ pub async fn attend_event(
     .bind(event_id)
     .bind(claims.sub)
     .bind(&body.status)
-    .execute(&state.db)
+    .execute(&mut *tx)
     .await?;
+    tx.commit().await?;
 
     let ws_event = serde_json::json!({ "type": "EVENT_RSVP_UPDATE", "event_id": event_id, "user_id": claims.sub, "status": body.status });
     state.broadcast_to_server_members(server_id, ws_event.to_string()).await;
