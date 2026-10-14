@@ -409,18 +409,21 @@ pub async fn attend_event(
     // max_attendees ne peut plus être dépassée. Toute erreur DB => refus (fail-closed).
     let mut tx = state.db.begin().await?;
     if body.status == "going" {
-        let at_limit: bool = sqlx::query_scalar(
-            "SELECT COALESCE(max_attendees, 2147483647) <= (
-               SELECT COUNT(*) FROM event_attendees
-               WHERE event_id=$1 AND status='going'
-               AND user_id != $2
-             )
-             FROM server_events WHERE id=$1 FOR UPDATE"
+        // Deux requêtes : le décompte doit être lu APRÈS l'obtention du verrou. Dans une seule
+        // requête `... FOR UPDATE`, la sous-requête garde l'instantané d'avant l'attente et ne
+        // voit pas l'inscription validée entre-temps (limite dépassée en concurrence).
+        let max: Option<i32> = sqlx::query_scalar("SELECT max_attendees FROM server_events WHERE id=$1 FOR UPDATE")
+            .bind(event_id)
+            .fetch_one(&mut *tx)
+            .await?;
+        let going: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM event_attendees WHERE event_id=$1 AND status='going' AND user_id != $2",
         )
         .bind(event_id)
         .bind(claims.sub)
         .fetch_one(&mut *tx)
         .await?;
+        let at_limit = max.is_some_and(|m| going >= i64::from(m));
 
         if at_limit {
             return Err(AppError::BadRequest("Événement complet".into()));
