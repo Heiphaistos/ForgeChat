@@ -622,7 +622,7 @@ pub(crate) async fn rotate_refresh_token(state: &AppState, token: &str) -> Resul
 async fn grace_retry(state: &AppState, token: &str, grace_key: &str) -> Result<(Uuid, String, String)> {
     let sealed: Option<String> = {
         let mut redis = state.redis.lock().await;
-        redis.get(grace_key).await.unwrap_or(None)
+        redis.get(grace_key).await.map_err(|_| AppError::Unavailable("Service momentanément indisponible".into()))?
     };
     let (user_id, issued, sid, successor) = sealed
         .as_deref()
@@ -632,7 +632,8 @@ async fn grace_retry(state: &AppState, token: &str, grace_key: &str) -> Result<(
         .ok_or(AppError::Unauthorized)?;
     let revoked_since: Option<i64> = {
         let mut redis = state.redis.lock().await;
-        redis.get(format!("jwtrevoke:{user_id}")).await.unwrap_or(None)
+        // Redis KO : 503 (jamais un jeton rendu sans avoir pu lire la révocation).
+        redis.get(format!("jwtrevoke:{user_id}")).await.map_err(|_| AppError::Unavailable("Service momentanément indisponible".into()))?
     };
     if revoked_since.is_some_and(|ts| issued < ts) {
         return Err(AppError::Unauthorized);

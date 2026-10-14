@@ -210,8 +210,9 @@ pub async fn get_poll(
     .fetch_optional(&state.db)
     .await?
     .ok_or_else(|| AppError::NotFound("Sondage introuvable".into()))?;
-    // Sondage d'un salon masqué : même garde que le vote.
+    // Sondage d'un salon masqué : même garde que le vote ; lire un sondage = lire l'historique.
     require_member_and_channel(&state, claims.sub, server_id, row.get("channel_id")).await?;
+    crate::handlers::channel_access::require_read_history(&state, claims.sub, row.get("channel_id")).await?;
 
     let options_rows = sqlx::query(
         "SELECT po.id, po.text, po.position,
@@ -388,6 +389,7 @@ pub async fn poll_voters(
         .await?
         .ok_or_else(|| AppError::NotFound("Sondage introuvable".into()))?;
     require_member_and_channel(&state, claims.sub, server_id, row.get("channel_id")).await?;
+    crate::handlers::channel_access::require_read_history(&state, claims.sub, row.get("channel_id")).await?;
     if row.get::<bool, _>("anonymous") {
         return Err(AppError::Forbidden);
     }

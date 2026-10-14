@@ -190,9 +190,7 @@ pub async fn create_event(
     }
     let recurrence = body.recurrence.as_deref().unwrap_or("none");
     super::event_tools::validate(Some(recurrence), body.reminder_minutes)?;
-    if body.name.chars().count() > 100 || body.description.as_ref().is_some_and(|d| d.chars().count() > 2000) {
-        return Err(AppError::BadRequest("Nom (100) ou description (2000) trop long".into()));
-    }
+    super::event_tools::validate_fields(Some(&body.name), body.description.as_deref(), body.image_url.as_deref(), body.max_attendees.map(i64::from))?;
 
     let event = sqlx::query_as::<_, ServerEvent>(
         "INSERT INTO server_events (server_id, channel_id, name, description, event_type,
@@ -285,6 +283,12 @@ pub async fn update_event(
     }
 
     super::event_tools::validate(body.recurrence.as_deref(), body.reminder_minutes.flatten())?;
+    super::event_tools::validate_fields(
+        body.name.as_deref(),
+        body.description.as_ref().and_then(|v| v.as_str()),
+        body.image_url.as_ref().and_then(|v| v.as_str()),
+        body.max_attendees.as_ref().and_then(|v| v.as_i64()),
+    )?;
     if let (Some(start), Some(Some(end))) = (body.start_time, body.end_time) {
         if end <= start {
             return Err(AppError::BadRequest("end_time doit être après start_time".into()));
