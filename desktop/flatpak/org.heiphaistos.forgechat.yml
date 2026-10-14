@@ -14,10 +14,11 @@ finish-args:
   - --socket=pulseaudio
   # Webcam des appels (nokhwa, V4L2) : Flatpak n'a pas de permission plus etroite pour /dev/video*.
   - --device=all
-  # Icone de la zone de notification, notifications, jetons de session (Secret Service).
+  # Icone de la zone de notification, notifications.
   - --talk-name=org.kde.StatusNotifierWatcher
   - --talk-name=org.freedesktop.Notifications
-  - --talk-name=org.freedesktop.secrets
+  # Pas de --talk-name=org.freedesktop.secrets : il ouvre TOUT le trousseau (secrets des autres applis).
+  # Les jetons vont dans le repli chiffre session.bin (session_file.rs), dans ~/.var/app/<id>.
 modules:
   - shared-modules/libayatana-appindicator/libayatana-appindicator-gtk3.json
 

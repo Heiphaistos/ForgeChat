@@ -141,9 +141,11 @@ export function DesktopUpdateToast({ info, onClose }: { info: DesktopUpdateInfo;
 
       {phase === 'installing' && info.target === 'linux-flatpak' && (
         <div className="mt-3 text-xs text-fc-text/90">
-          Paquet téléchargé et vérifié. Fermez ForgeChat, puis installez-le dans un terminal :
+          Paquet téléchargé et vérifié. Fermez ForgeChat, puis installez-le dans un terminal et relisez
+          les permissions affichées avant de valider :
           <pre className="mt-1 whitespace-pre-wrap break-all font-mono bg-fc-bg rounded p-2 select-all">
-            {`flatpak install --user --reinstall -y ~/.var/app/org.heiphaistos.forgechat/cache/${info.url.split('/').pop()}`}
+            {/* Sans -y : flatpak montre les permissions du paquet et demande confirmation (le cache est modifiable par l'appli). */}
+            {`flatpak install --user --reinstall ~/.var/app/org.heiphaistos.forgechat/cache/${info.url.split('/').pop()}`}
           </pre>
         </div>
       )}
