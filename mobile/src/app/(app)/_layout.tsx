@@ -43,6 +43,7 @@ export default function AppLayout() {
         <Stack.Screen name="group/[groupId]" options={{ title: '', ...OWN_BOTTOM }} />
         <Stack.Screen name="group/create" options={{ title: t('screen.newGroup'), presentation: 'modal' }} />
         <Stack.Screen name="group/manage/[groupId]" options={{ title: t('conv.manageGroup') }} />
+        <Stack.Screen name="tasks/[serverId]/[channelId]" options={{ title: t('tasks.title') }} />
         <Stack.Screen name="pins" options={{ title: t('screen.pins'), presentation: 'modal' }} />
         <Stack.Screen name="search" options={{ title: t('screen.search') }} />
         <Stack.Screen name="saved" options={{ title: t('you.saved') }} />

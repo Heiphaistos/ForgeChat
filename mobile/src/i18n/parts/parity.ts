@@ -1,0 +1,43 @@
+// Parité avec le web (oct. 2026) : tâches de salon, comptes liés, flux d'activité, salle d'attente, bots.
+// fr = référence, en = traduction complète.
+export const fr = {
+  'tasks.menu': 'Tâches du salon',
+  'tasks.title': 'Tâches',
+  'tasks.todo': 'À faire',
+  'tasks.done': 'Terminées',
+  'tasks.empty': 'Aucune tâche',
+  'tasks.add': 'Nouvelle tâche',
+  'tasks.titlePh': 'Titre de la tâche',
+  'tasks.descPh': 'Description (facultatif)',
+  'tasks.priority': 'Priorité',
+  'tasks.prio.low': 'Basse',
+  'tasks.prio.normal': 'Normale',
+  'tasks.prio.high': 'Haute',
+  'tasks.prio.urgent': 'Urgente',
+  'tasks.create': 'Ajouter la tâche',
+  'tasks.late': 'En retard',
+  'tasks.failed': 'Action sur la tâche impossible',
+  'tasks.deleteTitle': 'Supprimer « {name} » ?',
+  'tasks.deleteLabel': 'Supprimer la tâche {name}',
+}
+
+export const en: Record<keyof typeof fr, string> = {
+  'tasks.menu': 'Channel tasks',
+  'tasks.title': 'Tasks',
+  'tasks.todo': 'To do',
+  'tasks.done': 'Done',
+  'tasks.empty': 'No tasks',
+  'tasks.add': 'New task',
+  'tasks.titlePh': 'Task title',
+  'tasks.descPh': 'Description (optional)',
+  'tasks.priority': 'Priority',
+  'tasks.prio.low': 'Low',
+  'tasks.prio.normal': 'Normal',
+  'tasks.prio.high': 'High',
+  'tasks.prio.urgent': 'Urgent',
+  'tasks.create': 'Add task',
+  'tasks.late': 'Overdue',
+  'tasks.failed': 'Task action failed',
+  'tasks.deleteTitle': 'Delete "{name}"?',
+  'tasks.deleteLabel': 'Delete task {name}',
+}

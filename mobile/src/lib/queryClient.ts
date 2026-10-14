@@ -42,5 +42,6 @@ export const qk = {
   threadMessages: (threadId: string) => ['thread-messages', threadId] as const,
   forum: (channelId: string) => ['forum', channelId] as const,
   forumPost: (postId: string) => ['forum-post', postId] as const,
+  tasks: (channelId: string) => ['tasks', channelId] as const,
   forumTags: (channelId: string) => ['forum-tags', channelId] as const,
 }

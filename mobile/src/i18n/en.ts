@@ -27,6 +27,7 @@ import * as ringCard from './parts/ringCard'
 import * as siteAdmin from './parts/siteAdmin'
 import * as auditMobile from './parts/auditMobile'
 import * as discordFeatures from './parts/discordFeatures'
+import * as parity from './parts/parity'
 
 export const en: Partial<Record<Key, string>> = {
   ...settings.en,
@@ -56,6 +57,7 @@ export const en: Partial<Record<Key, string>> = {
   ...siteAdmin.en,
   ...auditMobile.en,
   ...discordFeatures.en,
+  ...parity.en,
 
   // --- Commun ---
   'common.cancel': 'Cancel',
