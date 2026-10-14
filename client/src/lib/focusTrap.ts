@@ -21,18 +21,20 @@ const focusables = (root: HTMLElement) =>
 export function installFocusTrap(): void {
   const stack: HTMLElement[] = []
   const triggers = new Map<HTMLElement, HTMLElement | null>()
-  let lastOutside: HTMLElement | null = null
+  // Dernier élément focalisé par modale (null = hors modale) : le déclencheur d'une modale imbriquée
+  // est dans la modale parente, pas derrière elle.
+  const lastIn = new Map<HTMLElement | null, HTMLElement>()
 
   document.addEventListener('focusin', e => {
     const el = e.target as HTMLElement
-    if (!el.closest?.(MODAL)) lastOutside = el
+    lastIn.set(el.closest?.<HTMLElement>(MODAL) ?? null, el)
   })
 
   new MutationObserver(() => {
     for (const d of document.querySelectorAll<HTMLElement>(MODAL)) {
       if (stack.includes(d)) continue
+      triggers.set(d, lastIn.get(stack[stack.length - 1] ?? null) ?? null)
       stack.push(d)
-      triggers.set(d, lastOutside)
       if (!d.contains(document.activeElement)) (focusables(d)[0] ?? (d.tabIndex = -1, d)).focus({ preventScroll: true })
     }
     for (let i = stack.length - 1; i >= 0; i--) {
@@ -41,6 +43,7 @@ export function installFocusTrap(): void {
       stack.splice(i, 1)
       const back = triggers.get(d)
       triggers.delete(d)
+      lastIn.delete(d)
       const a = document.activeElement
       if (back?.isConnected && (!a || a === document.body)) back.focus({ preventScroll: true })
     }

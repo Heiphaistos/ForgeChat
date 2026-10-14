@@ -35,7 +35,7 @@ export default function DiscordSyncTree({ tree, sel, onChange }: { tree: SyncTre
     const Icon = ICONS[kind]
     return (
       <li key={id} role="treeitem" aria-level={level} aria-selected={sel.has(id)} className="py-0.5" style={{ paddingLeft: (level - 1) * 20 }}>
-        <label className="flex items-center gap-2 text-sm text-white cursor-pointer">
+        <label className="flex items-center gap-2 text-sm text-white cursor-pointer min-w-0">
           <Check checked={sel.has(id)} label={name} onChange={on => onChange(toggleChannel(cat && full(cat), id, sel, on))} />
           <Icon size={14} className="text-fc-muted shrink-0" aria-hidden />
           <span className="truncate">{name}</span>
@@ -71,7 +71,7 @@ export default function DiscordSyncTree({ tree, sel, onChange }: { tree: SyncTre
                       className="text-fc-muted hover:text-white">
                       {open ? <ChevronDown size={14} aria-hidden /> : <ChevronRight size={14} aria-hidden />}
                     </button>
-                    <label className="flex items-center gap-2 text-sm font-semibold text-white cursor-pointer">
+                    <label className="flex items-center gap-2 text-sm font-semibold text-white cursor-pointer min-w-0">
                       <Check checked={st === 'all'} mixed={st === 'some'} label={cat.name}
                         onChange={on => onChange(toggleCategory(full(cat), sel, on))} />
                       <span className="truncate">{cat.name}</span>

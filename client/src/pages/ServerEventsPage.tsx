@@ -330,7 +330,7 @@ export default function ServerEventsPage({ serverId }: Props) {
   return (
     <div className="space-y-5">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h3 className="text-lg font-semibold text-white flex items-center gap-2">
             <Calendar size={18} className="text-fc-accent" />
@@ -338,7 +338,7 @@ export default function ServerEventsPage({ serverId }: Props) {
           </h3>
           <p className="text-sm text-fc-muted mt-0.5">{t('events.intro')}</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <div role="group" aria-label={t('events.viewMode')} className="flex items-center bg-fc-hover rounded-lg p-0.5">
             <button
               onClick={() => setViewMode('list')}

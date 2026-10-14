@@ -50,6 +50,7 @@ if ('serviceWorker' in navigator && import.meta.env.PROD) {
 
 initFaviconAnimation()
 initAppIcon()
+installFocusTrap()
 if (isTauri) installDragDropGuard()
 
 // App de bureau Linux : signale le premier rendu. Sans ce signal, le lancement

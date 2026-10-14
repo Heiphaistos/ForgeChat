@@ -36,3 +36,24 @@ test('dictionnaires : aucune valeur vide, anglais ⊂ français', () => {
     assert.ok(k in fr, `clé anglaise sans français : ${k}`)
   }
 })
+
+test('aucune clé définie deux fois (avec des valeurs différentes) dans les fichiers de dictionnaire', async () => {
+  const { readdirSync, readFileSync } = await import('node:fs')
+  const dir = new URL('../src/i18n/', import.meta.url)
+  const seen = new Map()
+  const dups = []
+  for (const f of [...readdirSync(dir).map(n => n), ...readdirSync(new URL('parts/', dir)).map(n => 'parts/' + n)].filter(n => n.endsWith('.ts'))) {
+    let dict = ''
+    for (const line of readFileSync(new URL(f, dir), 'utf8').split('\n')) {
+      const d = line.match(/^export const (\w+)/)
+      if (d) dict = d[1]
+      const k = line.match(/^\s+'([\w.-]+)':\s*(.+?),?\s*$/)
+      if (!k) continue
+      const id = `${dict}|${k[1]}`
+      const prev = seen.get(id)
+      if (prev && prev.v !== k[2]) dups.push(`${k[1]} (${prev.f} / ${f})`)
+      seen.set(id, { f, v: k[2] })
+    }
+  }
+  assert.deepEqual(dups, [])
+})

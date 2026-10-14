@@ -208,7 +208,7 @@ export default function DiscordSyncTab({ serverId }: { serverId: string }) {
         </label>
 
         {/* Mode de synchronisation */}
-        <fieldset>
+        <fieldset className="min-w-0">
           <legend className={labelCls}>{t('dsync.mode')}</legend>
           {(['full', 'content'] as const).map(m => (
             <label key={m} className="flex items-start gap-2 text-sm text-white cursor-pointer mb-2">
@@ -222,7 +222,7 @@ export default function DiscordSyncTab({ serverId }: { serverId: string }) {
         </fieldset>
 
         {/* Éléments à synchroniser */}
-        <fieldset>
+        <fieldset className="min-w-0">
           <legend className={labelCls}>{t('dsync.items')}</legend>
           <p className="text-xs text-fc-muted mb-2">{t('dsync.itemsHint')}</p>
           <label className="flex items-start gap-2 text-sm text-white cursor-pointer mb-2">
@@ -243,7 +243,7 @@ export default function DiscordSyncTab({ serverId }: { serverId: string }) {
         </fieldset>
 
         {/* Exclusion par nom */}
-        <fieldset>
+        <fieldset className="min-w-0">
           <legend className={labelCls}>{t('dsync.excluded')}</legend>
           <p className="text-xs text-fc-muted mb-2">{t('dsync.excludedHint')}</p>
           <div className="flex flex-wrap gap-2 mb-2">
