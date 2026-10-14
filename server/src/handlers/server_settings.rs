@@ -370,9 +370,11 @@ pub async fn get_members_detailed(
              FROM server_members sm
              JOIN users u ON u.id = sm.user_id
              WHERE sm.server_id=$1
-             ORDER BY sm.is_owner DESC, u.username",
+             ORDER BY sm.is_owner DESC, u.username
+             LIMIT $2",
         )
         .bind(server_id)
+        .bind(crate::handlers::servers::MEMBERS_PAGE_MAX)
         .fetch_all(&state.db),
         sqlx::query(
             "SELECT mr.user_id, r.id, r.name, r.color

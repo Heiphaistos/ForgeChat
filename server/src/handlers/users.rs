@@ -356,20 +356,7 @@ pub async fn delete_account(
     // de toute façon cibler que le compte du token authentifié (pas de risque cross-
     // compte), donc bloquer par utilisateur suffit et reste valable même si l'attaquant
     // change d'IP.
-    {
-        use redis::AsyncCommands;
-        let key = format!("delacc_attempts:{}", claims.sub);
-        let mut redis = state.redis.lock().await;
-        let count: Option<i64> = redis.get(&key).await.unwrap_or(None);
-        let count = count.unwrap_or(0);
-        if count >= 5 {
-            return Err(AppError::TooManyRequests);
-        }
-        let _: () = redis.incr(&key, 1).await.unwrap_or(());
-        if count == 0 {
-            let _: () = redis.expire(&key, 900).await.unwrap_or(());
-        }
-    }
+    crate::handlers::auth_v2::hit(&state, &format!("delacc_attempts:{}", claims.sub), 5, 900).await?;
 
     // Confirmation par la preuve du mot de passe (`auth`, connexion v2 ; `password` pour un
     // compte pas encore migré) contre la suppression accidentelle / CSRF.

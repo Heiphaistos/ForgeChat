@@ -45,10 +45,12 @@ pub async fn get_role_members(
          JOIN server_members sm ON sm.user_id = mr.user_id AND sm.server_id = mr.server_id
          JOIN users u ON u.id = mr.user_id
          WHERE mr.server_id = $1 AND mr.role_id = $2
-         ORDER BY u.username"
+         ORDER BY u.username
+         LIMIT $3"
     )
     .bind(server_id)
     .bind(role_id)
+    .bind(crate::handlers::servers::MEMBERS_PAGE_MAX)
     .fetch_all(&state.db)
     .await?;
 
@@ -62,6 +64,9 @@ pub async fn get_role_members(
 
     Ok(Json(members))
 }
+
+/// Rôles par serveur (Discord : 250).
+const MAX_ROLES_PER_SERVER: i64 = 250;
 
 pub async fn create_role(
     State(state): State<AppState>,
@@ -78,6 +83,11 @@ pub async fn create_role(
         return Err(AppError::BadRequest("Couleur invalide".into()));
     }
     let perms = body.permissions.unwrap_or(0) & Permissions::ALL;
+    let roles: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM roles WHERE server_id=$1")
+        .bind(server_id).fetch_one(&state.db).await?;
+    if roles >= MAX_ROLES_PER_SERVER {
+        return Err(AppError::BadRequest(format!("Limite de {MAX_ROLES_PER_SERVER} rôles par serveur atteinte")));
+    }
 
     // Élévation de privilège : MANAGE_ROLES seul permettait de créer un rôle avec
     // N'IMPORTE QUELLE permission du masque (BAN_MEMBERS, MANAGE_SERVER, KICK_MEMBERS...)

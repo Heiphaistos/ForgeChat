@@ -190,8 +190,19 @@ pub async fn registration_info(State(state): State<AppState>) -> Result<Json<Val
 // ─── Bannissement ──────────────────────────────────────────────────────────
 
 pub async fn is_banned(state: &AppState, user_id: Uuid) -> bool {
-    let mut redis = state.redis.lock().await;
-    redis.sismember::<_, _, bool>(BANNED_SET, user_id.to_string()).await.unwrap_or(false)
+    let cached = {
+        let mut redis = state.redis.lock().await;
+        redis.sismember::<_, _, bool>(BANNED_SET, user_id.to_string()).await
+    };
+    match cached {
+        Ok(b) => b,
+        // Redis KO : la base fait foi ; base KO aussi : refusé (fail-closed).
+        Err(_) => sqlx::query_scalar("SELECT site_banned_at IS NOT NULL FROM users WHERE id=$1")
+            .bind(user_id)
+            .fetch_optional(&state.db)
+            .await
+            .map_or(true, |b| b.unwrap_or(false)),
+    }
 }
 
 /// Recharge l'ensemble Redis depuis la base (au démarrage : Redis a pu être vidé).

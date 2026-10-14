@@ -24,12 +24,15 @@ const TOKEN_TTL_SECS: u64 = 30 * 60;
 /// Compte fantôme « Utilisateur supprimé » (migration 063) : jamais réinitialisable.
 const DELETED_USER: &str = "00000000-0000-0000-0000-00000000dead";
 
-/// Incrémente un compteur Redis ; `true` si la limite est dépassée.
+/// Incrémente un compteur Redis ; `true` si la limite est dépassée. Fail-closed : Redis
+/// injoignable ou TTL impossible à poser = limite atteinte (jamais un passage libre).
 pub(crate) async fn over_limit(state: &AppState, key: &str, max: i64, window_secs: i64) -> bool {
     let mut redis = state.redis.lock().await;
-    let count: i64 = redis.incr(key, 1).await.unwrap_or(0);
-    if count == 1 {
-        let _: () = redis.expire(key, window_secs).await.unwrap_or(());
+    let Ok(count) = redis.incr::<_, _, i64>(key, 1).await else { return true };
+    if count == 1 && redis.expire::<_, bool>(key, window_secs).await.is_err() {
+        // Sans TTL le compteur bloquerait la clé à vie : on la retire.
+        let _: std::result::Result<i64, _> = redis.del(key).await;
+        return true;
     }
     count > max
 }

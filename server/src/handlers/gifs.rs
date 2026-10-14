@@ -255,17 +255,7 @@ async fn fetch(state: &AppState, claims: &Claims, q: Option<&str>, pos: Option<&
         return Err(AppError::BadRequest("Pagination invalide".into()));
     }
 
-    {
-        let key = format!("gifs_rl:{}", claims.sub);
-        let mut redis = state.redis.lock().await;
-        let count: i64 = redis.incr(&key, 1i64).await.unwrap_or(0);
-        if count == 1 {
-            let _: () = redis.expire(&key, 60).await.unwrap_or(());
-        }
-        if count > RATE_PER_MINUTE {
-            return Err(AppError::TooManyRequests);
-        }
-    }
+    crate::handlers::auth_v2::hit(state, &format!("gifs_rl:{}", claims.sub), RATE_PER_MINUTE, 60).await?;
 
     let nom = match prov { Provider::Giphy { .. } => "giphy", Provider::Klipy { .. } => "klipy", Provider::Commons => "commons" };
     let cache_key = format!("gifs2:{nom}:{}:{}", q.unwrap_or("").to_lowercase(), pos.unwrap_or("0"));

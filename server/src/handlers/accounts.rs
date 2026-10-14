@@ -11,7 +11,6 @@ use axum::{
     Json,
 };
 use chrono::Utc;
-use redis::AsyncCommands;
 use serde::Deserialize;
 use std::net::SocketAddr;
 use uuid::Uuid;
@@ -55,15 +54,7 @@ async fn token_owner(state: &AppState, token: &str) -> Result<Option<Uuid>> {
 async fn rate_limit(state: &AppState, headers: &HeaderMap, addr: &SocketAddr) -> Result<()> {
     // Adresse du client (derrière nginx, `addr` est celle du proxy : tout le monde partageait un compteur).
     let key = format!("acct_switch:{}", crate::privacy::client_key(headers, addr));
-    let mut redis = state.redis.lock().await;
-    let count: i64 = redis.incr(&key, 1i64).await.unwrap_or(0);
-    if count == 1 {
-        let _: () = redis.expire(&key, 60).await.unwrap_or(());
-    }
-    if count > 30 {
-        return Err(AppError::TooManyRequests);
-    }
-    Ok(())
+    crate::handlers::auth_v2::hit(state, &key, 30, 60).await
 }
 
 /// GET /api/auth/accounts — comptes mis de côté dans ce navigateur (jetons encore valides).

@@ -296,15 +296,17 @@ pub async fn dispatch_scheduled_messages(state: AppState) {
         // expulsé/banni (retiré de server_members par kick_member/ban_member) ou mis en
         // timeout -- sans cette revérification, un message programmé avant la sanction
         // la contournait entièrement en partant quand même à l'heure prévue.
-        let still_eligible = sqlx::query_scalar::<_, bool>(
-            "SELECT EXISTS(SELECT 1 FROM server_members WHERE server_id=$1 AND user_id=$2)
-             AND NOT EXISTS(SELECT 1 FROM user_timeouts WHERE server_id=$1 AND user_id=$2 AND expires_at > NOW())"
-        )
-        .bind(server_id)
-        .bind(user_id)
-        .fetch_one(&state.db)
-        .await
-        .unwrap_or(false);
+        // Mêmes droits qu'un envoi direct (membre, salon visible, écriture permise, verrouillage,
+        // timeout). Refus net : annulé ; erreur technique (base) : on réessaiera au prochain passage,
+        // avant, elle annulait définitivement le message.
+        let still_eligible = match crate::handlers::servers::require_can_post(&state, user_id, server_id, channel_id, false).await {
+            Ok(()) => true,
+            Err(AppError::Forbidden | AppError::ForbiddenMsg(_)) => false,
+            Err(e) => {
+                tracing::warn!("Message programmé {sched_id} : vérification impossible, nouvel essai : {e}");
+                continue;
+            }
+        };
 
         if !still_eligible {
             let _ = sqlx::query("UPDATE scheduled_messages SET sent=TRUE WHERE id=$1")

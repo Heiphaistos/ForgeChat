@@ -498,6 +498,23 @@ pub async fn store_envelopes(db: &PgPool, conv: Conv, user: Uuid, body: &PostEnv
     .fetch_optional(&mut *tx)
     .await?;
     let plan = plan_envelopes(current, body.epoch, body.create)?;
+    // Redistribution : seul un membre qui détient lui-même la clé de cette époque peut
+    // l'envelopper pour un autre (le serveur ne voit pas le contenu : sans cela, un
+    // membre sans clé déposerait des enveloppes bidon pour les autres).
+    if plan == Plan::Redistribute && !body.envelopes.is_empty() {
+        let holds: bool = sqlx::query_scalar(
+            "SELECT EXISTS(SELECT 1 FROM conversation_keys WHERE conv_kind=$1 AND conv_id=$2 AND epoch=$3 AND member_id=$4)",
+        )
+        .bind(conv.kind())
+        .bind(conv.id())
+        .bind(body.epoch)
+        .bind(user)
+        .fetch_one(&mut *tx)
+        .await?;
+        if !holds {
+            return Err(AppError::Forbidden);
+        }
+    }
     // Enveloppe de serveur hors création d'époque (compléter `server_missing`) :
     // propriétaire ou MANAGE_SERVER seulement ; avant, n'importe quel membre
     // pouvait déposer le premier une enveloppe invalide, jamais remplacée.

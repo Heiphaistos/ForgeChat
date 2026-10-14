@@ -90,6 +90,9 @@ pub async fn get_emoji(
     })))
 }
 
+/// Emojis personnalisés par serveur (le fichier est écrit avant l'insertion : sans plafond, disque rempli par un administrateur).
+const MAX_EMOJIS_PER_SERVER: i64 = 250;
+
 pub async fn create_emoji(
     State(state): State<AppState>,
     Extension(claims): Extension<Claims>,
@@ -97,6 +100,11 @@ pub async fn create_emoji(
     mut multipart: Multipart,
 ) -> Result<Json<serde_json::Value>> {
     require_permission(&state, claims.sub, server_id, Permissions::MANAGE_SERVER).await?;
+    let emojis: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM custom_emojis WHERE server_id=$1")
+        .bind(server_id).fetch_one(&state.db).await?;
+    if emojis >= MAX_EMOJIS_PER_SERVER {
+        return Err(AppError::BadRequest(format!("Limite de {MAX_EMOJIS_PER_SERVER} emojis par serveur atteinte")));
+    }
 
     let upload_dir = PathBuf::from(&state.config.upload_dir).join("emojis");
     tokio::fs::create_dir_all(&upload_dir).await

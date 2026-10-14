@@ -125,18 +125,12 @@ pub struct UploadBudget {
 
 impl UploadBudget {
     pub async fn open(state: &AppState, user_id: Uuid) -> Result<Self> {
-        {
-            use redis::AsyncCommands;
-            let key = format!("upload_rl:{user_id}");
-            let mut redis = state.redis.lock().await;
-            let count: i64 = redis.incr(&key, 1).await
-                .map_err(|_| AppError::Internal(anyhow::anyhow!("rate limit unavailable")))?;
-            if count == 1 { let _: () = redis.expire(&key, 60).await.unwrap_or(()); }
-            if count > state.config.upload_rate_per_minute {
-                return Err(AppError::TooManyRequestsMsg(
-                    "Trop d'envois de fichiers : réessayez dans une minute".into(),
-                ));
+        // Fail-closed : Redis KO => 503 (jamais un envoi sans limite), compteur toujours muni d'un TTL.
+        match crate::handlers::auth_v2::hit(state, &format!("upload_rl:{user_id}"), state.config.upload_rate_per_minute, 60).await {
+            Err(AppError::TooManyRequests) => {
+                return Err(AppError::TooManyRequestsMsg("Trop d'envois de fichiers : réessayez dans une minute".into()))
             }
+            other => other?,
         }
         // ponytail: usage lu une fois par requête, deux envois simultanés peuvent dépasser
         // le quota d'un fichier ; verrou par compte si ça devient un problème.
@@ -175,6 +169,9 @@ impl UploadBudget {
         Ok(size as i64)
     }
 }
+
+/// Fichiers par requête d'envoi (le quota borne les octets, pas le nombre de lignes `attachments`).
+const MAX_FILES_PER_REQUEST: usize = 20;
 
 /// Propriétaire d'une pièce jointe : une colonne de `attachments` par source.
 #[derive(Clone, Copy)]
@@ -319,6 +316,9 @@ async fn store_attachments_inner(
             continue;
         }
 
+        if uploaded.len() >= MAX_FILES_PER_REQUEST {
+            return Err(AppError::BadRequest(format!("{MAX_FILES_PER_REQUEST} fichiers au plus par envoi")));
+        }
         let original_name = field.file_name()
             .unwrap_or("fichier")
             .to_string();
@@ -653,7 +653,7 @@ const SIGN_MAX: usize = 100;
 /// `user` peut-il lire la pièce jointe `url` ? Selon son propriétaire : message de salon, fil
 /// ou réponse de forum (salon visible), MP ou groupe (membre), média de forum (salon visible).
 /// Sans salon connu (média antérieur à la migration 109 que la 114 n'a pas pu rattacher) : son
-/// auteur, ou tout le monde s'il est chiffré (`.enc`, illisible sans la clé du message chiffré).
+/// auteur, ou, s'il est chiffré (`.enc`), qui partage un serveur avec l'auteur.
 pub async fn can_read_upload(state: &AppState, user: Uuid, url: &str) -> Result<bool> {
     use sqlx::Row;
     let Some(r) = sqlx::query(
@@ -663,7 +663,9 @@ pub async fn can_read_upload(state: &AppState, user: Uuid, url: &str) -> Result<
                 (EXISTS(SELECT 1 FROM dm_messages dm JOIN dm_channels d ON d.id = dm.dm_channel_id
                         WHERE dm.id = a.dm_message_id AND $2 IN (d.user1_id, d.user2_id))
                  OR EXISTS(SELECT 1 FROM group_dm_messages g JOIN group_dm_members gm ON gm.dm_id = g.dm_id
-                        WHERE g.id = a.group_dm_message_id AND gm.user_id = $2)) AS conv_member
+                        WHERE g.id = a.group_dm_message_id AND gm.user_id = $2)) AS conv_member,
+                EXISTS(SELECT 1 FROM server_members s1 JOIN server_members s2 ON s2.server_id = s1.server_id
+                       WHERE s1.user_id = a.uploader_id AND s2.user_id = $2) AS shares_server
          FROM attachments a
          LEFT JOIN messages m ON m.id = a.message_id
          LEFT JOIN thread_messages tm ON tm.id = a.thread_message_id
@@ -686,7 +688,11 @@ pub async fn can_read_upload(state: &AppState, user: Uuid, url: &str) -> Result<
     if let Some(ch) = r.get::<Option<Uuid>, _>("channel_id") {
         return Ok(!crate::state::channel_audience_among(&state.db, ch, &[user]).await.is_empty());
     }
-    Ok(r.get::<Option<Uuid>, _>("uploader_id") == Some(user) || url.ends_with(".enc"))
+    // Aucun lien d'appartenance connu (migration 114 n'a pu rattacher ce média) : l'auteur ;
+    // un blob chiffré aussi pour qui partage un serveur avec lui (le salon d'origine est
+    // perdu, on ne peut pas faire mieux sans lui) ou si l'auteur a disparu.
+    let uploader = r.get::<Option<Uuid>, _>("uploader_id");
+    Ok(uploader == Some(user) || (url.ends_with(".enc") && (uploader.is_none() || r.get("shares_server"))))
 }
 
 /// POST /api/uploads/sign {urls:[…]} → {urls:{<url>: <url signée>}} : URL `/uploads/…` que

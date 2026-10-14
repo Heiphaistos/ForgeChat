@@ -184,12 +184,11 @@ async fn load_secret(state: &AppState, user_id: Uuid) -> Result<Option<String>, 
 async fn first_use(state: &AppState, user_id: Uuid, code: &str) -> Result<bool, AppError> {
     let key = format!("totp_used:{user_id}:{}", code.trim());
     let mut redis = state.redis.lock().await;
-    let fresh: bool = redis.set_nx(&key, 1i64).await
+    // SET NX EX atomique : jamais de clé sans TTL.
+    let fresh: Option<String> = redis::cmd("SET").arg(&key).arg(1).arg("NX").arg("EX").arg(90)
+        .query_async(&mut *redis).await
         .map_err(|_| AppError::Unavailable("Service momentanément indisponible".into()))?;
-    if fresh {
-        let _: () = redis.expire(&key, 90i64).await.unwrap_or(());
-    }
-    Ok(fresh)
+    Ok(fresh.is_some())
 }
 
 /// Code TOTP (anti-rejeu) ou code de secours (consommé) du compte, 5 échecs / 15 min par compte

@@ -191,15 +191,12 @@ pub async fn check_rate(state: &AppState, server_id: Uuid, user_id: Uuid) -> Res
     ).bind(server_id).fetch_optional(&state.db).await? else { return Ok(()) };
     let (max, secs): (i32, i32) = (r.get("rate_limit_count"), r.get("rate_limit_seconds"));
     let key = format!("automod_rate:{server_id}:{user_id}");
-    let mut redis = state.redis.lock().await;
-    let n: i64 = redis::AsyncCommands::incr(&mut *redis, &key, 1).await.unwrap_or(1);
-    if n == 1 {
-        let _: () = redis::AsyncCommands::expire(&mut *redis, &key, secs as i64).await.unwrap_or(());
+    match crate::handlers::auth_v2::hit(state, &key, max as i64, secs as i64).await {
+        Err(AppError::TooManyRequests) => {
+            Err(AppError::TooManyRequestsMsg(format!("AutoMod : {max} messages en {secs} s au plus, ralentis")))
+        }
+        r => r,
     }
-    if n > max as i64 {
-        return Err(AppError::TooManyRequestsMsg(format!("AutoMod : {max} messages en {secs} s au plus, ralentis")));
-    }
-    Ok(())
 }
 
 #[cfg(test)]

@@ -70,16 +70,42 @@ pub async fn channel_epoch(db: &PgPool, channel: Uuid) -> Result<Option<(i32, bo
     Ok(Some((epoch, true)))
 }
 
-/// Commande de bot (`/nom args`) enregistrée sur ce serveur : destinée au bot,
-/// donc lisible par lui, elle reste en clair (affichée « non chiffré »).
+/// Longueur max d'une commande de bot en clair (nom + arguments) ; au-delà, c'est du texte.
+const BOT_COMMAND_MAX_CHARS: usize = 500;
+
+/// Nom de la commande d'un message `/nom args` de forme valide : une seule ligne,
+/// bornée, nom collé au `/` et de la forme acceptée à l'enregistrement.
+pub fn command_name(content: &str) -> Option<String> {
+    if content.chars().count() > BOT_COMMAND_MAX_CHARS || content.contains(['\n', '\r']) {
+        return None;
+    }
+    let name = content.strip_prefix('/')?.split_whitespace().next()?;
+    if content.as_bytes().get(1).is_some_and(|b| b.is_ascii_whitespace())
+        || name.chars().count() > 32
+        || !name.chars().all(|c| c.is_alphanumeric() || c == '_' || c == '-')
+    {
+        return None;
+    }
+    Some(name.to_lowercase())
+}
+
+/// Commande de bot (`/nom args`) enregistrée sur ce serveur par un vrai bot qui en
+/// est membre : destinée au bot, donc lisible par lui, elle reste en clair
+/// (affichée « non chiffré »). Toute erreur de lecture => faux (clair refusé).
 pub async fn is_bot_command(db: &PgPool, server_id: Uuid, content: &str) -> bool {
-    let Some(name) = content.strip_prefix('/').and_then(|r| r.split_whitespace().next()) else { return false };
-    sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM bot_commands WHERE server_id=$1 AND name=$2)")
-        .bind(server_id)
-        .bind(name.to_lowercase())
-        .fetch_one(db)
-        .await
-        .unwrap_or(false)
+    let Some(name) = command_name(content) else { return false };
+    sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM bot_commands bc
+           JOIN bot_tokens bt ON bt.id = bc.bot_id AND bt.server_id = bc.server_id
+           JOIN server_members sm ON sm.user_id = bt.bot_user_id AND sm.server_id = bc.server_id
+           JOIN users u ON u.id = bt.bot_user_id AND u.is_bot
+           WHERE bc.server_id=$1 AND bc.name=$2)",
+    )
+    .bind(server_id)
+    .bind(name)
+    .fetch_one(db)
+    .await
+    .unwrap_or(false)
 }
 
 /// Contenu d'un envoi ou d'une édition dans un salon (message, fil, forum,
@@ -261,5 +287,17 @@ mod tests {
         assert!(!needs_rotation(3, 3));
         assert!(needs_rotation(3, 2));
         assert!(!needs_rotation(0, 0));
+    }
+
+    #[test]
+    fn command_name_is_strict() {
+        assert_eq!(command_name("/Play url").as_deref(), Some("play"));
+        assert_eq!(command_name("/ban").as_deref(), Some("ban"));
+        assert_eq!(command_name("/ play"), None);
+        assert_eq!(command_name("/play\nsecret text"), None);
+        assert_eq!(command_name("/play ça"), Some("play".into()));
+        assert_eq!(command_name("/pl!ay"), None);
+        assert_eq!(command_name(&format!("/play {}", "a".repeat(600))), None);
+        assert_eq!(command_name("hello"), None);
     }
 }
