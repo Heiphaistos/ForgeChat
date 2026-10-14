@@ -28,6 +28,7 @@ import * as siteAdmin from './parts/siteAdmin'
 import * as auditMobile from './parts/auditMobile'
 import * as discordFeatures from './parts/discordFeatures'
 import * as parity from './parts/parity'
+import * as sweep from './parts/sweep'
 
 export const en: Partial<Record<Key, string>> = {
   ...settings.en,
@@ -58,6 +59,7 @@ export const en: Partial<Record<Key, string>> = {
   ...auditMobile.en,
   ...discordFeatures.en,
   ...parity.en,
+  ...sweep.en,
 
   // --- Commun ---
   'common.cancel': 'Cancel',

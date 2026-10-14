@@ -5,6 +5,7 @@
 // Mêmes octets sur le web (client/src/e2e/authKdf.ts), vecteurs `authV2` de docs/e2e-vectors.json.
 import { argon2idAsync } from '@noble/hashes/argon2.js'
 import * as c from './crypto'
+import { t } from '@/i18n'
 
 export const AUTH_INFO = 'forgechat auth v2'
 export const WRAP_INFO = 'forgechat wrap v2'
@@ -59,15 +60,15 @@ export const newKdfSalt = () => c.b64uEncode(c.randomBytes(16))
  * `context` : pseudo, e-mail… qui ne doivent pas en être la base.
  */
 export function passwordProblem(pw: string, context: readonly string[] = []): string | null {
-  if (pw.length < MIN_PASSWORD) return `Le mot de passe doit faire au moins ${MIN_PASSWORD} caractères`
-  if (pw.length > MAX_PASSWORD) return `Le mot de passe doit faire au plus ${MAX_PASSWORD} caractères`
-  if (new Set(pw).size < 6) return 'Mot de passe trop répétitif : varie davantage les caractères'
+  if (pw.length < MIN_PASSWORD) return t('e2e.pw.min', { n: MIN_PASSWORD })
+  if (pw.length > MAX_PASSWORD) return t('e2e.pw.max', { n: MAX_PASSWORD })
+  if (new Set(pw).size < 6) return t('e2e.pw.repeat')
   const low = pw.toLowerCase()
   const bases = [...COMMON_BASES, ...context.flatMap(v => v.toLowerCase().split('@')).filter(v => v.length >= 4)]
-  if (bases.some(b => low.includes(b))) return 'Mot de passe trop facile à deviner (mot courant, suite de touches, pseudo ou e-mail)'
+  if (bases.some(b => low.includes(b))) return t('e2e.pw.guess')
   const classes = [/[a-z]/, /[A-Z]/, /[0-9]/, /[^A-Za-z0-9]/].filter(r => r.test(pw)).length
   if (pw.length < 16 && classes < 3) {
-    return 'Mélange au moins 3 sortes de caractères (minuscules, majuscules, chiffres, symboles), ou choisis une phrase de 16 caractères ou plus'
+    return t('e2e.pw.mix')
   }
   return null
 }

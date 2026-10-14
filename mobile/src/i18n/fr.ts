@@ -29,6 +29,7 @@ import * as siteAdmin from './parts/siteAdmin'
 import * as auditMobile from './parts/auditMobile'
 import * as discordFeatures from './parts/discordFeatures'
 import * as parity from './parts/parity'
+import * as sweep from './parts/sweep'
 
 export const fr = {
   ...settings.fr,
@@ -59,6 +60,7 @@ export const fr = {
   ...auditMobile.fr,
   ...discordFeatures.fr,
   ...parity.fr,
+  ...sweep.fr,
 
   // --- Commun ---
   'common.cancel': 'Annuler',
