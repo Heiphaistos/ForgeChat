@@ -317,7 +317,7 @@ export default function PostView({ serverId, channelId, post, onBack, canManageM
       qc.invalidateQueries({ queryKey: ['forum-post', post.id] })
       toast.success(t('post.replyAdded'))
       if (replyId && res.prepared.count > 0) {
-        await uploadPrepared(`/servers/${serverId}/channels/${channelId}/posts/${post.id}/replies/${replyId}/attachments`, res.prepared).catch(() => {})
+        await uploadPrepared(`/servers/${serverId}/channels/${channelId}/posts/${post.id}/replies/${replyId}/attachments`, res.prepared).catch(() => toast.error(t('common.error')))
         qc.invalidateQueries({ queryKey: ['forum-post', post.id] })
       }
     },
