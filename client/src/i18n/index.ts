@@ -3,9 +3,9 @@
 import { useCallback } from 'react'
 import { create } from 'zustand'
 import { fr as dfFr, enUS } from 'date-fns/locale'
-import { fr, type Key } from './fr'
-import { en } from './en'
-import { translate, pickLang, type Vars } from './translate'
+import { fr, type Key } from './fr.ts'
+import { en } from './en.ts'
+import { translate, pickLang, type Vars } from './translate.ts'
 
 export type Lang = 'fr' | 'en'
 export type { Key }
@@ -33,12 +33,12 @@ export const useLang = create<LangState>()(set => ({
   setLang: code => {
     const lang = pickLang(code)
     try { localStorage.setItem(STORAGE_KEY, lang) } catch { /* sans mémoire : appliqué pour la session */ }
-    document.documentElement.lang = lang
+    if (typeof document !== 'undefined') document.documentElement.lang = lang
     set({ lang })
   },
 }))
 
-document.documentElement.lang = useLang.getState().lang
+if (typeof document !== 'undefined') document.documentElement.lang = useLang.getState().lang
 
 // Hors composant (toasts, callbacks) : lit la langue au moment de l'appel.
 export function t(key: Key, vars?: Vars): string {

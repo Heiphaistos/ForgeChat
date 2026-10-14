@@ -1,10 +1,14 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { openBackup, type BackupPayload } from '../e2e/historyBackup'
+import { openBackup, BackupError, type BackupErrorCode, type BackupPayload } from '../e2e/historyBackup'
 import { intlLocale, useT } from '../i18n'
 
 // Lecture d'une sauvegarde chiffrée (amélioration n° 30), sur l'appareil, sans compte ni réseau :
 // le fichier et la phrase ne quittent pas le navigateur.
+const BACKUP_ERRORS: Record<BackupErrorCode, 'e2e.backup.notFile' | 'e2e.backup.badParams' | 'e2e.backup.badPass'> = {
+  NOT_BACKUP: 'e2e.backup.notFile', BAD_PARAMS: 'e2e.backup.badParams', BAD_PASSPHRASE: 'e2e.backup.badPass',
+}
+
 export default function BackupViewerPage() {
   const t = useT()
   const [file, setFile] = useState<File | null>(null)
@@ -21,7 +25,7 @@ export default function BackupViewerPage() {
       setData(await openBackup(await file.text(), pass))
       setPass('')
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
+      setError(err instanceof BackupError ? t(BACKUP_ERRORS[err.code]) : err instanceof Error ? err.message : String(err))
     } finally {
       setBusy(false)
     }
