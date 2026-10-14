@@ -7,12 +7,7 @@ export const QUICK_EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🎉', '
 export const REACTION_PICKER_EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🔥', '🎉', '👏', '🤔', '✅', '❌', '🚀', '💯', '😎', '🙏', '💪', '🤡', '👀', '🫡', '💀']
 export const DBLCLICK_EMOJIS = ['👍', '❤️', '😂', '🎉', '🔥']
 
-const URL_REGEX = /https?:\/\/[^\s<>"]+/g
-
-export function extractFirstUrl(content: string): string | null {
-  const matches = content.match(URL_REGEX)
-  return matches?.[0] ?? null
-}
+export { previewUrl as extractFirstUrl } from '../../e2e/channelText'
 
 export function formatBytes(bytes: number) {
   if (bytes < 1024) return `${bytes} B`
