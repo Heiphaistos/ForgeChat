@@ -18,4 +18,6 @@ paths = [
   '''(^|/)dist/''',
   '''(^|/)package-lock\.json$''',
   '''(^|/)Cargo\.lock$''',
+  # Empreinte SHA-256 PUBLIQUE du certificat de l'appli (déjà dans /.well-known/assetlinks.json).
+  '''^mobile/docs/PASSKEYS\.md$''',
 ]
