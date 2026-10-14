@@ -126,6 +126,73 @@ pub fn validate_excluded(rules: &[String]) -> Result<Vec<String>, &'static str> 
     Ok(out)
 }
 
+/// Nombre maximal d'identifiants cochés ou décochés enregistrés (un serveur Discord compte 500 salons au plus).
+pub const MAX_IDS: usize = 1500;
+
+/// Identifiants Discord (snowflakes de 15 à 21 chiffres) nettoyés : sans doublons, bornés.
+pub fn validate_ids(ids: &[String]) -> Result<Vec<String>, &'static str> {
+    let mut out: Vec<String> = Vec::new();
+    for i in ids {
+        let i = i.trim();
+        if !(15..=21).contains(&i.len()) || !i.bytes().all(|b| b.is_ascii_digit()) {
+            return Err("Identifiant d'élément Discord invalide.");
+        }
+        if !out.iter().any(|o| o == i) {
+            out.push(i.to_string());
+        }
+    }
+    if out.len() > MAX_IDS {
+        return Err("Trop d'éléments sélectionnés.");
+    }
+    Ok(out)
+}
+
+/// Mode de synchronisation : `full` (crée les éléments manquants) ou `content` (messages seulement).
+pub fn validate_mode(mode: &str) -> Result<&'static str, &'static str> {
+    match mode {
+        "full" => Ok("full"),
+        "content" => Ok("content"),
+        _ => Err("Mode de synchronisation invalide : full ou content."),
+    }
+}
+
+/// Ce que la synchronisation doit traiter : décision pure « cet élément est-il synchronisé ? ».
+/// Priorité : décoché > coché > règle de nom (catégories, ancienne exclusion) > option « nouveaux éléments ».
+#[derive(Default, Clone)]
+pub struct Selection {
+    pub rules: Vec<String>,
+    pub included: Vec<String>,
+    pub excluded: Vec<String>,
+    pub auto_include_new: bool,
+    pub content_only: bool,
+}
+
+impl Selection {
+    fn decide(&self, id: &str, rule_hit: bool) -> bool {
+        if self.excluded.iter().any(|x| x == id) {
+            false
+        } else if self.included.iter().any(|x| x == id) {
+            true
+        } else {
+            !rule_hit && self.auto_include_new
+        }
+    }
+
+    pub fn category(&self, id: &str, name: &str) -> bool {
+        self.decide(id, is_excluded(&self.rules, id, name))
+    }
+
+    /// `parent` : état de la catégorie parente (`None` = salon sans catégorie). Parent décoché = salon ignoré.
+    pub fn channel(&self, parent: Option<bool>, id: &str) -> bool {
+        parent.unwrap_or(true) && self.decide(id, false)
+    }
+
+    /// Le mode « contenu seulement » ne crée jamais de catégorie ni de salon.
+    pub fn may_create(&self) -> bool {
+        !self.content_only
+    }
+}
+
 /// Taille maximale de `last_error` en octets (contrainte de la migration 131).
 pub const MAX_ERROR_BYTES: usize = 1000;
 
@@ -297,6 +364,54 @@ mod tests {
         assert!(!rule_matches("   ", "", ""));
         assert_eq!(fold_name("Œuvres"), "oeuvre");
         assert_eq!(fold_name("s"), "s");
+    }
+
+    #[test]
+    fn selection_decisions() {
+        let sel = |inc: &[&str], exc: &[&str], auto: bool| Selection {
+            rules: rules(&["actualité"]),
+            included: inc.iter().map(|s| s.to_string()).collect(),
+            excluded: exc.iter().map(|s| s.to_string()).collect(),
+            auto_include_new: auto,
+            content_only: false,
+        };
+        let (a, b) = ("111111111111111111", "222222222222222222");
+        // Nouveau élément : suit l'option.
+        assert!(sel(&[], &[], true).category(a, "Général"));
+        assert!(!sel(&[], &[], false).category(a, "Général"));
+        // Coché / décoché explicite l'emporte sur l'option ; décoché l'emporte sur coché.
+        assert!(sel(&[a], &[], false).category(a, "Général"));
+        assert!(!sel(&[], &[a], true).category(a, "Général"));
+        assert!(!sel(&[a], &[a], true).category(a, "Général"));
+        // Règle de nom (défaut « actualité ») : exclut un nouvel élément, sauf s'il est coché.
+        assert!(!sel(&[], &[], true).category(b, "📰 Actualités"));
+        assert!(sel(&[b], &[], true).category(b, "📰 Actualités"));
+        // Salon : parent décoché = ignoré, même coché ; sans catégorie = seule sa case compte.
+        assert!(!sel(&[a], &[], true).channel(Some(false), a));
+        assert!(sel(&[a], &[], false).channel(Some(true), a));
+        assert!(sel(&[a], &[], false).channel(None, a));
+        assert!(!sel(&[], &[a], true).channel(None, a));
+        assert!(sel(&[], &[], true).channel(Some(true), b));
+        assert!(!sel(&[], &[], false).channel(Some(true), b));
+        // Mode contenu : aucune création.
+        let mut c = sel(&[], &[], true);
+        assert!(c.may_create());
+        c.content_only = true;
+        assert!(!c.may_create());
+    }
+
+    #[test]
+    fn selection_validation() {
+        let v = |a: &[&str]| validate_ids(&a.iter().map(|s| s.to_string()).collect::<Vec<_>>());
+        assert_eq!(v(&[" 111111111111111111 ", "111111111111111111"]).unwrap(), vec!["111111111111111111".to_string()]);
+        assert!(v(&["abc"]).is_err());
+        assert!(v(&["12345"]).is_err());
+        assert!(v(&["1111111111111111111111"]).is_err());
+        let many: Vec<String> = (0..=MAX_IDS).map(|i| format!("{:018}", i + 1)).collect();
+        assert!(validate_ids(&many).is_err());
+        assert_eq!(validate_mode("full"), Ok("full"));
+        assert_eq!(validate_mode("content"), Ok("content"));
+        assert!(validate_mode("x").is_err());
     }
 
     #[test]

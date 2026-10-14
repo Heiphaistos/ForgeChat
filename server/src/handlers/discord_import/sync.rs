@@ -360,17 +360,25 @@ fn parse_u64(s: &str) -> u64 {
 }
 
 async fn run(state: &AppState, server_id: Uuid, lock: &str) -> anyhow::Result<Report> {
-    // (guilde, jeton chiffré, catégories exclues, émojis synchronisés, propriétaire)
-    type ConfigRow = (String, Option<String>, Vec<String>, bool, Uuid);
+    // (guilde, jeton chiffré, catégories exclues, émojis synchronisés, propriétaire, mode, cochés, décochés, nouveaux auto)
+    type ConfigRow = (String, Option<String>, Vec<String>, bool, Uuid, String, Vec<String>, Vec<String>, bool);
     let row: Option<ConfigRow> = sqlx::query_as(
-        "SELECT c.guild_id, c.bot_token_enc, c.excluded_categories, c.sync_emojis, s.owner_id
+        "SELECT c.guild_id, c.bot_token_enc, c.excluded_categories, c.sync_emojis, s.owner_id,
+                c.sync_mode, c.included_ids, c.excluded_ids, c.auto_include_new
          FROM discord_sync_configs c JOIN servers s ON s.id = c.server_id WHERE c.server_id=$1",
     )
     .bind(server_id)
     .fetch_optional(&state.db)
     .await?;
-    let Some((guild, token_enc, excluded, sync_emojis, owner)) = row else {
+    let Some((guild, token_enc, excluded, sync_emojis, owner, mode, included, excluded_ids, auto_include_new)) = row else {
         return Err(user_err("Synchronisation non configurée."));
+    };
+    let sel = rules::Selection {
+        rules: excluded,
+        included,
+        excluded: excluded_ids,
+        auto_include_new,
+        content_only: mode == "content",
     };
     let token = token_enc
         .as_deref()
@@ -442,11 +450,13 @@ async fn run(state: &AppState, server_id: Uuid, lock: &str) -> anyhow::Result<Re
 
     // Catégories : Some(id) = cible ForgeChat, None = exclue ou supprimée côté ForgeChat.
     let mut cat_target: HashMap<String, Option<Uuid>> = HashMap::new();
+    // Catégories Discord sans équivalent ForgeChat en mode « contenu » (jamais créées).
+    let mut cat_absent: HashSet<String> = HashSet::new();
     let mut cats: Vec<&DChannel> = channels.iter().filter(|c| c.r#type == 4).collect();
     cats.sort_by_key(|c| (c.position, snowflake(&c.id)));
     for c in cats {
         let name = c.name.clone().unwrap_or_default();
-        if rules::is_excluded(&excluded, &c.id, &name) {
+        if !sel.category(&c.id, &name) {
             cat_target.insert(c.id.clone(), None);
             continue;
         }
@@ -475,6 +485,10 @@ async fn run(state: &AppState, server_id: Uuid, lock: &str) -> anyhow::Result<Re
             });
         let id = match existing {
             Some(id) => id,
+            None if !sel.may_create() => {
+                cat_absent.insert(c.id.clone());
+                continue;
+            }
             None => {
                 let id = cx.create_category(&name, c.position).await?;
                 cx.report.categories += 1;
@@ -503,6 +517,10 @@ async fn run(state: &AppState, server_id: Uuid, lock: &str) -> anyhow::Result<Re
             },
             None => None,
         };
+        if !sel.channel(Some(true), &ch.id) {
+            continue; // décoché (ou nouveau avec l'option désactivée) : ni créé ni synchronisé
+        }
+        let parent_absent = ch.parent_id.as_deref().is_some_and(|p| cat_absent.contains(p));
         let kind = channel_kind(ch.r#type).unwrap_or("text");
         let name = ch.name.clone().unwrap_or_default();
         let (fc_id, created) = match map.get(&("channel".to_string(), ch.id.clone())) {
@@ -513,10 +531,12 @@ async fn run(state: &AppState, server_id: Uuid, lock: &str) -> anyhow::Result<Re
             None => {
                 let existing = fc_chans
                     .iter()
+                    .filter(|_| !parent_absent)
                     .find(|c| !mapped.contains(&c.0) && c.3 == category && family(&c.2) == family(kind) && same_name(&c.1, &name))
                     .map(|c| c.0);
                 let r = match existing {
                     Some(id) => (id, false),
+                    None if !sel.may_create() => continue,
                     None => {
                         let id = cx.create_channel(category, ch, kind, &name, &guild, &roles, &fc_roles).await?;
                         cx.report.channels += 1;
@@ -1198,6 +1218,10 @@ async fn config_json(state: &AppState, server_id: Uuid) -> Result<Value> {
         excluded_categories: Vec<String>,
         enabled: bool,
         sync_emojis: bool,
+        sync_mode: String,
+        included_ids: Vec<String>,
+        excluded_ids: Vec<String>,
+        auto_include_new: bool,
         next_sync_at: Option<DateTime<Utc>>,
         last_sync_at: Option<DateTime<Utc>>,
         last_status: Option<String>,
@@ -1206,7 +1230,7 @@ async fn config_json(state: &AppState, server_id: Uuid) -> Result<Value> {
     }
     let cfg: Option<Cfg> = sqlx::query_as(
         "SELECT guild_id, bot_token_enc IS NOT NULL AS has_token, interval_hours, excluded_categories, enabled, sync_emojis,
-                next_sync_at, last_sync_at, last_status, last_error, last_imported
+                sync_mode, included_ids, excluded_ids, auto_include_new, next_sync_at, last_sync_at, last_status, last_error, last_imported
          FROM discord_sync_configs WHERE server_id=$1",
     )
     .bind(server_id)
@@ -1217,12 +1241,15 @@ async fn config_json(state: &AppState, server_id: Uuid) -> Result<Value> {
         None => json!({
             "configured": false, "guild_id": "", "has_token": false, "interval_hours": 24,
             "excluded_categories": rules::DEFAULT_EXCLUDED, "enabled": false, "sync_emojis": true,
+            "sync_mode": "full", "included_ids": [], "excluded_ids": [], "auto_include_new": true,
             "next_sync_at": null, "last_sync_at": null, "last_status": null, "last_error": null,
             "last_imported": 0, "running": running,
         }),
         Some(c) => json!({
             "configured": true, "guild_id": c.guild_id, "has_token": c.has_token, "interval_hours": c.interval_hours,
             "excluded_categories": c.excluded_categories, "enabled": c.enabled, "sync_emojis": c.sync_emojis,
+            "sync_mode": c.sync_mode, "included_ids": c.included_ids, "excluded_ids": c.excluded_ids,
+            "auto_include_new": c.auto_include_new,
             "next_sync_at": c.next_sync_at, "last_sync_at": c.last_sync_at, "last_status": c.last_status,
             "last_error": c.last_error, "last_imported": c.last_imported, "running": running,
         }),
@@ -1276,6 +1303,11 @@ pub struct PutConfig {
     pub excluded_categories: Vec<String>,
     pub enabled: bool,
     pub sync_emojis: Option<bool>,
+    /// Absents : les valeurs enregistrées sont conservées (anciens clients).
+    pub sync_mode: Option<String>,
+    pub included_ids: Option<Vec<String>>,
+    pub excluded_ids: Option<Vec<String>>,
+    pub auto_include_new: Option<bool>,
 }
 
 /// PUT /api/servers/:server_id/discord-sync
@@ -1290,6 +1322,9 @@ pub async fn put_config(
     let guild = rules::validate_guild_id(&body.guild_id).map_err(bad)?;
     let interval = rules::validate_interval(body.interval_hours).map_err(bad)?;
     let excluded = rules::validate_excluded(&body.excluded_categories).map_err(bad)?;
+    let mode = body.sync_mode.as_deref().map(rules::validate_mode).transpose().map_err(bad)?;
+    let included = body.included_ids.as_deref().map(rules::validate_ids).transpose().map_err(bad)?;
+    let excluded_ids = body.excluded_ids.as_deref().map(rules::validate_ids).transpose().map_err(bad)?;
     let new_token = match body.bot_token.as_deref().map(str::trim).filter(|t| !t.is_empty()) {
         Some(t) => Some(rules::normalize_token(t).map_err(bad)?),
         None => None,
@@ -1326,8 +1361,10 @@ pub async fn put_config(
 
     let sealed = new_token.as_deref().map(|t| seal_token(server_id, t));
     sqlx::query(
-        "INSERT INTO discord_sync_configs (server_id, guild_id, bot_token_enc, interval_hours, excluded_categories, enabled, sync_emojis, updated_by, next_sync_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
+        "INSERT INTO discord_sync_configs (server_id, guild_id, bot_token_enc, interval_hours, excluded_categories, enabled, sync_emojis, updated_by, next_sync_at,
+                                          sync_mode, included_ids, excluded_ids, auto_include_new)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), COALESCE($9, 'full'), COALESCE($10, ARRAY[]::TEXT[]),
+                 COALESCE($11, ARRAY[]::TEXT[]), COALESCE($12, TRUE))
          ON CONFLICT (server_id) DO UPDATE SET
             guild_id = EXCLUDED.guild_id,
             bot_token_enc = COALESCE(EXCLUDED.bot_token_enc, discord_sync_configs.bot_token_enc),
@@ -1335,6 +1372,10 @@ pub async fn put_config(
             excluded_categories = EXCLUDED.excluded_categories,
             enabled = EXCLUDED.enabled,
             sync_emojis = EXCLUDED.sync_emojis,
+            sync_mode = COALESCE($9, discord_sync_configs.sync_mode),
+            included_ids = COALESCE($10, discord_sync_configs.included_ids),
+            excluded_ids = COALESCE($11, discord_sync_configs.excluded_ids),
+            auto_include_new = COALESCE($12, discord_sync_configs.auto_include_new),
             updated_by = EXCLUDED.updated_by,
             updated_at = NOW(),
             next_sync_at = CASE WHEN discord_sync_configs.last_sync_at IS NULL THEN NOW()
@@ -1348,6 +1389,10 @@ pub async fn put_config(
     .bind(body.enabled)
     .bind(body.sync_emojis.unwrap_or(true))
     .bind(claims.sub)
+    .bind(mode)
+    .bind(included)
+    .bind(excluded_ids)
+    .bind(body.auto_include_new)
     .execute(&state.db)
     .await?;
 
@@ -1457,6 +1502,56 @@ pub async fn list_categories(
     Ok(Json(json!(list)))
 }
 
+/// GET /api/servers/:server_id/discord-sync/tree : arbre complet du serveur Discord enregistré
+/// (catégories > salons, forums et médias compris) avec l'état coché de chaque élément.
+pub async fn list_tree(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+    Path(server_id): Path<Uuid>,
+) -> Result<Json<Value>> {
+    require_permission(&state, claims.sub, server_id, P::MANAGE_SERVER).await?;
+    route_limit(&state, "categories", claims.sub, server_id).await?;
+    let (guild, token) = stored_token(&state, server_id)
+        .await?
+        .ok_or_else(|| bad("Enregistrez d'abord l'identifiant du serveur Discord et le jeton du bot."))?;
+    let (name_rules, included, excluded_ids, auto_include_new): (Vec<String>, Vec<String>, Vec<String>, bool) = sqlx::query_as(
+        "SELECT excluded_categories, included_ids, excluded_ids, auto_include_new FROM discord_sync_configs WHERE server_id=$1",
+    )
+    .bind(server_id)
+    .fetch_one(&state.db)
+    .await?;
+    let sel = rules::Selection { rules: name_rules, included, excluded: excluded_ids, auto_include_new, content_only: false };
+    let api = Discord::new(&token, state.redis.clone(), Mode::Request).map_err(AppError::Internal)?;
+    let all = api.channels(&guild).await.map_err(discord_err)?;
+    let mut cats: Vec<&DChannel> = all.iter().filter(|c| c.r#type == 4).collect();
+    cats.sort_by_key(|c| (c.position, snowflake(&c.id)));
+    let mut chans: Vec<&DChannel> =
+        all.iter().filter(|c| matches!(c.r#type, 0 | 2 | 5 | 13 | 15 | 16) && channel_kind(c.r#type).is_some()).collect();
+    chans.sort_by_key(|c| (c.position, snowflake(&c.id)));
+    let item = |c: &DChannel| {
+        let kind = match c.r#type {
+            16 => "media",
+            t => channel_kind(t).unwrap_or("text"),
+        };
+        json!({ "id": c.id, "name": c.name.clone().unwrap_or_default(), "kind": kind, "selected": sel.channel(Some(true), &c.id) })
+    };
+    let categories: Vec<Value> = cats
+        .iter()
+        .map(|cat| {
+            let name = cat.name.clone().unwrap_or_default();
+            let kids: Vec<Value> = chans.iter().filter(|c| c.parent_id.as_deref() == Some(cat.id.as_str())).map(|c| item(c)).collect();
+            json!({ "id": cat.id, "name": name, "selected": sel.category(&cat.id, &name),
+                    "default_excluded": rules::default_excluded(&name), "channels": kids })
+        })
+        .collect();
+    let loose: Vec<Value> = chans
+        .iter()
+        .filter(|c| c.parent_id.as_deref().is_none_or(|p| !cats.iter().any(|k| k.id == p)))
+        .map(|c| item(c))
+        .collect();
+    Ok(Json(json!({ "categories": categories, "uncategorized": loose })))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1523,5 +1618,40 @@ mod tests {
         assert_eq!(best_by_children(&["général"], vec![(a, vec!["général"])].into_iter()), None);
         assert_eq!(family("announcement"), family("text"));
         assert_ne!(family("voice"), family("text"));
+    }
+
+    /// Migration 139 : défauts = comportement antérieur, mode borné par une contrainte.
+    #[tokio::test]
+    #[ignore]
+    async fn selection_columns_defaults_and_constraint() {
+        let url = std::env::var("FORGECHAT_TEST_DATABASE_URL").expect("FORGECHAT_TEST_DATABASE_URL");
+        let db = sqlx::PgPool::connect(&url).await.unwrap();
+        sqlx::migrate!("./migrations").run(&db).await.unwrap();
+        let tag = Uuid::new_v4().simple().to_string();
+        let user: Uuid = sqlx::query_scalar("INSERT INTO users (username, email, password_hash) VALUES ($1, $2, 'x') RETURNING id")
+            .bind(&tag[..20])
+            .bind(format!("{tag}@test.local"))
+            .fetch_one(&db)
+            .await
+            .unwrap();
+        let srv: Uuid = sqlx::query_scalar("INSERT INTO servers (name, owner_id) VALUES ('dsel', $1) RETURNING id")
+            .bind(user)
+            .fetch_one(&db)
+            .await
+            .unwrap();
+        sqlx::query("INSERT INTO discord_sync_configs (server_id, guild_id) VALUES ($1, '123456789012345678')")
+            .bind(srv)
+            .execute(&db)
+            .await
+            .unwrap();
+        let (mode, inc, exc, auto): (String, Vec<String>, Vec<String>, bool) =
+            sqlx::query_as("SELECT sync_mode, included_ids, excluded_ids, auto_include_new FROM discord_sync_configs WHERE server_id=$1")
+                .bind(srv)
+                .fetch_one(&db)
+                .await
+                .unwrap();
+        assert_eq!((mode.as_str(), inc.len(), exc.len(), auto), ("full", 0, 0, true));
+        let bad = sqlx::query("UPDATE discord_sync_configs SET sync_mode='bogus' WHERE server_id=$1").bind(srv).execute(&db).await;
+        assert!(bad.is_err());
     }
 }
