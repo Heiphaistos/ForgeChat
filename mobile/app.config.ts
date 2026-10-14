@@ -121,7 +121,9 @@ const buildConfig = ({ config }: ConfigContext): ExpoConfig => ({
   ios: {
     bundleIdentifier: PACKAGES[APP_ENV],
     supportsTablet: true,
-    associatedDomains: apiHost ? [`applinks:${apiHost}`] : [],
+    // webcredentials : clés d'accès (react-native-passkeys). Le domaine doit être celui du RP ID du serveur
+    // (hôte de FRONTEND_URL) et servir /.well-known/apple-app-site-association (client/public/.well-known/, docs/PASSKEYS.md).
+    associatedDomains: apiHost ? [`applinks:${apiHost}`, `webcredentials:${apiHost}`] : [],
     infoPlist: {
       NSCameraUsageDescription: 'ForgeChat utilise la caméra pour les appels vidéo, pour envoyer des photos et pour scanner le code de sécurité d’un contact.',
       NSMicrophoneUsageDescription: 'ForgeChat utilise le micro pour les appels et les salons vocaux.',
