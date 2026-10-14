@@ -668,6 +668,7 @@ fn protected_route_table() -> Router<AppState> {
             .layer(DefaultBodyLimit::max(SMALL_JSON_LIMIT)))
         .route("/servers/:server_id/discord-sync/run", post(handlers::discord_import::sync::run_now))
         .route("/servers/:server_id/discord-sync/categories", get(handlers::discord_import::sync::list_categories))
+        .route("/servers/:server_id/discord-sync/tree", get(handlers::discord_import::sync::list_tree))
         .route("/servers/:id/leave", post(handlers::servers::leave_server))
         .route("/servers/:id/members", get(handlers::servers::get_members))
         .route("/servers/:server_id/members/:user_id/kick", post(handlers::servers::kick_member))
