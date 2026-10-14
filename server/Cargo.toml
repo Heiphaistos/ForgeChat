@@ -1,6 +1,6 @@
 [package]
 name = "forgechat-server"
-version = "3.309.0"
+version = "3.310.0"
 edition = "2021"
 
 [[bin]]
