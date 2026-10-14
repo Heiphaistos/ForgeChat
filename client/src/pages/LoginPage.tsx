@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useId, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { LegalLinks } from './LegalPages'
 import { Eye, EyeOff } from 'lucide-react'
@@ -27,6 +27,7 @@ export default function LoginPage() {
   const nav = useNavigate()
   const [searchParams] = useSearchParams()
   const t = useT()
+  const id = useId()
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -97,8 +98,9 @@ export default function LoginPage() {
           {!needTotp ? (
             <>
               <div>
-                <label className="block text-xs font-semibold text-fc-muted uppercase mb-1">{t('auth.email')}</label>
+                <label htmlFor={`${id}-email`} className="block text-xs font-semibold text-fc-muted uppercase mb-1">{t('auth.email')}</label>
                 <input
+                  id={`${id}-email`}
                   type="email"
                   value={email}
                   onChange={e => setEmail(e.target.value)}
@@ -112,9 +114,10 @@ export default function LoginPage() {
                 />
               </div>
               <div>
-                <label className="block text-xs font-semibold text-fc-muted uppercase mb-1">{t('auth.password')}</label>
+                <label htmlFor={`${id}-password`} className="block text-xs font-semibold text-fc-muted uppercase mb-1">{t('auth.password')}</label>
                 <div className="relative">
                   <input
+                    id={`${id}-password`}
                     type={showPassword ? 'text' : 'password'}
                     value={password}
                     onChange={e => setPassword(e.target.value)}
@@ -155,8 +158,9 @@ export default function LoginPage() {
               <p className="text-fc-muted text-sm mb-3">
                 {t('auth.login.totpHelp')}
               </p>
-              <label className="block text-xs font-semibold text-fc-muted uppercase mb-1">{t('auth.login.totpLabel')}</label>
+              <label htmlFor={`${id}-totp`} className="block text-xs font-semibold text-fc-muted uppercase mb-1">{t('auth.login.totpLabel')}</label>
               <input
+                id={`${id}-totp`}
                 type="text"
                 inputMode="text"
                 maxLength={19}

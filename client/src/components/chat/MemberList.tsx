@@ -46,7 +46,7 @@ const STATUS_LABELS: Record<string, Key> = {
   invisible: 'presence.invisible',
 }
 
-function MemberRow({ m, decor, serverId, onClick }: { m: any; decor?: RoleDecor; serverId: string; onClick: (e: React.MouseEvent) => void }) {
+function MemberRow({ m, decor, serverId, onOpen }: { m: any; decor?: RoleDecor; serverId: string; onOpen: (x: number, y: number) => void }) {
   const t = useT()
   const statusLabel = t(STATUS_LABELS[m.liveStatus] ?? 'presence.offline')
   return (
@@ -54,8 +54,17 @@ function MemberRow({ m, decor, serverId, onClick }: { m: any; decor?: RoleDecor;
       role="listitem"
       aria-label={`${m.nickname ?? m.username} — ${statusLabel}${m.is_owner ? t('members.owner') : ''}`}
       style={{ height: ROW_H }}
-      className="flex items-center gap-2 px-2 rounded hover:bg-fc-hover group cursor-pointer transition"
-      onClick={onClick}
+      // Atteignable au clavier : Entrée/Espace ouvrent la même fiche, ancrée sur la ligne.
+      tabIndex={0}
+      aria-haspopup="dialog"
+      className="flex items-center gap-2 px-2 rounded hover:bg-fc-hover focus-visible:bg-fc-hover group cursor-pointer transition"
+      onClick={e => onOpen(e.clientX, e.clientY)}
+      onKeyDown={e => {
+        if (e.target !== e.currentTarget || (e.key !== 'Enter' && e.key !== ' ')) return
+        e.preventDefault()
+        const r = e.currentTarget.getBoundingClientRect()
+        onOpen(r.left, r.top + r.height / 2)
+      }}
       {...userMenuProps({ userId: m.user_id, username: m.username, avatar: m.avatar, serverId })}
     >
       <div className="relative flex-shrink-0">
@@ -225,7 +234,7 @@ export default function MemberList({ serverId, onClose }: Props) {
                   {it.label}
                 </div>
               ) : (
-                <MemberRow m={it.m} decor={roleDecor(it.m.user_id)} serverId={serverId} onClick={e => setPopup({ userId: it.m.user_id, x: e.clientX - 356, y: e.clientY })} />
+                <MemberRow m={it.m} decor={roleDecor(it.m.user_id)} serverId={serverId} onOpen={(x, y) => setPopup({ userId: it.m.user_id, x: x - 356, y })} />
               )}
             </div>
           )
