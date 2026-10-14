@@ -19,6 +19,7 @@ import * as serverLook from './parts/serverLook.ts'
 import * as profileDecorMore from './parts/profileDecorMore.ts'
 import * as profileDecorExtra from './parts/profileDecorExtra.ts'
 import * as auditUi from './parts/auditUi.ts'
+import * as serverAdminPage from './parts/serverAdminPage.ts'
 import * as auditChat from './parts/auditChat.ts'
 import * as siteAdmin from './parts/siteAdmin.ts'
 import * as discordFeatures from './parts/discordFeatures.ts'
@@ -59,6 +60,7 @@ export const en: Partial<Record<Key, string>> = {
   ...profileDecorMore.en,
   ...profileDecorExtra.en,
   ...auditUi.en,
+  ...serverAdminPage.en,
   ...auditChat.en,
   ...siteAdmin.en,
   ...discordFeatures.en,
