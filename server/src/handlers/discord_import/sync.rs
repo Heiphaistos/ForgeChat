@@ -306,6 +306,20 @@ fn same_name(a: &str, b: &str) -> bool {
     }
 }
 
+/// Catégorie ForgeChat (non encore liée) dont les salons recoupent au moins la moitié de ceux d'une
+/// catégorie Discord, et au moins deux : elle a été renommée ou stylisée autrement, c'est la même.
+/// Une catégorie Discord à un seul salon reste trop ambiguë pour être rapprochée ainsi.
+fn best_by_children<'a>(theirs: &[&str], ours: impl Iterator<Item = (Uuid, Vec<&'a str>)>) -> Option<Uuid> {
+    let want: HashSet<String> = theirs.iter().map(|n| fold_name(n)).filter(|f| !f.is_empty()).collect();
+    ours.map(|(id, names)| {
+        let have: HashSet<String> = names.iter().map(|n| fold_name(n)).collect();
+        (id, want.intersection(&have).count())
+    })
+    .filter(|(_, k)| *k >= 2 && *k * 2 >= want.len())
+    .max_by_key(|(_, k)| *k)
+    .map(|(id, _)| id)
+}
+
 /// Format réel d'un émoji téléchargé (PNG, GIF, WebP ou JPEG, lu dans les octets par
 /// `image_probe`) : extension et type MIME, `None` pour tout le reste.
 fn emoji_format(bytes: &[u8]) -> Option<(&'static str, &'static str)> {
@@ -419,7 +433,24 @@ async fn run(state: &AppState, server_id: Uuid, lock: &str) -> anyhow::Result<Re
             cat_target.insert(c.id.clone(), alive.then_some(*fc));
             continue;
         }
-        let existing = fc_cats.iter().find(|(id, n)| !mapped.contains(id) && same_name(n, &name)).map(|(id, _)| *id);
+        let existing = fc_cats
+            .iter()
+            .find(|(id, n)| !mapped.contains(id) && same_name(n, &name))
+            .map(|(id, _)| *id)
+            .or_else(|| {
+                // Catégorie renommée côté ForgeChat : celle dont les salons recoupent ceux de Discord.
+                let theirs: Vec<&str> = channels
+                    .iter()
+                    .filter(|x| x.parent_id.as_deref() == Some(c.id.as_str()))
+                    .filter_map(|x| x.name.as_deref())
+                    .collect();
+                best_by_children(
+                    &theirs,
+                    fc_cats.iter().filter(|(id, _)| !mapped.contains(id)).map(|(id, _)| {
+                        (*id, fc_chans.iter().filter(|ch| ch.3 == Some(*id)).map(|ch| ch.1.as_str()).collect::<Vec<_>>())
+                    }),
+                )
+            });
         let id = match existing {
             Some(id) => id,
             None => {
@@ -1384,6 +1415,19 @@ mod tests {
         assert!(same_name("⭒𝐓𝐢𝐜𝐤𝐞𝐭-𝐇𝐞𝐥𝐩🗪", "⭒𝗧𝗶𝗰𝗸𝗲𝘁-𝗛𝗲𝗹𝗽🗪"));
         assert!(same_name("ＩＮＦＯ", "info"));
         assert!(!same_name("𝗜𝗡𝗙𝗢𝗥𝗠𝗔𝗧𝗜𝗢𝗡", "𝗜𝗡𝗙𝗢𝗥𝗠𝗔𝗧𝗜𝗤𝗨𝗘"));
+    }
+
+    #[test]
+    fn renamed_category_is_matched_by_its_channels() {
+        let (a, b) = (Uuid::from_u128(1), Uuid::from_u128(2));
+        let theirs = ["général", "règles", "annonces", "vocal"];
+        let ours = vec![(a, vec!["📢・annonces", "Général", "règles"]), (b, vec!["autre"])];
+        assert_eq!(best_by_children(&theirs, ours.into_iter()), Some(a));
+        // Un seul salon recoupé : pas assez pour affirmer que c'est la même catégorie.
+        let weak = vec![(a, vec!["général"])];
+        assert_eq!(best_by_children(&theirs, weak.into_iter()), None);
+        // Catégorie Discord à un seul salon : jamais rapprochée.
+        assert_eq!(best_by_children(&["général"], vec![(a, vec!["général"])].into_iter()), None);
         assert_eq!(family("announcement"), family("text"));
         assert_ne!(family("voice"), family("text"));
     }
