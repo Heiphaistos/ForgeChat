@@ -1,9 +1,8 @@
 // Petite fenêtre de saisie d'une ligne (renommer une catégorie, statut d'un salon vocal).
 // Même gabarit que les autres fenêtres (div fixe, z-50) : pas de <dialog> modal, dont la couche
 // supérieure masquerait les toasts d'erreur et rendrait ConfirmModal inerte.
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useT } from '../../i18n'
-import { useEscapeKey } from '../../hooks/useEscapeKey'
 
 interface Props {
   title: string
@@ -14,13 +13,27 @@ interface Props {
   /** Autorise l'enregistrement d'une valeur vide (= effacer). */
   allowEmpty?: boolean
   busy?: boolean
+  /** Texte du bouton de validation (défaut : « Enregistrer »). */
+  submitLabel?: string
+  /** Bouton de validation rouge (bannir, suspendre…). */
+  danger?: boolean
   onSubmit: (value: string) => void
   onClose: () => void
 }
 
-export default function TextPromptDialog({ title, label, initial = '', placeholder, maxLength, allowEmpty, busy, onSubmit, onClose }: Props) {
+export default function TextPromptDialog({ title, label, initial = '', placeholder, maxLength, allowEmpty, busy, submitLabel, danger, onSubmit, onClose }: Props) {
   const t = useT()
-  useEscapeKey(onClose)
+  // Escape = annuler, en capture + stopPropagation comme ConfirmModal : sinon la page des
+  // paramètres (ou la fenêtre parente) se fermerait aussi.
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return
+      e.stopPropagation()
+      onClose()
+    }
+    window.addEventListener('keydown', handler, true)
+    return () => window.removeEventListener('keydown', handler, true)
+  }, [onClose])
   const [value, setValue] = useState(initial)
   const empty = !value.trim()
   return (
@@ -37,8 +50,8 @@ export default function TextPromptDialog({ title, label, initial = '', placehold
         <div className="flex justify-end gap-2 mt-4">
           <button type="button" onClick={onClose} className="px-4 py-2 text-sm text-fc-muted hover:text-white transition">{t('common.cancel')}</button>
           <button type="submit" disabled={busy || (!allowEmpty && empty)}
-            className="px-4 py-2 bg-fc-accent hover:bg-indigo-500 text-white rounded-lg text-sm font-medium transition disabled:opacity-50">
-            {t('common.save')}
+            className={`px-4 py-2 ${danger ? 'bg-red-500 hover:bg-red-600' : 'bg-fc-accent hover:bg-indigo-500'} text-white rounded-lg text-sm font-medium transition disabled:opacity-50`}>
+            {submitLabel ?? t('common.save')}
           </button>
         </div>
       </form>

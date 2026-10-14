@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { formatDistanceToNow } from 'date-fns'
 import { KeyRound, Trash2 } from 'lucide-react'
@@ -6,6 +7,7 @@ import api from '../../api/client'
 import { dateLocale, useT } from '../../i18n'
 import { createPasskey, passkeySupported } from '../../lib/passkey'
 import { confirm } from '../ui/ConfirmModal'
+import TextPromptDialog from '../ui/TextPromptDialog'
 
 interface Passkey { id: string; name: string; created_at: string; last_used_at: string | null }
 
@@ -19,16 +21,14 @@ export default function PasskeysSection() {
     queryFn: () => api.get('/auth/passkeys').then(r => r.data),
     staleTime: 60_000,
   })
+  const [naming, setNaming] = useState(false)
   const add = useMutation({
-    mutationFn: async () => {
-      const name = window.prompt(t('guard.passkey.namePrompt'))?.trim()
-      if (!name) return null
+    mutationFn: async (name: string) => {
       const options = (await api.post('/auth/passkeys/register/start')).data
       const created = await createPasskey(options)
       return api.post('/auth/passkeys/register/finish', { name, ...created })
     },
-    onSuccess: r => {
-      if (!r) return
+    onSuccess: () => {
       toast.success(t('guard.passkey.added'))
       qc.invalidateQueries({ queryKey: ['passkeys'] })
     },
@@ -37,6 +37,7 @@ export default function PasskeysSection() {
   const remove = useMutation({
     mutationFn: (id: string) => api.delete(`/auth/passkeys/${id}`),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['passkeys'] }),
+    onError: (e: any) => toast.error(e.response?.data?.error ?? t('guard.passkey.removeFailed')),
   })
 
   return (
@@ -72,7 +73,7 @@ export default function PasskeysSection() {
       {supported
         ? (
           <button
-            onClick={() => add.mutate()}
+            onClick={() => setNaming(true)}
             disabled={add.isPending}
             className="px-3 py-1.5 bg-fc-accent rounded-lg text-white text-sm font-medium disabled:opacity-50"
           >
@@ -80,6 +81,11 @@ export default function PasskeysSection() {
           </button>
         )
         : <p className="text-xs text-fc-muted">{t('guard.passkey.unsupported')}</p>}
+      {naming && (
+        <TextPromptDialog title={t('guard.passkey.add')} label={t('guard.passkey.namePrompt')} maxLength={64}
+          submitLabel={t('guard.passkey.continue')}
+          onSubmit={name => { setNaming(false); add.mutate(name) }} onClose={() => setNaming(false)} />
+      )}
     </div>
   )
 }

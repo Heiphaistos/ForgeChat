@@ -9,6 +9,8 @@ import { useMobile } from '../contexts/MobileContext'
 import { useSiteAdmin, useSiteAdminInfo } from '../hooks/useSiteAdmin'
 import { HealthTab, SecurityTab } from '../components/admin/HealthTabs'
 import { t as tr, useT, intlLocale, type Key } from '../i18n'
+import { confirm } from '../components/ui/ConfirmModal'
+import TextPromptDialog from '../components/ui/TextPromptDialog'
 
 /** Administration du site : comptes, invitations, bannissements, réglages, journal. */
 
@@ -101,6 +103,7 @@ function UsersTab() {
   const [q, setQ] = useState('')
   const [filter, setFilter] = useState('all')
   const [open, setOpen] = useState<string | null>(null)
+  const [banning, setBanning] = useState<AdminUser | null>(null)
   const { data, isLoading } = useQuery<{ total: number; users: AdminUser[] }>({
     queryKey: ['site-admin', 'users', q, filter],
     queryFn: () => api.get('/admin/users', { params: { q, filter, limit: 100 } }).then(r => r.data),
@@ -155,15 +158,15 @@ function UsersTab() {
                 {u.banned_at ? (
                   <button onClick={() => unban.mutate(u.id)} className="px-2 py-1 text-xs rounded bg-green-600/20 text-green-400 hover:bg-green-600/30">{t('sadm.u.unban')}</button>
                 ) : !u.is_patron && (
-                  <button onClick={() => { const reason = window.prompt(t('sadm.u.banPrompt', { name: u.username })); if (reason !== null) ban.mutate({ id: u.id, reason }) }}
+                  <button onClick={() => setBanning(u)}
                     className="p-1.5 rounded text-red-400 hover:bg-red-500/20" title={t('sadm.u.ban')} aria-label={t('sadm.u.banA11y', { name: u.username })}><Ban size={15} /></button>
                 )}
                 {!u.is_bot && (
-                  <button onClick={() => { if (window.confirm(t('sadm.u.logoutConfirm', { name: u.username }))) logout.mutate(u.id) }}
+                  <button onClick={() => { void confirm({ message: t('sadm.u.logoutConfirm', { name: u.username }), danger: true, confirmLabel: t('sadm.u.logoutAll') }).then(ok => { if (ok) logout.mutate(u.id) }) }}
                     className="p-1.5 rounded text-fc-muted hover:text-white hover:bg-fc-hover" title={t('sadm.u.logoutAll')} aria-label={t('sadm.u.logoutA11y', { name: u.username })}><LogOut size={15} /></button>
                 )}
                 {owner && !u.is_owner && !u.is_bot && !u.banned_at && (
-                  <button onClick={() => { if (window.confirm(t(u.is_patron ? 'sadm.u.patronRevokeConfirm' : 'sadm.u.patronGrantConfirm', { name: u.username }))) setPatron.mutate({ id: u.id, patron: !u.is_patron }) }}
+                  <button onClick={() => { void confirm({ message: t(u.is_patron ? 'sadm.u.patronRevokeConfirm' : 'sadm.u.patronGrantConfirm', { name: u.username }), danger: true, confirmLabel: t(u.is_patron ? 'sadm.u.patronRevoke' : 'sadm.u.patronGrant') }).then(ok => { if (ok) setPatron.mutate({ id: u.id, patron: !u.is_patron }) }) }}
                     className={`p-1.5 rounded hover:bg-fc-hover ${u.is_patron ? 'text-yellow-400' : 'text-fc-muted hover:text-white'}`} title={t(u.is_patron ? 'sadm.u.patronRevoke' : 'sadm.u.patronGrant')} aria-label={t('sadm.u.patronA11y')}><Crown size={15} /></button>
                 )}
               </div>
@@ -173,6 +176,11 @@ function UsersTab() {
           </div>
         ))}
       </div>
+      {banning && (
+        <TextPromptDialog title={t('sadm.u.banTitle', { name: banning.username })} label={t('sadm.reasonOptional')} maxLength={300} allowEmpty
+          submitLabel={t('sadm.u.ban')} danger
+          onSubmit={reason => { ban.mutate({ id: banning.id, reason }); setBanning(null) }} onClose={() => setBanning(null)} />
+      )}
     </div>
   )
 }
@@ -192,6 +200,7 @@ function ServersTab() {
   const [q, setQ] = useState('')
   const [filter, setFilter] = useState('all')
   const [del, setDel] = useState<AdminServer | null>(null)
+  const [suspending, setSuspending] = useState<AdminServer | null>(null)
   const [pw, setPw] = useState('')
   const { data, isLoading } = useQuery<{ total: number; servers: AdminServer[] }>({
     queryKey: ['site-admin', 'servers', q, filter],
@@ -249,7 +258,7 @@ function ServersTab() {
                 {s.supervising && <button onClick={() => endSup.mutate(s.id)} className="px-2 py-1 text-xs rounded text-fc-muted hover:text-white hover:bg-fc-hover">{t('sadm.s.end')}</button>}
                 {s.suspended_at
                   ? <button onClick={() => resume.mutate(s.id)} className="px-2 py-1 text-xs rounded bg-green-600/20 text-green-400 hover:bg-green-600/30">{t('sadm.s.resume')}</button>
-                  : <button onClick={() => { const reason = window.prompt(t('sadm.s.suspendPrompt', { name: s.name })); if (reason !== null) suspend.mutate({ id: s.id, reason }) }} className="px-2 py-1 text-xs rounded text-orange-300 hover:bg-orange-500/20">{t('sadm.s.suspend')}</button>}
+                  : <button onClick={() => setSuspending(s)} className="px-2 py-1 text-xs rounded text-orange-300 hover:bg-orange-500/20">{t('sadm.s.suspend')}</button>}
                 <button onClick={() => setDel(s)} className="p-1.5 rounded text-red-400 hover:bg-red-500/20" title={t('sadm.s.delete')} aria-label={t('sadm.s.deleteA11y', { name: s.name })}><Trash2 size={15} /></button>
               </div>
             </div>
@@ -257,6 +266,11 @@ function ServersTab() {
           </div>
         ))}
       </div>
+      {suspending && (
+        <TextPromptDialog title={t('sadm.s.suspendTitle', { name: suspending.name })} label={t('sadm.s.suspendReason')} maxLength={300} allowEmpty
+          submitLabel={t('sadm.s.suspend')} danger
+          onSubmit={reason => { suspend.mutate({ id: suspending.id, reason }); setSuspending(null) }} onClose={() => setSuspending(null)} />
+      )}
       {del && (
         <div role="dialog" aria-modal="true" aria-label={t('sadm.s.delete')} className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/70 px-4">
           <form onSubmit={e => { e.preventDefault(); remove.mutate({ id: del.id, password: pw }) }} className="bg-fc-channel rounded-lg p-5 w-full max-w-sm space-y-3 border border-fc-hover">
@@ -312,7 +326,7 @@ function InvitesTab() {
             <span className="text-xs text-fc-muted">{t('sadm.i.usedCount', { u: i.uses, m: i.max_uses })}</span>
             <span className="text-xs text-fc-muted flex-1 min-w-[160px] truncate">{i.note ?? ''}{i.used_by.length ? ` → ${i.used_by.map(u => u.username).join(', ')}` : ''}</span>
             <span className="text-xs text-fc-muted">{i.expires_at ? t('sadm.i.expiresOn', { date: fmt(i.expires_at) }) : t('sadm.i.noExpiry')}</span>
-            {i.status === 'active' && <button onClick={() => { if (window.confirm(t('sadm.i.revokeConfirm'))) revoke.mutate(i.id) }} className="p-1.5 rounded text-red-400 hover:bg-red-500/20" title={t('sadm.i.revoke')} aria-label={t('sadm.i.revoke')}><Trash2 size={15} /></button>}
+            {i.status === 'active' && <button onClick={() => { void confirm({ message: t('sadm.i.revokeConfirm'), danger: true, confirmLabel: t('sadm.i.revoke') }).then(ok => { if (ok) revoke.mutate(i.id) }) }} className="p-1.5 rounded text-red-400 hover:bg-red-500/20" title={t('sadm.i.revoke')} aria-label={t('sadm.i.revoke')}><Trash2 size={15} /></button>}
           </div>
         ))}
       </div>

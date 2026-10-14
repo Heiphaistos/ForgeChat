@@ -21,6 +21,7 @@ import ServerBoostBanner from '../server/ServerBoostBanner'
 import type { ServerSettingsTab } from '../modals/ServerSettingsModal'
 import ProfileBanner from '../ui/ProfileBanner'
 import ServerIcon from '../ui/ServerIcon'
+import TextPromptDialog from '../ui/TextPromptDialog'
 import StyledNameText from '../ui/StyledNameText'
 import { useServerAppearance } from '../../hooks/useServerAppearance'
 import { accentFill, bannerBounds, bannerFocus, bannerOverlayCss } from '../../lib/serverAppearance'
@@ -98,7 +99,7 @@ export default function ServerHeader({ serverId, data, isAdmin, canCreate, open 
   const nav = useNavigate()
   const qc = useQueryClient()
   const { channelId } = useParams()
-  const [modal, setModal] = useState<'notif' | 'info' | null>(null)
+  const [modal, setModal] = useState<'notif' | 'info' | 'category' | null>(null)
   const unread = useUnread(s => s.serverCounts[serverId] ?? 0)
   const hideMuted = useMyUxPrefs().hideMuted.includes(serverId)
   const { closeSidebar } = useMobile()
@@ -131,13 +132,7 @@ export default function ServerHeader({ serverId, data, isAdmin, canCreate, open 
       { label: t('channels.create'), icon: <Plus size={16} />, onClick: open.createChannel },
       {
         label: t('sm.createCategory'), icon: <FolderPlus size={16} />,
-        onClick: () => {
-          const n = window.prompt(t('sm.categoryName'))?.trim()
-          if (!n) return
-          api.post(`/servers/${serverId}/categories`, { name: n.slice(0, 100) })
-            .then(() => { qc.invalidateQueries({ queryKey: ['categories', serverId] }); toast.success(t('sm.categoryCreated')) })
-            .catch(e => toast.error(e?.response?.data?.error ?? t('common.error')))
-        },
+        onClick: () => setModal('category'),
       },
     ] : []),
     { label: t('sm.createEvent'), icon: <CalendarPlus size={16} />, onClick: () => open.settings('events') },
@@ -234,6 +229,16 @@ export default function ServerHeader({ serverId, data, isAdmin, canCreate, open 
     </div>
       {modal === 'notif' && <ServerNotifModal serverId={serverId} serverName={name} onClose={() => setModal(null)} />}
       {modal === 'info' && data && <ServerInfoModal data={data} onClose={() => setModal(null)} />}
+      {modal === 'category' && (
+        <TextPromptDialog title={t('sm.createCategory')} label={t('sm.categoryName')} maxLength={100} submitLabel={t('common.create')}
+          onSubmit={n => {
+            setModal(null)
+            api.post(`/servers/${serverId}/categories`, { name: n })
+              .then(() => { qc.invalidateQueries({ queryKey: ['categories', serverId] }); toast.success(t('sm.categoryCreated')) })
+              .catch(e => toast.error(e?.response?.data?.error ?? t('common.error')))
+          }}
+          onClose={() => setModal(null)} />
+      )}
     </>
   )
 }

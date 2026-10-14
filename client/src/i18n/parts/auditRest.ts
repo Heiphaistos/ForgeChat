@@ -54,6 +54,13 @@ export const fr = {
   'reg.closed': 'Les inscriptions sont fermées pour le moment.',
   'reg.inviteLabel': 'Code d’invitation',
   'reg.inviteHint': 'ForgeChat est un cercle privé : demande ton code à la personne qui t’invite.',
+  // Fenêtres de saisie qui remplacent window.prompt (PasskeysSection, SiteAdminPage)
+  'guard.passkey.continue': 'Continuer',
+  'guard.passkey.removeFailed': 'Impossible de retirer cette clé d’accès.',
+  'sadm.u.banTitle': 'Bannir {name}',
+  'sadm.reasonOptional': 'Motif (facultatif)',
+  'sadm.s.suspendTitle': 'Suspendre « {name} »',
+  'sadm.s.suspendReason': 'Motif (affiché dans le journal)',
 }
 
 export const en: Partial<Record<keyof typeof fr, string>> = {
@@ -103,4 +110,10 @@ export const en: Partial<Record<keyof typeof fr, string>> = {
   'reg.closed': 'Sign-ups are closed for now.',
   'reg.inviteLabel': 'Invite code',
   'reg.inviteHint': 'ForgeChat is a private circle: ask the person inviting you for your code.',
+  'guard.passkey.continue': 'Continue',
+  'guard.passkey.removeFailed': 'Could not remove this passkey.',
+  'sadm.u.banTitle': 'Ban {name}',
+  'sadm.reasonOptional': 'Reason (optional)',
+  'sadm.s.suspendTitle': 'Suspend “{name}”',
+  'sadm.s.suspendReason': 'Reason (shown in the log)',
 }
