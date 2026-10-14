@@ -203,6 +203,7 @@ export type SettingsSection =
   | 'invites'
   | 'emojis'
   | 'webhooks'
+  | 'bots'
   | 'audit'
   | 'automod'
   | 'stats'
@@ -223,7 +224,7 @@ export function settingsSections(p: ServerPerms): SettingsSection[] {
   if (p.has(PERM.MANAGE_ROLES | PERM.KICK_MEMBERS | PERM.BAN_MEMBERS | PERM.BAN_TEMP | PERM.MANAGE_MESSAGES | voiceMod)) out.push('members')
   if (p.has(PERM.BAN_MEMBERS | PERM.BAN_TEMP)) out.push('reports', 'bans') // reports.rs : BAN_MEMBERS | BAN_TEMP
   // Invitations, emojis, stickers, webhooks, audit, AutoMod, statistiques : MANAGE_SERVER
-  if (manageServer) out.push('invites', 'emojis', 'webhooks', 'audit', 'automod', 'stats', 'community')
+  if (manageServer) out.push('invites', 'emojis', 'webhooks', 'bots', 'audit', 'automod', 'stats', 'community')
   if (p.isOwner) out.push('onboarding', 'danger') // accueil, transfert et suppression : require_owner
   return out
 }
