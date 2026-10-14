@@ -14,12 +14,12 @@ import { lockedText } from '../../e2e/conversations'
 import { clearSearchIndex, countIndexed, searchLocal } from '../../e2e/searchIndex'
 import toast from 'react-hot-toast'
 
-const FILTER_HELP = [
-  ['from:pseudo', 'messages de cet auteur'],
-  ['in:salon', 'dans ce salon, groupe ou DM (en recherche partout)'],
-  ['has:fichier | image | lien', 'avec pièce jointe, image ou lien'],
-  ['before:2026-01-31', 'avant cette date'],
-  ['after:2026-01-01', 'après cette date'],
+const FILTER_HELP: [Key, Key][] = [
+  ['hc.sp.key.from', 'hc.sp.f.from'],
+  ['hc.sp.key.in', 'hc.sp.f.in'],
+  ['hc.sp.key.has', 'hc.sp.f.has'],
+  ['hc.sp.key.before', 'hc.sp.f.before'],
+  ['hc.sp.key.after', 'hc.sp.f.after'],
 ]
 
 /** Portée : cette conversation, tous les MP et groupes, tous les salons de serveur, partout. */
@@ -127,9 +127,9 @@ export default function SearchPanel({ serverId, channelId, channelName, onClose,
       <div className="flex items-center justify-between px-4 py-3 border-b border-fc-bg">
         <div className="flex items-center gap-2">
           <Search size={16} className="text-fc-accent" aria-hidden />
-          <span className="font-semibold text-white text-sm">Rechercher</span>
+          <span className="font-semibold text-white text-sm">{t('hc.sp.title')}</span>
         </div>
-        <button onClick={onClose} aria-label="Fermer la recherche" className="p-1 text-fc-muted hover:text-white rounded hover:bg-fc-hover transition">
+        <button onClick={onClose} aria-label={t('hc.sp.close')} className="p-1 text-fc-muted hover:text-white rounded hover:bg-fc-hover transition">
           <X size={16} aria-hidden />
         </button>
       </div>
@@ -153,7 +153,7 @@ export default function SearchPanel({ serverId, channelId, channelName, onClose,
               } else if (e.key === 'Escape') onClose()
             }}
             aria-activedescendant={selIdx >= 0 && results[selIdx] ? `search-result-${results[selIdx].id}` : undefined}
-            placeholder="Rechercher dans #..."
+            placeholder={t('hc.sp.ph')}
             aria-label={`Rechercher des messages dans #${channelName}`}
             inputMode="search" autoComplete="off"
             enterKeyHint="search" autoCapitalize="none"
@@ -163,7 +163,7 @@ export default function SearchPanel({ serverId, channelId, channelName, onClose,
           <button
             onClick={handleSearch}
             disabled={query.trim().length < 2}
-            aria-label="Lancer la recherche"
+            aria-label={t('hc.sp.go')}
             className="px-2.5 py-1.5 bg-fc-accent hover:bg-indigo-500 text-white rounded text-sm transition disabled:opacity-40"
           >
             <Search size={14} aria-hidden />
@@ -185,7 +185,7 @@ export default function SearchPanel({ serverId, channelId, channelName, onClose,
             {isFetching && <Loader2 size={10} className="ml-auto animate-spin" aria-hidden />}
             {!isFetching && (
               <span aria-live="polite" aria-atomic="true" className="ml-auto">
-                {results.length}{hasNextPage ? '+' : ''} résultat(s)
+                {t('hc.sp.count', { n: `${results.length}${hasNextPage ? '+' : ''}` })}
               </span>
             )}
           </div>
@@ -196,11 +196,11 @@ export default function SearchPanel({ serverId, channelId, channelName, onClose,
         {!search && (
           <div className="text-center py-8">
             <Search size={28} className="mx-auto mb-2 text-fc-muted opacity-40" aria-hidden />
-            <p className="text-sm text-fc-muted">Tapez votre recherche</p>
-            <p className="text-xs text-fc-muted mt-1 opacity-70">Minimum 2 caractères, ou un filtre</p>
-            <ul className="mt-4 text-left text-xs text-fc-muted space-y-1" aria-label="Filtres disponibles">
+            <p className="text-sm text-fc-muted">{t('hc.sp.type')}</p>
+            <p className="text-xs text-fc-muted mt-1 opacity-70">{t('hc.sp.min')}</p>
+            <ul className="mt-4 text-left text-xs text-fc-muted space-y-1" aria-label={t('hc.sp.filters')}>
               {FILTER_HELP.map(([k, d]) => (
-                <li key={k}><code className="text-fc-text bg-fc-bg px-1 rounded">{k}</code> {d}</li>
+                <li key={k}><code className="text-fc-text bg-fc-bg px-1 rounded">{t(k)}</code> {t(d)}</li>
               ))}
             </ul>
             <div className="mt-4 text-left text-xs text-fc-muted space-y-1">
@@ -223,12 +223,12 @@ export default function SearchPanel({ serverId, channelId, channelName, onClose,
 
         {search && !isFetching && results.length === 0 && (
           <div role="status" className="text-center py-8">
-            <p className="text-sm text-fc-muted">Aucun résultat pour "{search}"</p>
+            <p className="text-sm text-fc-muted">{t('hc.sp.none', { q: search })}</p>
           </div>
         )}
 
         {results.length > 0 && (
-          <div role="listbox" aria-label="Résultats de recherche" className="space-y-2">
+          <div role="listbox" aria-label={t('hc.sp.results')} className="space-y-2">
             {results.map((msg: any, idx: number) => (
               <div
                 key={msg.id}
@@ -272,7 +272,7 @@ export default function SearchPanel({ serverId, channelId, channelName, onClose,
         {hasNextPage && (
           <button onClick={() => void fetchNextPage()} disabled={isFetchingNextPage}
             className="w-full py-2 text-xs text-fc-accent hover:text-white hover:bg-fc-hover rounded transition disabled:opacity-50">
-            {isFetchingNextPage ? 'Chargement…' : 'Charger plus'}
+            {isFetchingNextPage ? t('hc.thr.loadingShort') : t('hc.sp.more')}
           </button>
         )}
       </div>

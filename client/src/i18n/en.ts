@@ -21,6 +21,7 @@ import * as profileDecorExtra from './parts/profileDecorExtra.ts'
 import * as auditUi from './parts/auditUi.ts'
 import * as serverAdminPage from './parts/serverAdminPage.ts'
 import * as hardcoded from './parts/hardcoded.ts'
+import * as hardcoded4 from './parts/hardcoded4.ts'
 import * as hardcoded3 from './parts/hardcoded3.ts'
 import * as hardcoded2 from './parts/hardcoded2.ts'
 import * as auditChat from './parts/auditChat.ts'
@@ -65,6 +66,7 @@ export const en: Partial<Record<Key, string>> = {
   ...auditUi.en,
   ...serverAdminPage.en,
   ...hardcoded.en,
+  ...hardcoded4.en,
   ...hardcoded3.en,
   ...hardcoded2.en,
   ...auditChat.en,
