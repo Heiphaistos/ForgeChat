@@ -160,7 +160,7 @@ export default function ConnectedAccountsSection() {
 
       {/* Modal d'ajout */}
       {adding && platformMeta && (
-        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center" onClick={() => setAdding(null)}>
+        <div role="dialog" aria-modal="true" aria-label={t('settings.connected.title', { name: platformMeta.label })} className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center" onClick={() => setAdding(null)}>
           <div
             className="bg-fc-sidebar rounded-2xl p-6 w-full max-w-sm shadow-2xl space-y-4"
             onClick={e => e.stopPropagation()}

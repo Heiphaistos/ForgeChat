@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback, useRef } from 'react'
 import { X, Download, ChevronLeft, ChevronRight, ZoomIn, ZoomOut, Share2, Copy } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { saveUrl } from '../../lib/saveFile'
+import { useT } from '../../i18n'
 
 interface Props {
   images: string[]
@@ -12,6 +13,7 @@ interface Props {
 }
 
 export default function LightboxModal({ images, initialIndex, onClose }: Props) {
+  const t = useT()
   const [index, setIndex] = useState(initialIndex)
   const src = useSignedUrl(images[index])
   const [zoom, setZoom] = useState(1)
@@ -52,9 +54,9 @@ export default function LightboxModal({ images, initialIndex, onClose }: Props) 
     } else {
       try {
         await navigator.clipboard.writeText(url)
-        toast.success('Lien de l\'image copié')
+        toast.success(t('lightbox.linkCopied'))
       } catch {
-        toast.error('Impossible de copier le lien')
+        toast.error(t('lightbox.linkCopyFailed'))
       }
     }
   }
@@ -74,9 +76,9 @@ export default function LightboxModal({ images, initialIndex, onClose }: Props) 
       const blob = await new Promise<Blob | null>(res => canvas.toBlob(res, 'image/png'))
       if (!blob) throw new Error('toBlob failed')
       await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })])
-      toast.success('Image copiée')
+      toast.success(t('lightbox.copied'))
     } catch {
-      toast.error("Impossible de copier l'image")
+      toast.error(t('lightbox.copyFailed'))
     }
   }
   const canCopyImage = typeof ClipboardItem !== 'undefined' && !!navigator.clipboard?.write
@@ -88,18 +90,19 @@ export default function LightboxModal({ images, initialIndex, onClose }: Props) 
 
   return (
     <div
+      role="dialog" aria-modal="true" aria-label={t('lightbox.title')}
       className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center"
       onClick={e => { if (e.target === e.currentTarget) onClose() }}
     >
       <div className="absolute top-4 right-4 flex items-center gap-2 z-10">
-        <button onClick={() => setZoom(z => Math.min(z + 0.25, 4))} aria-label="Zoom avant" className="p-2 bg-white/10 hover:bg-white/20 rounded-lg text-white transition"><ZoomIn size={18} aria-hidden /></button>
-        <button onClick={() => setZoom(z => Math.max(z - 0.25, 0.5))} aria-label="Zoom arrière" className="p-2 bg-white/10 hover:bg-white/20 rounded-lg text-white transition"><ZoomOut size={18} aria-hidden /></button>
+        <button onClick={() => setZoom(z => Math.min(z + 0.25, 4))} aria-label={t('lightbox.zoomIn')} className="p-2 bg-white/10 hover:bg-white/20 rounded-lg text-white transition"><ZoomIn size={18} aria-hidden /></button>
+        <button onClick={() => setZoom(z => Math.max(z - 0.25, 0.5))} aria-label={t('lightbox.zoomOut')} className="p-2 bg-white/10 hover:bg-white/20 rounded-lg text-white transition"><ZoomOut size={18} aria-hidden /></button>
         {canCopyImage && (
-          <button onClick={copyImage} aria-label="Copier l'image" title="Copier l'image" className="p-2 bg-white/10 hover:bg-white/20 rounded-lg text-white transition"><Copy size={18} aria-hidden /></button>
+          <button onClick={copyImage} aria-label={t('lightbox.copy')} title={t('lightbox.copy')} className="p-2 bg-white/10 hover:bg-white/20 rounded-lg text-white transition"><Copy size={18} aria-hidden /></button>
         )}
-        <button onClick={share} aria-label="Partager l'image" title="Partager" className="p-2 bg-white/10 hover:bg-white/20 rounded-lg text-white transition"><Share2 size={18} aria-hidden /></button>
-        <button onClick={download} aria-label="Télécharger l'image" className="p-2 bg-white/10 hover:bg-white/20 rounded-lg text-white transition"><Download size={18} aria-hidden /></button>
-        <button onClick={onClose} aria-label="Fermer" className="p-2 bg-white/10 hover:bg-white/20 rounded-lg text-white transition"><X size={18} aria-hidden /></button>
+        <button onClick={share} aria-label={t('lightbox.share')} title={t('lightbox.share')} className="p-2 bg-white/10 hover:bg-white/20 rounded-lg text-white transition"><Share2 size={18} aria-hidden /></button>
+        <button onClick={download} aria-label={t('lightbox.download')} className="p-2 bg-white/10 hover:bg-white/20 rounded-lg text-white transition"><Download size={18} aria-hidden /></button>
+        <button onClick={onClose} aria-label={t('common.close')} className="p-2 bg-white/10 hover:bg-white/20 rounded-lg text-white transition"><X size={18} aria-hidden /></button>
       </div>
 
       {images.length > 1 && (
@@ -110,8 +113,8 @@ export default function LightboxModal({ images, initialIndex, onClose }: Props) 
 
       {images.length > 1 && (
         <>
-          <button onClick={prev} aria-label="Image précédente" className="absolute left-4 p-3 bg-white/10 hover:bg-white/20 rounded-full text-white transition z-10"><ChevronLeft size={24} /></button>
-          <button onClick={next} aria-label="Image suivante" className="absolute right-4 p-3 bg-white/10 hover:bg-white/20 rounded-full text-white transition z-10"><ChevronRight size={24} /></button>
+          <button onClick={prev} aria-label={t('lightbox.prev')} className="absolute left-4 p-3 bg-white/10 hover:bg-white/20 rounded-full text-white transition z-10"><ChevronLeft size={24} /></button>
+          <button onClick={next} aria-label={t('lightbox.next')} className="absolute right-4 p-3 bg-white/10 hover:bg-white/20 rounded-full text-white transition z-10"><ChevronRight size={24} /></button>
         </>
       )}
 

@@ -386,7 +386,7 @@ export default function RolesTab({ serverId }: { serverId: string }) {
                     <Trash2 size={14} />
                   </button>
                   {showDeleteConfirm && (
-                    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 px-4" onClick={() => setShowDeleteConfirm(false)}>
+                    <div role="dialog" aria-modal="true" aria-label={t('servers.delete.title', { name: selected.name })} className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 px-4" onClick={() => setShowDeleteConfirm(false)}>
                       <div className="bg-fc-sidebar rounded-xl shadow-2xl p-6 w-full max-w-sm" onClick={e => e.stopPropagation()}>
                         <h3 className="text-lg font-bold text-white mb-2">{t('servers.delete.title', { name: selected.name })}</h3>
                         <p className="text-sm text-fc-muted mb-5">{t('roles.deleteWarn')}</p>
