@@ -335,7 +335,9 @@ pub async fn join_server(
     {
         use redis::AsyncCommands;
         let mut redis = state.redis.lock().await;
-        let count: Option<i64> = redis.get(&join_key).await.unwrap_or(None);
+        // Redis KO : 503 (jamais un essai de codes sans limite).
+        let count: Option<i64> = redis.get(&join_key).await
+            .map_err(|_| AppError::Unavailable("Service momentanément indisponible".into()))?;
         if count.unwrap_or(0) >= 10 {
             return Err(AppError::TooManyRequests);
         }
@@ -380,8 +382,8 @@ pub async fn join_server(
                 use redis::AsyncCommands;
                 let mut redis = state.redis.lock().await;
                 let n: i64 = redis.incr(&join_key, 1).await.unwrap_or(1);
-                if n == 1 {
-                    let _: () = redis.expire(&join_key, 600).await.unwrap_or(());
+                if n == 1 && redis.expire::<_, bool>(&join_key, 600).await.is_err() {
+                    let _: std::result::Result<i64, _> = redis.del(&join_key).await; // pas de compteur sans TTL
                 }
                 return Err(AppError::NotFound("Invitation invalide".into()));
             }

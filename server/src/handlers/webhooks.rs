@@ -228,15 +228,7 @@ pub async fn execute_webhook(
 
     // Rate limit : 10 messages / minute par webhook (fail-closed si Redis down), compté
     // APRÈS le jeton : avant, n'importe qui connaissant l'id épuisait le quota du webhook.
-    {
-        use redis::AsyncCommands;
-        let rl_key = format!("webhook_rl:{}", webhook_id);
-        let mut redis = state.redis.lock().await;
-        let count: i64 = redis.incr(&rl_key, 1).await
-            .map_err(|_| AppError::Internal(anyhow::anyhow!("rate limit unavailable")))?;
-        if count == 1 { let _: () = redis.expire(&rl_key, 60).await.unwrap_or(()); }
-        if count > 10 { return Err(AppError::TooManyRequests); }
-    }
+    crate::handlers::auth_v2::hit(&state, &format!("webhook_rl:{}", webhook_id), 10, 60).await?;
 
     let channel_id: Uuid = row.get("channel_id");
     let server_id: Uuid = row.get("server_id");
@@ -310,15 +302,7 @@ pub async fn receive_github_webhook(
     }
 
     // Rate limit : 30 événements / minute par canal (fail-closed si Redis down)
-    {
-        use redis::AsyncCommands;
-        let rl_key = format!("gh_webhook_rl:{}", channel_id);
-        let mut redis = state.redis.lock().await;
-        let count: i64 = redis.incr(&rl_key, 1).await
-            .map_err(|_| AppError::Internal(anyhow::anyhow!("rate limit unavailable")))?;
-        if count == 1 { let _: () = redis.expire(&rl_key, 60).await.unwrap_or(()); }
-        if count > 30 { return Err(AppError::TooManyRequests); }
-    }
+    crate::handlers::auth_v2::hit(&state, &format!("gh_webhook_rl:{}", channel_id), 30, 60).await?;
 
     let payload: serde_json::Value = serde_json::from_slice(&body_bytes)
         .map_err(|_| AppError::BadRequest("JSON invalide".into()))?;

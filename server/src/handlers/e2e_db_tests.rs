@@ -156,6 +156,8 @@ async fn e2e_conversations() {
     // Arrivée : redistribution des anciennes époques au nouveau membre.
     let d = user(&db, true).await;
     sqlx::query("INSERT INTO group_dm_members (dm_id, user_id) VALUES ($1, $2)").bind(g).bind(d).execute(&db).await.unwrap();
+    // Sans la clé de l'époque, d ne peut pas l'envelopper pour un autre (enveloppe bidon).
+    assert_eq!(err(store_envelopes(&db, gconv, d, &body(&db, 0, false, &[b], 3).await).await), "FORBIDDEN");
     store_envelopes(&db, gconv, a, &body(&db, 0, false, &[d], 4).await).await.unwrap();
     store_envelopes(&db, gconv, a, &body(&db, 1, false, &[d], 4).await).await.unwrap();
     assert_eq!(my_envelopes(&db, gconv, d).await.unwrap().len(), 2);

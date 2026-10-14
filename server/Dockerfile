@@ -2,8 +2,8 @@
 FROM rust:slim-bookworm@sha256:2c3a22f0a5533ea2dd5a16627bc841228151faa2d4de2644ac9987e4a2f1f2fa AS builder
 WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends pkg-config libssl-dev curl && rm -rf /var/lib/apt/lists/*
-COPY Cargo.toml ./
-RUN mkdir src && echo "fn main(){}" > src/main.rs && cargo build --release && rm src/main.rs
+COPY Cargo.toml Cargo.lock ./
+RUN mkdir src && echo "fn main(){}" > src/main.rs && cargo build --release --locked && rm src/main.rs
 COPY src ./src
 COPY migrations ./migrations
 # GIT_SHA busts Docker's own layer cache deterministically. Observed 2026-07-22: even
@@ -13,7 +13,7 @@ COPY migrations ./migrations
 # host. Referencing a per-commit ARG in the RUN's own command forces Docker to recompute
 # this layer independent of whatever it decided about the COPY above.
 ARG GIT_SHA=unknown
-RUN echo "Building commit ${GIT_SHA}" && find /app/src -name "*.rs" -exec touch {} + && cargo build --release
+RUN echo "Building commit ${GIT_SHA}" && find /app/src -name "*.rs" -exec touch {} + && cargo build --release --locked
 
 # Pas d'apt-get upgrade (non reproductible) : les correctifs viennent de l'image de base.
 # Images épinglées par digest (audit 2026-10-10) : `--pull` ne les met plus à jour, il faut
