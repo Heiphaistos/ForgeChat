@@ -177,7 +177,7 @@ pub async fn enrich_batch(state: &AppState) {
         let link: String = r.get("link");
         let og = match youtube_thumb(&link) {
             Some(_) => None,
-            None => crate::handlers::audit::fetch_og(state, &link).await,
+            None => crate::handlers::link_preview::fetch_og(state, &link).await,
         };
         let image = og.as_ref().and_then(|o| o.image.clone()).filter(|u| u.len() <= 2000).or_else(|| youtube_thumb(&link));
         let summary = og.as_ref().and_then(|o| o.description.as_deref()).map(|d| clip(&html_text(d), 600)).filter(|d| !d.is_empty());

@@ -129,6 +129,18 @@ pub async fn read_capped(mut resp: reqwest::Response, max: usize) -> Option<Vec<
     Some(out)
 }
 
+/// Début d'une réponse : au plus `max` octets, le reste est abandonné sans erreur
+/// (les métadonnées d'une page sont dans son `<head>`, pas besoin du reste).
+pub async fn read_prefix(mut resp: reqwest::Response, max: usize) -> Option<Vec<u8>> {
+    let mut out = Vec::new();
+    while out.len() < max {
+        let Some(chunk) = resp.chunk().await.ok()? else { break };
+        out.extend_from_slice(&chunk);
+    }
+    out.truncate(max);
+    Some(out)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -146,6 +158,13 @@ mod tests {
             let _ = s.write_all(&body).await;
         });
         format!("http://{addr}/")
+    }
+
+    #[tokio::test]
+    async fn prefix_body() {
+        let c = reqwest::Client::new();
+        let url = serve(vec![b'a'; 5000]).await;
+        assert_eq!(read_prefix(c.get(&url).send().await.unwrap(), 4096).await.map(|b| b.len()), Some(4096));
     }
 
     #[tokio::test]

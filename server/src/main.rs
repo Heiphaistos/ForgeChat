@@ -959,7 +959,8 @@ fn protected_route_table() -> Router<AppState> {
         // Reaction detail
         .route("/reactions", get(handlers::audit::get_reaction_detail))
         // OG preview
-        .route("/og", get(handlers::audit::og_preview))
+        .route("/og", get(handlers::link_preview::og_preview))
+        .route("/og/image", get(handlers::link_preview::og_image))
         // Nickname
         .route("/servers/:server_id/nickname", patch(handlers::nicknames::set_nickname))
         // DM read receipts
