@@ -54,6 +54,7 @@
 .site-nav { display: flex; align-items: center; gap: 4px; margin-left: auto; }
 .site-nav-link { position: relative; padding: 8px 12px; border-radius: 10px; color: var(--muted); text-decoration: none; font-size: .95rem; transition: color .2s, background .2s; }
 .site-nav-link:hover { color: var(--text); background: var(--card); }
+button.site-nav-link { background: none; border: 0; font-family: inherit; text-align: left; cursor: pointer; }
 .site-nav-link[aria-current='page'] { color: var(--text); }
 .site-nav-link[aria-current='page']::after {
   content: ''; position: absolute; left: 12px; right: 12px; bottom: 2px; height: 2px; border-radius: 2px;
