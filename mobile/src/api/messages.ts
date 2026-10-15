@@ -21,7 +21,7 @@ import { normalizeBotCommands, type SlashCommand } from '@/features/composer/com
 import { normalizePins, type PinnedItem } from '@/features/chat/pins'
 import type { Attachment, ChatMessage, ConversationRef } from '@/types/models'
 import { forwardText, mustEncrypt, openRaw, openRawList, seal, withSeal } from '@/e2e/conversations'
-import { isBotCommand, sendChannelText } from '@/e2e/channels'
+import { isBotCommand, linkPreviewExtra, sendChannelText } from '@/e2e/channels'
 import type { FileEntry } from '@/e2e/crypto'
 import type { SupportPayload } from '@/lib/remoteSupport'
 import { firstUrl, mentionMeta } from '@/e2e/channelText'
@@ -142,11 +142,13 @@ export const messagesApi = {
     if (ref.kind === 'channel') return sendChannel(ref, input.content ?? '', extra, input.files)
     const conv = e2eConv(ref)
     // MP/groupe : chiffré sur l'appareil ; le serveur ne renvoie pas le texte, on garde celui saisi.
+    const preview = input.content ? await linkPreviewExtra(input.content) : {}
+    const sealed = { ...preview, ...(input.files?.length ? { f: input.files } : {}), ...(input.support ? { rs: input.support } : {}) }
     const raw = await withSeal(conv[0], conv[1], input.content ?? '', (body) => http.post<Record<string, unknown>>(base(ref), { ...body, ...extra }), null,
-      { extra: input.files?.length || input.support ? { ...(input.files?.length ? { f: input.files } : {}), ...(input.support ? { rs: input.support } : {}) } : undefined })
+      { extra: Object.keys(sealed).length ? sealed : undefined })
     const m = adaptMessage(ref, raw)
     return raw?.enc
-      ? { ...m, content: input.content, e2e: 'ok', ...(input.files?.length ? { files: input.files } : {}), ...(input.support ? { support: input.support } : {}) }
+      ? { ...m, content: input.content, e2e: 'ok', preview: normalizeOg(preview.p, firstUrl(input.content ?? '') ?? ''), ...(input.files?.length ? { files: input.files } : {}), ...(input.support ? { support: input.support } : {}) }
       : m
   },
 

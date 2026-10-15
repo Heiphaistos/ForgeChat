@@ -82,6 +82,12 @@ async function linkPreview(text: string): Promise<Record<string, unknown> | null
   }
 }
 
+/** Aperçu de lien d'un MP ou groupe, pour le contenu chiffré (`p`) ; {} sinon. */
+export const dmLinkPreview = async (text: string | null): Promise<Record<string, unknown>> => {
+  const p = text ? await linkPreview(text) : null
+  return p ? { p } : {}
+}
+
 /** Corps envoyé au serveur : clair (`content`) ou chiffré (`enc` + `client_msg_id`). */
 export interface ChannelBody { content: string | null; enc?: EncPayload; client_msg_id?: string }
 

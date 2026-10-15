@@ -46,7 +46,7 @@ export async function checkAutomod(serverId: string, text: string): Promise<void
 
 // ─── Aperçu de lien ─────────────────────────────────────────────────────────
 /** Aperçu du premier lien demandé par l'expéditeur, mis dans le contenu chiffré (`p`) ; {} sinon. */
-async function linkPreviewExtra(text: string): Promise<Record<string, unknown>> {
+export async function linkPreviewExtra(text: string): Promise<Record<string, unknown>> {
   const url = previewUrl(text)
   if (!url || !previewAllowed(url)) return {}
   // Réglage « aperçus de liens » coupé : le lien ne part pas au serveur.

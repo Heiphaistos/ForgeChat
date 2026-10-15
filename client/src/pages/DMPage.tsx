@@ -34,6 +34,7 @@ import { rememberConvName } from '../e2e/searchIndex'
 import { E2ECallBadge } from '../e2e/E2ECallBadge'
 import { fetchDmMessages, openDm, type RawDm } from '../e2e/dmMessages'
 import { filesExtra, prepareFiles, type PreparedFiles } from '../e2e/files'
+import { dmLinkPreview } from '../e2e/channels'
 import { isQueued } from '../lib/offline'
 import { RemoteSupportButton, useSupportSender } from '../components/chat/RemoteSupport'
 import type { SupportPayload } from '../lib/remoteSupport'
@@ -362,13 +363,16 @@ export default function DMPage() {
 
   // Normal DM mutation (non-E2E)
   const sendDm = useMutation({
-    mutationFn: ({ content, replyTo, files, extra }: { content: string | null; replyTo?: string; files?: PreparedFiles; extra?: Record<string, unknown> }) =>
-      withSeal('dm', dmId!, content ?? '', body => api.post(`/dms/${dmId}/messages`, {
+    mutationFn: async ({ content, replyTo, files, extra }: { content: string | null; replyTo?: string; files?: PreparedFiles; extra?: Record<string, unknown> }) => {
+      const preview = await dmLinkPreview(content)
+      const res = await withSeal('dm', dmId!, content ?? '', body => api.post(`/dms/${dmId}/messages`, {
         ...body,
         content: body.content ?? '',
         reply_to: replyTo,
         has_attachments: !!files?.count,
-      }), null, { extra: { ...filesExtra(files), ...extra } }),
+      }), null, { extra: { ...filesExtra(files), ...preview, ...extra } })
+      return Object.assign(res, { preview })
+    },
     onSuccess: async (res, vars) => {
       const msg = res.data
       if (msg && me && dmId) {
@@ -380,7 +384,7 @@ export default function DMPage() {
           // Chiffré : le serveur ne renvoie pas le texte, on garde celui saisi.
           content: msg.enc ? vars.content : msg.content,
           // Clés des fichiers envoyés : gardées pour afficher mes pièces jointes sans recharger.
-          ...(msg.enc ? { e2e: 'ok', e2e_body: { t: vars.content ?? '', ...filesExtra(vars.files), ...vars.extra } } : {}),
+          ...(msg.enc ? { e2e: 'ok', e2e_body: { t: vars.content ?? '', ...filesExtra(vars.files), ...res.preview, ...vars.extra } } : {}),
           channel_id: dmId,
           author_id: me.id,
           author_username: me.username,

@@ -32,6 +32,7 @@ import DisappearingControl from '../components/chat/DisappearingControl'
 import { AfterReadBadge, EphemeralBadge } from '../components/chat/messageListShared'
 import { rememberConvName, searchLocal } from '../e2e/searchIndex'
 import { displayAttachments, filesExtra, prepareFiles, type PreparedFiles } from '../e2e/files'
+import { dmLinkPreview } from '../e2e/channels'
 import E2EAttachment from '../e2e/E2EAttachment'
 import { UnencryptedBadge } from '../e2e/ChannelBadge'
 import { AvatarDecoration } from '../components/ui/ProfileDecor'
@@ -558,12 +559,12 @@ export default function GroupDMPage() {
   }, [loadingMore, hasMore, allMessages, groupId, t])
 
   const sendMsg = useMutation({
-    mutationFn: ({ text, files, replyToId }: { text: string; files: PreparedFiles; replyToId?: string }) =>
+    mutationFn: async ({ text, files, replyToId }: { text: string; files: PreparedFiles; replyToId?: string }) =>
       withSeal('group', groupId!, text, body => api.post(`/dms/groups/${groupId}/messages`, {
         ...body,
         has_attachments: files.count > 0,
         reply_to: replyToId ?? null,
-      }), null, { extra: filesExtra(files) }),
+      }), null, { extra: { ...filesExtra(files), ...await dmLinkPreview(text) } }),
     onSuccess: async (res, vars) => {
       if (vars.files.count > 0 && res.data?.id) {
         await postWithUploadProgress(`/dms/groups/${groupId}/messages/${res.data.id}/attachments`, vars.files.form, vars.files.bytes).catch(() => null)
