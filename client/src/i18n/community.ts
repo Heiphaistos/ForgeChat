@@ -172,7 +172,8 @@ export const communityFr = {
   'community.stats.voice': 'Minutes de vocal par jour',
   'community.stats.voiceNow': '{n} personne(s) en vocal en ce moment',
   'community.stats.channels': 'Salons les plus actifs',
-  'community.stats.channelLine': '{m} messages · {a} auteurs',
+  'community.stats.channelLine': 'Messages : {m} · auteurs : {a}',
+  'community.stats.channelsEmpty': 'Aucune activité sur la période',
   'community.stats.privacy': 'Des comptes seulement : le contenu des messages reste chiffré.',
 
   'community.events.repeat': 'Répétition',
@@ -364,7 +365,8 @@ export const communityEn: Record<keyof typeof communityFr, string> = {
   'community.stats.voice': 'Voice minutes per day',
   'community.stats.voiceNow': '{n} people in voice right now',
   'community.stats.channels': 'Most active channels',
-  'community.stats.channelLine': '{m} messages · {a} authors',
+  'community.stats.channelLine': 'Messages: {m} · authors: {a}',
+  'community.stats.channelsEmpty': 'No activity in this period',
   'community.stats.privacy': 'Counts only: message content stays encrypted.',
 
   'community.events.repeat': 'Repeat',
