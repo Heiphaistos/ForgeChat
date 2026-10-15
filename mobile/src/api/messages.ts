@@ -64,12 +64,11 @@ async function adaptList(ref: ConversationRef, raw: unknown): Promise<ChatMessag
   return (await openRawList(conv[0], conv[1], Array.isArray(raw) ? raw : [])).map((m) => adaptMessage(ref, m))
 }
 
-/** Commandes des bots du serveur (même cache que la barre de saisie). */
-const botCommandNames = (serverId: string) =>
+/** Commandes du serveur, natives et de bots (même cache que la barre de saisie). */
+const serverCommandList = (serverId: string) =>
   queryClient
     .fetchQuery({ queryKey: ['server-commands', serverId], queryFn: () => messagesApi.commands(serverId), staleTime: 60_000 })
-    .then((list) => list.map((c) => c.name))
-    .catch(() => [] as string[])
+    .catch(() => [] as SlashCommand[])
 
 /** Commandes de bot déjà confirmées pendant cette session (serveur|commande). */
 const confirmedCommands = new Set<string>()
@@ -94,9 +93,14 @@ async function sendChannel(
   ref: Extract<ConversationRef, { kind: 'channel' }>, text: string, extra: Record<string, unknown>, files?: FileEntry[],
 ): Promise<ChatMessage> {
   const meta = { ...extra, ...mentionMeta(text) }
-  if (text.startsWith('/') && isBotCommand(text, await botCommandNames(ref.serverId))) {
-    // En clair (le bot doit la lire), sur une liste fournie par le serveur : confirmation d'abord.
-    if (!(await confirmPlainCommand(ref.serverId, text))) throw new Error(t('e2e.botCommand.cancelled'))
+  const commands = text.startsWith('/') ? await serverCommandList(ref.serverId) : []
+  if (commands.length && isBotCommand(text, commands.map((c) => c.name))) {
+    const cmd = commands.find((c) => c.name === text.trim().slice(1).split(/\s+/)[0]?.toLowerCase())
+    // Connue du serveur mais refusée à mon compte : rien n'est envoyé (ni en clair, ni chiffré).
+    if (cmd?.allowed === false) throw new Error(t('e2e.cmdNotAllowed', { cmd: cmd.name }))
+    // En clair (le bot doit la lire), sur une liste fournie par le serveur : confirmation d'abord,
+    // sauf commande intégrée, lue par le serveur lui-même.
+    if (!cmd?.native && !(await confirmPlainCommand(ref.serverId, text))) throw new Error(t('e2e.botCommand.cancelled'))
     return adaptMessage(ref, await http.post<unknown>(base(ref), { content: text, ...meta }))
   }
   const sent = await sendChannelText(ref.serverId, ref.channelId, text, (body) => http.post<Record<string, unknown>>(base(ref), { ...body, ...meta }),
