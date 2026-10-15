@@ -178,6 +178,13 @@ GET    /api/activity-feed
 { "type": "THREAD_MESSAGE", "data": { "thread_id": "...", "content": "..." } }
 ```
 
+## Mises à jour du bureau
+
+L'application bureau se met à jour seule (installation silencieuse puis relance). Chaque mise à jour est
+vérifiée par une signature Ed25519 hors ligne et le SHA-256 du binaire avant installation. Réglages >
+Avancé > Mises à jour : bouton « Rechercher une mise à jour » et vérification automatique désactivable.
+Publier une release : voir `docs/PUBLICATION-SIGNEE.md`.
+
 ---
 
 ## Licence
