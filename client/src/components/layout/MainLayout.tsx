@@ -219,7 +219,7 @@ export default function MainLayout() {
               {/* Actualités : la page a sa propre colonne de rubriques ; la liste des MP ne ferait que
                   manger de la place (sur téléphone, le tiroir reste là pour naviguer). */}
               <div
-                className={`relative flex flex-col bg-fc-channel flex-shrink-0 h-full ${location.pathname.startsWith('/news') ? 'md:hidden' : ''}`}
+                className={`relative flex flex-col bg-fc-channel flex-shrink-0 h-full ${/^\/(news|tutos)/.test(location.pathname) ? 'md:hidden' : ''}`}
                 style={{ width: isMobile ? 'calc(100vw - 72px)' : `${sidebarWidth}px`, ...lookAccent }}
               >
                 <LookBackdrop bg={look?.sidebar_bg} />
@@ -233,8 +233,8 @@ export default function MainLayout() {
               </div>
             </div>
             {/* Vocal et profil sur toute la largeur (sous le rail des serveurs aussi), sur toutes les pages. */}
-            <VoiceBar compact={location.pathname.startsWith('/news')} />
-            <UserPanel onToggleActivity={toggleActivity} activityOpen={activityOpen} compact={location.pathname.startsWith('/news')} />
+            <VoiceBar compact={/^\/(news|tutos)/.test(location.pathname)} />
+            <UserPanel onToggleActivity={toggleActivity} activityOpen={activityOpen} compact={/^\/(news|tutos)/.test(location.pathname)} />
           </nav>
 
           {/* Handle de redimensionnement sidebar — desktop uniquement */}

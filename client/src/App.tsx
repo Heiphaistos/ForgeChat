@@ -81,6 +81,8 @@ const CommandPalette = lazy(() => import('./components/CommandPalette'))
 const SavedPage = lazy(() => import('./pages/SavedPage'))
 const NotificationsPage = lazy(() => import('./pages/NotificationsPage'))
 const NewsPage = lazy(() => import('./pages/NewsPage'))
+const TutorialsPage = lazy(() => import('./pages/TutorialsPage'))
+const TutorialDetail = lazy(() => import('./pages/tutorials/TutorialDetail'))
 const ScheduledPage = lazy(() => import('./pages/ScheduledPage'))
 const ExplorePage = lazy(() => import('./pages/ExplorePage'))
 const ServerDiscoveryPage = lazy(() => import('./pages/ServerDiscoveryPage'))
@@ -1081,6 +1083,8 @@ function AppInner() {
             <Route path="users/:userId" element={<UserProfilePage />} />
             <Route path="saved" element={<SavedPage />} />
             <Route path="news" element={<NewsPage />} />
+            <Route path="tutos" element={<TutorialsPage />} />
+            <Route path="tutos/:slug" element={<TutorialDetail />} />
             <Route path="notifications" element={<NotificationsPage />} />
             <Route path="scheduled" element={<ScheduledPage />} />
             <Route path="explore" element={<ExplorePage />} />

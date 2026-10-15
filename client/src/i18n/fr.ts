@@ -5,6 +5,7 @@ import * as messaging from './parts/messaging.ts'
 import * as chrome from './parts/chrome.ts'
 import * as ai from './parts/ai.ts'
 import * as notifCenter from './parts/notifCenter.ts'
+import * as tutorials from './parts/tutorials.ts'
 import * as uxSettings from './parts/uxSettings.ts'
 import * as menus from './parts/menus.ts'
 import * as accountGuard from './parts/accountGuard.ts'
@@ -57,6 +58,7 @@ export const fr = {
   ...voiceDockFr,
   ...ai.fr,
   ...notifCenter.fr,
+  ...tutorials.fr,
   ...systemDeskFr,
   ...menus.fr,
   ...accountGuard.fr,
