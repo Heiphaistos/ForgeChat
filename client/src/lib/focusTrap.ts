@@ -25,9 +25,15 @@ export function installFocusTrap(): void {
   // est dans la modale parente, pas derrière elle.
   const lastIn = new Map<HTMLElement | null, HTMLElement>()
 
+  // Derniers éléments focalisés hors modale : repli quand le déclencheur a disparu (une modale
+  // ouverte depuis un menu contextuel qui se ferme emporte son entrée, le focus tombait sur <body>).
+  const recent: HTMLElement[] = []
+
   document.addEventListener('focusin', e => {
     const el = e.target as HTMLElement
-    lastIn.set(el.closest?.<HTMLElement>(MODAL) ?? null, el)
+    const modal = el.closest?.<HTMLElement>(MODAL) ?? null
+    lastIn.set(modal, el)
+    if (!modal) { recent.push(el); if (recent.length > 8) recent.shift() }
   })
 
   new MutationObserver(() => {
@@ -45,7 +51,10 @@ export function installFocusTrap(): void {
       triggers.delete(d)
       lastIn.delete(d)
       const a = document.activeElement
-      if (back?.isConnected && (!a || a === document.body)) back.focus({ preventScroll: true })
+      if (!a || a === document.body) {
+        const target = back?.isConnected ? back : [...recent].reverse().find(el => el.isConnected && el.getClientRects().length > 0)
+        target?.focus({ preventScroll: true })
+      }
     }
   }).observe(document.body, { childList: true, subtree: true })
 

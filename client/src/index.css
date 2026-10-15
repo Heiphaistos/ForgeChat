@@ -757,3 +757,9 @@ html[data-fc-solid] #fc-backdrop { display: none; }
 @media (prefers-reduced-motion: reduce) {
   html[data-fc-rail="hover"] .fc-server-rail { transition: none; }
 }
+
+/* Thème clair : les teintes -300 (pensées pour le sombre) passent sous 3:1 sur fond clair, ex. les pastilles d'état des évènements. */
+html[data-fc-scheme="light"] [class~="text-blue-300"] { color: #1d4ed8; }
+html[data-fc-scheme="light"] [class~="text-green-300"] { color: #15803d; }
+html[data-fc-scheme="light"] [class~="text-red-300"] { color: #b91c1c; }
+html[data-fc-scheme="light"] [class~="text-yellow-300"] { color: #a16207; }
