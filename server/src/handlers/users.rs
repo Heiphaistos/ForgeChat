@@ -408,6 +408,19 @@ pub async fn delete_account(
         .bind(claims.sub).execute(&mut *tx).await?;
     sqlx::query("DELETE FROM message_spam_track WHERE user_id=$1")
         .bind(claims.sub).execute(&mut *tx).await?;
+    // Copies du nom gardees ailleurs (RGPD) : journal d'audit des serveurs (auteur et cible),
+    // favoris et transferts de ses messages chez les autres. L'historique reste, le nom part.
+    // ponytail: balayages sans index sur audit_log.target_id / messages.forward_from_id, ok tant que la suppression de compte reste rare
+    sqlx::query("UPDATE audit_log SET username=NULL WHERE user_id=$1")
+        .bind(claims.sub).execute(&mut *tx).await?;
+    sqlx::query("UPDATE audit_log SET target_name=NULL WHERE target_id=$1")
+        .bind(claims.sub).execute(&mut *tx).await?;
+    sqlx::query("UPDATE saved_messages SET author_username=NULL, author_avatar=NULL
+                 WHERE message_id IN (SELECT id FROM messages WHERE user_id=$1)")
+        .bind(claims.sub).execute(&mut *tx).await?;
+    sqlx::query("UPDATE messages SET forward_from_username=NULL
+                 WHERE forward_from_id IN (SELECT id FROM messages WHERE user_id=$1)")
+        .bind(claims.sub).execute(&mut *tx).await?;
     sqlx::query("DELETE FROM users WHERE id=$1")
         .bind(claims.sub)
         .execute(&mut *tx)

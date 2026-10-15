@@ -148,3 +148,68 @@ async fn srv2_bot_invalid_tokens_rate_limited() {
     }
     assert!(matches!(call().await, Err(AppError::TooManyRequests)));
 }
+
+#[tokio::test]
+#[ignore]
+async fn srv2_friend_by_name_ambiguous_needs_tag() {
+    let (state, db) = setup().await;
+    let me = user(&db).await;
+    let name = format!("hom{}", &Uuid::new_v4().simple().to_string()[..10]);
+    let mut ids = Vec::new();
+    for (n, d) in [(name.clone(), "1111"), (name.to_uppercase(), "2222")] {
+        let id: Uuid = sqlx::query_scalar(
+            "INSERT INTO users (username, discriminator, email, password_hash) VALUES ($1, $2, $3, 'x') RETURNING id")
+            .bind(&n).bind(d).bind(format!("{}@test.local", Uuid::new_v4().simple()))
+            .fetch_one(&db).await.expect("homonyme");
+        ids.push(id);
+    }
+    let body = |n: String| Json(crate::handlers::friends::AddByNameBody { name: n, message: None });
+    let r = crate::handlers::friends::send_friend_by_name(State(state.clone()), Extension(claims(me)), body(name.clone())).await;
+    assert!(matches!(r, Err(AppError::Conflict(_))), "sans #tag, deux homonymes = ambigu");
+    let Json(v) = crate::handlers::friends::send_friend_by_name(State(state.clone()), Extension(claims(me)), body(format!("{name}#2222")))
+        .await.expect("avec #tag");
+    assert_eq!(v["user_id"], ids[1].to_string());
+}
+
+#[tokio::test]
+#[ignore]
+async fn srv2_delete_account_anonymizes_copies() {
+    let (state, db) = setup().await;
+    let owner = user(&db).await;
+    let gone = user(&db).await;
+    sqlx::query("UPDATE users SET password_hash=$2 WHERE id=$1")
+        .bind(gone).bind(bcrypt::hash("pw", 4).unwrap()).execute(&db).await.unwrap();
+    let s: Uuid = sqlx::query_scalar("INSERT INTO servers (name, owner_id) VALUES ('rgpd', $1) RETURNING id")
+        .bind(owner).fetch_one(&db).await.unwrap();
+    let c: Uuid = sqlx::query_scalar("INSERT INTO channels (server_id, name) VALUES ($1, 'g') RETURNING id")
+        .bind(s).fetch_one(&db).await.unwrap();
+    let m: Uuid = sqlx::query_scalar("INSERT INTO messages (channel_id, user_id, content) VALUES ($1, $2, 'coucou') RETURNING id")
+        .bind(c).bind(gone).fetch_one(&db).await.unwrap();
+    let fwd: Uuid = sqlx::query_scalar(
+        "INSERT INTO messages (channel_id, user_id, content, forward_from_id, forward_from_username) VALUES ($1, $2, 'coucou', $3, 'parti') RETURNING id")
+        .bind(c).bind(owner).bind(m).fetch_one(&db).await.unwrap();
+    sqlx::query("INSERT INTO saved_messages (user_id, message_id, channel_id, server_id, content, author_username, author_avatar)
+                 VALUES ($1, $2, $3, $4, 'coucou', 'parti', 'a.png')")
+        .bind(owner).bind(m).bind(c).bind(s).execute(&db).await.unwrap();
+    sqlx::query("INSERT INTO audit_log (server_id, action, user_id, username) VALUES ($1, 'x', $2, 'parti')")
+        .bind(s).bind(gone).execute(&db).await.unwrap();
+    sqlx::query("INSERT INTO audit_log (server_id, action, user_id, username, target_id, target_name) VALUES ($1, 'kick', $2, 'chef', $3, 'parti')")
+        .bind(s).bind(owner).bind(gone).execute(&db).await.unwrap();
+
+    let _ = crate::handlers::users::delete_account(State(state.clone()), Extension(claims(gone)), Json(serde_json::json!({ "password": "pw" })))
+        .await.expect("suppression");
+
+    let left: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM audit_log WHERE server_id=$1 AND (username='parti' OR target_name='parti')")
+        .bind(s).fetch_one(&db).await.unwrap();
+    assert_eq!(left, 0, "le nom du compte supprime reste dans le journal d'audit");
+    let chef: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM audit_log WHERE server_id=$1 AND username='chef'")
+        .bind(s).fetch_one(&db).await.unwrap();
+    assert_eq!(chef, 1, "les autres noms ne bougent pas");
+    let saved: Option<String> = sqlx::query_scalar("SELECT author_username FROM saved_messages WHERE user_id=$1")
+        .bind(owner).fetch_one(&db).await.unwrap();
+    assert_eq!(saved, None);
+    let f: Option<Option<String>> = sqlx::query_scalar("SELECT forward_from_username FROM messages WHERE id=$1")
+        .bind(fwd).fetch_optional(&db).await.unwrap();
+    assert!(matches!(f, None | Some(None)), "transfert encore signe 'parti'");
+}
