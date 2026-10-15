@@ -1,6 +1,7 @@
 import * as Clipboard from 'expo-clipboard'
 import { router } from 'expo-router'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Ionicons } from '@expo/vector-icons'
 import { ActivityIndicator, Alert, FlatList, Modal, Pressable, StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native'
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller'
 import { useQuery } from '@tanstack/react-query'
@@ -24,6 +25,7 @@ import { ApiError, errorMessage } from '@/lib/http'
 import { qk, queryClient } from '@/lib/queryClient'
 import { useAuth } from '@/stores/auth'
 import { useTyping } from '@/stores/typing'
+import { useLocalNotices, type LocalNotice } from '@/stores/localNotices'
 import type { ChatMessage, ConversationRef } from '@/types/models'
 import { colors, font, radius, spacing } from '@/theme'
 import { hasEditableText, tenorGifUrl } from '@/features/composer/formats'
@@ -47,6 +49,31 @@ import { unreadCounts } from '@/features/servers/discordFeatures'
 
 const GROUP_WINDOW_MS = 5 * 60_000
 const HIGHLIGHT_MS = 2000
+
+const NO_NOTICES: LocalNotice[] = []
+
+/** Réponses éphémères de commandes : visibles de moi seul, fermables. */
+function LocalNotices({ channelId }: { channelId: string }) {
+  const t = useT()
+  const notices = useLocalNotices((s) => s.byChannel[channelId]) ?? NO_NOTICES
+  const dismiss = useLocalNotices((s) => s.dismiss)
+  if (!notices.length) return null
+  return (
+    <View style={styles.notices} accessibilityLiveRegion="polite" accessibilityLabel={t('cmd.local.region')}>
+      {notices.map((n) => (
+        <View key={n.id} style={styles.notice}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.noticeHead}>{t('cmd.local.onlyYou', { cmd: n.command })}</Text>
+            <Text style={styles.noticeText} selectable>{n.content}</Text>
+          </View>
+          <Pressable onPress={() => dismiss(channelId, n.id)} accessibilityRole="button" accessibilityLabel={t('common.close')} hitSlop={8}>
+            <Ionicons name="close" size={18} color={colors.textMuted} />
+          </Pressable>
+        </View>
+      ))}
+    </View>
+  )
+}
 
 function TypingIndicator({ conversationId }: { conversationId: string }) {
   const t = useT()
@@ -507,6 +534,7 @@ ${t('e2e.report.notice')}` : t('chat.reportReason'), [
           }}
         />
         <View style={{ flex: 1 }}>{body}</View>
+        {channelId ? <LocalNotices channelId={channelId} /> : null}
         <TypingIndicator conversationId={conv.id} />
         {denied ? null : (
           <Composer
@@ -596,6 +624,10 @@ const styles = StyleSheet.create({
   highlight: { backgroundColor: colors.primary + '33' },
   detached: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingLeft: spacing.lg, backgroundColor: colors.bgAlt },
   detachedText: { color: colors.textMuted, fontSize: font.sm, flexShrink: 1 },
+  notices: { marginHorizontal: spacing.md, marginBottom: spacing.xs, gap: spacing.xs, maxHeight: 180 },
+  notice: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm, backgroundColor: colors.bgElevated, borderLeftWidth: 3, borderLeftColor: colors.primary, borderRadius: radius.md, paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
+  noticeHead: { color: colors.textMuted, fontSize: font.xs },
+  noticeText: { color: colors.text, fontSize: font.sm },
   typing: { height: 20, paddingHorizontal: spacing.lg, justifyContent: 'center' },
   typingText: { color: colors.textMuted, fontSize: font.xs, fontStyle: 'italic' },
   quickRow: { flexDirection: 'row', justifyContent: 'space-around', paddingHorizontal: spacing.md, paddingBottom: spacing.sm },

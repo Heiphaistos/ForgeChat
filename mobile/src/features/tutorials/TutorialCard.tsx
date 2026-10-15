@@ -45,7 +45,8 @@ export function TutorialCard({ category, title, description, group, thumbnail, o
         </Tint>
       )}
       <View style={styles.body}>
-        <Text style={styles.title} numberOfLines={2}>{title}</Text>
+        {/* Le titre est déjà incrusté dans la miniature. */}
+        {uri ? null : <Text style={styles.title} numberOfLines={2}>{title}</Text>}
         {description ? <Text style={styles.desc} numberOfLines={3}>{description}</Text> : null}
       </View>
     </Pressable>

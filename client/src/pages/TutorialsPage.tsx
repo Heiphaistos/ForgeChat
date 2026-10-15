@@ -169,7 +169,7 @@ function Card({ tu }: { tu: Tutorial }) {
         {tu.group && <span className="absolute top-2 right-2 text-[11px] font-semibold bg-white/90 text-black rounded px-1.5 py-0.5">{tu.group}</span>}
       </div>
       <div className="flex flex-col gap-2 p-4 flex-1">
-        <h3 className="font-bold text-white group-hover:underline leading-snug line-clamp-2">{tu.title}</h3>
+        <h3 className={thumb ? 'sr-only' : 'font-bold text-white group-hover:underline leading-snug line-clamp-2'}>{tu.title}</h3>
         {tu.description && <p className="text-sm text-fc-text leading-relaxed line-clamp-3">{tu.description}</p>}
         {tu.tags.length > 0 && <p className="mt-auto flex flex-wrap gap-1.5 pt-1">{tu.tags.slice(0, 4).map(g => <span key={g} className="text-[11px] px-2 py-0.5 rounded-full bg-fc-hover text-fc-muted">{g}</span>)}</p>}
       </div>

@@ -31,6 +31,7 @@ import * as discordFeatures from './parts/discordFeatures'
 import * as parity from './parts/parity'
 import * as sweep from './parts/sweep'
 import * as tutorials from './parts/tutorials'
+import * as commandNotices from './parts/commandNotices'
 
 export const en: Partial<Record<Key, string>> = {
   ...settings.en,
@@ -64,6 +65,7 @@ export const en: Partial<Record<Key, string>> = {
   ...parity.en,
   ...sweep.en,
   ...tutorials.en,
+  ...commandNotices.en,
 
   // --- Commun ---
   'common.cancel': 'Cancel',

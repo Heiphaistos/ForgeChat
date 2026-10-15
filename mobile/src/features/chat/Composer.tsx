@@ -159,7 +159,7 @@ export function Composer({
       const all: SlashCommand[] = [...BUILTIN_COMMANDS, ...(serverId ? usableCommands(botCommands.data ?? []) : [])]
       return all
         .filter((c) => c.name.startsWith(slash))
-        .slice(0, 8)
+        .slice(0, 40) // la liste défile : « / » seul doit montrer aussi les commandes du serveur
         .map((c) => ({
           key: `/${c.name}`,
           label: `/${c.name}`,

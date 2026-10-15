@@ -32,6 +32,7 @@ import * as discordFeatures from './parts/discordFeatures'
 import * as parity from './parts/parity'
 import * as sweep from './parts/sweep'
 import * as tutorials from './parts/tutorials'
+import * as commandNotices from './parts/commandNotices'
 
 export const fr = {
   ...settings.fr,
@@ -65,6 +66,7 @@ export const fr = {
   ...parity.fr,
   ...sweep.fr,
   ...tutorials.fr,
+  ...commandNotices.fr,
 
   // --- Commun ---
   'common.cancel': 'Annuler',
