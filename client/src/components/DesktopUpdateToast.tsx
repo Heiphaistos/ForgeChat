@@ -176,3 +176,14 @@ export function showDesktopUpdateToast(info: DesktopUpdateInfo) {
     { duration: Infinity, id: 'desktop-update' }
   )
 }
+
+const CLE_AUTO = 'fc_auto_update'
+
+/** Vérification automatique des mises à jour : active par défaut, coupée par le réglage. */
+export function autoUpdateEnabled(): boolean {
+  try { return localStorage.getItem(CLE_AUTO) !== '0' } catch { return true }
+}
+
+export function setAutoUpdateEnabled(on: boolean) {
+  try { localStorage.setItem(CLE_AUTO, on ? '1' : '0') } catch { /* stockage indisponible : le défaut (actif) s'applique */ }
+}

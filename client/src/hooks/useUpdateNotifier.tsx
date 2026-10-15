@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react'
 import toast from 'react-hot-toast'
-import { showDesktopUpdateToast, type DesktopUpdateInfo } from '../components/DesktopUpdateToast'
+import { autoUpdateEnabled, showDesktopUpdateToast, type DesktopUpdateInfo } from '../components/DesktopUpdateToast'
 
 declare const __APP_VERSION__: string
 
@@ -29,7 +29,7 @@ function useDesktopUpdateNotifier() {
 
     let cancelled = false
     const check = async () => {
-      if (cancelled || notified.current) return
+      if (cancelled || notified.current || !autoUpdateEnabled()) return
       try {
         const { invoke } = await import('@tauri-apps/api/core')
         const info = await invoke<DesktopUpdateInfo | null>('update_check')

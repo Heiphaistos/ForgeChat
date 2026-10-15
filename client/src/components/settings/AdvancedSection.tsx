@@ -6,6 +6,7 @@ import { sendManualReport } from '../../lib/errorReporter'
 import { useAuth } from '../../store/auth'
 import api from '../../api/client'
 import toast from 'react-hot-toast'
+import DesktopUpdateSettings from './DesktopUpdateSettings'
 
 interface Props {
   user: any
@@ -51,6 +52,7 @@ export default function AdvancedSection({ user }: Props) {
 
   return (
     <div className="space-y-6">
+      <DesktopUpdateSettings />
       <div>
         <h3 className="text-sm font-semibold text-white mb-2">Cache local</h3>
         <button
