@@ -50,7 +50,12 @@ export default function LoginPage() {
       } else {
         setPassword('')
         setNeedTotp(false)
-        form.fail(msg || t(err?.message === 'AUTH_DOWNGRADE' ? 'auth.login.downgrade' : 'auth.login.error'))
+        console.error('[login]', err)
+        // Pas de réponse du serveur (réseau, CORS, rejet d'une commande Tauri) : on dit pourquoi.
+        const why = err?.response ? `HTTP ${err.response.status}` : typeof err === 'string' ? err : err?.code ?? err?.message ?? ''
+        form.fail(msg || (err?.message === 'AUTH_DOWNGRADE'
+          ? t('auth.login.downgrade')
+          : `${t('auth.login.error')}${why ? ` (${String(why).slice(0, 80)})` : ''}`))
       }
     } finally {
       setLoading(false)
