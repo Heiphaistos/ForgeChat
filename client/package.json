@@ -1,6 +1,6 @@
 {
   "name": "forgechat-client",
-  "version": "3.683.0",
+  "version": "3.684.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
