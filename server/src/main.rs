@@ -929,6 +929,10 @@ fn protected_route_table() -> Router<AppState> {
         .route("/gifs/status", get(handlers::gifs::status))
         .route("/gifs/search", get(handlers::gifs::search))
         .route("/gifs/trending", get(handlers::gifs::trending))
+        // Tutoriels (relais du site tuto.heiphaistos.org, cache mémoire)
+        .route("/tutorials/catalog", get(handlers::tutorials::catalog))
+        .route("/tutorials", get(handlers::tutorials::list))
+        .route("/tutorials/:slug", get(handlers::tutorials::detail))
         // Audit log
         .route("/servers/:server_id/audit", get(handlers::audit_search::get_audit_log))
         .route("/servers/:server_id/audit/facets", get(handlers::audit_search::get_audit_facets))
