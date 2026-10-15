@@ -94,6 +94,10 @@ pub fn command_name(content: &str) -> Option<String> {
 /// (affichée « non chiffré »). Toute erreur de lecture => faux (clair refusé).
 pub async fn is_bot_command(db: &PgPool, server_id: Uuid, content: &str) -> bool {
     let Some(name) = command_name(content) else { return false };
+    // Commandes natives de ForgeChat : lues par le serveur lui-même, donc en clair.
+    if crate::handlers::commands::native::find(&name).is_some() {
+        return true;
+    }
     sqlx::query_scalar(
         "SELECT EXISTS(SELECT 1 FROM bot_commands bc
            JOIN bot_tokens bt ON bt.id = bc.bot_id AND bt.server_id = bc.server_id

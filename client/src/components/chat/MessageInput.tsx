@@ -31,6 +31,7 @@ import { mustEncrypt, openMessages, withSeal } from '../../e2e/conversations'
 import { currentGeo } from '../../lib/geo'
 import { buildPoll } from '../../lib/encPoll'
 import { channelSendError, postMessage, sendChannel } from '../../e2e/channels'
+import { commandUsage, useServerCommands } from '../../lib/serverCommands'
 import { sealPoll } from '../../e2e/channelScopes'
 import { outgoingText, useUxPrefs } from '../../lib/uxPrefs'
 import { renderMarkdown } from '../../utils/markdown'
@@ -86,6 +87,7 @@ interface SlashCommand {
   usage: string
   isBot?: boolean
   botName?: string
+  dangerous?: boolean
 }
 
 // Description et syntaxe : clés slash.<nom> et slash.<nom>.usage.
@@ -313,22 +315,19 @@ export default function MessageInput({ channelId, serverId, convKind = 'dm', pla
     ? allServerChannels.filter(c => c.name.toLowerCase().includes(channelQuery.toLowerCase())).slice(0, 5)
     : allServerChannels.slice(0, 5)
 
-  const { data: botCommandsRaw = [] } = useQuery<{ name: string; description: string; bot_name: string }[]>({
-    queryKey: ['server_commands', serverId],
-    queryFn: () => api.get(`/servers/${serverId}/commands`).then(r => r.data),
-    enabled: !!serverId,
-    staleTime: 60_000,
-  })
+  // Commandes du serveur (natives + bots) : seules celles que le serveur m'autorise sont proposées.
+  const { data: serverCommands = [] } = useServerCommands(serverId)
 
   // Fusion builtin + bot commands
   const allSlashCommands: SlashCommand[] = [
     ...BUILTIN_COMMANDS.map(name => ({ name, description: t(`slash.${name}`), usage: t(`slash.${name}.usage`) })),
-    ...botCommandsRaw.map(bc => ({
+    ...serverCommands.filter(bc => bc.allowed).map(bc => ({
       name: bc.name,
       description: bc.description,
-      usage: `/${bc.name}`,
+      usage: commandUsage(bc),
       isBot: true,
       botName: bc.bot_name,
+      dangerous: bc.dangerous,
     })),
   ]
 
@@ -1009,6 +1008,9 @@ export default function MessageInput({ channelId, serverId, convKind = 'dm', pla
                     <span className="text-xs bg-indigo-500/20 text-indigo-300 px-1.5 py-0.5 rounded font-medium">
                       BOT{cmd.botName ? ` · ${cmd.botName}` : ''}
                     </span>
+                  )}
+                  {cmd.dangerous && (
+                    <span className="text-xs bg-red-500/20 text-red-300 px-1.5 py-0.5 rounded font-medium">{t('cmd.dangerous')}</span>
                   )}
                 </div>
                 <div className="text-xs text-fc-muted truncate">{cmd.description}</div>

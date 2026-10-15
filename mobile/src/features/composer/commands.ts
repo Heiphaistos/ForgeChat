@@ -6,6 +6,10 @@ export interface SlashCommand {
   description: string
   /** Nom du bot pour une commande déclarée par un bot du serveur (GET /servers/:id/commands). */
   bot?: string
+  /** Calculé par le serveur pour MOI : faux = commande connue mais refusée (jamais proposée ni envoyée). */
+  allowed?: boolean
+  /** Commande intégrée de ForgeChat (ForgeBot) : lue par le serveur lui-même, pas de confirmation « en clair ». */
+  native?: boolean
 }
 
 export const BUILTIN_COMMANDS: readonly SlashCommand[] = [
@@ -33,10 +37,19 @@ export function normalizeBotCommands(raw: unknown): SlashCommand[] {
     const name = typeof r?.name === 'string' ? r.name.toLowerCase() : ''
     if (!NAME.test(name) || taken.has(name)) continue
     taken.add(name)
-    out.push({ name, description: typeof r.description === 'string' ? r.description : '', bot: typeof r.bot_name === 'string' ? r.bot_name : 'Bot' })
+    out.push({
+      name,
+      description: typeof r.description === 'string' ? r.description : '',
+      bot: typeof r.bot_name === 'string' ? r.bot_name : 'Bot',
+      allowed: r.allowed !== false,
+      native: r.native === true,
+    })
   }
   return out
 }
+
+/** Commandes à proposer dans l'autocomplétion : seulement celles que le serveur m'autorise. */
+export const usableCommands = (list: readonly SlashCommand[]): SlashCommand[] => list.filter((c) => c.allowed !== false)
 
 /** Nom de commande en cours de saisie : le message commence par « / » sans espace encore tapé. */
 export function activeSlashQuery(text: string): string | null {

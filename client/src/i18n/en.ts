@@ -10,6 +10,7 @@ import * as tutorials from './parts/tutorials.ts'
 import * as uxSettings from './parts/uxSettings.ts'
 import * as menus from './parts/menus.ts'
 import * as accountGuard from './parts/accountGuard.ts'
+import * as commandsPart from './parts/commands.ts'
 import * as discordSync from './parts/discordSync.ts'
 import * as themesMore from './parts/themesMore.ts'
 import * as looksMore from './parts/looksMore.ts'
@@ -63,6 +64,7 @@ export const en: Partial<Record<Key, string>> = {
   ...systemDeskEn,
   ...menus.en,
   ...accountGuard.en,
+  ...commandsPart.en,
   ...discordSync.en,
   ...themesMore.en,
   ...looksMore.en,

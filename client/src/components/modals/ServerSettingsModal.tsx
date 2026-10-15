@@ -1,7 +1,7 @@
 import { useState, useRef } from 'react'
 import BirthdayChannelSetting from '../server/BirthdayChannelSetting'
 import { createPortal } from 'react-dom'
-import { X, Trash2, Upload, SmilePlus, Bot, Plus, RefreshCw, Copy, Check, Shield, Users, Ban, Tag, Link, ScrollText, Rss, BarChart2, Image, Calendar, Sparkles, Lock, Trophy, Palette, Ticket } from 'lucide-react'
+import { X, Trash2, Upload, SmilePlus, Bot, Plus, RefreshCw, Copy, Check, Shield, Users, Ban, Tag, Link, ScrollText, Rss, BarChart2, Image, Calendar, Sparkles, Lock, Trophy, Palette, Ticket, Slash } from 'lucide-react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import api, { mediaUrl } from '../../api/client'
 import ProfileBanner from '../ui/ProfileBanner'
@@ -24,6 +24,7 @@ import DiscordSyncTab from './DiscordSyncTab'
 import StatsTab from './StatsTab'
 import InviteTrackingTab from './InviteTrackingTab'
 import OnboardingTab from './OnboardingTab'
+import CommandsTab from './CommandsTab'
 import ServerEventsPage from '../../pages/ServerEventsPage'
 import SaveAsTemplateButton from './SaveAsTemplateButton'
 import MyServerProfileTab from './MyServerProfileTab'
@@ -70,7 +71,7 @@ interface Props {
   initialTab?: ServerSettingsTab
 }
 
-export type ServerSettingsTab = 'general' | 'appearance' | 'profile' | 'e2e' | 'roles' | 'members' | 'bans' | 'tags' | 'emojis' | 'bots' | 'webhooks' | 'audit' | 'automod' | 'feeds' | 'discordSync' | 'stats' | 'events' | 'onboarding' | 'community' | 'invites'
+export type ServerSettingsTab = 'commands' | 'general' | 'appearance' | 'profile' | 'e2e' | 'roles' | 'members' | 'bans' | 'tags' | 'emojis' | 'bots' | 'webhooks' | 'audit' | 'automod' | 'feeds' | 'discordSync' | 'stats' | 'events' | 'onboarding' | 'community' | 'invites'
 
 function BoostSection({ server }: { server: any }) {
   // Boost gratuit (un par membre et par serveur) : même appel que le bouton de la barre des salons.
@@ -338,6 +339,7 @@ export default function ServerSettingsModal({ server, onClose, isAdmin = false, 
         ...(isAdmin || canSeeBans ? [{ id: 'bans' as Tab, icon: Ban }] : []),
         { id: 'emojis', icon: SmilePlus },
         { id: 'bots', icon: Bot },
+        ...(isAdmin || canManageServer ? [{ id: 'commands' as Tab, icon: Slash }] : []),
         ...(isAdmin ? [{ id: 'webhooks' as Tab, icon: Link }] : []),
         { id: 'feeds', icon: Rss }, ...(canManageServer ? [{ id: 'invites' as Tab, icon: Ticket }] : []),
         ...(isAdmin || estProprietaire || canManageServer ? [{ id: 'discordSync' as Tab, icon: RefreshCw }] : []),
@@ -879,6 +881,7 @@ export default function ServerSettingsModal({ server, onClose, isAdmin = false, 
             {tab === 'onboarding' && <OnboardingTab serverId={server.id} channels={channels} />}
             {tab === 'community' && <CommunitySettings server={server} channels={channels} />}
             {tab === 'roles'   && <RolesTab serverId={server.id} />}
+            {tab === 'commands' && <CommandsTab serverId={server.id} />}
             {tab === 'members' && <MembersTab serverId={server.id} />}
             {tab === 'bans'    && <BansTab serverId={server.id} />}
             {tab === 'tags'    && <TagsTab serverId={server.id} />}

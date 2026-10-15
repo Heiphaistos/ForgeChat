@@ -16,7 +16,7 @@ import {
 } from '@/features/chat/messageExtras'
 import { pollBody } from '@/features/chat/polls'
 import { cachedChannel, cachedRole, cachedUsername, roleColor } from '@/features/chat/tokens'
-import { activeSlashQuery, normalizeBotCommands, runBuiltin } from '@/features/composer/commands'
+import { activeSlashQuery, normalizeBotCommands, runBuiltin, usableCommands } from '@/features/composer/commands'
 
 const A = '11111111-1111-4111-8111-111111111111'
 const B = '22222222-2222-4222-8222-222222222222'
@@ -67,6 +67,16 @@ describe('commandes « / »', () => {
     expect(runBuiltin('/meteo paris')).toBeNull()
     expect(runBuiltin('pas une /shrug')).toBeNull()
   })
+  it('commandes du serveur : seules celles autorisées sont proposées (allowed calculé par le serveur)', () => {
+    const list = normalizeBotCommands([
+      { name: 'help', description: 'Aide', bot_name: 'ForgeBot', allowed: true, native: true },
+      { name: 'ban', description: 'Bannir', bot_name: 'ForgeBot', allowed: false, native: true, dangerous: true },
+      { name: 'ancien', description: 'Sans champ allowed', bot_name: 'Vieux' },
+    ])
+    expect(list.map((c) => c.name)).toEqual(['help', 'ban', 'ancien'])
+    expect(usableCommands(list).map((c) => c.name)).toEqual(['help', 'ancien'])
+    expect(list.find((c) => c.name === 'help')?.native).toBe(true)
+  })
   it('commandes de bots : noms valides, sans doublon ni écrasement des intégrées', () => {
     expect(
       normalizeBotCommands([
@@ -76,7 +86,7 @@ describe('commandes « / »', () => {
         { name: 'a b', description: 'invalide', bot_name: 'X' },
         null,
       ]),
-    ).toEqual([{ name: 'meteo', description: 'Météo', bot: 'Ciel' }])
+    ).toEqual([{ name: 'meteo', description: 'Météo', bot: 'Ciel', allowed: true, native: false }])
     expect(normalizeBotCommands({})).toEqual([])
   })
 })

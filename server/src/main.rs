@@ -128,6 +128,7 @@ async fn main() -> anyhow::Result<()> {
             handlers::diagnostics::purge_old(&cleanup_state).await;
             purge_retention(&cleanup_state).await;
             handlers::e2e_conv::purge_legacy(&cleanup_state.db).await;
+            handlers::commands::bot_api::purge_old_interactions(&cleanup_state.db).await;
         }
     });
 
@@ -364,7 +365,9 @@ fn app_routes(protected: Router<AppState>, upload_dir: &str) -> Router<AppState>
         // Routes bot (sans JWT — auth via Bearer token)
         .route("/api/bot/messages", post(handlers::bots::bot_send_message).layer(DefaultBodyLimit::max(INBOUND_JSON_LIMIT)))
         .route("/api/bot/news", post(handlers::news::bot_post_news).layer(DefaultBodyLimit::max(INBOUND_JSON_LIMIT)))
-        .route("/api/bots/:bot_id/commands", post(handlers::bots::register_bot_command).layer(DefaultBodyLimit::max(INBOUND_JSON_LIMIT)))
+        .route("/api/bots/:bot_id/commands", post(handlers::commands::bot_api::register_command).layer(DefaultBodyLimit::max(INBOUND_JSON_LIMIT)))
+        .route("/api/bots/:bot_id/commands/batch", post(handlers::commands::bot_api::register_batch).layer(DefaultBodyLimit::max(512 * 1024)))
+        .route("/api/bot/interactions/:interaction_id/reply", post(handlers::commands::bot_api::interaction_reply).layer(DefaultBodyLimit::max(INBOUND_JSON_LIMIT)))
         // Webhook entrant (sans JWT — auth via token dans l'URL)
         .route("/api/webhook/:id/:token", post(handlers::webhooks::execute_webhook).layer(DefaultBodyLimit::max(INBOUND_JSON_LIMIT)))
         // Webhook GitHub entrant (sans JWT — push/PR/issues)
@@ -872,8 +875,10 @@ fn protected_route_table() -> Router<AppState> {
         .route("/servers/:server_id/bots", post(handlers::bots::create_bot))
         .route("/servers/:server_id/bots/:bot_id", delete(handlers::bots::delete_bot))
         .route("/servers/:server_id/bots/:bot_id/token", post(handlers::bots::regenerate_token))
-        // Slash commands bots (lecture — auth user)
-        .route("/servers/:server_id/commands", get(handlers::bots::list_server_commands))
+        .route("/servers/:server_id/bots/:bot_id/callback", put(handlers::commands::bot_api::set_callback))
+        // Commandes slash (natives + bots) : liste filtrée par droits, exceptions par serveur (admin)
+        .route("/servers/:server_id/commands", get(handlers::commands::list_server_commands))
+        .route("/servers/:server_id/commands/:name/override", put(handlers::commands::put_override).delete(handlers::commands::delete_override))
         // Bans
         .route("/servers/:server_id/bans", get(handlers::server_settings::list_bans))
         .route("/servers/:server_id/bans/:user_id", delete(handlers::server_settings::unban_member))

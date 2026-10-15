@@ -699,14 +699,14 @@ async fn security_audit_2026_10_14() {
 
     // Vrai bot : enregistre une commande, poste dans un salon visible, pas dans un salon masqué.
     let created = bots::create_bot(State(state.clone()), Extension(claims.clone()), Path(s),
-        Json(bots::CreateBotRequest { name: "Mon".into() })).await.expect("create_bot").0;
+        Json(bots::CreateBotRequest { name: "Mon".into(), callback_url: None })).await.expect("create_bot").0;
     let bot_user: Uuid = created["bot_user_id"].as_str().unwrap().parse().unwrap();
     let token = created["token"].as_str().unwrap().to_string();
     let token_id: Uuid = sqlx::query_scalar("SELECT id FROM bot_tokens WHERE bot_user_id=$1").bind(bot_user).fetch_one(&db).await.unwrap();
-    sqlx::query("INSERT INTO bot_commands (bot_id, server_id, name, description) VALUES ($1, $2, 'ping', 'd')")
+    sqlx::query("INSERT INTO bot_commands (bot_id, server_id, name, description) VALUES ($1, $2, 'memo', 'd')")
         .bind(token_id).bind(s).execute(&db).await.expect("command");
-    assert!(crate::handlers::e2e_channel::is_bot_command(&db, s, "/ping a b").await);
-    assert!(!crate::handlers::e2e_channel::is_bot_command(&db, s, "/ping\nsecret").await);
+    assert!(crate::handlers::e2e_channel::is_bot_command(&db, s, "/memo a b").await);
+    assert!(!crate::handlers::e2e_channel::is_bot_command(&db, s, "/memo\nsecret").await);
     assert!(!crate::handlers::e2e_channel::is_bot_command(&db, s, "/ unknown").await);
     let open: Uuid = sqlx::query_scalar("INSERT INTO channels (server_id, name) VALUES ($1, 'o') RETURNING id").bind(s).fetch_one(&db).await.unwrap();
     let hidden: Uuid = sqlx::query_scalar("INSERT INTO channels (server_id, name) VALUES ($1, 'h') RETURNING id").bind(s).fetch_one(&db).await.unwrap();
@@ -724,7 +724,7 @@ async fn security_audit_2026_10_14() {
     assert!(post(hidden).await.is_err(), "le bot ne poste pas dans un salon qu'il ne voit pas");
     // Bot retiré : sa commande n'autorise plus le clair.
     let _ = bots::delete_bot(State(state.clone()), Extension(claims), Path((s, bot_user))).await.expect("delete_bot");
-    assert!(!crate::handlers::e2e_channel::is_bot_command(&db, s, "/ping a").await);
+    assert!(!crate::handlers::e2e_channel::is_bot_command(&db, s, "/memo a").await);
 
     // Message programmé : les droits sont revérifiés à l'envoi (salon passé en lecture seule).
     let ro: Uuid = sqlx::query_scalar("INSERT INTO channels (server_id, name) VALUES ($1, 'ro') RETURNING id").bind(s).fetch_one(&db).await.unwrap();

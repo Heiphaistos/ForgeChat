@@ -13,11 +13,11 @@ import type { EncPayload } from './crypto'
 /** Règles AutoMod et commandes de bot : relues au plus toutes les 5 minutes. */
 const TTL = 5 * 60_000
 
-function perServer<T>(load: (serverId: string) => Promise<T>, fallback: T) {
+function perServer<T>(load: (serverId: string) => Promise<T>, fallback: T, ttl = TTL) {
   const cache = new Map<string, { v: T; at: number }>()
-  return async (serverId: string): Promise<T> => {
+  const get = async (serverId: string): Promise<T> => {
     const hit = cache.get(serverId)
-    if (hit && Date.now() - hit.at < TTL) return hit.v
+    if (hit && Date.now() - hit.at < ttl) return hit.v
     try {
       const v = await load(serverId)
       cache.set(serverId, { v, at: Date.now() })
@@ -26,12 +26,19 @@ function perServer<T>(load: (serverId: string) => Promise<T>, fallback: T) {
       return fallback // hors ligne : pas de cache, on réessaiera au prochain envoi
     }
   }
+  return Object.assign(get, { forget: (serverId: string) => { cache.delete(serverId) } })
 }
 
 const automodRules = perServer<AutoModRules | null>(
   id => api.get<AutoModRules>(`/servers/${id}/automod/rules`).then(r => r.data), null)
-const botCommands = perServer<Set<string>>(
-  id => api.get<{ name: string }[]>(`/servers/${id}/commands`).then(r => new Set(r.data.map(c => c.name.toLowerCase()))), new Set())
+/** Commandes du serveur : nom -> {autorisée pour moi, native}. Relues chaque minute (droits modifiables). */
+const botCommands = perServer<Map<string, { allowed: boolean; native: boolean }>>(
+  id => api.get<{ name: string; allowed: boolean; native: boolean }[]>(`/servers/${id}/commands`)
+    .then(r => new Map(r.data.map(c => [c.name.toLowerCase(), { allowed: c.allowed, native: c.native }]))),
+  new Map(), 60_000)
+
+/** À appeler après un changement d'exceptions de commandes : la liste est relue au prochain envoi. */
+export const forgetServerCommands = (serverId: string) => botCommands.forget(serverId)
 
 /** Mes derniers textes envoyés par serveur (anti-spam AutoMod), en mémoire seulement. */
 const recentSent = new Map<string, { text: string; at: number }[]>()
@@ -44,6 +51,11 @@ export class AutoModError extends Error {
 /** Commande de bot refusée par l'utilisateur (elle aurait été envoyée en clair). */
 export class PlainCommandCancelled extends Error {
   constructor() { super('PLAIN_COMMAND_CANCELLED') }
+}
+
+/** Commande connue du serveur mais que je n'ai pas le droit de lancer : rien n'est envoyé. */
+export class CommandNotAllowed extends Error {
+  constructor(readonly command: string) { super('COMMAND_NOT_ALLOWED') }
 }
 
 /** Commandes déjà confirmées pendant cette session (serveur|commande). */
@@ -65,7 +77,8 @@ async function confirmPlainCommand(serverId: string, cmd: string): Promise<boole
 export const channelSendError = (e: unknown, fallback: string) =>
   e instanceof AutoModError ? t(`e2e.automod.${e.reason}`)
     : e instanceof PlainCommandCancelled ? t('e2e.botCommand.cancelled')
-      : sendErrorText(e, fallback)
+      : e instanceof CommandNotAllowed ? t('cmd.notAllowed', { cmd: e.command })
+        : sendErrorText(e, fallback)
 
 /** Aperçu du premier lien, demandé par l'expéditeur (court délai, erreurs ignorées). */
 async function linkPreview(text: string): Promise<Record<string, unknown> | null> {
@@ -113,8 +126,12 @@ interface SendOpts {
  */
 export async function sendChannel<T>(channelId: string, text: string, post: (body: ChannelBody) => Promise<T>, o: SendOpts): Promise<T> {
   const cmd = o.command && text.startsWith('/') ? text.slice(1).split(/\s+/)[0]?.toLowerCase() : ''
-  if (cmd && (await botCommands(o.serverId)).has(cmd)) {
-    if (!(await confirmPlainCommand(o.serverId, cmd))) throw new PlainCommandCancelled()
+  const known = cmd ? (await botCommands(o.serverId)).get(cmd) : undefined
+  if (cmd && known) {
+    // Jamais envoyée (même chiffrée) si le serveur me la refuse : message d'erreur local.
+    if (!known.allowed) throw new CommandNotAllowed(cmd)
+    // Commande native : lue par le serveur lui-même, pas de confirmation à chaque fois.
+    if (!known.native && !(await confirmPlainCommand(o.serverId, cmd))) throw new PlainCommandCancelled()
     return post({ content: text })
   }
   const encrypt = await mustEncrypt('channel', channelId)

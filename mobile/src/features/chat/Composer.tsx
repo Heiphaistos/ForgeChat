@@ -12,7 +12,7 @@ import { Sheet } from '@/components/Sheet'
 import type { IconName } from '@/components/ui'
 import { messagesApi } from '@/api/messages'
 import { PollCreator, ScheduleSheet } from '@/features/composer/ChannelExtras'
-import { activeSlashQuery, BUILTIN_COMMANDS, COMMANDS_WITH_ARGS, runBuiltin, type SlashCommand } from '@/features/composer/commands'
+import { activeSlashQuery, BUILTIN_COMMANDS, COMMANDS_WITH_ARGS, runBuiltin, usableCommands, type SlashCommand } from '@/features/composer/commands'
 import { useServerDetail } from '@/features/servers/menus'
 import { MESSAGE_TTL_OPTIONS } from '@/features/composer/data'
 import { voiceFileName, voiceMessageContent } from '@/features/composer/formats'
@@ -156,7 +156,7 @@ export function Composer({
   const channelQuery = slash === null && !mention && serverId ? activeTriggerQuery(draft, cursor, '#') : null
   const suggestions = useMemo<Suggestion[]>(() => {
     if (slash !== null) {
-      const all: SlashCommand[] = [...BUILTIN_COMMANDS, ...(serverId ? (botCommands.data ?? []) : [])]
+      const all: SlashCommand[] = [...BUILTIN_COMMANDS, ...(serverId ? usableCommands(botCommands.data ?? []) : [])]
       return all
         .filter((c) => c.name.startsWith(slash))
         .slice(0, 8)
