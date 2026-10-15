@@ -1,6 +1,6 @@
 import { useNavigate, useParams, useLocation } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Bookmark, Newspaper, MessageCircle, Plus, Compass, Folder, FolderOpen, X, LayoutTemplate, Settings, LogOut, Copy, UserPlus, Trash2, BellOff, Bell, CheckCheck, Search as SearchIcon } from 'lucide-react'
+import { Bookmark, Check, GraduationCap, Newspaper, EyeOff, MessageCircle, Plus, Compass, Folder, FolderOpen, X, LayoutTemplate, Settings, LogOut, Copy, UserPlus, Trash2, BellOff, Bell, CheckCheck, Search as SearchIcon } from 'lucide-react'
 import { useState, useEffect, useRef, useCallback, useMemo, type CSSProperties } from 'react'
 import { accentVars, cleanAppearance, effectiveAppearance, iconRingCss, iconShape, isOptedOut } from '../../lib/serverAppearance'
 import { hex } from '../../lib/nameStyle'
@@ -16,6 +16,7 @@ import { useChannelNotif } from '../../store/channelNotif'
 import { useMobile } from '../../contexts/MobileContext'
 import { createPortal } from 'react-dom'
 import { useT, intlLocale, t as tr, type Key } from '../../i18n'
+import { FIXED_IDS, moveFixed, resetFixed, setFixedHidden, visibleFixed } from './railFixed'
 import { acceptsInto, applyDrop, dissolveFolder, FOLDER_COLORS, newFolderId, topLevel, type Drag, type Folders, type RailLayout, type Target, type Zone } from './railLayout'
 
 // ─── Dossiers (localStorage = cache, le compte fait foi) ─────
@@ -44,6 +45,7 @@ export default function ServerSidebar() {
   const isDMs = pathname.startsWith('/friends') || pathname.startsWith('/dms') || pathname.startsWith('/dm')
   const isSaved = pathname.startsWith('/saved')
   const isNews = pathname.startsWith('/news')
+  const isTuto = pathname.startsWith('/tutos')
   const isNotif = pathname.startsWith('/notifications')
   const qc = useQueryClient()
   // Re-rendu quand un membre refuse ou réaccepte l'apparence d'un serveur.
@@ -77,6 +79,15 @@ export default function ServerSidebar() {
       return []
     }
   })
+  // Entrées fixes : ordre et masquage (cache local, le compte fait foi via /users/me/server-layout).
+  const [fixedPrefs, setFixedPrefs] = useState<{ fixed?: string[]; hidden?: string[] }>(() => {
+    try { return JSON.parse(localStorage.getItem('fc_rail_fixed') ?? '{}') || {} } catch { return {} }
+  })
+  const [fixedDrag, setFixedDrag] = useState<string | null>(null)
+  const [fixedHint, setFixedHint] = useState<{ id: string; zone: 'before' | 'after' } | null>(null)
+  const [railMenu, setRailMenu] = useState<{ x: number; y: number; id?: string } | null>(null)
+  const railMenuRef = useRef<HTMLDivElement>(null)
+  const railPressRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const contextMenuRef = useRef<HTMLDivElement>(null)
   const serverLongPressRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -154,13 +165,16 @@ export default function ServerSidebar() {
       if (!alive) return
       if (data && typeof data === 'object') {
         if (data.folders && typeof data.folders === 'object') { setFolders(data.folders); saveFolders(data.folders) }
+        const fp = { fixed: Array.isArray(data.fixed) ? data.fixed : undefined, hidden: Array.isArray(data.hidden) ? data.hidden : undefined }
+        setFixedPrefs(fp)
+        try { localStorage.setItem('fc_rail_fixed', JSON.stringify(fp)) } catch { /* cache seulement */ }
         if (Array.isArray(data.order)) {
           setServerOrder(data.order)
           try { localStorage.setItem('fc_server_order', JSON.stringify(data.order)) } catch { /* cache seulement */ }
         }
       } else {
         // Rien en ligne : la disposition de ce navigateur devient la référence.
-        api.put('/users/me/server-layout', { order: serverOrder, folders }).catch(() => {})
+        api.put('/users/me/server-layout', { order: serverOrder, folders, ...fixedPrefs }).catch(() => {})
       }
       layoutLoaded.current = true
     }).catch(() => { /* hors ligne : on garde le cache local, sans écraser le serveur */ })
@@ -170,10 +184,10 @@ export default function ServerSidebar() {
   useEffect(() => {
     if (!layoutLoaded.current) return
     const t = setTimeout(() => {
-      api.put('/users/me/server-layout', { order: serverOrder, folders }).catch(() => toast.error(tr('msg.saveFailed')))
+      api.put('/users/me/server-layout', { order: serverOrder, folders, ...fixedPrefs }).catch(() => toast.error(tr('msg.saveFailed')))
     }, 800)
     return () => clearTimeout(t)
-  }, [folders, serverOrder])
+  }, [folders, serverOrder, fixedPrefs])
 
   const saveServerOrder = useCallback((newOrder: string[]) => {
     setServerOrder(newOrder)
@@ -184,6 +198,76 @@ export default function ServerSidebar() {
     persistFolders(next.folders)
     saveServerOrder(next.order)
   }, [persistFolders, saveServerOrder])
+
+  const rail: RailLayout = { order: serverOrder, folders, ...fixedPrefs }
+  const applyFixed = (next: RailLayout) => {
+    const fp = { fixed: next.fixed, hidden: next.hidden }
+    setFixedPrefs(fp)
+    try { localStorage.setItem('fc_rail_fixed', JSON.stringify(fp)) } catch { /* cache seulement */ }
+  }
+
+  useEffect(() => {
+    if (!railMenu) return
+    const close = (e: Event) => { if (!railMenuRef.current?.contains(e.target as Node)) setRailMenu(null) }
+    const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') setRailMenu(null) }
+    document.addEventListener('mousedown', close)
+    document.addEventListener('keydown', esc)
+    return () => { document.removeEventListener('mousedown', close); document.removeEventListener('keydown', esc) }
+  }, [railMenu])
+
+  const FIXED = {
+    dms: { path: '/friends', active: isDMs, label: t('servers.dms'), Icon: MessageCircle, badge: dmUnread, badgeLabel: t(dmUnread > 1 ? 'servers.dmUnread.other' : 'servers.dmUnread.one', { n: dmUnread > 99 ? '99+' : dmUnread }) },
+    saved: { path: '/saved', active: isSaved, label: t('servers.saved'), Icon: Bookmark, badge: 0, badgeLabel: '' },
+    tutorials: { path: '/tutos', active: isTuto, label: t('tuto.rail'), Icon: GraduationCap, badge: 0, badgeLabel: '' },
+    news: { path: '/news', active: isNews, label: t('news.title'), Icon: Newspaper, badge: 0, badgeLabel: '' },
+    notifications: { path: '/notifications', active: isNotif, label: t('notifCenter.title'), Icon: Bell, badge: mentionTotal, badgeLabel: t('notifCenter.unread', { n: mentionTotal }) },
+  } as const
+  const fixedItem = (id: string) => {
+    const f = FIXED[id as keyof typeof FIXED]
+    if (!f) return null
+    const mark = fixedHint?.id === id && fixedDrag !== id
+      ? <span aria-hidden className={`pointer-events-none absolute left-1/2 -translate-x-1/2 w-10 h-1 rounded-full bg-fc-accent ${fixedHint.zone === 'before' ? '-top-1.5' : '-bottom-1.5'}`} />
+      : null
+    return (
+      <div
+        key={id}
+        className={`relative w-full flex items-center justify-center ${fixedDrag === id ? 'opacity-40' : ''}`}
+        draggable
+        onDragStart={e => { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', id); setFixedDrag(id) }}
+        onDragOver={e => {
+          if (!fixedDrag || fixedDrag === id) return
+          e.preventDefault()
+          const r = e.currentTarget.getBoundingClientRect()
+          const zone = e.clientY - r.top < r.height / 2 ? 'before' : 'after'
+          if (fixedHint?.id !== id || fixedHint.zone !== zone) setFixedHint({ id, zone })
+        }}
+        onDrop={e => {
+          e.preventDefault()
+          if (fixedDrag && fixedHint) applyFixed(moveFixed(rail, fixedDrag, id, fixedHint.zone))
+          setFixedDrag(null); setFixedHint(null)
+        }}
+        onDragEnd={() => { setFixedDrag(null); setFixedHint(null) }}
+        onContextMenu={e => { e.preventDefault(); e.stopPropagation(); setRailMenu({ x: e.clientX, y: e.clientY, id }) }}
+      >
+        {mark}
+        <span aria-hidden className={`absolute left-0 w-1 h-9 rounded-r-full bg-white transition-all duration-200 ${f.active ? 'opacity-100' : 'opacity-0 h-0'}`} />
+        <button
+          onClick={() => { nav(f.path); closeSidebar() }}
+          aria-current={f.active ? 'page' : undefined}
+          aria-label={f.label}
+          className={`min-w-[44px] min-h-[44px] w-12 h-12 rounded-full flex items-center justify-center transition-all hover:rounded-2xl ${f.active ? 'bg-fc-accent rounded-2xl' : 'bg-fc-channel hover:bg-fc-accent'}`}
+          title={f.label}
+        >
+          <f.Icon size={20} className="text-fc-text" />
+        </button>
+        {f.badge > 0 && (
+          <span role="status" aria-label={f.badgeLabel} className="absolute bottom-0 right-2 min-w-[16px] h-4 px-1 bg-fc-red text-white text-[9px] font-bold rounded-full border-2 border-fc-bg flex items-center justify-center">
+            <span aria-hidden>{f.badge > 99 ? '99+' : f.badge}</span>
+          </span>
+        )}
+      </div>
+    )
+  }
 
   /** Zone survolée : haut / bas = déplacer avant / après, milieu = ranger dans un dossier (ou en créer un). */
   const zoneAt = (e: React.DragEvent, target: Target): Zone => {
@@ -358,80 +442,19 @@ export default function ServerSidebar() {
   }
 
   return (
-    <div className="fc-server-rail flex flex-col items-center py-3 w-[72px] bg-fc-bg gap-2 overflow-y-auto overscroll-y-contain relative">
-      {/* DMs */}
-      <div className="relative w-full flex items-center justify-center">
-        <span aria-hidden className={`absolute left-0 w-1 h-9 rounded-r-full bg-white transition-all duration-200 ${isDMs ? 'opacity-100' : 'opacity-0 h-0'}`} />
-        <button
-          onClick={() => { nav('/friends'); closeSidebar() }}
-          aria-current={isDMs ? 'page' : undefined}
-          aria-label={t('servers.dms')}
-          className={`min-w-[44px] min-h-[44px] w-12 h-12 rounded-full flex items-center justify-center transition-all hover:rounded-2xl ${isDMs ? 'bg-fc-accent rounded-2xl' : 'bg-fc-channel hover:bg-fc-accent'}`}
-          title={t('servers.dms')}
-        >
-          <MessageCircle size={20} className="text-fc-text" />
-        </button>
-        {dmUnread > 0 && (
-          <span
-            role="status"
-            aria-label={t(dmUnread > 1 ? 'servers.dmUnread.other' : 'servers.dmUnread.one', { n: dmUnread > 99 ? '99+' : dmUnread })}
-            className="absolute bottom-0 right-2 min-w-[16px] h-4 px-1 bg-fc-red text-white text-[9px] font-bold rounded-full border-2 border-fc-bg flex items-center justify-center"
-          >
-            <span aria-hidden>{dmUnread > 99 ? '99+' : dmUnread}</span>
-          </span>
-        )}
-      </div>
-
-      {/* Messages sauvegardés */}
-      <div className="relative w-full flex items-center justify-center">
-        <span aria-hidden className={`absolute left-0 w-1 h-9 rounded-r-full bg-white transition-all duration-200 ${isSaved ? 'opacity-100' : 'opacity-0 h-0'}`} />
-        <button
-          onClick={() => { nav('/saved'); closeSidebar() }}
-          aria-current={isSaved ? 'page' : undefined}
-          aria-label={t('servers.saved')}
-          className={`min-w-[44px] min-h-[44px] w-12 h-12 rounded-full flex items-center justify-center transition-all hover:rounded-2xl ${isSaved ? 'bg-fc-accent rounded-2xl' : 'bg-fc-channel hover:bg-fc-accent'}`}
-          title={t('servers.saved')}
-        >
-          <Bookmark size={20} className="text-fc-text" />
-        </button>
-      </div>
-
-      {/* Actualités : articles des flux RSS, pour tout le monde */}
-      <div className="relative w-full flex items-center justify-center">
-        <span aria-hidden className={`absolute left-0 w-1 h-9 rounded-r-full bg-white transition-all duration-200 ${isNews ? 'opacity-100' : 'opacity-0 h-0'}`} />
-        <button
-          onClick={() => { nav('/news'); closeSidebar() }}
-          aria-current={isNews ? 'page' : undefined}
-          aria-label={t('news.title')}
-          className={`min-w-[44px] min-h-[44px] w-12 h-12 rounded-full flex items-center justify-center transition-all hover:rounded-2xl ${isNews ? 'bg-fc-accent rounded-2xl' : 'bg-fc-channel hover:bg-fc-accent'}`}
-          title={t('news.title')}
-        >
-          <Newspaper size={20} className="text-fc-text" />
-        </button>
-      </div>
-
-      {/* Centre de notifications : réglages par serveur, catégorie, MP */}
-      <div className="relative w-full flex items-center justify-center">
-        <span aria-hidden className={`absolute left-0 w-1 h-9 rounded-r-full bg-white transition-all duration-200 ${isNotif ? 'opacity-100' : 'opacity-0 h-0'}`} />
-        <button
-          onClick={() => { nav('/notifications'); closeSidebar() }}
-          aria-current={isNotif ? 'page' : undefined}
-          aria-label={t('notifCenter.title')}
-          className={`min-w-[44px] min-h-[44px] w-12 h-12 rounded-full flex items-center justify-center transition-all hover:rounded-2xl ${isNotif ? 'bg-fc-accent rounded-2xl' : 'bg-fc-channel hover:bg-fc-accent'}`}
-          title={t('notifCenter.title')}
-        >
-          <Bell size={20} className="text-fc-text" />
-        </button>
-        {mentionTotal > 0 && (
-          <span
-            role="status"
-            aria-label={t('notifCenter.unread', { n: mentionTotal })}
-            className="absolute bottom-0 right-2 min-w-[16px] h-4 px-1 bg-fc-red text-white text-[9px] font-bold rounded-full border-2 border-fc-bg flex items-center justify-center"
-          >
-            <span aria-hidden>{mentionTotal > 99 ? '99+' : mentionTotal}</span>
-          </span>
-        )}
-      </div>
+    <div
+      className="fc-server-rail flex flex-col items-center py-3 w-[72px] bg-fc-bg gap-2 overflow-y-auto overscroll-y-contain relative"
+      onContextMenu={e => { if ((e.target as HTMLElement).closest('button')) return; e.preventDefault(); setRailMenu({ x: e.clientX, y: e.clientY }) }}
+      onTouchStart={e => {
+        if ((e.target as HTMLElement).closest('button')) return
+        const { clientX: x, clientY: y } = e.touches[0]
+        railPressRef.current = setTimeout(() => { railPressRef.current = null; if ('vibrate' in navigator) navigator.vibrate(20); setRailMenu({ x, y }) }, 500)
+      }}
+      onTouchEnd={() => { if (railPressRef.current) { clearTimeout(railPressRef.current); railPressRef.current = null } }}
+      onTouchMove={() => { if (railPressRef.current) { clearTimeout(railPressRef.current); railPressRef.current = null } }}
+    >
+      {/* Entrées fixes : masquables (clic droit) et réordonnables (glisser-déposer) */}
+      {visibleFixed(rail).map(fixedItem)}
 
       <div className="w-8 h-px bg-fc-hover mx-auto" />
 
@@ -540,6 +563,41 @@ export default function ServerSidebar() {
       >
         <LayoutTemplate size={20} />
       </button>
+
+      {/* Menu du vide de la barre / d'une entrée fixe : afficher, masquer, réinitialiser */}
+      {railMenu && (
+        <div
+          ref={railMenuRef}
+          role="menu"
+          className="fixed z-[100] bg-fc-channel border border-fc-hover rounded-lg shadow-2xl py-1 min-w-[220px]"
+          style={{ top: Math.min(railMenu.y, window.innerHeight - 260), left: Math.max(8, Math.min(railMenu.x, window.innerWidth - 230)) }}
+        >
+          {railMenu.id ? (
+            <button role="menuitem" className="w-full text-left px-3 py-1.5 text-sm text-fc-text hover:bg-fc-hover hover:text-white transition flex items-center gap-2"
+              onClick={() => { applyFixed(setFixedHidden(rail, railMenu.id!, true)); setRailMenu(null) }}>
+              <EyeOff size={14} /> {t('rail.fixed.hide')}
+            </button>
+          ) : (
+            <>
+              <div className="px-3 py-1 text-[11px] font-semibold uppercase text-fc-muted">{t('rail.fixed.title')}</div>
+              {FIXED_IDS.map(id => {
+                const shown = !rail.hidden?.includes(id)
+                return (
+                  <button key={id} role="menuitemcheckbox" aria-checked={shown} className="w-full text-left px-3 py-1.5 text-sm text-fc-text hover:bg-fc-hover hover:text-white transition flex items-center gap-2"
+                    onClick={() => applyFixed(setFixedHidden(rail, id, shown))}>
+                    <span className="w-4 flex-shrink-0">{shown && <Check size={14} />}</span> {t('rail.fixed.show', { name: FIXED[id].label })}
+                  </button>
+                )
+              })}
+              <div className="h-px bg-fc-hover my-1" />
+              <button role="menuitem" className="w-full text-left px-3 py-1.5 text-sm text-fc-text hover:bg-fc-hover hover:text-white transition"
+                onClick={() => { applyFixed(resetFixed(rail)); setRailMenu(null) }}>
+                {t('rail.fixed.reset')}
+              </button>
+            </>
+          )}
+        </div>
+      )}
 
       {/* Context menu clic droit serveur */}
       {contextMenu && (() => {

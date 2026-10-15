@@ -5,7 +5,8 @@ import { t as tr } from '../../i18n'
 
 export interface Folder { name: string; color: string; serverIds: string[] }
 export type Folders = Record<string, Folder>
-export interface RailLayout { order: string[]; folders: Folders }
+/** `fixed` : ordre des entrées fixes ; `hidden` : entrées fixes masquées. Absents chez les anciens clients. */
+export interface RailLayout { order: string[]; folders: Folders; fixed?: string[]; hidden?: string[] }
 export interface Drag { kind: 'server' | 'folder'; id: string }
 /** `inFolder` : serveur affiché dans un dossier ouvert. */
 export interface Target { kind: 'server' | 'folder'; id: string; inFolder?: string }
@@ -57,7 +58,7 @@ export function applyDrop(serverIds: readonly string[], l: RailLayout, drag: Dra
   }
 
   for (const [k, f] of Object.entries(folders)) if (!f.serverIds.length) delete folders[k]
-  return { order: top.filter(id => !isFolderId(id) || folders[id]), folders }
+  return { ...l, order: top.filter(id => !isFolderId(id) || folders[id]), folders }
 }
 
 /** Dossier défait : ses serveurs reprennent sa place au premier niveau. */
@@ -67,5 +68,5 @@ export function dissolveFolder(serverIds: readonly string[], l: RailLayout, fold
   const top = topLevel(serverIds, l).flatMap(id => (id === folderId ? f.serverIds : [id]))
   const folders = { ...l.folders }
   delete folders[folderId]
-  return { order: top, folders }
+  return { ...l, order: top, folders }
 }
