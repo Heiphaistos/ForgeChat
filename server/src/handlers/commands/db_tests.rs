@@ -171,8 +171,15 @@ async fn cmd_purge_warn_roles_and_public_replies() {
     assert_eq!(denied(db.clone(), w.s, w.chan).await & Permissions::SEND_MESSAGES, 0, "un membre ne verrouille pas");
     run(&state, &db, &w, w.owner, "/lock").await;
     assert_ne!(denied(db.clone(), w.s, w.chan).await & Permissions::SEND_MESSAGES, 0);
+    // Les rôles de modération gardent le droit d'écrire (et donc de déverrouiller) pendant le verrouillage.
+    let staff_allow = |db: PgPool, c: Uuid, r: Uuid| async move {
+        sqlx::query_scalar::<_, i64>("SELECT allow FROM channel_permissions WHERE channel_id=$1 AND target_id=$2")
+            .bind(c).bind(r).fetch_optional(&db).await.unwrap().unwrap_or(0)
+    };
+    assert_ne!(staff_allow(db.clone(), w.chan, w.mod_role).await & Permissions::SEND_MESSAGES, 0, "le rôle modérateur peut écrire dans un salon verrouillé");
     run(&state, &db, &w, w.owner, "/unlock").await;
     assert_eq!(denied(db.clone(), w.s, w.chan).await & Permissions::SEND_MESSAGES, 0);
+    assert_eq!(staff_allow(db.clone(), w.chan, w.mod_role).await & Permissions::SEND_MESSAGES, 0, "l'autorisation du rôle est retirée au déverrouillage");
     run(&state, &db, &w, w.owner, "/slowmode 30").await;
     let slow: i32 = sqlx::query_scalar("SELECT slowmode_delay FROM channels WHERE id=$1").bind(w.chan).fetch_one(&db).await.unwrap();
     assert_eq!(slow, 30);

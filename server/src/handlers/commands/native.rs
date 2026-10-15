@@ -196,7 +196,7 @@ pub async fn run(state: &AppState, claims: &Claims, ctx: &Ctx<'_>, name: &str, v
             let body = crate::handlers::polls::CreatePollBody {
                 question, options, enc: None, client_msg_id: None, multiple_choice: None, anonymous: None, ends_at: None,
             };
-            let _ = crate::handlers::polls::create_poll(st, cl, Path((sid, cid)), Json(body)).await?;
+            let _ = crate::handlers::polls::create_poll_with(state.clone(), claims.clone(), sid, cid, body, true).await?;
             Ok(Reply::Done)
         }
         "roll" => {
@@ -328,6 +328,22 @@ async fn set_lock(state: &AppState, claims: &Claims, sid: Uuid, cid: Uuid, lock:
         let _ = delete_channel_permission(st, cl, Path((cid, everyone))).await?;
     } else {
         let _ = put_channel_permission(st, cl, Path((cid, everyone)), Json(ChannelPermOverride { target_type: "role".into(), allow, deny })).await?;
+    }
+    // Un « refuser » posé sur @everyone l'emporte aussi sur les droits de base des autres rôles : sans
+    // « autoriser » par rôle, la modération elle-même ne pourrait plus écrire (ni déverrouiller).
+    let staff = Permissions::ADMINISTRATOR | Permissions::MANAGE_MESSAGES | Permissions::MANAGE_CHANNELS;
+    let roles: Vec<(Uuid, i64)> = sqlx::query_as("SELECT id, permissions FROM roles WHERE server_id=$1 AND NOT is_everyone")
+        .bind(sid).fetch_all(&state.db).await?;
+    for (rid, perms) in roles.into_iter().filter(|(_, p)| p & staff != 0) {
+        let (a, d): (i64, i64) = sqlx::query_as("SELECT allow, deny FROM channel_permissions WHERE channel_id=$1 AND target_id=$2")
+            .bind(cid).bind(rid).fetch_optional(&state.db).await?.unwrap_or((0, 0));
+        let a = if lock { a | send } else { a & !send };
+        let (st, cl) = (State(state.clone()), Extension(claims.clone()));
+        if a == 0 && d == 0 {
+            let _ = delete_channel_permission(st, cl, Path((cid, rid))).await;
+        } else {
+            let _ = put_channel_permission(st, cl, Path((cid, rid)), Json(ChannelPermOverride { target_type: "role".into(), allow: a, deny: d })).await;
+        }
     }
     eph(if lock { "Salon verrouillé." } else { "Salon déverrouillé." })
 }

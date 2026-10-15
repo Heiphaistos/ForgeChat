@@ -53,6 +53,19 @@ pub async fn create_poll(
     Path((server_id, channel_id)): Path<(Uuid, Uuid)>,
     Json(body): Json<CreatePollBody>,
 ) -> Result<Json<PollResponse>, AppError> {
+    create_poll_with(state, claims, server_id, channel_id, body, false).await
+}
+
+/// `exempt` : sondage lancé par la commande native `/poll`, seule autorisée à poster du texte
+/// en clair dans un salon chiffré (comme les commandes de bot).
+pub(crate) async fn create_poll_with(
+    state: AppState,
+    claims: Claims,
+    server_id: Uuid,
+    channel_id: Uuid,
+    body: CreatePollBody,
+    exempt: bool,
+) -> Result<Json<PollResponse>, AppError> {
     let has_enc = body.enc.as_ref().is_some_and(|v| !v.is_null());
     if (!has_enc && body.question.trim().is_empty()) || body.question.len() > 300 {
         return Err(AppError::BadRequest("Question invalide".into()));
@@ -70,7 +83,7 @@ pub async fn create_poll(
     crate::handlers::servers::require_can_post(&state, claims.sub, server_id, channel_id, false).await?;
     let has_text = !body.question.trim().is_empty() || body.options.iter().any(|o| !o.trim().is_empty());
     let enc = crate::handlers::e2e_channel::check_content(
-        &state.db, channel_id, has_text, body.enc.as_ref(), body.client_msg_id, false,
+        &state.db, channel_id, has_text, body.enc.as_ref(), body.client_msg_id, exempt,
     ).await?;
     let cmid = enc.as_ref().and(body.client_msg_id);
 
