@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { intlLocale, t } from '../../i18n'
 
 /**
  * Versions publiées, lues dans les manifestes de mise à jour (une seule source de vérité : ce que
@@ -32,14 +33,14 @@ export const useMobileRelease = () => useManifest('/desktop/mobile.json')
 /** URL absolue d'un artefact (le manifeste mobile en donne déjà, le bureau aussi via l'API). */
 export const artefactUrl = (a: Artefact) => (/^https:\/\//.test(a.url) ? a.url : `${DL_BASE}/${a.url}`)
 
-export const taille = (a?: Artefact) => (a?.size ? `${Math.round(a.size / 1_048_576)} Mo` : '')
+export const taille = (a?: Artefact) => (a?.size ? t('site.dl.mb', { n: Math.round(a.size / 1_048_576) }) : '')
 
-/** « 22 septembre 2026 », heure de Paris ; null si la date est absente ou illisible. */
-export function dateFr(iso?: string): string | null {
+/** « 22 septembre 2026 » (ou « September 22, 2026 »), heure de Paris ; null si la date est absente ou illisible. */
+export function dateLongue(iso?: string): string | null {
   if (!iso) return null
   const d = new Date(iso)
   if (Number.isNaN(d.getTime())) return null
-  return d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Europe/Paris' })
+  return d.toLocaleDateString(intlLocale(), { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Europe/Paris' })
 }
 
 export type Plateforme = 'windows' | 'macos' | 'linux' | 'android' | 'iphone' | 'web'

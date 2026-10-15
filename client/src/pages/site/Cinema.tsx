@@ -4,6 +4,7 @@ import { gsap } from 'gsap'
 import { ScrollTrigger } from 'gsap/ScrollTrigger'
 import { Bell, Download, Hash, Lock, MessageSquare, Mic, Pause, Play, Send, Server, Volume2, VolumeX } from 'lucide-react'
 import './cinema.css'
+import { useT, type Key } from '../../i18n'
 
 gsap.registerPlugin(ScrollTrigger)
 // Barre d'adresse mobile qui apparaît/disparaît : ne pas tout recalculer à chaque fois.
@@ -80,42 +81,46 @@ export function LogoMark({ size = 72 }: { size?: number }) {
 
 /* ───────────────────────────── Téléphone de démonstration ───────────────────────────── */
 
-type Msg = { qui: string; c: string; h: string; txt: ReactNode }
-const MSGS: Msg[] = [
-  { qui: 'Max', c: '#3b82c4', h: '20:40', txt: 'Les nouveaux salons vocaux sont en ligne' },
-  { qui: 'Alex', c: '#d0453a', h: '20:44', txt: 'Testé sur mon Pixel, ça tourne nickel' },
-  { qui: 'Théo', c: '#e07a26', h: '20:51', txt: 'La màj d’hier est trop propre' },
-  { qui: 'Sam', c: '#1f9e7a', h: '20:58', txt: 'Le mode sombre sur Android, enfin' },
-  { qui: 'Léa', c: '#e0245e', h: '21:02', txt: 'Quelqu’un chaud pour un vocal ce soir ?' },
-  { qui: 'Hugo', c: '#4255c4', h: '21:03', txt: <>Grave <span className="cn-mention">@Léa</span> on se cale dans le salon vocal</> },
+// Texte du message N : clé cn.msg.N ; le dernier (Hugo) mentionne Léa au milieu de la phrase.
+const MSGS = [
+  { qui: 'Max', c: '#3b82c4', h: '20:40' },
+  { qui: 'Alex', c: '#d0453a', h: '20:44' },
+  { qui: 'Théo', c: '#e07a26', h: '20:51' },
+  { qui: 'Sam', c: '#1f9e7a', h: '20:58' },
+  { qui: 'Léa', c: '#e0245e', h: '21:02' },
+  { qui: 'Hugo', c: '#4255c4', h: '21:03' },
 ]
 
 export function Phone({ className = '', style }: { className?: string; style?: CSSProperties }) {
+  const t = useT()
+  const txt = (i: number): ReactNode => (i === 5
+    ? <>{t('cn.msg.5a')} <span className="cn-mention">@Léa</span> {t('cn.msg.5b')}</>
+    : t(`cn.msg.${i}` as Key))
   return (
     <div className={`cn-phone ${className}`} style={style} aria-hidden="true">
       <div className="cn-phone-bar"><span>21:04</span><i className="cn-cam" /><span className="cn-sig"><b /><b /><b /></span></div>
       <div className="cn-phone-top"><Hash size={15} /> gaming <span className="cn-phone-acc" /></div>
-      <div className="cn-notif"><span className="cn-notif-ico"><MessageSquare size={12} /></span><div><b>ForgeChat · #gaming</b><small>Léa t’a mentionné : on lance à 21 h ?</small></div></div>
+      <div className="cn-notif"><span className="cn-notif-ico"><MessageSquare size={12} /></span><div><b>ForgeChat · #gaming</b><small>{t('cn.notif')}</small></div></div>
       <div className="cn-phone-msgs">
-        {MSGS.map(m => (
+        {MSGS.map((m, i) => (
           <div key={m.qui} className="cn-pm">
             <span className="cn-av" style={{ background: m.c }}>{m.qui[0]}</span>
-            <div><b style={{ color: m.c === '#d0453a' ? '#f07a6f' : undefined }}>{m.qui}</b> <small>{m.h}</small><p>{m.txt}</p></div>
+            <div><b style={{ color: m.c === '#d0453a' ? '#f07a6f' : undefined }}>{m.qui}</b> <small>{m.h}</small><p>{txt(i)}</p></div>
           </div>
         ))}
         <div className="cn-pm cn-pm-poll">
           <span className="cn-av" style={{ background: '#8e44ad' }}>N</span>
           <div>
-            <b>Nina</b> <small>21:04</small><p>Je lance un sondage :</p>
+            <b>Nina</b> <small>21:04</small><p>{t('cn.pollIntro')}</p>
             <div className="cn-poll">
-              <p>On joue à quoi ?</p>
-              <div className="cn-poll-row"><i className="cn-poll-bar" style={{ '--v': '68%' } as CSSProperties} /><span>Coop survie</span><em>68%</em></div>
-              <div className="cn-poll-row"><i className="cn-poll-bar" style={{ '--v': '32%' } as CSSProperties} /><span>Course</span><em>32%</em></div>
+              <p>{t('cn.pollQ')}</p>
+              <div className="cn-poll-row"><i className="cn-poll-bar" style={{ '--v': '68%' } as CSSProperties} /><span>{t('cn.pollA')}</span><em>68%</em></div>
+              <div className="cn-poll-row"><i className="cn-poll-bar" style={{ '--v': '32%' } as CSSProperties} /><span>{t('cn.pollB')}</span><em>32%</em></div>
             </div>
             <span className="cn-react">🔥 5</span>
           </div>
         </div>
-        <p className="cn-typing">Max est en train d’écrire<span>.</span><span>.</span><span>.</span></p>
+        <p className="cn-typing">{t('cn.typing')}<span>.</span><span>.</span><span>.</span></p>
       </div>
       <div className="cn-phone-input"><span>+</span> Message #gaming <i><Send size={13} /></i></div>
       <div className="cn-home" />
@@ -126,6 +131,7 @@ export function Phone({ className = '', style }: { className?: string; style?: C
 /* ───────────────────────────── Scènes ───────────────────────────── */
 
 function Hero() {
+  const t = useT()
   const root = useRef<HTMLElement>(null)
   useLayoutEffect(() => {
     if (reduit()) return
@@ -155,10 +161,10 @@ function Hero() {
           <span aria-hidden="true" className="cn-grad">{[...'Chat'].map((c, i) => <span key={i} className="cn-ch">{c}</span>)}</span>
         </h1>
         <p className="cn-pill"><i /> Web · Windows · macOS · Linux · Android · iPhone</p>
-        <p className="cn-lead">Ta messagerie, partout. Salons, vocal, vidéo, partage d’écran. Gratuit, sans pistage, hébergé en France.</p>
+        <p className="cn-lead">{t('cn.lead')}</p>
         <div className="cn-actions">
-          <Link to="/register" className="site-btn site-btn-primary">Créer un compte gratuit</Link>
-          <Link to="/telecharger" className="site-btn site-btn-ghost"><Download size={18} /> Télécharger</Link>
+          <Link to="/register" className="site-btn site-btn-primary">{t('cn.signupFree')}</Link>
+          <Link to="/telecharger" className="site-btn site-btn-ghost"><Download size={18} /> {t('site.nav.download')}</Link>
         </div>
       </div>
       <div className="cn-scroll" aria-hidden="true"><span /></div>
@@ -167,6 +173,7 @@ function Hero() {
 }
 
 function Trailer() {
+  const t = useT()
   const root = useRef<HTMLElement>(null)
   const video = useRef<HTMLVideoElement>(null)
   const [enLecture, setEnLecture] = useState(false)
@@ -201,15 +208,15 @@ function Trailer() {
   return (
     <section ref={root} className="cn-trailer" aria-labelledby="cn-trailer-t">
       <div className="cn-trailer-head">
-        <p className="cn-chapter">— 00 — BANDE-ANNONCE</p>
-        <h2 id="cn-trailer-t" className="cn-h2">32 secondes pour <span className="cn-grad">tout voir.</span></h2>
+        <p className="cn-chapter">{t('cn.trailer.chapter')}</p>
+        <h2 id="cn-trailer-t" className="cn-h2">{t('cn.trailer.h2')} <span className="cn-grad">{t('cn.trailer.h2Grad')}</span></h2>
       </div>
       <div className="cn-trailer-frame">
         <video ref={video} src="/media/forgechat-trailer.mp4" poster="/media/forgechat-trailer.jpg" muted={muet} loop playsInline preload="metadata"
-          aria-label="Vidéo de présentation de ForgeChat" />
+          aria-label={t('cn.trailer.aria')} />
         <div className="cn-trailer-ctrl">
-          <button type="button" onClick={basculer} aria-label={enLecture ? 'Mettre en pause' : 'Lire la vidéo'}>{enLecture ? <Pause size={18} /> : <Play size={18} />}</button>
-          <button type="button" onClick={() => setMuet(m => !m)} aria-label={muet ? 'Activer le son' : 'Couper le son'}>{muet ? <VolumeX size={18} /> : <Volume2 size={18} />}</button>
+          <button type="button" onClick={basculer} aria-label={t(enLecture ? 'cn.trailer.pause' : 'cn.trailer.play')}>{enLecture ? <Pause size={18} /> : <Play size={18} />}</button>
+          <button type="button" onClick={() => setMuet(m => !m)} aria-label={t(muet ? 'cn.trailer.unmute' : 'cn.trailer.mute')}>{muet ? <VolumeX size={18} /> : <Volume2 size={18} />}</button>
         </div>
       </div>
     </section>
@@ -217,8 +224,9 @@ function Trailer() {
 }
 
 function Words() {
+  const t = useT()
   const root = useRef<HTMLElement>(null)
-  const mots = ['Partage.', 'Discute.', 'Appelle.']
+  const mots = [t('cn.word.0'), t('cn.word.1'), t('cn.word.2')]
   useLayoutEffect(() => {
     if (reduit()) return
     const ctx = gsap.context(() => {
@@ -235,21 +243,19 @@ function Words() {
     return () => ctx.revert()
   }, [])
   return (
-    <section ref={root} className="cn-words" aria-label="Partage, discute, appelle : forge ta communauté">
+    <section ref={root} className="cn-words" aria-label={t('cn.words.aria')}>
       <div className="cn-lines" aria-hidden="true"><i /><i /><i /><i /></div>
-      {mots.map((m, i) => <p key={m} className={`cn-word cn-word-${i}`} aria-hidden="true">{m}</p>)}
-      <p className="cn-word cn-word-final">Forge ta<br /><span className="cn-grad">communauté.</span></p>
+      {mots.map((m, i) => <p key={i} className={`cn-word cn-word-${i}`} aria-hidden="true">{m}</p>)}
+      <p className="cn-word cn-word-final">{t('cn.words.final')}<br /><span className="cn-grad">{t('cn.words.finalGrad')}</span></p>
     </section>
   )
 }
 
-const CHAPITRES = [
-  { n: '01', label: 'MESSAGERIE', a: 'Tous tes serveurs.', b: 'Dans ta poche.' },
-  { n: '02', label: 'TEMPS RÉEL', a: 'Instantané.', b: 'Vraiment.' },
-  { n: '03', label: 'NOTIFICATIONS', a: 'Natives.', b: 'Rien ne t’échappe.' },
-]
+// Textes : clés cn.chap.N.label / .a / .b.
+const CHAPITRES = ['01', '02', '03']
 
 function Chapters() {
+  const t = useT()
   const root = useRef<HTMLElement>(null)
   useLayoutEffect(() => {
     if (reduit()) return
@@ -280,10 +286,10 @@ function Chapters() {
   return (
     <section ref={root} className="cn-chapters">
       <div className="cn-chap-text">
-        {CHAPITRES.map((c, i) => (
-          <div key={c.n} className={`cn-chap cn-chap-${i}`}>
-            <p className="cn-chapter">— {c.n} — {c.label}</p>
-            <h2 className="cn-h1">{c.a}<br /><span className="cn-dim">{c.b}</span></h2>
+        {CHAPITRES.map((n, i) => (
+          <div key={n} className={`cn-chap cn-chap-${i}`}>
+            <p className="cn-chapter">— {n} — {t(`cn.chap.${i}.label` as Key)}</p>
+            <h2 className="cn-h1">{t(`cn.chap.${i}.a` as Key)}<br /><span className="cn-dim">{t(`cn.chap.${i}.b` as Key)}</span></h2>
           </div>
         ))}
         <div className="cn-chap-progress" aria-hidden="true"><i /></div>
@@ -293,16 +299,11 @@ function Chapters() {
   )
 }
 
-const PUCES = [
-  { i: <Hash size={20} />, t: 'Serveurs & salons', s: 'Texte, vocal, vidéo' },
-  { i: <Mic size={20} />, t: 'Vocal & vidéo', s: 'WebRTC + anti-bruit' },
-  { i: <MessageSquare size={20} />, t: 'Fils & sondages', s: 'Forums, réactions, mentions' },
-  { i: <Lock size={20} />, t: 'Messages privés', s: 'DM et groupes, chiffrés' },
-  { i: <Bell size={20} />, t: 'Notifs natives', s: 'Mentions en direct' },
-  { i: <Server size={20} />, t: 'Self-hosted', s: 'Tes données, ton serveur' },
-]
+// Textes : clés cn.chip.N.t / .s.
+const PUCES = [Hash, Mic, MessageSquare, Lock, Bell, Server]
 
 function Chips() {
+  const t = useT()
   const root = useRef<HTMLElement>(null)
   useLayoutEffect(() => {
     if (reduit()) return
@@ -325,11 +326,11 @@ function Chips() {
     <section ref={root} className="cn-chips" aria-labelledby="cn-chips-t">
       <Phone />
       <div>
-        <p className="cn-chapter">— 04 — TOUT EST LÀ</p>
-        <h2 id="cn-chips-t" className="cn-h2">Tout ce qu’il faut.<br /><span className="cn-dim">Rien de trop.</span></h2>
+        <p className="cn-chapter">{t('cn.chips.chapter')}</p>
+        <h2 id="cn-chips-t" className="cn-h2">{t('cn.chips.h2')}<br /><span className="cn-dim">{t('cn.chips.h2Dim')}</span></h2>
         <div className="cn-chip-grid">
-          {PUCES.map(p => (
-            <div key={p.t} className="cn-chip"><span className="cn-chip-ico">{p.i}</span><div><b>{p.t}</b><small>{p.s}</small></div></div>
+          {PUCES.map((Icone, i) => (
+            <div key={i} className="cn-chip"><span className="cn-chip-ico"><Icone size={20} /></span><div><b>{t(`cn.chip.${i}.t` as Key)}</b><small>{t(`cn.chip.${i}.s` as Key)}</small></div></div>
           ))}
         </div>
       </div>
@@ -345,6 +346,7 @@ const THEMES = [
 ]
 
 function Themes() {
+  const tr = useT()
   const root = useRef<HTMLElement>(null)
   const [i, setI] = useState(0)
   useLayoutEffect(() => {
@@ -362,29 +364,32 @@ function Themes() {
   return (
     <section ref={root} className="cn-themes" style={{ '--acc': t.c } as CSSProperties} aria-labelledby="cn-themes-t">
       <div className="cn-themes-glow" aria-hidden="true" />
-      <h2 id="cn-themes-t" className="cn-side cn-h1">38 thèmes.</h2>
+      <h2 id="cn-themes-t" className="cn-side cn-h1">{tr('cn.themes.h')}</h2>
       <div className="cn-themes-mid">
         <Phone className="cn-phone-themed" />
-        <div className="cn-dots" role="tablist" aria-label="Thèmes">
+        <div className="cn-dots" role="tablist" aria-label={tr('cn.themes.aria')}>
           {THEMES.map((th, k) => (
-            <button key={th.nom} type="button" role="tab" aria-selected={k === i} aria-label={th.nom} className={k === i ? 'is-on' : ''} style={{ background: th.c }} onClick={() => setI(k)} />
+            <button key={th.nom} type="button" role="tab" aria-selected={k === i} aria-label={k === 0 ? tr('cn.themes.dark') : th.nom} className={k === i ? 'is-on' : ''} style={{ background: th.c }} onClick={() => setI(k)} />
           ))}
         </div>
-        <p className="cn-theme-name">{t.nom}</p>
+        <p className="cn-theme-name">{i === 0 ? tr('cn.themes.dark') : t.nom}</p>
       </div>
-      <p className="cn-side cn-h1 cn-dim">Ton style.</p>
+      <p className="cn-side cn-h1 cn-dim">{tr('cn.themes.style')}</p>
     </section>
   )
 }
 
-const CAPOT = [
-  { mot: 'Rust', sous: 'BACKEND AXUM + TOKIO · ULTRA LÉGER' },
-  { mot: 'Temps réel', sous: 'WEBSOCKET · LIVEKIT SFU · TURN' },
-  { mot: 'Sécurisé', sous: 'JWT · RATE LIMITING · CORS STRICT · 2FA' },
-  { mot: 'Partout', sous: 'WEB · WINDOWS · MACOS · LINUX · ANDROID · IPHONE' },
+// Termes techniques identiques dans les deux langues écrits ici, le reste en clés cn.hood.*.
+const CAPOT: { mot: string; sous: string }[] = [
+  { mot: 'Rust', sous: 'cn.hood.0.sub' },
+  { mot: 'cn.hood.1.word', sous: 'WEBSOCKET · LIVEKIT SFU · TURN' },
+  { mot: 'cn.hood.2.word', sous: 'cn.hood.2.sub' },
+  { mot: 'cn.hood.3.word', sous: 'WEB · WINDOWS · MACOS · LINUX · ANDROID · IPHONE' },
 ]
 
 function UnderTheHood() {
+  const tr = useT()
+  const txt = (s: string) => (s.startsWith('cn.') ? tr(s as Key) : s)
   const root = useRef<HTMLElement>(null)
   useLayoutEffect(() => {
     if (reduit()) return
@@ -403,12 +408,12 @@ function UnderTheHood() {
     return () => ctx.revert()
   }, [])
   return (
-    <section ref={root} className="cn-capot" aria-label="Sous le capot">
-      <p className="cn-capot-label">SOUS LE CAPOT · <span className="cn-capot-count">01/04</span></p>
+    <section ref={root} className="cn-capot" aria-label={tr('cn.hood.aria')}>
+      <p className="cn-capot-label">{tr('cn.hood.label')} · <span className="cn-capot-count">01/04</span></p>
       {CAPOT.map((c, i) => (
         <div key={c.mot} className={`cn-capot-item cn-capot-item-${i}`}>
-          <p className="cn-capot-mot">{c.mot}<span className="cn-dot">.</span></p>
-          <p className="cn-capot-sous">{c.sous}</p>
+          <p className="cn-capot-mot">{txt(c.mot)}<span className="cn-dot">.</span></p>
+          <p className="cn-capot-sous">{txt(c.sous)}</p>
         </div>
       ))}
       <div className="cn-capot-bar" aria-hidden="true"><i /></div>
@@ -417,6 +422,7 @@ function UnderTheHood() {
 }
 
 function Finale() {
+  const t = useT()
   const root = useRef<HTMLElement>(null)
   useLayoutEffect(() => {
     if (reduit()) return
@@ -438,13 +444,13 @@ function Finale() {
           <span aria-hidden="true" className="cn-grad">{[...'Chat'].map((c, i) => <span key={i} className="cn-ch">{c}</span>)}</span>
         </p>
       </div>
-      <p className="cn-pill"><i /> Disponible maintenant, partout</p>
+      <p className="cn-pill"><i /> {t('cn.finale.pill')}</p>
       <div className="cn-actions">
-        <Link to="/telecharger" className="site-btn site-btn-primary"><Download size={18} /> Télécharger ForgeChat</Link>
-        <Link to="/register" className="site-btn site-btn-ghost">Créer un compte</Link>
+        <Link to="/telecharger" className="site-btn site-btn-primary"><Download size={18} /> {t('cn.finale.download')}</Link>
+        <Link to="/register" className="site-btn site-btn-ghost">{t('cn.finale.signup')}</Link>
       </div>
-      <nav className="cn-devices" aria-label="Télécharger par appareil">
-        {[['windows', 'Windows'], ['macos', 'macOS'], ['linux', 'Linux'], ['android', 'Android'], ['iphone', 'iPhone'], ['web', 'Navigateur']].map(([id, nom]) => (
+      <nav className="cn-devices" aria-label={t('cn.finale.devicesAria')}>
+        {[['windows', 'Windows'], ['macos', 'macOS'], ['linux', 'Linux'], ['android', 'Android'], ['iphone', 'iPhone'], ['web', t('site.browser')]].map(([id, nom]) => (
           <Link key={id} to={`/telecharger/${id}`}>{nom}</Link>
         ))}
       </nav>

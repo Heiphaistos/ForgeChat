@@ -32,6 +32,8 @@ import * as auditChat from './parts/auditChat.ts'
 import * as siteAdmin from './parts/siteAdmin.ts'
 import * as discordFeatures from './parts/discordFeatures.ts'
 import * as auditRest from './parts/auditRest.ts'
+import * as site from './parts/site.ts'
+import * as siteCinema from './parts/siteCinema.ts'
 import { profileFr } from './profileFr.ts'
 import { profileStyleFr } from './profileStyleFr.ts'
 import { ringFr } from './ringFr.ts'
@@ -82,6 +84,8 @@ export const fr = {
   ...siteAdmin.fr,
   ...discordFeatures.fr,
   ...auditRest.fr,
+  ...site.fr,
+  ...siteCinema.fr,
   // --- Connexion, inscription, mot de passe oublié ---
   'auth.email': 'Email',
   'auth.password': 'Mot de passe',

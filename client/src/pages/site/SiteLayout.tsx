@@ -7,14 +7,15 @@ import '@fontsource-variable/inter'
 import '@fontsource/jetbrains-mono/500.css'
 import './site.css'
 import { Dust, LogoMark, reduit } from './Cinema'
+import { useLang, useT, type Key } from '../../i18n'
 
-const NAV = [
-  { to: '/', label: 'Accueil', end: true },
-  { to: '/fonctionnalites', label: 'Fonctionnalités' },
-  { to: '/telecharger', label: 'Télécharger' },
-  { to: '/nouveautes', label: 'Nouveautés' },
-  { to: '/aide', label: 'Aide & FAQ' },
-  { to: '/a-propos', label: 'À propos' },
+const NAV: { to: string; label: Key; end?: boolean }[] = [
+  { to: '/', label: 'site.nav.home', end: true },
+  { to: '/fonctionnalites', label: 'site.nav.features' },
+  { to: '/telecharger', label: 'site.nav.download' },
+  { to: '/nouveautes', label: 'site.nav.news' },
+  { to: '/aide', label: 'site.nav.help' },
+  { to: '/a-propos', label: 'site.nav.about' },
 ]
 
 /**
@@ -85,6 +86,8 @@ function usePageMotion(key: string) {
 export default function SiteLayout({ children }: { children: ReactNode }) {
   const { pathname } = useLocation()
   const [menu, setMenu] = useState(false)
+  const t = useT()
+  const { lang, setLang } = useLang()
   useReveal(pathname)
   useEffect(() => { setMenu(false); window.scrollTo(0, 0) }, [pathname])
   // L'app de chat bloque le défilement du document (html/body overflow: hidden, index.css) : le site
@@ -98,24 +101,26 @@ export default function SiteLayout({ children }: { children: ReactNode }) {
   return (
     <div className="site">
       <div className="site-bg" aria-hidden="true"><Dust density={55} /></div>
-      <a href="#contenu" className="site-skip">Aller au contenu</a>
+      <a href="#contenu" className="site-skip">{t('site.skip')}</a>
       <header className="site-header">
         <div className="site-wrap site-header-row">
-          <Link to="/" className="site-brand" aria-label="ForgeChat, accueil">
+          <Link to="/" className="site-brand" aria-label={t('site.brandAria')}>
             <LogoMark size={34} />
             <span>Forge<span className="site-brand-chat">Chat</span></span>
           </Link>
-          <nav aria-label="Navigation principale" className={`site-nav ${menu ? 'is-open' : ''}`}>
+          <nav aria-label={t('site.navAria')} className={`site-nav ${menu ? 'is-open' : ''}`}>
             {NAV.map(n => (
-              <NavLink key={n.to} to={n.to} end={n.end} className="site-nav-link">{n.label}</NavLink>
+              <NavLink key={n.to} to={n.to} end={n.end} className="site-nav-link">{t(n.label)}</NavLink>
             ))}
-            <Link to="/login" className="site-btn site-btn-ghost site-nav-cta">Se connecter</Link>
+            <button type="button" className="site-nav-link" lang={lang === 'fr' ? 'en' : 'fr'} aria-label={t('site.langOtherAria')}
+              onClick={() => setLang(lang === 'fr' ? 'en' : 'fr')}>{t('site.langOther')}</button>
+            <Link to="/login" className="site-btn site-btn-ghost site-nav-cta">{t('site.login')}</Link>
           </nav>
           <button
             type="button"
             className="site-menu-btn"
             aria-expanded={menu}
-            aria-label={menu ? 'Fermer le menu' : 'Ouvrir le menu'}
+            aria-label={t(menu ? 'site.menuClose' : 'site.menuOpen')}
             onClick={() => setMenu(m => !m)}
           >
             {menu ? <X size={22} /> : <Menu size={22} />}
@@ -129,26 +134,26 @@ export default function SiteLayout({ children }: { children: ReactNode }) {
         <div className="site-wrap site-footer-grid">
           <div>
             <p className="site-footer-brand">ForgeChat</p>
-            <p className="site-muted">Messagerie, salons vocaux et appels, hébergée en France.</p>
+            <p className="site-muted">{t('site.footer.tagline')}</p>
             <p className="site-muted">
-              ForgeChat par <strong>Heiphaistos</strong> · application mobile créée par <strong>aerwx</strong>.
+              {t('site.footer.by')} <strong>Heiphaistos</strong> · {t('site.footer.mobileBy')} <strong>aerwx</strong>.
             </p>
           </div>
-          <nav aria-label="Télécharger">
-            <p className="site-footer-title">Télécharger</p>
+          <nav aria-label={t('site.nav.download')}>
+            <p className="site-footer-title">{t('site.nav.download')}</p>
             <Link to="/telecharger/windows">Windows</Link>
             <Link to="/telecharger/macos">macOS</Link>
             <Link to="/telecharger/linux">Linux</Link>
             <Link to="/telecharger/android">Android</Link>
-            <Link to="/telecharger/iphone">iPhone et iPad</Link>
+            <Link to="/telecharger/iphone">{t('site.iphoneIpad')}</Link>
           </nav>
-          <nav aria-label="Informations">
-            <p className="site-footer-title">Informations</p>
-            <Link to="/aide">Aide & FAQ</Link>
-            <Link to="/nouveautes">Nouveautés</Link>
-            <Link to="/mentions-legales">Mentions légales</Link>
-            <Link to="/confidentialite">Confidentialité</Link>
-            <Link to="/cgu">Conditions d'utilisation</Link>
+          <nav aria-label={t('site.footer.info')}>
+            <p className="site-footer-title">{t('site.footer.info')}</p>
+            <Link to="/aide">{t('site.nav.help')}</Link>
+            <Link to="/nouveautes">{t('site.nav.news')}</Link>
+            <Link to="/mentions-legales">{t('legal.notice')}</Link>
+            <Link to="/confidentialite">{t('legal.privacy')}</Link>
+            <Link to="/cgu">{t('legal.terms')}</Link>
           </nav>
         </div>
       </footer>
