@@ -10,6 +10,7 @@ import { parseTags } from './format'
 import { btnCls, ChannelSelect, Field, inputCls, Section } from './ui'
 import { errText, useRoles, useSetting } from './hooks'
 import WelcomeTicketsSettings from './WelcomeTicketsSettings'
+import { grantable } from '../modals/OnboardingTab'
 
 interface Props {
   server: { id: string; name: string; discovery_tags?: string[]; is_public?: boolean }
@@ -44,7 +45,8 @@ function LevelsSection({ server }: Props) {
   const { data: roles = [] } = useRoles(server.id)
   const [lvl, setLvl] = useState(5)
   const [roleId, setRoleId] = useState('')
-  const usable = roles.filter(r => !r.is_everyone)
+  // Le serveur refuse tout rôle à droits sensibles : ne pas le proposer.
+  const usable = roles.filter(grantable)
   const add = () => {
     if (!roleId || local.roles.some(r => r.level === lvl && r.role_id === roleId)) return
     setLocal({ ...local, roles: [...local.roles, { level: lvl, role_id: roleId }].sort((a, b) => a.level - b.level) })

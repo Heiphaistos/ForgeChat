@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react'
-import { useEscapeKey } from '../hooks/useEscapeKey'
 import { Calendar, Plus, Users, Edit2, Trash2, Check, Clock, X, List } from 'lucide-react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import api from '../api/client'
@@ -87,7 +86,17 @@ interface EventModalProps {
 
 function EventModal({ initial, onClose, onSubmit, loading, mode }: EventModalProps) {
   const t = useT()
-  useEscapeKey(onClose)
+  // Échap en capture + stopPropagation (comme TextPromptDialog) : cette fenêtre s'ouvre aussi par-dessus
+  // les paramètres du serveur, qui se fermeraient sinon en même temps.
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return
+      e.stopPropagation()
+      onClose()
+    }
+    window.addEventListener('keydown', handler, true)
+    return () => window.removeEventListener('keydown', handler, true)
+  }, [onClose])
   const [form, setForm] = useState<EventFormData>({
     name:        initial?.name        ?? '',
     description: initial?.description ?? '',
@@ -416,7 +425,8 @@ export default function ServerEventsPage({ serverId }: Props) {
                 const canManage = user && event.creator_id === user.id
                 return (
                   <div key={event.id} className="bg-fc-channel rounded-lg p-4 hover:bg-fc-hover/20 transition">
-                    <div className="flex items-start gap-3">
+                    {/* Sur téléphone, les actions passent sous le texte au lieu de l'écraser. */}
+                    <div className="flex flex-wrap items-start gap-3">
                       <div className="flex-shrink-0 w-12 h-12 bg-fc-accent/20 rounded-lg flex flex-col items-center justify-center text-fc-accent">
                         <span className="text-xs font-medium leading-none uppercase">
                           {new Date(event.start_time).toLocaleDateString(intlLocale(), { month: 'short' })}
@@ -426,7 +436,7 @@ export default function ServerEventsPage({ serverId }: Props) {
                         </span>
                       </div>
 
-                      <div className="flex-1 min-w-0">
+                      <div className="flex-1 basis-56 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap mb-1">
                           <span className="text-white font-semibold text-sm truncate">{event.name}</span>
                           <span className={`text-xs px-2 py-0.5 rounded-full font-medium flex-shrink-0 ${badge.cls}`}>
@@ -452,7 +462,7 @@ export default function ServerEventsPage({ serverId }: Props) {
                         </div>
                       </div>
 
-                      <div className="flex items-center gap-1.5 flex-shrink-0">
+                      <div className="flex items-center gap-1.5 flex-shrink-0 ml-auto">
                         <AddToCalendar serverId={serverId} event={event} />
                         <button
                           onClick={() => toggleAttend.mutate({ id: event.id, rsvp: isAttending ? 'not_going' : 'going' })}

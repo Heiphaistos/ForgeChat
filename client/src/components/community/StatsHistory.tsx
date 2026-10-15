@@ -76,6 +76,7 @@ export default function StatsHistory({ serverId }: { serverId: string }) {
               <span className="text-fc-muted flex-shrink-0">{t('community.stats.channelLine', { m: c.messages, a: c.authors })}</span>
             </li>
           ))}
+          {data.channels.length === 0 && <li className="text-sm text-fc-muted">{t('community.stats.channelsEmpty')}</li>}
         </ul>
       </div>
       <p className="text-xs text-fc-muted">{t('community.stats.privacy')}</p>

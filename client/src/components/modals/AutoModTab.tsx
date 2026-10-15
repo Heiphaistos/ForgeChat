@@ -115,9 +115,9 @@ export default function AutoModTab({ server }: Props) {
           {local.blocked_words.length > 0 && (
             <div className="flex flex-wrap gap-2 mb-3">
               {local.blocked_words.map(w => (
-                <span key={w} className="flex items-center gap-1.5 px-2.5 py-1 bg-fc-channel rounded-full text-sm text-white">
-                  {w}
-                  <button onClick={() => removeWord(w)} aria-label={t('group.remove', { name: w })} className="text-fc-muted hover:text-white transition">
+                <span key={w} className="flex items-center gap-1.5 px-2.5 py-1 bg-fc-channel rounded-full text-sm text-white max-w-full">
+                  <span className="break-all">{w}</span>
+                  <button onClick={() => removeWord(w)} aria-label={t('group.remove', { name: w })} className="text-fc-muted hover:text-white transition flex-shrink-0">
                     <X size={12} />
                   </button>
                 </span>

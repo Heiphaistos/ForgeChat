@@ -444,6 +444,11 @@ html[data-fc-outline] :is([class~="bg-fc-sidebar"], [class~="bg-fc-channel"], [c
 html[data-fc-scheme="light"] :is([class~="text-white"], [class~="hover:text-white"]:hover):not(:is([class~="bg-fc-accent"], [class~="bg-fc-red"], [class~="bg-fc-green"], [class~="bg-fc-yellow"], [class*="bg-black"], [class*="bg-gradient"], [class*="bg-indigo"], [class*="bg-red-"], [class*="bg-green-"], [class*="bg-blue-"]), :is([class~="bg-fc-accent"], [class~="bg-fc-red"], [class~="bg-fc-green"], [class*="bg-black"], [class*="bg-gradient"]) *) {
   color: rgb(var(--fc-strong-rgb));
 }
+/* Le voile sombre d'une modale (fixed inset-0 bg-black/xx) n'est pas un fond média : dans son
+   panneau thémé, la règle s'applique de nouveau (sinon titres et champs blancs sur fond clair). */
+html[data-fc-scheme="light"] :is(:is([class~="bg-fc-bg"], [class~="bg-fc-sidebar"], [class~="bg-fc-channel"], [class~="bg-fc-chat"]) *, [class~="bg-fc-bg"], [class~="bg-fc-sidebar"], [class~="bg-fc-channel"], [class~="bg-fc-chat"]):is([class~="text-white"], [class~="hover:text-white"]:hover):not(:is([class~="bg-fc-accent"], [class~="bg-fc-red"], [class~="bg-fc-green"], [class~="bg-fc-yellow"], [class*="bg-black"], [class*="bg-gradient"], [class*="bg-indigo"], [class*="bg-red-"], [class*="bg-green-"], [class*="bg-blue-"]), :is([class~="bg-fc-bg"], [class~="bg-fc-sidebar"], [class~="bg-fc-channel"], [class~="bg-fc-chat"]) :is([class~="bg-fc-accent"], [class~="bg-fc-red"], [class~="bg-fc-green"], [class*="bg-black"], [class*="bg-gradient"]) *) {
+  color: rgb(var(--fc-strong-rgb));
+}
 
 /* ── DISPOSITION (Réglages → Apparence → Disposition) ─────────────────── */
 @media (min-width: 1024px) {

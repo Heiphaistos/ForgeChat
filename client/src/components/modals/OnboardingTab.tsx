@@ -8,9 +8,10 @@ import { useT } from '../../i18n'
 
 type Draft = Omit<OnboardingQuestion, 'id' | 'options'> & { id?: string; options: (Omit<OnboardingQuestion['options'][number], 'id'> & { id?: string })[] }
 
-// Mêmes droits que `SAFE_PERMS` côté serveur : un rôle d'accueil ne modère ni n'administre.
+// Mêmes droits que `SAFE_PERMS` côté serveur (role_grantable) : un rôle donné par l'accueil ou
+// débloqué par niveau ne modère ni n'administre.
 const SAFE = (1n << 0n) | (1n << 1n) | (1n << 2n) | (1n << 10n) | (1n << 11n) | (1n << 12n) | (1n << 13n) | (1n << 14n) | (1n << 40n)
-const grantable = (r: any) => !r.is_everyone && (BigInt(r.permissions ?? 0) & ~SAFE) === 0n
+export const grantable = (r: { is_everyone?: boolean; permissions?: string | number | null }) => !r.is_everyone && (BigInt(r.permissions ?? 0) & ~SAFE) === 0n
 
 const chip = (on: boolean) => `px-2 py-1 rounded text-xs border transition ${on ? 'bg-fc-accent border-fc-accent text-white' : 'border-fc-hover text-fc-muted hover:text-white'}`
 
@@ -54,7 +55,7 @@ export default function OnboardingTab({ serverId, channels }: { serverId: string
       {draft.map((q, qi) => (
         <div key={q.id ?? `n${qi}`} className="bg-fc-bg/50 rounded-xl border border-fc-hover p-4 space-y-3">
           <div className="flex gap-2 items-center">
-            <input value={q.title} onChange={e => setQ(qi, { title: e.target.value })} maxLength={100} placeholder={t('onb.question')} aria-label={t('onb.question')} className={`flex-1 ${input}`} />
+            <input value={q.title} onChange={e => setQ(qi, { title: e.target.value })} maxLength={100} placeholder={t('onb.question')} aria-label={t('onb.question')} className={`flex-1 min-w-0 ${input}`} />
             <label className="flex items-center gap-1 text-xs text-fc-muted whitespace-nowrap">
               <input type="checkbox" checked={q.multiple} onChange={e => setQ(qi, { multiple: e.target.checked })} /> {t('onb.multiple')}
             </label>
@@ -63,7 +64,7 @@ export default function OnboardingTab({ serverId, channels }: { serverId: string
           {q.options.map((o, oi) => (
             <div key={o.id ?? `n${oi}`} className="ml-3 pl-3 border-l border-fc-hover space-y-2">
               <div className="flex gap-2">
-                <input value={o.label} onChange={e => setO(qi, oi, { label: e.target.value })} maxLength={100} placeholder={t('onb.answer')} aria-label={t('onb.answer')} className={`flex-1 ${input}`} />
+                <input value={o.label} onChange={e => setO(qi, oi, { label: e.target.value })} maxLength={100} placeholder={t('onb.answer')} aria-label={t('onb.answer')} className={`flex-1 min-w-0 ${input}`} />
                 <button onClick={() => setQ(qi, { options: q.options.filter((_, i) => i !== oi) })} aria-label={t('onb.deleteAnswer')} className="p-2 text-fc-muted hover:text-red-400"><Trash2 size={14} /></button>
               </div>
               {safeRoles.length > 0 && (

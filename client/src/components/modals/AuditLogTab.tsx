@@ -31,7 +31,7 @@ interface Props {
 }
 
 // Les clés DOIVENT matcher exactement les chaînes passées à log_event() côté backend
-// (server/src/handlers/*.rs) -- toutes en MAJUSCULES_SNAKE_CASE. Libellés : clés audit.<ACTION>.
+// (server/src/handlers/*.rs). Libellés : clés audit.<ACTION>.
 const ACTION_CONFIG: Record<string, { color: string; Icon: any }> = {
   MEMBER_JOIN:     { color: 'text-fc-green',   Icon: UserPlus },
   MEMBER_LEAVE:    { color: 'text-fc-muted',   Icon: UserMinus },
@@ -53,6 +53,20 @@ const ACTION_CONFIG: Record<string, { color: string; Icon: any }> = {
   LOCKDOWN_OFF:    { color: 'text-fc-green',   Icon: Unlock },
   TICKET_OPEN:     { color: 'text-blue-400',   Icon: Ticket },
   TICKET_STATUS:   { color: 'text-fc-muted',   Icon: Ticket },
+  TICKETS_UPDATE:  { color: 'text-blue-400',   Icon: Ticket },
+  AUTOMOD_UPDATE:  { color: 'text-blue-400',   Icon: Settings },
+  LEVELS_UPDATE:   { color: 'text-blue-400',   Icon: Settings },
+  STARBOARD_UPDATE: { color: 'text-blue-400',  Icon: Settings },
+  WELCOME_UPDATE:  { color: 'text-blue-400',   Icon: Settings },
+  MEMBER_MOVE:     { color: 'text-blue-400',   Icon: UserX },
+  MEMBER_DISCONNECT: { color: 'text-orange-400', Icon: UserX },
+  MEMBER_VOICE_UPDATE: { color: 'text-orange-400', Icon: UserX },
+  PURGE_MESSAGES:  { color: 'text-fc-red',     Icon: MessageSquareX },
+  // Écrites par l'équipe du site (site_admin.rs, server_audit), en minuscules.
+  site_supervision:     { color: 'text-red-400',  Icon: ShieldCheck },
+  site_supervision_end: { color: 'text-fc-muted', Icon: ShieldCheck },
+  site_suspend:         { color: 'text-fc-red',   Icon: Lock },
+  site_unsuspend:       { color: 'text-fc-green', Icon: Unlock },
 }
 
 const PAGE = 50
