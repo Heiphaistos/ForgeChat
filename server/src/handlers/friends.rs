@@ -1092,16 +1092,21 @@ pub async fn send_friend_by_name(
         (name.to_lowercase(), None)
     };
 
-    let target = if let Some(disc) = discriminator {
-        sqlx::query("SELECT id FROM users WHERE LOWER(username)=$1 AND discriminator=$2")
-            .bind(&username).bind(&disc).fetch_optional(&state.db).await?
+    // Plusieurs comptes peuvent porter le meme nom (discriminants differents, ou casse differente) :
+    // sans #tag, prendre « le premier » enverrait la demande a un inconnu. Ambigu = on demande le #tag.
+    let matches = if let Some(disc) = discriminator {
+        sqlx::query("SELECT id FROM users WHERE LOWER(username)=$1 AND discriminator=$2 LIMIT 2")
+            .bind(&username).bind(&disc).fetch_all(&state.db).await?
     } else {
-        sqlx::query("SELECT id FROM users WHERE LOWER(username)=$1 LIMIT 1")
-            .bind(&username).fetch_optional(&state.db).await?
+        sqlx::query("SELECT id FROM users WHERE LOWER(username)=$1 LIMIT 2")
+            .bind(&username).fetch_all(&state.db).await?
     };
-
-    let target = target.ok_or_else(|| AppError::NotFound("Utilisateur introuvable".into()))?;
-    let target_id: Uuid = target.get("id");
+    let target_id: Uuid = match matches.as_slice() {
+        [] => return Err(AppError::NotFound("Utilisateur introuvable".into())),
+        [one] => one.get("id"),
+        _ => return Err(AppError::Conflict(
+            "Plusieurs comptes portent ce nom : ajoutez son identifiant complet (nom#1234)".into())),
+    };
 
     if target_id == claims.sub {
         return Err(AppError::BadRequest("Impossible de s'ajouter soi-même".into()));
