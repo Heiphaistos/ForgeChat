@@ -315,14 +315,15 @@ export function EmptyState({ icon, title, subtitle, action }: { icon: IconName; 
   )
 }
 
-export function ErrorState({ message, onRetry }: { message: string; onRetry?: () => void }) {
+export function ErrorState({ message, onRetry, onClose }: { message: string; onRetry?: () => void; onClose?: () => void }) {
   const t = useT()
   return (
     <EmptyState
       icon="cloud-offline-outline"
       title={t('common.oops')}
       subtitle={message}
-      action={onRetry ? <Button title={t('common.retry')} variant="secondary" onPress={onRetry} /> : undefined}
+      action={onRetry ? <Button title={t('common.retry')} variant="secondary" onPress={onRetry} />
+        : onClose ? <Button title={t('common.close')} variant="ghost" onPress={onClose} /> : undefined}
     />
   )
 }
