@@ -1,6 +1,6 @@
 import { useNavigate, useParams, useLocation } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Bookmark, Newspaper, MessageCircle, Plus, Compass, ChevronDown, FolderOpen, X, LayoutTemplate, Settings, LogOut, Copy, UserPlus, Trash2, BellOff, Bell, CheckCheck, Search as SearchIcon } from 'lucide-react'
+import { Bookmark, Newspaper, MessageCircle, Plus, Compass, Folder, FolderOpen, X, LayoutTemplate, Settings, LogOut, Copy, UserPlus, Trash2, BellOff, Bell, CheckCheck, Search as SearchIcon } from 'lucide-react'
 import { useState, useEffect, useRef, useCallback, useMemo, type CSSProperties } from 'react'
 import { accentVars, cleanAppearance, effectiveAppearance, iconRingCss, iconShape, isOptedOut } from '../../lib/serverAppearance'
 import { hex } from '../../lib/nameStyle'
@@ -462,7 +462,7 @@ export default function ServerSidebar() {
                 }}
                 onTouchEnd={() => { if (serverLongPressRef.current) { clearTimeout(serverLongPressRef.current); serverLongPressRef.current = null } }}
                 onTouchMove={() => { if (serverLongPressRef.current) { clearTimeout(serverLongPressRef.current); serverLongPressRef.current = null } }}
-                className={`w-12 h-12 rounded-2xl flex flex-col items-center justify-center transition-all gap-0.5
+                className={`relative w-12 h-12 rounded-2xl flex items-center justify-center transition-all
                   ${hasActiveServer ? 'ring-2 ring-fc-accent' : ''} ${drag?.id === id ? 'opacity-40' : ''}
                   hover:brightness-110`}
                 style={{ backgroundColor: folder.color + '33', border: `2px solid ${folder.color}` }}
@@ -470,9 +470,8 @@ export default function ServerSidebar() {
                 aria-label={folder.name}
                 aria-expanded={isExpanded}
               >
-                <FolderOpen size={14} style={{ color: folder.color }} />
-                <span className="text-[9px] font-bold" style={{ color: folder.color }}>{folderServers.length}</span>
-                <ChevronDown size={10} style={{ color: folder.color }} className={`transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+                {isExpanded ? <FolderOpen size={26} style={{ color: folder.color }} /> : <Folder size={26} style={{ color: folder.color }} />}
+                <span className="absolute -bottom-1 -right-1 min-w-[16px] h-4 px-1 rounded-full bg-fc-channel text-[10px] leading-4 text-center font-bold" style={{ color: folder.color, border: `1px solid ${folder.color}` }}>{folderServers.length}</span>
               </button>
             </div>
 
