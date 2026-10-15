@@ -35,8 +35,6 @@ export function fromServerMessage(m: ServerMessage): ChatMessage {
     ...e2eFields(m),
     ...plainFields(m, false),
     ...(m.type === 'welcome' || m.type === 'starboard' ? { system: { kind: m.type, meta: m.system_meta ?? {} } } : {}),
-    // Aperçu de lien du message chiffré : celui de l'expéditeur, sans appel à /og.
-    ...(m.e2e === 'ok' ? { preview: normalizeOg(m.e2e_body?.p, firstUrl(m.content ?? '') ?? '') } : {}),
   }
 }
 
@@ -86,12 +84,14 @@ export function plainFields(m: { enc?: unknown; e2e?: unknown; purged?: unknown;
 }
 
 /** Champs du chiffrement de bout en bout (le texte est déjà déchiffré dans `content`, les clés des fichiers dans `files`). */
-function e2eFields(m: { client_msg_id?: string | null; e2e?: 'ok' | 'locked' }) {
+function e2eFields(m: { client_msg_id?: string | null; e2e?: 'ok' | 'locked'; content?: string | null }) {
   const body = (m as { e2e_body?: unknown }).e2e_body
   const files = fileEntries(body)
   // Position partagée (amélioration n° 34) : seulement depuis un corps chiffré déchiffré.
   const geo = m.e2e === 'ok' ? geoOf(body) : null
-  return { clientMsgId: m.client_msg_id ?? null, ...(m.e2e ? { e2e: m.e2e } : {}), ...(files.length ? { files } : {}), ...(geo ? { geo } : {}) }
+  // Aperçu de lien du message chiffré : celui de l'expéditeur (`p`), sans appel à /og.
+  const preview = m.e2e === 'ok' ? { preview: normalizeOg((body as { p?: unknown } | undefined)?.p, firstUrl(m.content ?? '') ?? '') } : {}
+  return { clientMsgId: m.client_msg_id ?? null, ...(m.e2e ? { e2e: m.e2e } : {}), ...(files.length ? { files } : {}), ...(geo ? { geo } : {}), ...preview }
 }
 
 export function fromGroupMessage(m: GroupMessage): ChatMessage {
@@ -149,7 +149,7 @@ export function fromThreadMessage(raw: unknown): ChatMessage | null {
     reactions: Array.isArray(m.reactions) ? (m.reactions as ChatMessage['reactions']) : [],
     pinned: false,
     // Fil ou forum chiffré (déchiffré par e2e/conversations.openRaw avec la portée du fil ou de la publication).
-    ...e2eFields({ client_msg_id: s(m.client_msg_id), ...(m.e2e === 'ok' || m.e2e === 'locked' ? { e2e: m.e2e } : {}), e2e_body: m.e2e_body } as Parameters<typeof e2eFields>[0]),
+    ...e2eFields({ client_msg_id: s(m.client_msg_id), ...(m.e2e === 'ok' || m.e2e === 'locked' ? { e2e: m.e2e } : {}), e2e_body: m.e2e_body, content: s(m.content) } as Parameters<typeof e2eFields>[0]),
     ...plainFields(m as Parameters<typeof plainFields>[0], false),
   }
 }
