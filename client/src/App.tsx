@@ -1185,14 +1185,14 @@ function IncomingCallModal({ call, onAccept, onDecline }: {
           className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-fc-red hover:bg-red-600 rounded-xl text-white text-sm font-medium transition"
         >
           <PhoneOff size={16} />
-          Refuser
+          {tr('hc.app.callDecline')}
         </button>
         <button
           onClick={onAccept}
           className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-fc-green hover:bg-green-600 rounded-xl text-white text-sm font-medium transition"
         >
           {call.callType === 'video' ? <Video size={16} /> : <Phone size={16} />}
-          Accepter
+          {tr('hc.app.callAccept')}
         </button>
       </div>
     </div>
