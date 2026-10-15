@@ -1475,7 +1475,7 @@ export const fr = {
   'srv.tab.onboarding': 'Accueil',
   'srv.tab.e2e': 'Chiffrement',
   'srv.tab.events': 'Événements',
-  'srv.tab.audit': 'Audit Log',
+  'srv.tab.audit': "Journal d'audit",
   'srv.tab.automod': 'AutoMod',
   'srv.tab.stats': 'Statistiques',
   'srv.group.community': 'Communauté',
