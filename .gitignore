@@ -23,3 +23,6 @@ server/uploads/
 # Claude Code internals
 .claude/
 dist-desktop/
+
+# Cle publique de signature des releases (non secrete) : le *.pem global ne doit pas la masquer
+!deploy/release-signing-public.pem
