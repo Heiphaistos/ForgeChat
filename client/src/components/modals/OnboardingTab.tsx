@@ -8,9 +8,10 @@ import { useT } from '../../i18n'
 
 type Draft = Omit<OnboardingQuestion, 'id' | 'options'> & { id?: string; options: (Omit<OnboardingQuestion['options'][number], 'id'> & { id?: string })[] }
 
-// Mêmes droits que `SAFE_PERMS` côté serveur : un rôle d'accueil ne modère ni n'administre.
+// Mêmes droits que `SAFE_PERMS` côté serveur (role_grantable) : un rôle donné par l'accueil ou
+// débloqué par niveau ne modère ni n'administre.
 const SAFE = (1n << 0n) | (1n << 1n) | (1n << 2n) | (1n << 10n) | (1n << 11n) | (1n << 12n) | (1n << 13n) | (1n << 14n) | (1n << 40n)
-const grantable = (r: any) => !r.is_everyone && (BigInt(r.permissions ?? 0) & ~SAFE) === 0n
+export const grantable = (r: { is_everyone?: boolean; permissions?: string | number | null }) => !r.is_everyone && (BigInt(r.permissions ?? 0) & ~SAFE) === 0n
 
 const chip = (on: boolean) => `px-2 py-1 rounded text-xs border transition ${on ? 'bg-fc-accent border-fc-accent text-white' : 'border-fc-hover text-fc-muted hover:text-white'}`
 
