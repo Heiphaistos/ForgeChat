@@ -115,7 +115,7 @@ export default function MemberList({ serverId, onClose }: Props) {
   const presenceStatuses = usePresence(s => s.statuses)
   // Activité en direct (WS) : remplace l'ancien rechargement toutes les 30 s
   const presenceActivities = usePresence(s => s.activities)
-  const getStatus = (id: string) => presenceStatuses[id] ?? 'offline'
+  const getStatus = (id: string, apiStatus?: string) => presenceStatuses[id] ?? apiStatus ?? 'offline'
   const [popup, setPopup] = useState<{ userId: string; x: number; y: number } | null>(null)
 
   const { online, offline } = useMemo(() => {
@@ -124,7 +124,7 @@ export default function MemberList({ serverId, onClose }: Props) {
       return {
         ...m,
         ...(act ? { activity_type: act.activity_type, activity_name: act.activity_name, in_call: act.in_call } : {}),
-        liveStatus: getStatus(m.user_id) ?? m.status ?? 'offline',
+        liveStatus: getStatus(m.user_id, m.status),
       }
     })
     return {

@@ -142,7 +142,7 @@ export default function FriendsPage() {
   const qc = useQueryClient()
   const nav = useNavigate()
   const presenceStatuses = usePresence(s => s.statuses)
-  const getStatus = (id: string) => presenceStatuses[id] ?? 'offline'
+  const getStatus = (id: string, apiStatus?: string) => presenceStatuses[id] ?? apiStatus ?? 'offline'
 
   // ── Queries ────────────────────────────────────────────────────────────────
   const { data: friendsData, isLoading } = useQuery<{ friends: FriendRow[]; counts: Record<string, number> }>({
@@ -298,7 +298,7 @@ export default function FriendsPage() {
 
   // ── Friend card (render function, pas un composant React) ─────────────────
   const renderFriendCard = (f: FriendRow) => {
-    const live = getStatus(f.friend_id) || f.user_status
+    const live = getStatus(f.friend_id, f.user_status)
     const target = { userId: f.friend_id, username: f.username, avatar: f.avatar }
 
     return (

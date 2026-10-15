@@ -172,7 +172,9 @@ async fn handle_socket(socket: WebSocket, state: AppState, user_id: Uuid, sid: O
     // d'écrasement de « ne pas déranger » / « invisible » à la connexion).
     crate::handlers::presence::refresh(&state, user_id).await;
 
-    // Envoyer au nouveau client le snapshot de présence — filtré aux amis + membres de serveurs communs
+    // Envoyer au nouveau client le snapshot de présence — filtré aux amis + membres de serveurs communs,
+    // et lui-même : `refresh` ci-dessus ne diffuse que si le statut change, sinon sa propre ligne
+    // restait « hors ligne » dans la liste des membres.
     {
         use sqlx::Row;
         let connected_ids: Vec<Uuid> = state.clients.read().await.keys().copied().collect();
@@ -180,9 +182,10 @@ async fn handle_socket(socket: WebSocket, state: AppState, user_id: Uuid, sid: O
             let rows = sqlx::query(
                 "SELECT DISTINCT u.id, u.status
                  FROM users u
-                 WHERE u.id = ANY($1) AND u.id != $2 AND u.status <> 'offline'
+                 WHERE u.id = ANY($1) AND u.status <> 'offline'
                    AND (
-                       EXISTS(
+                       u.id = $2
+                       OR EXISTS(
                            SELECT 1 FROM server_members sm1
                            JOIN server_members sm2 ON sm1.server_id = sm2.server_id
                            WHERE sm1.user_id = $2 AND sm2.user_id = u.id
