@@ -187,7 +187,7 @@ export default function DiscordSyncScreen() {
       </View>
       <Section title={t('dsync.status')}>
         <Row
-          icon={cfg.running ? 'sync-outline' : cfg.lastStatus === 'error' ? 'alert-circle-outline' : 'checkmark-circle-outline'}
+          icon={cfg.running ? 'sync-outline' : !cfg.lastSyncAt ? 'time-outline' : cfg.lastStatus === 'error' ? 'alert-circle-outline' : 'checkmark-circle-outline'}
           title={cfg.running ? t('dsync.running') : status}
           subtitle={detailLine}
         />
