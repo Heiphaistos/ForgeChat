@@ -55,7 +55,7 @@ export default function OnboardingTab({ serverId, channels }: { serverId: string
       {draft.map((q, qi) => (
         <div key={q.id ?? `n${qi}`} className="bg-fc-bg/50 rounded-xl border border-fc-hover p-4 space-y-3">
           <div className="flex gap-2 items-center">
-            <input value={q.title} onChange={e => setQ(qi, { title: e.target.value })} maxLength={100} placeholder={t('onb.question')} aria-label={t('onb.question')} className={`flex-1 ${input}`} />
+            <input value={q.title} onChange={e => setQ(qi, { title: e.target.value })} maxLength={100} placeholder={t('onb.question')} aria-label={t('onb.question')} className={`flex-1 min-w-0 ${input}`} />
             <label className="flex items-center gap-1 text-xs text-fc-muted whitespace-nowrap">
               <input type="checkbox" checked={q.multiple} onChange={e => setQ(qi, { multiple: e.target.checked })} /> {t('onb.multiple')}
             </label>
@@ -64,7 +64,7 @@ export default function OnboardingTab({ serverId, channels }: { serverId: string
           {q.options.map((o, oi) => (
             <div key={o.id ?? `n${oi}`} className="ml-3 pl-3 border-l border-fc-hover space-y-2">
               <div className="flex gap-2">
-                <input value={o.label} onChange={e => setO(qi, oi, { label: e.target.value })} maxLength={100} placeholder={t('onb.answer')} aria-label={t('onb.answer')} className={`flex-1 ${input}`} />
+                <input value={o.label} onChange={e => setO(qi, oi, { label: e.target.value })} maxLength={100} placeholder={t('onb.answer')} aria-label={t('onb.answer')} className={`flex-1 min-w-0 ${input}`} />
                 <button onClick={() => setQ(qi, { options: q.options.filter((_, i) => i !== oi) })} aria-label={t('onb.deleteAnswer')} className="p-2 text-fc-muted hover:text-red-400"><Trash2 size={14} /></button>
               </div>
               {safeRoles.length > 0 && (
