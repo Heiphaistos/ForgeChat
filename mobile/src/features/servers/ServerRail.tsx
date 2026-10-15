@@ -1,9 +1,10 @@
 import { Ionicons } from '@expo/vector-icons'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { router } from 'expo-router'
 import { useMemo, useState } from 'react'
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native'
+import { Alert, Pressable, ScrollView, StyleSheet, View } from 'react-native'
 import { Avatar } from '@/components/Avatar'
+import { Sheet, type SheetAction } from '@/components/Sheet'
 import { Badge } from '@/components/ui'
 import { directUnread, serverUnread, useUnread } from '@/stores/unread'
 import type { Server } from '@/types/models'
@@ -13,6 +14,7 @@ import { unreadLabel } from '@/lib/format'
 import { http } from '@/lib/http'
 import { railEntries, type ServerLayout } from './layout'
 import { ServerMenu } from './menus'
+import { MOBILE_FIXED, isHidden, moveFixedStep, resetFixed, setFixedHidden, visibleFixed, withBase, type FixedId } from './railFixed'
 import { ServerIconView } from './ServerIconView'
 import { cleanLook, hex, iconRadius } from './serverLook'
 
@@ -44,6 +46,46 @@ export function ServerRail({
     queryFn: () => http.get<ServerLayout | null>('/users/me/server-layout'),
     staleTime: 60_000,
   })
+  const qc = useQueryClient()
+  const [fixedMenu, setFixedMenu] = useState<FixedId | 'all' | null>(null)
+  const fixedName = (id: FixedId) => (id === 'dms' ? t('rail.dms') : id === 'tutorials' ? t('tuto.rail') : t('news.title'))
+  // Écriture sans perte : l'édition est rejouée sur la disposition la plus récente du serveur, qui garde
+  // `order`, `folders` et les clés posées par le web ; en cas d'échec on revient à l'état précédent.
+  const editFixed = async (edit: (l: ServerLayout | null | undefined) => ServerLayout) => {
+    const prev = layout.data
+    qc.setQueryData(['server-layout'], withBase(edit(prev)))
+    try {
+      const latest = await http.get<ServerLayout | null>('/users/me/server-layout')
+      const next = withBase(edit(latest))
+      await http.put('/users/me/server-layout', next)
+      qc.setQueryData(['server-layout'], next)
+    } catch {
+      qc.setQueryData(['server-layout'], prev)
+      Alert.alert(t('rail.fixed.saveError'))
+    }
+  }
+  const fixedActions = (): SheetAction[] => {
+    const hideShow = (id: FixedId): SheetAction => {
+      const hidden = isHidden(layout.data, id)
+      return {
+        label: t(hidden ? 'rail.fixed.show' : 'rail.fixed.hide', { name: fixedName(id) }),
+        icon: hidden ? 'eye-outline' : 'eye-off-outline',
+        onPress: () => void editFixed((l) => setFixedHidden(l, id, !hidden)),
+      }
+    }
+    const reset: SheetAction = { label: t('rail.fixed.reset'), icon: 'refresh-outline', onPress: () => void editFixed(resetFixed) }
+    if (fixedMenu === 'all') return [...MOBILE_FIXED.map(hideShow), reset]
+    if (!fixedMenu) return []
+    const id = fixedMenu
+    const shown = visibleFixed(layout.data)
+    const i = shown.indexOf(id)
+    const move = (dir: -1 | 1): SheetAction => ({
+      label: t(dir === -1 ? 'rail.fixed.up' : 'rail.fixed.down', { name: fixedName(id) }),
+      icon: dir === -1 ? 'arrow-up' : 'arrow-down',
+      onPress: () => void editFixed((l) => moveFixedStep(l, id, dir, MOBILE_FIXED)),
+    })
+    return [...(i > 0 ? [move(-1)] : []), ...(i !== -1 && i < shown.length - 1 ? [move(1)] : []), hideShow(id), reset]
+  }
   const entries = useMemo(() => railEntries(servers, layout.data), [servers, layout.data])
   const toggle = (id: string) =>
     setOpen((prev) => {
@@ -86,15 +128,24 @@ export function ServerRail({
     )
   }
 
-  return (
-    <View style={styles.rail}>
-      <ScrollView contentContainerStyle={{ alignItems: 'center', gap: spacing.sm, paddingVertical: spacing.md }} showsVerticalScrollIndicator={false}>
+  const fixedItem = (id: FixedId) => {
+    const name = fixedName(id)
+    const open = () => setFixedMenu(id)
+    const common = {
+      onLongPress: open,
+      accessibilityActions: [{ name: 'longpress', label: t('rail.fixed.options') }],
+      onAccessibilityAction: (e: { nativeEvent: { actionName: string } }) => e.nativeEvent.actionName === 'longpress' && open(),
+      style: styles.item,
+    }
+    if (id === 'dms') {
+      return (
         <Pressable
+          key={id}
           onPress={() => onSelect(null)}
           accessibilityRole="button"
-          accessibilityLabel={`${t('rail.dms')}${dmUnread ? `, ${unreadLabel(dmUnread)}` : ''}`}
+          accessibilityLabel={`${name}${dmUnread ? `, ${unreadLabel(dmUnread)}` : ''}`}
           accessibilityState={{ selected: dmActive }}
-          style={styles.item}
+          {...common}
         >
           <View style={[styles.pill, { height: dmActive ? 36 : dmUnread ? 8 : 0 }]} />
           <View style={[styles.home, dmActive && styles.homeActive]}>
@@ -106,12 +157,22 @@ export function ServerRail({
             </View>
           ) : null}
         </Pressable>
-        {/* Actualités : articles des flux RSS, pour tout le monde */}
-        <Pressable onPress={() => router.push('/news')} accessibilityRole="button" accessibilityLabel={t('news.title')} style={styles.item}>
-          <View style={styles.home}>
-            <Ionicons name="newspaper-outline" size={22} color={colors.textMuted} />
-          </View>
-        </Pressable>
+      )
+    }
+    // Tutoriels (vidéos) et Actualités (flux RSS) : pour tout le monde.
+    return (
+      <Pressable key={id} onPress={() => router.push(id === 'tutorials' ? '/tutos' : '/news')} accessibilityRole="button" accessibilityLabel={name} {...common}>
+        <View style={styles.home}>
+          <Ionicons name={id === 'tutorials' ? 'school-outline' : 'newspaper-outline'} size={22} color={colors.textMuted} />
+        </View>
+      </Pressable>
+    )
+  }
+
+  return (
+    <View style={styles.rail}>
+      <ScrollView contentContainerStyle={{ alignItems: 'center', gap: spacing.sm, paddingVertical: spacing.md, flexGrow: 1 }} showsVerticalScrollIndicator={false}>
+        {visibleFixed(layout.data).map(fixedItem)}
         <View style={styles.separator} />
         {onRetry ? (
           <Pressable style={styles.add} onPress={onRetry} accessibilityRole="button" accessibilityLabel={t('rail.retry')}>
@@ -154,7 +215,16 @@ export function ServerRail({
         <Pressable style={styles.add} onPress={() => router.push('/server/explore')} accessibilityRole="button" accessibilityLabel={t('rail.explore')}>
           <Ionicons name="compass-outline" size={24} color={colors.success} />
         </Pressable>
+        {/* Le vide sous les boutons : appui long = masquer / afficher / réinitialiser les entrées fixes. */}
+        <Pressable
+          style={{ flex: 1, minHeight: 56, width: 72 }}
+          onLongPress={() => setFixedMenu('all')}
+          accessibilityRole="button"
+          accessibilityLabel={t('rail.fixed.options')}
+          accessibilityHint={t('rail.fixed.optionsHint')}
+        />
       </ScrollView>
+      <Sheet visible={fixedMenu !== null} onClose={() => setFixedMenu(null)} title={t('rail.fixed.title')} actions={fixedActions()} />
       {menu ? <ServerMenu server={menu} visible onClose={() => setMenu(null)} /> : null}
     </View>
   )
