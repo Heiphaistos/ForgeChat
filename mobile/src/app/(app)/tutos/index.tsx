@@ -101,7 +101,7 @@ export default function TutorialsScreen() {
       onEndReachedThreshold={0.5}
       ListFooterComponent={list.isFetchingNextPage ? <ActivityIndicator color={colors.textMuted} /> : null}
       renderItem={({ item }) => (
-        <TutorialCard category={item.category} title={item.title} description={item.description} group={item.group} onPress={() => router.push({ pathname: '/tutos/[slug]', params: { slug: item.slug } })} />
+        <TutorialCard category={item.category} title={item.title} description={item.description} group={item.group} thumbnail={item.thumbnail_url} onPress={() => router.push({ pathname: '/tutos/[slug]', params: { slug: item.slug } })} />
       )}
     />
   )

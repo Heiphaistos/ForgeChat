@@ -95,6 +95,8 @@ pub struct Item {
     pub group: String,
     pub tags: Vec<String>,
     pub video_url: String,
+    /// Miniature `<slug>.thumb.jpg` posée à côté du film sur le site ; absente (null) pour un film sans `.mp4`.
+    pub thumbnail_url: Option<String>,
     pub created_at: String,
     #[serde(skip)]
     content_html: String,
@@ -197,6 +199,12 @@ pub fn anchor_video(raw: &str) -> Option<String> {
     ok.then(|| format!("https://{HOST}{}{}", u.path(), u.query().map(|q| format!("?{q}")).unwrap_or_default()))
 }
 
+/// Adresse de la miniature d'un film : même chemin, `.mp4` remplacé par `.thumb.jpg` (déjà ancrée sur l'hôte du site).
+pub fn thumbnail_of(video_url: &str) -> Option<String> {
+    let no_query = video_url.split('?').next()?;
+    no_query.strip_suffix(".mp4").map(|stem| format!("{stem}.thumb.jpg"))
+}
+
 fn build_snapshot(raws: Vec<Raw>) -> Snapshot {
     let mut items = Vec::with_capacity(raws.len());
     let mut seen = std::collections::HashSet::new();
@@ -216,6 +224,7 @@ fn build_snapshot(raws: Vec<Raw>) -> Snapshot {
             category: Cat { slug: r.category.slug, name: r.category.name, icon: r.category.icon.unwrap_or_else(|| "📚".into()) },
             group,
             tags,
+            thumbnail_url: thumbnail_of(&video_url),
             video_url,
             created_at: r.created_at,
             content_html: r.content.unwrap_or_default(),
@@ -500,6 +509,9 @@ mod tests {
         let s = sample();
         assert_eq!(s.items.len(), 7, "sans vidéo ou hors hôte tuto : écartés");
         assert!(s.items.iter().all(|i| i.video_url.starts_with("https://tuto.heiphaistos.org/videos/tutos/")));
+        assert!(s.items.iter().all(|i| i.thumbnail_url.as_deref().is_some_and(|t| t.starts_with("https://tuto.heiphaistos.org/videos/tutos/") && t.ends_with(".thumb.jpg"))));
+        assert_eq!(thumbnail_of("https://tuto.heiphaistos.org/videos/tutos/a.mp4?x=1").as_deref(), Some("https://tuto.heiphaistos.org/videos/tutos/a.thumb.jpg"));
+        assert_eq!(thumbnail_of("https://tuto.heiphaistos.org/videos/tutos/a.webm"), None);
         let cats = s.catalog["categories"].as_array().unwrap();
         assert_eq!(cats.len(), 2);
         let lin = &cats[0];

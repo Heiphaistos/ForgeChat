@@ -6,7 +6,7 @@ export interface Group { key: string; label: string; count: number }
 export interface Category extends CategoryRef { count: number; groups: Group[] }
 export interface Tutorial {
   slug: string; title: string; description: string; category: CategoryRef; group: string | null
-  tags: string[]; video_url: string; created_at: string; content_html?: string
+  tags: string[]; video_url: string; thumbnail_url?: string | null; created_at: string; content_html?: string
 }
 export interface TutorialPage { items: Tutorial[]; total: number; page: number; per_page: number }
 

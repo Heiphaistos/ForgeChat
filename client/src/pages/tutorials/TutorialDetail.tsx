@@ -44,7 +44,7 @@ export default function TutorialDetail() {
           </header>
           <div className="rounded-xl overflow-hidden bg-black border border-fc-hover aspect-video flex items-center justify-center">
             {isSafeUrl(tu.video_url) && !videoFailed
-              ? <video key={tu.slug} src={tu.video_url} controls preload="metadata" playsInline onError={() => setVideoFailed(true)} className="w-full h-full" />
+              ? <video key={tu.slug} src={tu.video_url} poster={tu.thumbnail_url && isSafeUrl(tu.thumbnail_url) ? tu.thumbnail_url : undefined} controls preload="metadata" playsInline onError={() => setVideoFailed(true)} className="w-full h-full" />
               : <p className="text-sm text-white/70">{t('tuto.noVideo')}</p>}
           </div>
           {body.length > 0 && <div className={BODY}>{body}</div>}

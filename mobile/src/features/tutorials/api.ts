@@ -12,6 +12,7 @@ export interface Tutorial {
   group: string | null
   tags: string[]
   video_url: string
+  thumbnail_url?: string | null
   created_at: string
   content_html?: string
 }

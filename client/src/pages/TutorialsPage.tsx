@@ -3,6 +3,7 @@
 // Contrat : GET /tutorials/catalog et GET /tutorials (voir pages/tutorials/shared.tsx).
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
 import { useEffect, useState } from 'react'
+import { isSafeUrl } from '../utils/safeUrl'
 import { createPortal } from 'react-dom'
 import { Link, useSearchParams } from 'react-router-dom'
 import { GraduationCap, ListTree, Play, Search, X } from 'lucide-react'
@@ -154,12 +155,17 @@ export default function TutorialsPage() {
 
 function Card({ tu }: { tu: Tutorial }) {
   const Icon = categoryIcon(tu.category.slug)
+  // Miniature tirée du film (serveur) ; dégradé + icône de catégorie tant qu'elle manque ou ne charge pas.
+  const [thumbFailed, setThumbFailed] = useState(false)
+  const thumb = tu.thumbnail_url && isSafeUrl(tu.thumbnail_url) && !thumbFailed ? tu.thumbnail_url : null
   return (
     <Link to={`/tutos/${encodeURIComponent(tu.slug)}`} className="group rounded-xl overflow-hidden bg-fc-channel border border-fc-hover hover:border-fc-accent/60 transition flex flex-col">
       <div className="relative aspect-video flex items-center justify-center" style={{ background: tint(tu.category.slug) }}>
-        <Icon size={52} className="text-white/25" aria-hidden />
+        {thumb
+          ? <img src={thumb} alt="" loading="lazy" decoding="async" onError={() => setThumbFailed(true)} className="absolute inset-0 w-full h-full object-cover" />
+          : <Icon size={52} className="text-white/25" aria-hidden />}
         <span className="absolute inset-0 m-auto w-12 h-12 rounded-full bg-black/45 flex items-center justify-center text-white group-hover:bg-fc-accent transition" aria-hidden><Play size={20} fill="currentColor" /></span>
-        <span className="absolute top-2 left-2 text-[11px] font-semibold bg-black/50 text-white rounded px-1.5 py-0.5">{tu.category.name}</span>
+        {!thumb && <span className="absolute top-2 left-2 text-[11px] font-semibold bg-black/50 text-white rounded px-1.5 py-0.5">{tu.category.name}</span>}
         {tu.group && <span className="absolute top-2 right-2 text-[11px] font-semibold bg-white/90 text-black rounded px-1.5 py-0.5">{tu.group}</span>}
       </div>
       <div className="flex flex-col gap-2 p-4 flex-1">
