@@ -31,6 +31,7 @@ import * as discordSync from './parts/discordSync'
 import * as discordFeatures from './parts/discordFeatures'
 import * as parity from './parts/parity'
 import * as sweep from './parts/sweep'
+import * as tutorials from './parts/tutorials'
 
 export const fr = {
   ...settings.fr,
@@ -63,6 +64,7 @@ export const fr = {
   ...discordFeatures.fr,
   ...parity.fr,
   ...sweep.fr,
+  ...tutorials.fr,
 
   // --- Commun ---
   'common.cancel': 'Annuler',

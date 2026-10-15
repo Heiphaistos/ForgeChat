@@ -4,6 +4,11 @@ import type { Server } from '@/types/models'
 export interface ServerLayout {
   order?: unknown
   folders?: unknown
+  /** Entrées fixes (ordre) et masquées : voir railFixed.ts. */
+  fixed?: unknown
+  hidden?: unknown
+  /** Clés ajoutées par d'autres clients : conservées à l'écriture. */
+  [key: string]: unknown
 }
 
 export type RailEntry =
