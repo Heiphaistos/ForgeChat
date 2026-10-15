@@ -21,9 +21,10 @@ export default function InviteLanding() {
   const [joining, setJoining] = useState(false)
   const info = useQuery({ queryKey: ['invite', code], queryFn: () => serversApi.invite(code!), enabled: !!code, retry: false })
 
-  if (!code) return <ErrorState message={t('social.invite.invalid')} />
+  const close = () => (router.canGoBack() ? router.back() : router.replace('/'))
+  if (!code) return <ErrorState message={t('social.invite.invalid')} onClose={close} />
   if (info.isLoading) return <Loading />
-  if (info.error || !info.data) return <ErrorState message={errorMessage(info.error, t('social.invite.expired'))} />
+  if (info.error || !info.data) return <ErrorState message={errorMessage(info.error, t('social.invite.expired'))} onClose={close} />
 
   const s = info.data.server
   const join = async () => {
@@ -54,7 +55,7 @@ export default function InviteLanding() {
           <Button title={t('auth.login')} onPress={() => router.replace('/login')} style={{ alignSelf: 'stretch', marginTop: spacing.md }} />
         </>
       )}
-      <Button title={t('common.close')} variant="ghost" onPress={() => (router.canGoBack() ? router.back() : router.replace('/'))} />
+      <Button title={t('common.close')} variant="ghost" onPress={close} />
     </View>
   )
 }

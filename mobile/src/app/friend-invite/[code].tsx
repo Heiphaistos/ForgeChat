@@ -20,9 +20,10 @@ export default function FriendInviteLanding() {
   const [busy, setBusy] = useState(false)
   const info = useQuery({ queryKey: ['friend-invite', code], queryFn: () => friendInviteApi.get(code!), enabled: !!code, retry: false })
 
-  if (!code) return <ErrorState message={t('social.invite.invalidLink')} />
+  const close = () => (router.canGoBack() ? router.back() : router.replace('/'))
+  if (!code) return <ErrorState message={t('social.invite.invalidLink')} onClose={close} />
   if (info.isLoading) return <Loading />
-  if (info.error || !info.data) return <ErrorState message={errorMessage(info.error, t('social.invite.expired'))} />
+  if (info.error || !info.data) return <ErrorState message={errorMessage(info.error, t('social.invite.expired'))} onClose={close} />
   const u = info.data.user
 
   const accept = async () => {
@@ -48,7 +49,7 @@ export default function FriendInviteLanding() {
       ) : (
         <Button title={t('auth.login')} onPress={() => router.replace('/login')} style={{ alignSelf: 'stretch', marginTop: spacing.xl }} />
       )}
-      <Button title={t('common.close')} variant="ghost" onPress={() => (router.canGoBack() ? router.back() : router.replace('/'))} />
+      <Button title={t('common.close')} variant="ghost" onPress={close} />
     </View>
   )
 }
