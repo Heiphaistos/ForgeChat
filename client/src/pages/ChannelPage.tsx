@@ -15,6 +15,7 @@ import { useWs } from '../store/ws'
 import { useAuth } from '../store/auth'
 import type { FileWithTtl } from '../components/chat/MessageInput'
 import MessageList from '../components/chat/MessageList'
+import LocalNotices from '../components/chat/LocalNotices'
 import MessageInput, { ReplyTarget } from '../components/chat/MessageInput'
 import { useUnread } from '../store/unread'
 import MemberList from '../components/chat/MemberList'
@@ -864,6 +865,7 @@ export default function ChannelPage({ forcedChannelId, isSplit, onClose }: Props
         {serverData?.lockdown && <LockdownBanner />}
         {/* Salon sans SEND_MESSAGES (overrides compris, calculé par le serveur ;
             repli sur le masque des rôles) : zone de saisie grisée au lieu d'un 403. */}
+        <LocalNotices channelId={channelId} />
         {(!isAnnouncement || canPost) && !(currentChannel?.can_send ?? canSendBase) && (
           <div className="mx-4 mb-4 mt-1 flex items-center gap-2 px-4 py-3 rounded-lg bg-fc-input/50 text-fc-muted text-sm cursor-not-allowed select-none" aria-disabled="true">
             <Lock size={15} className="flex-shrink-0" />

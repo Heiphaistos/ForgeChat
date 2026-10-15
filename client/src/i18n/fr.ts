@@ -8,6 +8,7 @@ import * as notifCenter from './parts/notifCenter.ts'
 import * as uxSettings from './parts/uxSettings.ts'
 import * as menus from './parts/menus.ts'
 import * as accountGuard from './parts/accountGuard.ts'
+import * as commandsPart from './parts/commands.ts'
 import * as discordSync from './parts/discordSync.ts'
 import * as themesMore from './parts/themesMore.ts'
 import * as looksMore from './parts/looksMore.ts'
@@ -60,6 +61,7 @@ export const fr = {
   ...systemDeskFr,
   ...menus.fr,
   ...accountGuard.fr,
+  ...commandsPart.fr,
   ...discordSync.fr,
   ...themesMore.fr,
   ...looksMore.fr,

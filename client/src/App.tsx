@@ -24,6 +24,7 @@ import { useGlobalShortcuts } from './hooks/useShortcuts'
 import api from './api/client'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useChat } from './store/chat'
+import { useLocalNotices } from './store/localNotices'
 import { useChannelNotif } from './store/channelNotif'
 import toast from 'react-hot-toast'
 import { stripMarkdown } from './utils/mdShortcuts'
@@ -884,6 +885,16 @@ function AppInner() {
       toast.success(tr('toast.timeoutLifted'), { duration: 4000 })
     })
     return () => { offTimeout(); offLift() }
+  }, [user?.id])
+
+  // Réponses éphémères de commandes : message local, visible de moi seul
+  useEffect(() => {
+    if (!user) return
+    return on('COMMAND_RESPONSE', (d: any) => {
+      if (typeof d?.channel_id !== 'string' || typeof d?.content !== 'string') return
+      useLocalNotices.getState().add(d.channel_id, { command: String(d.command ?? ''), content: d.content })
+      if (d.command === 'warn') toast.error(d.content, { duration: 10000 })
+    })
   }, [user?.id])
 
   useCommunityRealtime(user?.id)
