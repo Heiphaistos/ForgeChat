@@ -402,19 +402,10 @@ pub async fn send_message(
     state.broadcast_to_channel_members(channel_id, event.to_string()).await;
     crate::handlers::levels::on_message(&state, server_id, claims.sub);
 
-    // Bot slash commands : "/cmd args" est envoyé comme un message normal par le
-    // client (voir MessageInput.tsx) — c'est ici qu'on détecte et dispatch aux bots.
-    if let Some(content) = full_msg.content.as_deref() {
-        if let Some(rest) = content.strip_prefix('/') {
-            let mut parts = rest.splitn(2, ' ');
-            let cmd_name = parts.next().unwrap_or("").to_lowercase();
-            let args = parts.next().unwrap_or("");
-            if !cmd_name.is_empty() {
-                crate::handlers::bots::dispatch_slash_command(
-                    &state, channel_id, server_id, claims.sub, &cmd_name, args,
-                ).await;
-            }
-        }
+    // Commandes slash ("/cmd args", en clair) : natives ou de bot, droits revérifiés ici
+    // (voir handlers/commands). Un message de commande reconnue est retiré du salon.
+    if let Some(content) = full_msg.content.as_deref().filter(|c| c.starts_with('/')) {
+        crate::handlers::commands::handle_message(&state, &claims, server_id, channel_id, full_msg.id, content).await;
     }
 
     Ok(Json(full_msg))

@@ -54,6 +54,7 @@ pub mod reads;
 pub mod reports;
 pub mod emojis;
 pub mod bots;
+pub mod commands;
 pub mod server_settings;
 pub mod polls;
 pub mod webhooks;
