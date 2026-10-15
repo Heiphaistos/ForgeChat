@@ -6,6 +6,7 @@ pub mod auth_v2;
 pub mod site_admin;
 pub mod accounts;
 pub mod gifs;
+pub mod tutorials;
 pub mod password_reset;
 pub mod users;
 pub mod user_keys;
