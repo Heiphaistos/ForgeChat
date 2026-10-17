@@ -559,16 +559,19 @@ fn remplacer_sur_place(cible: &Path, octets: &[u8]) -> Result<(), String> {
 
 #[cfg(not(target_os = "macos"))]
 fn remplacer_fichier(cible: &Path, octets: &[u8]) -> Result<(), String> {
-    let nouveau = cible.with_extension("nouveau");
+    // Nom imprévisible + create_new : on n'écrit jamais dans un fichier (ou un lien) préparé d'avance.
+    let nouveau = cible.with_extension(format!("nouveau-{}", suffixe_aleatoire()?));
     let ancien = cible.with_extension("ancien");
 
-    std::fs::write(&nouveau, octets).map_err(|e| format!("écriture impossible : {e}"))?;
+    ecrire_neuf(&nouveau, octets).map_err(|e| format!("écriture impossible : {e}"))?;
 
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
-        std::fs::set_permissions(&nouveau, std::fs::Permissions::from_mode(0o755))
-            .map_err(|e| format!("droits d'exécution non posés : {e}"))?;
+        if let Err(e) = std::fs::set_permissions(&nouveau, std::fs::Permissions::from_mode(0o755)) {
+            let _ = std::fs::remove_file(&nouveau);
+            return Err(format!("droits d'exécution non posés : {e}"));
+        }
     }
 
     if ancien.exists() {
@@ -645,16 +648,54 @@ pub fn balayer_ancien() {
 
 // ─────────────────────── Chemin installé ───────────────────────
 
-/// Dossier neuf, au nom aléatoire et réservé au compte (0700) : sous Linux, `/tmp` est partagé et
-/// un autre compte pouvait préparer `/tmp/<nom du paquet>` puis remplacer le paquet vérifié avant
-/// son installation par `sudo apt install`.
-fn dossier_prive() -> Result<PathBuf, String> {
+/// 128 bits d'aléa en hexadécimal.
+fn suffixe_aleatoire() -> Result<String, String> {
     use ring::rand::SecureRandom;
     let mut alea = [0u8; 16];
     ring::rand::SystemRandom::new()
         .fill(&mut alea)
         .map_err(|_| "aléa indisponible".to_string())?;
-    let dossier = std::env::temp_dir().join(format!("forgechat-maj-{}", hex(&alea)));
+    Ok(hex(&alea))
+}
+
+/// Crée `chemin` (échoue s'il existe déjà, lien compris) et y écrit `octets`.
+fn ecrire_neuf(chemin: &Path, octets: &[u8]) -> std::io::Result<()> {
+    use std::io::Write;
+    let mut f = std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(chemin)?;
+    f.write_all(octets)?;
+    f.sync_all()
+}
+
+/// Rouvre l'installeur en lecture, partage « lecture seule » (personne ne peut plus l'écrire, le
+/// renommer ni le supprimer tant que le handle vit), et vérifie qu'il est identique à `octets`
+/// (déjà vérifiés par SHA-256). Le handle doit rester ouvert jusqu'au lancement.
+#[cfg(windows)]
+fn verrouiller_et_verifier(chemin: &Path, octets: &[u8]) -> Result<std::fs::File, String> {
+    use std::io::Read;
+    use std::os::windows::fs::OpenOptionsExt;
+    const FILE_SHARE_READ: u32 = 1;
+    let mut f = std::fs::OpenOptions::new()
+        .read(true)
+        .share_mode(FILE_SHARE_READ)
+        .open(chemin)
+        .map_err(|e| format!("installeur impossible à verrouiller : {e}"))?;
+    let mut lu = Vec::with_capacity(octets.len());
+    f.read_to_end(&mut lu)
+        .map_err(|e| format!("installeur illisible : {e}"))?;
+    if Sha256::digest(&lu) != Sha256::digest(octets) {
+        return Err("installeur modifié après vérification : lancement refusé".into());
+    }
+    Ok(f)
+}
+
+/// Dossier neuf, au nom aléatoire et réservé au compte (0700) : sous Linux, `/tmp` est partagé et
+/// un autre compte pouvait préparer `/tmp/<nom du paquet>` puis remplacer le paquet vérifié avant
+/// son installation par `sudo apt install`.
+fn dossier_prive() -> Result<PathBuf, String> {
+    let dossier = std::env::temp_dir().join(format!("forgechat-maj-{}", suffixe_aleatoire()?));
     // `mut` ne sert que sous Unix (droits 0700).
     #[cfg_attr(not(unix), allow(unused_mut))]
     let mut b = std::fs::DirBuilder::new();
@@ -680,18 +721,9 @@ fn lancer_installeur(octets: &[u8], info: &UpdateInfo) -> Result<(), String> {
     }
 
     let chemin = dossier_prive()?.join(nom);
-    {
-        // create_new : jamais un fichier préparé d'avance par un autre compte.
-        use std::io::Write;
-        let mut f = std::fs::OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(&chemin)
-            .map_err(|e| format!("écriture du fichier de mise à jour impossible : {e}"))?;
-        f.write_all(octets)
-            .and_then(|_| f.sync_all())
-            .map_err(|e| format!("écriture du fichier de mise à jour impossible : {e}"))?;
-    }
+    // create_new : jamais un fichier préparé d'avance par un autre compte.
+    ecrire_neuf(&chemin, octets)
+        .map_err(|e| format!("écriture du fichier de mise à jour impossible : {e}"))?;
 
     #[cfg(windows)]
     {
@@ -705,6 +737,8 @@ fn lancer_installeur(octets: &[u8], info: &UpdateInfo) -> Result<(), String> {
         // L'installeur demande l'élévation lui-même : `Command::spawn` échoue
         // sur un exécutable qui l'exige (ERROR_ELEVATION_REQUIRED), il faut
         // passer par ShellExecuteW, comme le fait tauri-plugin-updater.
+        // Handle gardé ouvert (partage lecture seule) jusqu'à la sortie : pas de TOCTOU.
+        let _verrou = verrouiller_et_verifier(&chemin, octets)?;
         shell_execute(&chemin, "/P /UPDATE /R /ARGS")?;
         // L'installeur ne peut pas remplacer les fichiers tant que nous
         // tournons. Il relancera l'application lui-même (/R).
