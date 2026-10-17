@@ -45,6 +45,8 @@ use axum::extract::DefaultBodyLimit;
 
 /// Corps des routes publiques et des petits réglages JSON (anti-saturation mémoire).
 const SMALL_JSON_LIMIT: usize = 64 * 1024;
+/// Envois de bannières (25 Mo, profile_custom::BANNER_MAX) + enveloppe multipart.
+const BANNER_BODY_LIMIT: usize = handlers::profile_custom::BANNER_MAX + 1024 * 1024;
 /// Webhooks entrants et routes bot : JSON seulement (aucun fichier), 1 Mo suffit.
 const INBOUND_JSON_LIMIT: usize = 1024 * 1024;
 use axum::http::{header, HeaderValue};
@@ -650,7 +652,7 @@ fn protected_route_table() -> Router<AppState> {
         .route("/users/me/stats", get(handlers::users::get_my_stats))
         .route("/users/me/login-history", get(handlers::users::get_login_history))
         .route("/users/me/avatar", post(handlers::profile_custom::upload_avatar))
-        .route("/users/me/banner", post(handlers::profile_custom::upload_banner))
+        .route("/users/me/banner", post(handlers::profile_custom::upload_banner).layer(DefaultBodyLimit::max(BANNER_BODY_LIMIT)))
         .route("/users/styles", get(handlers::profile_custom::name_styles))
         .route("/users/:id", get(handlers::users::get_user))
         // Profil (fiche) : authentifié depuis l'audit 2026-10-10 (avant : public, jeton optionnel jamais révoqué)
@@ -680,7 +682,7 @@ fn protected_route_table() -> Router<AppState> {
         .route("/servers/:server_id/members/:user_id/ban", post(handlers::servers::ban_member))
         .route("/servers/:server_id/members/:user_id/nickname", patch(handlers::nicknames::set_member_nickname).layer(DefaultBodyLimit::max(SMALL_JSON_LIMIT)))
         .route("/servers/:server_id/icon", post(handlers::servers::upload_server_icon))
-        .route("/servers/:server_id/banner", post(handlers::servers::upload_server_banner))
+        .route("/servers/:server_id/banner", post(handlers::servers::upload_server_banner).layer(DefaultBodyLimit::max(BANNER_BODY_LIMIT)))
         // Apparence du serveur (135) : document validé (models/server_look.rs) et images de fond.
         .route("/servers/:server_id/look", put(handlers::server_look::put_look).layer(DefaultBodyLimit::max(SMALL_JSON_LIMIT)))
         .route("/servers/:server_id/look/image", post(handlers::server_look::upload_look_image))
@@ -966,7 +968,8 @@ fn protected_route_table() -> Router<AppState> {
         .route("/users/me/super-reactions", get(handlers::super_reactions::get_quota))
         .route("/servers/:server_id/profile", patch(handlers::member_profile::update_profile))
         .route("/servers/:server_id/profile/:kind",
-            post(handlers::member_profile::upload_profile_image).delete(handlers::member_profile::delete_profile_image))
+            post(handlers::member_profile::upload_profile_image).delete(handlers::member_profile::delete_profile_image)
+                .layer(DefaultBodyLimit::max(BANNER_BODY_LIMIT)))
         // Reaction detail
         .route("/reactions", get(handlers::audit::get_reaction_detail))
         // OG preview

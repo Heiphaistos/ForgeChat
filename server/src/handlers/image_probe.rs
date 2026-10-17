@@ -6,7 +6,7 @@
 //! sans décoder l'image : on recopie seulement les blocs de la première image.
 
 pub const MAX_DIM: u32 = 4096;
-pub const MAX_FRAMES: u32 = 600;
+pub const MAX_FRAMES: u32 = 2000;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Probe {
@@ -51,7 +51,7 @@ pub fn probe(data: &[u8]) -> R<(Probe, Option<Vec<u8>>)> {
         return Err("Dimensions refusées (4096 × 4096 px max)");
     }
     if p.frames > MAX_FRAMES {
-        return Err("Animation trop longue (600 images max)");
+        return Err("Animation trop longue (2000 images max)");
     }
     Ok((p, still))
 }

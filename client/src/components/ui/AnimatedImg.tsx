@@ -22,11 +22,13 @@ export function setAvatarAnimation(v: AvatarAnimation) {
   window.dispatchEvent(new Event(EVENT))
 }
 
-/** Mode effectif : « réduire les animations » (réglage ou système) ramène « toujours » à « au survol ». */
+/**
+ * Mode effectif : le réglage « Réduire les animations » de l'appli ramène « toujours » à « au survol ».
+ * Pas celui du système : Windows le coupe souvent pour la fluidité, et toutes les bannières GIF restaient figées.
+ */
 function effective(): AvatarAnimation {
   const mode = getAvatarAnimation()
   const reduce = document.documentElement.getAttribute('data-reduce-motion') === 'true'
-    || window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
   return reduce && mode === 'always' ? 'hover' : mode
 }
 

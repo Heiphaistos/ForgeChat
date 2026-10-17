@@ -16,8 +16,8 @@ import { qk, queryClient } from '@/lib/queryClient'
 import type { Server } from '@/types/models'
 import { colors, radius, spacing } from '@/theme'
 
-// Limites du serveur : icône 8 Mo (servers.rs), bannière 10 Mo (server_look.rs).
-const MAX_BYTES = { icon: 8 * 1024 * 1024, banner: 10 * 1024 * 1024 }
+// Limites du serveur : icône 8 Mo (servers.rs), bannière 25 Mo (profile_custom::BANNER_MAX).
+const MAX_BYTES = { icon: 8 * 1024 * 1024, banner: 25 * 1024 * 1024 }
 
 const refresh = (id: string) =>
   Promise.all([queryClient.invalidateQueries({ queryKey: qk.servers }), queryClient.invalidateQueries({ queryKey: qk.server(id) })])

@@ -1,0 +1,1 @@
+- Bannières (serveur, profil, profil de serveur) : jusqu'à 25 Mo, pour les GIF animés.

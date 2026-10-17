@@ -23,7 +23,7 @@ use crate::{
 
 /// Bannière de serveur : 10 Mo (avant : 2 Mo, type déclaré cru sur parole, sans contrôle
 /// des dimensions). Jusqu'à 4096 × 4096 px (image_probe::MAX_DIM), animations gardées.
-pub const SERVER_BANNER_MAX: usize = 10 * 1024 * 1024;
+pub const SERVER_BANNER_MAX: usize = crate::handlers::profile_custom::BANNER_MAX;
 /// Image de fond (liste des salons, zone des messages).
 pub const LOOK_IMAGE_MAX: usize = 10 * 1024 * 1024;
 const DIR: &str = "server-banners";
@@ -55,7 +55,7 @@ async fn broadcast_server(state: &AppState, server_id: Uuid) -> Result<Server> {
     Ok(server)
 }
 
-/// POST /servers/:server_id/banner — PNG, JPEG, GIF, WebP (animés gardés), 10 Mo.
+/// POST /servers/:server_id/banner — PNG, JPEG, GIF, WebP (animés gardés), 25 Mo.
 pub async fn upload_server_banner(
     state: AppState,
     claims: Claims,

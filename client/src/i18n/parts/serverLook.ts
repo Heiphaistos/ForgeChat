@@ -99,8 +99,8 @@ export const fr = {
   'srvLook.optOutHint': 'Réglage de cet appareil. Le serveur garde son apparence pour les autres membres.',
   'srvLook.enforced': 'Le propriétaire impose cette apparence à tous les membres.',
 
-  'srvLook.bannerTooBig': 'Bannière : 10 Mo maximum',
-  'srvLook.bannerFormats': 'URL ou envoi · PNG, JPG, GIF ou WEBP (animés gardés) · max 10 Mo · jusqu’à 4096 × 4096 px, affichée en entier',
+  'srvLook.bannerTooBig': 'Bannière : 25 Mo maximum',
+  'srvLook.bannerFormats': 'URL ou envoi · PNG, JPG, GIF ou WEBP (animés gardés) · max 25 Mo · jusqu’à 4096 × 4096 px, affichée en entier',
 } as const
 
 export const en: Partial<Record<keyof typeof fr, string>> = {
@@ -201,6 +201,6 @@ export const en: Partial<Record<keyof typeof fr, string>> = {
   'srvLook.optOutHint': 'Setting for this device. The server keeps its appearance for other members.',
   'srvLook.enforced': 'The owner applies this appearance for all members.',
 
-  'srvLook.bannerTooBig': 'Banner: 10 MB max',
-  'srvLook.bannerFormats': 'URL or upload · PNG, JPG, GIF or WEBP (animation kept) · max 10 MB · up to 4096 × 4096 px, shown in full',
+  'srvLook.bannerTooBig': 'Banner: 25 MB max',
+  'srvLook.bannerFormats': 'URL or upload · PNG, JPG, GIF or WEBP (animation kept) · max 25 MB · up to 4096 × 4096 px, shown in full',
 }

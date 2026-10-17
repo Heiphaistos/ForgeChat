@@ -4,8 +4,8 @@ import api from '../../api/client'
 
 type GifMode = 'always' | 'hover' | 'never'
 
+// Réglage de l'appli seulement, pas celui du système (voir AnimatedImg).
 const reduceMotion = () => document.documentElement.getAttribute('data-reduce-motion') === 'true'
-  || !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
 
 /** « Lire les GIF automatiquement » du compte ; « Réduire les animations » ramène « toujours » à « au survol ». */
 function useGifMode(): GifMode {

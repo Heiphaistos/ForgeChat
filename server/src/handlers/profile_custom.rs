@@ -16,7 +16,8 @@ use crate::{
 };
 
 pub const AVATAR_MAX: usize = 10 * 1024 * 1024;
-pub const BANNER_MAX: usize = 10 * 1024 * 1024;
+/// Bannières : 25 Mo, une bannière GIF animée dépasse vite 10 Mo (lue octet par octet, jamais décodée).
+pub const BANNER_MAX: usize = 25 * 1024 * 1024;
 
 /// 20 envois d'image de profil par tranche de 10 minutes.
 pub async fn upload_rate_limit(state: &AppState, user: Uuid) -> Result<()> {
@@ -120,7 +121,7 @@ pub async fn upload_avatar(
     Ok(Json(broadcast_profile(&state, user).await))
 }
 
-/// POST /users/me/banner — mêmes formats que l'avatar, 10 Mo max.
+/// POST /users/me/banner — mêmes formats que l'avatar, 25 Mo max.
 pub async fn upload_banner(
     State(state): State<AppState>,
     Extension(claims): Extension<Claims>,

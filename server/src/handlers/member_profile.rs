@@ -22,7 +22,7 @@ pub const BIO_MAX: usize = 190;
 pub fn image_column(kind: &str) -> Result<(&'static str, u64)> {
     match kind {
         "avatar" => Ok(("server_avatar", 10 * 1024 * 1024)),
-        "banner" => Ok(("server_banner", 10 * 1024 * 1024)),
+        "banner" => Ok(("server_banner", crate::handlers::profile_custom::BANNER_MAX as u64)),
         _ => Err(AppError::NotFound("Introuvable".into())),
     }
 }
