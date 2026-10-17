@@ -21,6 +21,7 @@ import { normalizeBotCommands, type SlashCommand } from '@/features/composer/com
 import { normalizePins, type PinnedItem } from '@/features/chat/pins'
 import type { Attachment, ChatMessage, ConversationRef } from '@/types/models'
 import { forwardText, mustEncrypt, openRaw, openRawList, seal, withSeal } from '@/e2e/conversations'
+import { NATIVE_COMMANDS } from '@/e2e/nativeCommands'
 import { isBotCommand, linkPreviewExtra, sendChannelText } from '@/e2e/channels'
 import type { FileEntry } from '@/e2e/crypto'
 import type { SupportPayload } from '@/lib/remoteSupport'
@@ -99,8 +100,8 @@ async function sendChannel(
     // Connue du serveur mais refusée à mon compte : rien n'est envoyé (ni en clair, ni chiffré).
     if (cmd?.allowed === false) throw new Error(t('e2e.cmdNotAllowed', { cmd: cmd.name }))
     // En clair (le bot doit la lire), sur une liste fournie par le serveur : confirmation d'abord,
-    // sauf commande intégrée, lue par le serveur lui-même.
-    if (!cmd?.native && !(await confirmPlainCommand(ref.serverId, text))) throw new Error(t('e2e.botCommand.cancelled'))
+    // sauf commande intégrée (liste LOCALE, jamais le `native` servi), lue par le serveur lui-même.
+    if (!NATIVE_COMMANDS.has(cmd?.name ?? '') && !(await confirmPlainCommand(ref.serverId, text))) throw new Error(t('e2e.botCommand.cancelled'))
     return adaptMessage(ref, await http.post<unknown>(base(ref), { content: text, ...meta }))
   }
   const sent = await sendChannelText(ref.serverId, ref.channelId, text, (body) => http.post<Record<string, unknown>>(base(ref), { ...body, ...meta }),
