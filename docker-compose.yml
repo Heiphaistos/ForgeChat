@@ -7,6 +7,8 @@ x-logging: &logging
 
 services:
   postgres:
+    security_opt: ["no-new-privileges:true"]
+    pids_limit: 512
     # Images épinglées par empreinte (celles qui tournaient en production le 2026-10-10) : une mise à jour
     # est un changement explicite de cette ligne, jamais une surprise au redémarrage.
     image: postgres:16-alpine@sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea
@@ -26,6 +28,8 @@ services:
       retries: 10
 
   redis:
+    security_opt: ["no-new-privileges:true"]
+    pids_limit: 512
     image: redis:8-alpine@sha256:3811787313eba226a2ef38658c6ccb91cd5e110edc89c37767de373120a0e5a0
     logging: *logging
     restart: unless-stopped
@@ -41,6 +45,13 @@ services:
 
   server:
     logging: *logging
+    # Durcissement : aucune capacité, pas d'élévation, système de fichiers en lecture seule
+    # (seuls /app/uploads — volume — et /tmp — tmpfs, imports Discord — sont inscriptibles).
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: [ALL]
+    read_only: true
+    tmpfs: ["/tmp:size=24g,mode=1777"]
+    pids_limit: 512
     build:
       context: ./server
       dockerfile: Dockerfile
@@ -126,6 +137,8 @@ services:
   # Serveur média (SFU) : tout le son et la vidéo transitent par lui, plus aucun
   # pair-à-pair. Signalisation derrière nginx (/livekit/), média en UDP direct.
   livekit:
+    security_opt: ["no-new-privileges:true"]
+    pids_limit: 512
     image: livekit/livekit-server:v1.13.9@sha256:d0c04791bf63ca8dcea123571827d56ba9504bd57c8d5de60ee03b5408cc3154
     logging: *logging
     # Pas de root : aucun volume, ports tous au-dessus de 1024.

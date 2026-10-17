@@ -48,6 +48,24 @@ if [[ ! -f .env ]]; then
     exit 1
 fi
 
+# ── Sauvegarde de la base + image précédente (retour arrière possible) ────────
+# Une migration ratée ne doit pas coûter jusqu'à 24 h de données (sauvegarde nocturne seule).
+BACKUP_DIR=/root/backups
+mkdir -p "$BACKUP_DIR"
+if docker compose ps --status running postgres 2>/dev/null | grep -q postgres; then
+    dump="$BACKUP_DIR/forgechat-avant-deploy-$(date +%Y%m%d-%H%M%S).sql.gz"
+    if docker compose exec -T postgres pg_dump -U forgechat forgechat | gzip > "$dump"; then
+        log "Sauvegarde base : $dump ($(du -h "$dump" | cut -f1))"
+    else
+        rm -f "$dump"; log "❌ pg_dump a échoué : déploiement interrompu"; exit 1
+    fi
+    # On garde les 7 dernières sauvegardes de déploiement.
+    ls -1t "$BACKUP_DIR"/forgechat-avant-deploy-*.sql.gz 2>/dev/null | tail -n +8 | xargs -r rm -f
+fi
+SERVER_IMAGE="$(docker compose config --images 2>/dev/null | grep -E '(^|/)forgechat[-_]server' | head -1 || true)"
+PREV_IMAGE="$(docker compose images -q server 2>/dev/null | head -1 || true)"
+[[ -n "$PREV_IMAGE" ]] && docker tag "$PREV_IMAGE" forgechat-server:prev
+
 # ── Docker Compose ──────────────────────────────────────────────────
 log "Démarrage des services..."
 docker compose pull --quiet 2>/dev/null || true
@@ -65,6 +83,24 @@ done
 
 log "Vérification des services..."
 docker compose ps
+
+# ── Santé du serveur, sinon retour à l'image précédente ───────────────────
+healthy=0
+for i in $(seq 1 90); do
+    if [[ "$(docker inspect -f '{{.State.Health.Status}}' "$(docker compose ps -q server)" 2>/dev/null)" == "healthy" ]]; then healthy=1; break; fi
+    sleep 2
+done
+if [[ "$healthy" != 1 ]]; then
+    log "❌ Le serveur n'est pas sain après 3 min :"
+    docker compose logs --tail 60 server || true
+    if [[ -n "$PREV_IMAGE" && -n "$SERVER_IMAGE" ]]; then
+        log "↩ Retour à l'image précédente ($PREV_IMAGE). La base n'est PAS restaurée automatiquement : voir $BACKUP_DIR."
+        docker tag forgechat-server:prev "$SERVER_IMAGE"
+        docker compose up -d --no-build server || true
+    fi
+    exit 1
+fi
+log "✅ Serveur sain"
 
 # ── Healthcheck TURN (N7) ───────────────────────────────────────────
 # Une panne TURN silencieuse a déjà coûté ~7 itérations : appels muets en NAT
