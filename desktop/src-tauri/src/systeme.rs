@@ -38,6 +38,8 @@ pub struct Config {
     pub download_dir: Option<String>,
     /// Icône choisie (`preset:12`, `custom`) ; None = icône d'origine.
     pub icon: Option<String>,
+    /// Joindre le contenu du journal (console WebKit) aux rapports d'erreur. Désactivé par défaut.
+    pub send_logs: bool,
 }
 
 impl Default for Config {
@@ -49,6 +51,7 @@ impl Default for Config {
             ask_save: true,
             download_dir: None,
             icon: None,
+            send_logs: false,
         }
     }
 }
@@ -121,6 +124,7 @@ pub struct Patch {
     start_minimized: Option<bool>,
     hardware_acceleration: Option<bool>,
     ask_save: Option<bool>,
+    send_logs: Option<bool>,
 }
 
 #[tauri::command]
@@ -137,6 +141,9 @@ pub async fn system_set(patch: Patch) -> Result<Config, String> {
         }
         if let Some(v) = patch.ask_save {
             c.ask_save = v
+        }
+        if let Some(v) = patch.send_logs {
+            c.send_logs = v
         }
     })
 }
@@ -207,20 +214,30 @@ fn nom_sur(nom: &str) -> String {
     }
 }
 
-/// `nom.ext` existe déjà → `nom (1).ext`, `nom (2).ext`…
-fn chemin_libre(dir: &Path, nom: &str) -> PathBuf {
-    let p = dir.join(nom);
-    if !p.exists() {
-        return p;
-    }
+/// Écrit `octets` dans `dir/nom` ; si le nom existe déjà → `nom (1).ext`, `nom (2).ext`…
+/// `create_new` rend création et test atomiques : jamais d'écrasement ni de suivi de lien.
+fn ecrire_libre(dir: &Path, nom: &str, octets: &[u8]) -> Result<PathBuf, String> {
+    use std::io::{ErrorKind, Write};
     let (souche, ext) = match nom.rfind('.') {
         Some(i) if i > 0 => (&nom[..i], &nom[i..]),
         _ => (nom, ""),
     };
-    (1..10_000)
-        .map(|n| dir.join(format!("{souche} ({n}){ext}")))
-        .find(|p| !p.exists())
-        .unwrap_or(p)
+    for n in 0..10_000 {
+        let p = if n == 0 {
+            dir.join(nom)
+        } else {
+            dir.join(format!("{souche} ({n}){ext}"))
+        };
+        match std::fs::OpenOptions::new().write(true).create_new(true).open(&p) {
+            Ok(mut f) => {
+                f.write_all(octets).map_err(|e| format!("{}: {e}", p.display()))?;
+                return Ok(p);
+            }
+            Err(e) if e.kind() == ErrorKind::AlreadyExists => {}
+            Err(e) => return Err(format!("{}: {e}", p.display())),
+        }
+    }
+    Err("aucun nom de fichier libre".into())
 }
 
 /// Extensions qui s'exécutent ou s'interprètent à l'ouverture (Windows, macOS, Linux).
@@ -365,7 +382,9 @@ pub async fn save_file(
             let chemin = match dir_defaut {
                 // Un exécutable n'est jamais déposé sans que l'utilisateur choisisse où.
                 Some(dir) if !cfg.ask_save && !extension_executable(&nom) => {
-                    chemin_libre(&dir, &nom)
+                    let p = ecrire_libre(&dir, &nom, &octets)?;
+                    marquer_provenance(&p);
+                    return Ok(Some(p));
                 }
                 dir => {
                     let mut boite = app.dialog().file().set_file_name(&nom);
@@ -713,8 +732,9 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("fc-systeme-test-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         std::fs::write(dir.join("a.txt"), "x").unwrap();
-        assert_eq!(chemin_libre(&dir, "a.txt"), dir.join("a (1).txt"));
-        assert_eq!(chemin_libre(&dir, "b.txt"), dir.join("b.txt"));
+        assert_eq!(ecrire_libre(&dir, "a.txt", b"y").unwrap(), dir.join("a (1).txt"));
+        assert_eq!(ecrire_libre(&dir, "b.txt", b"y").unwrap(), dir.join("b.txt"));
+        assert_eq!(std::fs::read(dir.join("a.txt")).unwrap(), b"x");
         let _ = std::fs::remove_dir_all(&dir);
     }
 

@@ -354,8 +354,8 @@ fn enable_linux_media_capture(app: &tauri::AppHandle) {
             settings.set_enable_mediasource(true);
             settings.set_enable_webrtc(true);
             // Diagnostic de la page blanche : la console JavaScript part dans
-            // le journal (stdout, redirigé vers forgechat.log hors terminal).
-            settings.set_enable_write_console_messages_to_stdout(true);
+            // le journal (stdout, redirigé vers forgechat.log hors terminal) : build debug seulement.
+            settings.set_enable_write_console_messages_to_stdout(cfg!(debug_assertions));
         } else {
             eprintln!("[ForgeChat] WebKitSettings indisponibles : WebRTC peut rester désactivé");
         }
@@ -375,10 +375,16 @@ fn enable_linux_media_capture(app: &tauri::AppHandle) {
                 wv.uri().unwrap_or_default()
             );
         });
-        webview.connect_permission_request(|_, request| {
+        webview.connect_permission_request(|wv, request| {
             match request.downcast_ref::<UserMediaPermissionRequest>() {
                 Some(media) => {
-                    media.allow();
+                    // Micro/caméra/écran : seulement pour l'application, jamais pour un cadre ou une page tierce.
+                    let uri = wv.uri().unwrap_or_default();
+                    if garde_web::uri_appli(uri.as_str()) {
+                        media.allow();
+                    } else {
+                        media.deny();
+                    }
                     true
                 }
                 None => false,
@@ -491,7 +497,7 @@ pub fn run() {
         // Note : --remote-debugging-port ne sert a rien ici, WebView2 filtre ce
         // drapeau dans AdditionalBrowserArguments (essaye le 2026-09-22, le port
         // n'ecoute jamais). Pour lire la console d'une build de production,
-        // utiliser F12 : la feature `devtools` de tauri est activee en release.
+        // compiler avec `--features devtools` (F12) ; absente des builds de production.
         std::env::set_var("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS", &browser_args);
         // Mesuré le 2026-10-11 (ligne de commande de msedgewebview2.exe) : la variable
         // ci-dessus n'est PAS appliquée, wry passe ses propres AdditionalBrowserArguments
@@ -505,7 +511,6 @@ pub fn run() {
 
     let builder = tauri::Builder::default()
         .plugin(tauri_plugin_window_state::Builder::new().build())
-        .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
             compat::seconde_instance();
             // Focaliser la fenêtre existante si une 2e instance est lancée

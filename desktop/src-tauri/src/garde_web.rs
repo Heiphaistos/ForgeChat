@@ -15,6 +15,12 @@ pub fn origine_appli(url: &Url) -> bool {
     }
 }
 
+/// Même test que `origine_appli`, sur une URI texte (WebKitGTK : page qui demande le média).
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+pub fn uri_appli(uri: &str) -> bool {
+    Url::parse(uri).is_ok_and(|u| origine_appli(&u))
+}
+
 /// Navigation autorisée dans la fenêtre principale : l'appli, et les lecteurs YouTube
 /// intégrés (WebKitGTK soumet aussi la navigation des iframes à ce filtre). Tout le reste
 /// (lien sans target, `location = …` venu d'un contenu) est refusé : aucun site tiers ne
@@ -117,6 +123,14 @@ mod tests {
 
     fn u(s: &str) -> Url {
         Url::parse(s).unwrap()
+    }
+
+    #[test]
+    fn uri_appli_refuse_tout_sauf_l_appli() {
+        assert!(uri_appli("tauri://localhost/servers/x"));
+        assert!(!uri_appli("https://evil.example/"));
+        assert!(!uri_appli("https://www.youtube.com/embed/x"));
+        assert!(!uri_appli(""));
     }
 
     #[test]

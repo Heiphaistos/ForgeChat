@@ -103,6 +103,8 @@ pub fn signaler_lancement_precedent() {
     // Conservé à côté, et jamais renvoyé deux fois (un lancement depuis un
     // terminal ne réécrit pas le journal).
     let _ = std::fs::rename(&journal, dir.join("forgechat-precedent.log"));
+    // Sans consentement (réglage `send_logs`) : seul l'échec de démarrage part, sans contenu.
+    let consentement = crate::systeme::config().send_logs;
     let erreurs = [
         "Processus d'affichage WebKit arrêté",
         "Chargement échoué",
@@ -114,7 +116,7 @@ pub fn signaler_lancement_precedent() {
         || texte
             .lines()
             .any(|l| l.contains("CONSOLE") && l.contains("ERROR"));
-    if !echec && !erreurs {
+    if !echec && !(consentement && erreurs) {
         return;
     }
     let (kind, quoi) = if echec {
@@ -131,6 +133,7 @@ pub fn signaler_lancement_precedent() {
         distribution(),
         paquet()
     );
+    let texte = if consentement { texte } else { String::new() };
     envoyer("linux", kind, message, texte);
 }
 
@@ -186,6 +189,9 @@ pub fn surveiller_paniques() {
 pub fn read_desktop_log() -> Option<String> {
     #[cfg(target_os = "linux")]
     {
+        if !crate::systeme::config().send_logs {
+            return None;
+        }
         let dir = crate::compat::dossier_donnees()?;
         lire_fin(&dir.join("forgechat.log"))
             .or_else(|| lire_fin(&dir.join("forgechat-precedent.log")))

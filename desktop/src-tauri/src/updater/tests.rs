@@ -317,3 +317,31 @@ fn un_dossier_inexistant_donne_un_message_clair_pas_un_succes() {
     assert!(r.is_err());
     assert!(r.unwrap_err().contains("n'accepte pas l'écriture"));
 }
+
+#[test]
+fn ecrire_neuf_refuse_un_fichier_existant() {
+    let d = dossier_prive().unwrap();
+    let f = d.join("x.nouveau-1");
+    ecrire_neuf(&f, b"a").unwrap();
+    assert!(ecrire_neuf(&f, b"b").is_err());
+    assert_eq!(std::fs::read(&f).unwrap(), b"a");
+    let _ = std::fs::remove_dir_all(&d);
+}
+
+#[test]
+fn suffixes_aleatoires_distincts() {
+    assert_ne!(suffixe_aleatoire().unwrap(), suffixe_aleatoire().unwrap());
+}
+
+#[cfg(windows)]
+#[test]
+fn verrou_installeur_detecte_une_difference_et_bloque_l_ecriture() {
+    let d = dossier_prive().unwrap();
+    let f = d.join("setup.exe");
+    ecrire_neuf(&f, b"abc").unwrap();
+    assert!(verrouiller_et_verifier(&f, b"abd").is_err());
+    let verrou = verrouiller_et_verifier(&f, b"abc").unwrap();
+    assert!(std::fs::OpenOptions::new().write(true).open(&f).is_err());
+    drop(verrou);
+    let _ = std::fs::remove_dir_all(&d);
+}

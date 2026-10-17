@@ -168,9 +168,18 @@ pub fn journal_si_pas_de_terminal() {
     }
     let Some(dir) = dossier_donnees() else { return };
     let _ = std::fs::create_dir_all(&dir);
-    let Ok(f) = std::fs::File::create(dir.join("forgechat.log")) else {
+    use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
+    // 0600 : le journal peut contenir des extraits de la console WebKit.
+    let Ok(f) = std::fs::OpenOptions::new()
+        .write(true)
+        .create(true)
+        .truncate(true)
+        .mode(0o600)
+        .open(dir.join("forgechat.log"))
+    else {
         return;
     };
+    let _ = f.set_permissions(std::fs::Permissions::from_mode(0o600));
     // SAFETY: dup2 remplace stdout/stderr par un fichier ouvert, possédé par `f`
     // jusqu'ici ; les descripteurs 1 et 2 restent valides après sa fermeture.
     unsafe {

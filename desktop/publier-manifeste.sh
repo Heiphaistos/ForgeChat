@@ -47,6 +47,8 @@ declare -A ARTEFACTS=(
     [linux-rpm]="ForgeChat-v$VERSION-x86_64.rpm"
     [linux-arch]="ForgeChat-v$VERSION-x86_64.pkg.tar.zst"
     [linux-portable]="ForgeChat-v$VERSION-amd64.AppImage"
+    [macos]="ForgeChat-v$VERSION-macos.app.tar.gz"
+    [macos-dmg]="ForgeChat-v$VERSION-macos.dmg"
 )
 
 empreinte() {
