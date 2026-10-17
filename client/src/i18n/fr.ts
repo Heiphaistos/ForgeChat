@@ -103,6 +103,7 @@ export const fr = {
   'auth.login.enterTotp': 'Entrez votre code 2FA',
   'auth.login.error': 'Erreur de connexion',
   'auth.proof.downgrade': "Le serveur demande ton mot de passe en clair alors que ton compte est déjà protégé : action bloquée par sécurité. Contacte l'administrateur.",
+  'auth.logout.revokeFailed': "Déconnexion locale faite, mais le serveur n'a pas confirmé la révocation de la session (réseau ?). Reconnecte-toi puis déconnecte-toi de nouveau, ou ferme tes autres sessions dans les paramètres.",
   'auth.legacy.title': 'Connexion ancienne demandée',
   'auth.legacy.msg': "Ce serveur demande une connexion ancienne : ton mot de passe sera envoyé tel quel (non protégé), une dernière fois, pour migrer ton compte. Si ton compte est déjà migré ou si tu ne t'y attendais pas, ANNULE : le serveur est peut-être compromis.",
   'auth.legacy.go': 'Continuer',

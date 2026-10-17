@@ -16,6 +16,7 @@ import { asKdf, deriveSecrets, newKdfSalt, passwordProblem } from '../e2e/authKd
 import { pwnedProblem } from '../e2e/pwned'
 import type { PasskeyAssertion } from '../lib/passkey'
 import { clearSearchIndex } from '../e2e/searchIndex'
+import toast from 'react-hot-toast'
 import { t } from '../i18n'
 import { confirm } from '../components/ui/ConfirmModal'
 import { guardArgon, markMigrated, markUserMigrated } from '../e2e/authGuard'
@@ -131,8 +132,9 @@ export const useAuth = create<AuthState>()(
       // Avant la déconnexion (route authentifiée) : ce navigateur ne doit plus
       // recevoir les notifications push de ce compte.
       await disableWebPush((await listAccounts()).length > 0)
-      await api.post('/auth/logout', {}).catch(() => {})
-      if (isTauri) await clearLocalSession(true)
+      // Révocation côté serveur ratée : la session reste valide là-bas jusqu'à son expiration, on le dit.
+      await api.post('/auth/logout', {}).catch(() => { toast.error(t('auth.logout.revokeFailed'), { duration: 8000 }) })
+      await clearLocalSession(true)
       const uid = useAuth.getState().user?.id
       await clearAccountKey(uid)
       if (uid) await forgetOfflineData(uid)

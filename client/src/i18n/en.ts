@@ -104,6 +104,7 @@ export const en: Partial<Record<Key, string>> = {
   'auth.login.enterTotp': 'Enter your 2FA code',
   'auth.login.error': 'Sign-in failed',
   'auth.proof.downgrade': 'The server is asking for your password in clear text although your account is already protected: action blocked for safety. Contact the administrator.',
+  'auth.logout.revokeFailed': 'Signed out locally, but the server did not confirm the session revocation (network?). Sign in and out again, or close your other sessions in the settings.',
   'auth.legacy.title': 'Legacy sign-in requested',
   'auth.legacy.msg': "This server asks for a legacy sign-in: your password will be sent as is (unprotected), one last time, to migrate your account. If your account is already migrated or you did not expect this, CANCEL: the server may be compromised.",
   'auth.legacy.go': 'Continue',
