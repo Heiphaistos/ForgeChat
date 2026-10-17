@@ -578,12 +578,24 @@ pub(crate) async fn require_can_react(
     Ok(())
 }
 
+/// Emojis différents par message, au plus.
+const MAX_DISTINCT_EMOJIS: i64 = 20;
+
 pub async fn add_reaction(
     State(state): State<AppState>,
     Extension(claims): Extension<Claims>,
     Path((server_id, channel_id, message_id, emoji)): Path<(Uuid, Uuid, Uuid, String)>,
 ) -> Result<Json<serde_json::Value>> {
     require_can_react(&state, claims.sub, server_id, channel_id, message_id, &emoji).await?;
+
+    // Emojis distincts par message : sans plafond, un membre en empilait des milliers (message énorme
+    // à servir et à diffuser).
+    let (distinct, already): (i64, bool) = sqlx::query_as(
+        "SELECT COUNT(DISTINCT emoji), COALESCE(bool_or(emoji = $2), FALSE) FROM reactions WHERE message_id = $1"
+    ).bind(message_id).bind(&emoji).fetch_one(&state.db).await?;
+    if distinct >= MAX_DISTINCT_EMOJIS && !already {
+        return Err(AppError::BadRequest(format!("{MAX_DISTINCT_EMOJIS} emojis différents au plus par message")));
+    }
 
     sqlx::query(
         "INSERT INTO reactions (message_id, user_id, emoji) VALUES ($1, $2, $3)
