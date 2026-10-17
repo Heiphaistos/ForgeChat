@@ -10,13 +10,17 @@ import type { ContextMenuItem } from '../ui/ContextMenu'
 
 /** Staff : MANAGE_MESSAGES | MANAGE_SERVER | KICK_MEMBERS (automod::STAFF côté serveur). */
 export const STAFF_BITS = (1 << 3) | (1 << 8) | (1 << 6)
+/** Lever un verrouillage : gestion du serveur seulement (le serveur refuse les autres). */
+const MANAGE_SERVER = 1 << 8
 
 /** Entrées du menu du serveur : tickets, classement, verrouillage (selon réglages et droits). */
 export function useServerMenuExtras(serverId: string | undefined, lockdown: boolean, onDone: () => void): ContextMenuItem[] {
   const t = useT()
   const nav = useNavigate()
   const qc = useQueryClient()
-  const staff = useServerPerms(serverId).has(STAFF_BITS)
+  const perms = useServerPerms(serverId)
+  const staff = perms.has(STAFF_BITS)
+  const canToggle = lockdown ? perms.has(MANAGE_SERVER) : staff
   const { data: tickets } = useQuery<{ enabled: boolean; is_staff: boolean }>({
     queryKey: ['community', serverId, 'tickets/settings'],
     queryFn: () => api.get(`/servers/${serverId}/tickets/settings`).then(r => r.data),
@@ -42,7 +46,7 @@ export function useServerMenuExtras(serverId: string | undefined, lockdown: bool
   return [
     ...(tickets?.enabled || tickets?.is_staff ? [{ label: t('community.tickets.menu'), icon: <Ticket size={16} />, onClick: () => go('tickets') }] : []),
     ...(levels?.enabled ? [{ label: t('community.levels.menu'), icon: <Trophy size={16} />, onClick: () => go('leaderboard') }] : []),
-    ...(staff ? [{
+    ...(canToggle ? [{
       label: t(lockdown ? 'community.lockdown.lift' : 'community.lockdown.enable'),
       icon: lockdown ? <Unlock size={16} /> : <Lock size={16} />,
       danger: !lockdown,

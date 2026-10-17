@@ -37,6 +37,8 @@ pub struct Ticket {
     pub channel_id: Option<Uuid>,
     pub number: Option<i32>,
     pub closed_at: Option<DateTime<Utc>>,
+    /// Qui l'a fermé : le créateur ne peut rouvrir que ce qu'il a fermé lui-même.
+    pub closed_by: Option<Uuid>,
 }
 
 #[derive(Debug, Serialize, sqlx::FromRow)]

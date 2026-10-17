@@ -190,6 +190,8 @@ interface AdminServer {
   id: string; name: string; is_public: boolean; created_at: string; owner: string | null
   members: number; channels: number; messages: number; storage_bytes: number
   suspended_at: string | null; suspended_reason: string | null; joined: boolean; supervising: boolean
+  /** Ses bots peuvent publier dans « À la une » de tous les comptes. */
+  news_public_allowed?: boolean
 }
 const sizeLabel = (n: number) => (n >= 1e9 ? tr('sadm.size.gb', { n: (n / 1e9).toFixed(1) }) : n >= 1e6 ? tr('sadm.size.mb', { n: (n / 1e6).toFixed(1) }) : tr('sadm.size.kb', { n: Math.round(n / 1e3) }))
 
@@ -214,6 +216,7 @@ function ServersTab() {
   const supervise = useMutation({ mutationFn: (id: string) => api.post(`/admin/servers/${id}/supervise`), onSuccess: (_r, id) => { refresh(); nav(`/servers/${id}`) }, onError: fail })
   const endSup = useMutation({ mutationFn: (id: string) => api.delete(`/admin/servers/${id}/supervise`), onSuccess: () => { toast.success(tr('sadm.s.supEnded')); refresh() }, onError: fail })
   const suspend = useMutation({ mutationFn: ({ id, reason }: { id: string; reason: string }) => api.post(`/admin/servers/${id}/suspend`, { reason }), onSuccess: () => { toast.success(tr('sadm.s.suspended')); refresh() }, onError: fail })
+  const newsPublic = useMutation({ mutationFn: ({ id, allowed }: { id: string; allowed: boolean }) => api.put(`/admin/servers/${id}/news-public`, { allowed }), onSuccess: (_, v) => { toast.success(tr(v.allowed ? 'sadm.s.newsOn' : 'sadm.s.newsOff')); refresh() }, onError: fail })
   const resume = useMutation({ mutationFn: (id: string) => api.delete(`/admin/servers/${id}/suspend`), onSuccess: () => { toast.success(tr('sadm.s.resumed')); refresh() }, onError: fail })
   const remove = useMutation({
     mutationFn: async ({ id, password }: { id: string; password: string }) => api.delete(`/admin/servers/${id}`, { data: await passwordProof(password) }),
@@ -258,6 +261,10 @@ function ServersTab() {
                   <button onClick={() => supervise.mutate(s.id)} className="px-2 py-1 text-xs rounded bg-yellow-500/20 text-yellow-300 hover:bg-yellow-500/30">{t(s.supervising ? 'sadm.s.open' : 'sadm.s.supervise')}</button>
                 )}
                 {s.supervising && <button onClick={() => endSup.mutate(s.id)} className="px-2 py-1 text-xs rounded text-fc-muted hover:text-white hover:bg-fc-hover">{t('sadm.s.end')}</button>}
+                <button onClick={() => newsPublic.mutate({ id: s.id, allowed: !s.news_public_allowed })} title={t('sadm.s.newsHint')}
+                  className={`px-2 py-1 text-xs rounded ${s.news_public_allowed ? 'bg-fc-accent/20 text-fc-accent hover:bg-fc-accent/30' : 'text-fc-muted hover:text-white hover:bg-fc-hover'}`}>
+                  {t(s.news_public_allowed ? 'sadm.s.newsRevoke' : 'sadm.s.newsAllow')}
+                </button>
                 {s.suspended_at
                   ? <button onClick={() => resume.mutate(s.id)} className="px-2 py-1 text-xs rounded bg-green-600/20 text-green-400 hover:bg-green-600/30">{t('sadm.s.resume')}</button>
                   : <button onClick={() => setSuspending(s)} className="px-2 py-1 text-xs rounded text-orange-300 hover:bg-orange-500/20">{t('sadm.s.suspend')}</button>}

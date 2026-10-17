@@ -536,7 +536,7 @@ pub async fn list_servers(
     let offset = q.offset.unwrap_or(0).max(0);
     let like = q.q.as_deref().map(str::trim).filter(|s| !s.is_empty()).map(|s| format!("%{}%", s.replace('%', "\\%").replace('_', "\\_")));
     let rows = sqlx::query(
-        "SELECT s.id, s.name, s.icon, s.is_public, s.created_at, s.suspended_at, s.suspended_reason,
+        "SELECT s.id, s.name, s.icon, s.is_public, s.created_at, s.suspended_at, s.suspended_reason, s.news_public_allowed,
                 s.owner_id, o.username AS owner_name,
                 (SELECT COUNT(*) FROM server_members sm WHERE sm.server_id = s.id AND NOT sm.supervisor) AS members,
                 (SELECT COUNT(*) FROM channels c WHERE c.server_id = s.id) AS channels,
@@ -582,6 +582,7 @@ pub async fn list_servers(
                 "storage_bytes": r.get::<i64, _>("storage_bytes"),
                 "suspended_at": r.get::<Option<DateTime<Utc>>, _>("suspended_at"),
                 "suspended_reason": r.get::<Option<String>, _>("suspended_reason"),
+                "news_public_allowed": r.get::<bool, _>("news_public_allowed"),
                 "joined": r.get::<bool, _>("joined"),
                 "supervising": r.get::<bool, _>("supervising"),
             })

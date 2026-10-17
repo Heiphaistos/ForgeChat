@@ -26,6 +26,8 @@ interface Ticket {
   category_id: string | null
   channel_id: string | null
   created_at: string
+  /** Qui l'a fermé : le créateur ne peut rouvrir que ce qu'il a fermé lui-même. */
+  closed_by?: string | null
 }
 
 interface Category {
@@ -246,7 +248,7 @@ export default function TicketsPage() {
                             {t('community.tickets.take')}
                           </button>
                         )}
-                        {(mine || staff) && (
+                        {(staff || (mine && (!closed || ticket.closed_by === user?.id))) && (
                           <button onClick={() => update.mutate({ id: ticket.id, status: closed ? 'open' : 'closed' })}
                             className="text-xs px-2 py-1 rounded bg-fc-hover text-fc-muted hover:text-white">
                             {t(closed ? 'community.tickets.reopen' : 'community.tickets.close')}
