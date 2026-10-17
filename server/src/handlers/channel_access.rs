@@ -90,6 +90,20 @@ pub async fn require_channel_perm(
     }
 }
 
+/// Réglage d'un salon précis : membre du serveur, salon visible pour lui, et le droit `perm`
+/// possédé SUR CE SALON (rôles + surcharges). Avant, ces routes ne lisaient que le masque global du
+/// serveur : une surcharge qui retire le droit sur un salon n'avait aucun effet.
+pub async fn require_channel_manage(
+    state: &AppState,
+    user: Uuid,
+    server_id: Uuid,
+    channel_id: Uuid,
+    perm: i64,
+) -> Result<()> {
+    crate::handlers::servers::require_member_and_channel(state, user, server_id, channel_id).await?;
+    require_channel_perm(state, user, channel_id, perm).await
+}
+
 /// Créer un salon ou une catégorie.
 pub const CAN_CREATE: i64 = Permissions::MANAGE_CHANNELS | Permissions::CREATE_CHANNELS;
 /// Modifier un salon (nom, réglages, ordre, surcharges, tags, flux, webhook…).
