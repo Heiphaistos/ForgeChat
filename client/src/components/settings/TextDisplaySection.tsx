@@ -1,6 +1,6 @@
 ﻿import { useState, useEffect } from 'react'
 import { useQuery, useMutation } from '@tanstack/react-query'
-import { Field, Toggle, Select } from './shared'
+import { Field, Select } from './shared'
 import api from '../../api/client'
 import toast from 'react-hot-toast'
 import { useT } from '../../i18n'
@@ -25,7 +25,6 @@ export default function TextDisplaySection() {
   const [dateFormat, setDateFormat] = useState('DD/MM/YYYY')
   const [timestamps, setTimestamps] = useState('hover')
   const [gifAutoplay, setGifAutoplay] = useState('always')
-  const [linkPreview, setLinkPreview] = useState(true)
   const [messageGrouping, setMessageGrouping] = useState(5)
   const [avatarAnim, setAvatarAnim] = useState<AvatarAnimation>(getAvatarAnimation)
 
@@ -36,7 +35,6 @@ export default function TextDisplaySection() {
       setDateFormat(settings.date_format ?? 'DD/MM/YYYY')
       setTimestamps(settings.show_timestamps ?? 'hover')
       setGifAutoplay(settings.gif_autoplay ?? 'always')
-      setLinkPreview(settings.link_preview ?? true)
       setMessageGrouping(settings.message_grouping_minutes ?? 5)
     }
   }, [settings])
@@ -95,16 +93,8 @@ export default function TextDisplaySection() {
           className="w-full accent-fc-accent" />
       </Field>
 
-      <div className="flex items-center justify-between p-4 bg-fc-channel rounded-xl border border-fc-hover">
-        <div>
-          <div className="text-sm font-medium text-white">{t('settings.text.links')}</div>
-          <div className="text-xs text-fc-muted">{t('settings.text.linksDesc')}</div>
-        </div>
-        <Toggle value={linkPreview} onChange={setLinkPreview} label={t('settings.text.links')} />
-      </div>
-
       <button
-        onClick={() => save.mutate({ emoji_style: emojiStyle, time_format: timeFormat, date_format: dateFormat, show_timestamps: timestamps, gif_autoplay: gifAutoplay, link_preview: linkPreview, message_grouping_minutes: messageGrouping })}
+        onClick={() => save.mutate({ emoji_style: emojiStyle, time_format: timeFormat, date_format: dateFormat, show_timestamps: timestamps, gif_autoplay: gifAutoplay, message_grouping_minutes: messageGrouping })}
         disabled={save.isPending}
         className="w-full py-2.5 bg-fc-accent hover:bg-fc-accent/80 text-white rounded-lg font-medium text-sm transition disabled:opacity-50"
       >

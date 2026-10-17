@@ -118,7 +118,7 @@ export default function PostView({ serverId, channelId, post, onBack, canManageM
     queryFn: () => api.get('/user/settings').then(r => r.data),
     staleTime: 60_000,
   })
-  const linkPreviewEnabled = (userSettings?.link_preview ?? true) as boolean
+  const linkPreviewEnabled = (userSettings?.link_preview ?? false) as boolean
   const [localPost, setLocalPost] = useState(post)
   const [editingReplyId, setEditingReplyId] = useState<string | null>(null)
   // Édition du contenu du post original (réservée au créateur, backend déjà prêt)

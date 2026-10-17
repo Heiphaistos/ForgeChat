@@ -25,6 +25,7 @@ export default function PrivacySection() {
   const [callVisibility, setCallVisibility] = useState('friends')
   const [friendRequestFrom, setFriendRequestFrom] = useState('everyone')
   const [dmFromAll, setDmFromAll] = useState(true)
+  const [linkPreview, setLinkPreview] = useState(false)
   const [explicitFilter, setExplicitFilter] = useState('none')
 
   useEffect(() => {
@@ -34,6 +35,7 @@ export default function PrivacySection() {
       setCallVisibility(settings.call_visibility ?? 'friends')
       setFriendRequestFrom(settings.friend_request_from ?? 'everyone')
       setDmFromAll(settings.dm_from_all ?? true)
+      setLinkPreview(settings.link_preview === true)
       setExplicitFilter(settings.explicit_content_filter ?? 'none')
     }
   }, [settings])
@@ -43,6 +45,7 @@ export default function PrivacySection() {
       {[
         { label: t('settings.privacy.showOnline'), desc: t('settings.privacy.showOnlineDesc'), value: showOnline, onChange: setShowOnline },
         { label: t('settings.privacy.dmAll'), desc: t('settings.privacy.dmAllDesc'), value: dmFromAll, onChange: setDmFromAll },
+        { label: t('settings.text.links'), desc: t('settings.text.linksDesc'), value: linkPreview, onChange: setLinkPreview },
       ].map(item => (
         <div key={item.label} className="flex items-center justify-between p-4 bg-fc-channel rounded-xl border border-fc-hover">
           <div>
@@ -88,7 +91,7 @@ export default function PrivacySection() {
       </Field>
 
       <button
-        onClick={() => save.mutate({ show_online: showOnline, activity_visibility: activityVisibility, call_visibility: callVisibility, friend_request_from: friendRequestFrom, dm_from_all: dmFromAll, explicit_content_filter: explicitFilter })}
+        onClick={() => save.mutate({ show_online: showOnline, activity_visibility: activityVisibility, call_visibility: callVisibility, friend_request_from: friendRequestFrom, dm_from_all: dmFromAll, link_preview: linkPreview, explicit_content_filter: explicitFilter })}
         disabled={save.isPending}
         className="w-full py-2.5 bg-fc-accent hover:bg-fc-accent/80 text-white rounded-lg font-medium text-sm transition disabled:opacity-50"
       >

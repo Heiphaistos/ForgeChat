@@ -99,7 +99,7 @@ export default function MessageList({
     queryFn: () => api.get('/user/settings').then(r => r.data),
     staleTime: 300_000,
   })
-  const linkPreviewEnabled = (userSettings?.link_preview ?? true) as boolean
+  const linkPreviewEnabled = (userSettings?.link_preview ?? false) as boolean
   const groupingMs = ((userSettings?.message_grouping_minutes as number | undefined) ?? 5) * 60 * 1000
   const timeFormat = (userSettings?.time_format as string | undefined) ?? '24h'
   const dateFormat = (userSettings?.date_format as string | undefined) ?? 'DD/MM/YYYY'

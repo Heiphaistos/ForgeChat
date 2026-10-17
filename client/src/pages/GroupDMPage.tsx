@@ -209,7 +209,7 @@ export default function GroupDMPage() {
     queryFn: () => api.get('/user/settings').then(r => r.data),
     staleTime: 60_000,
   })
-  const linkPreviewEnabled = (userSettings?.link_preview ?? true) as boolean
+  const linkPreviewEnabled = (userSettings?.link_preview ?? false) as boolean
   const showReactions = useUxPrefs(s => s.showReactions)
   const showAttachments = useUxPrefs(s => s.showAttachments)
   // Pièces jointes repliées (réglage) que l'on a ouvertes, par message.

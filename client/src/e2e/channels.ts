@@ -85,9 +85,9 @@ async function linkPreview(text: string): Promise<Record<string, unknown> | null
   const url = previewUrl(text)
   if (!url || !previewAllowed(url)) return null
   try {
-    // Réglage « aperçus de liens » coupé : le lien ne part pas au serveur.
+    // Réglage « aperçus de liens » (désactivé par défaut) : sans accord explicite, le lien ne part pas au serveur.
     const prefs = await api.get('/user/settings', { timeout: 4000 })
-    if (prefs.data?.link_preview === false) return null
+    if (prefs.data?.link_preview !== true) return null
     const { data } = await api.get(`/og?url=${encodeURIComponent(url)}`, { timeout: 4000 })
     return data && (data.title || data.description || data.image) ? data : null
   } catch {
