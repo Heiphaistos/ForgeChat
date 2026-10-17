@@ -29,6 +29,8 @@ GitHub, ni sur le VPS.
 
 ## Procédure (à chaque release)
 
+En une commande : `scripts/publier-release.sh desktop-vX.Y.Z` ou `mobile-vX.Y.Z` (bureau : exe Windows signés Heiphaistos et SHA256SUMS recalculé ; puis signature, envoi, publication, attente du manifeste VPS). Détail des étapes :
+
 ```bash
 TAG=desktop-v3.55.0            # ou mobile-v1.28.0
 D="$HOME/forgechat-sign/$TAG"
