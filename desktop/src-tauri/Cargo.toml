@@ -84,3 +84,9 @@ tungstenite = "0.29"
 # ring ET aws-lc-rs sont compilés (dépendances croisées) : rustls refuse alors de
 # choisir et panique à la première connexion TLS. On installe ring explicitement.
 rustls = { version = "0.23", default-features = false, features = ["ring"] }
+
+# webrtc-sys-build 0.3.19 (dépendance de compilation de livekit) extrait l'archive WebRTC avec zip 0.6,
+# visé par RUSTSEC-2026-0367/0368/0369 (liens symboliques et bits SUID hors du dossier cible) et sans
+# version amont corrigée : copie locale identique, seule la dépendance passe à zip 9 (vendor/README).
+[patch.crates-io]
+webrtc-sys-build = { path = "../vendor/webrtc-sys-build" }
