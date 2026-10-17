@@ -92,8 +92,8 @@ export const serversApi = {
     return http.upload<{ icon?: string; banner?: string }>(path`/servers/${id}/${kind}`, fd)
   },
   /** Clé de récupération du serveur ré-enveloppée pour le nouveau propriétaire (null : il saisira le code). */
-  transfer: async (id: string, userId: string, password: string) =>
-    http.post(path`/servers/${id}/transfer`, { user_id: userId, ...(await passwordProof(password)), server_key_owner_wrapped: await serverKeyForNewOwner(id, userId) }),
+  transfer: async (id: string, userId: string, password: string, totp?: string) =>
+    http.post(path`/servers/${id}/transfer`, { user_id: userId, ...(await passwordProof(password)), ...(totp ? { totp_code: totp.replace(/\s/g, '') } : {}), server_key_owner_wrapped: await serverKeyForNewOwner(id, userId) }),
   /** Pseudo sur ce serveur ; null = retirer. */
   setNickname: (id: string, nickname: string | null) => http.patch(path`/servers/${id}/nickname`, { nickname }),
   /** Pseudo d'un autre membre (« Gérer les pseudos ») ; null = retirer. */

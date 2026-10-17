@@ -297,15 +297,17 @@ export const useVoice = create<VoiceState>((set, get) => {
     // Salon chiffré (clé du salon, conversation `channel`) : jamais de connexion en clair.
     const channelId = get().channelId
     let e2ee: MediaE2EE | null = null
-    if (access.e2ee && channelId) {
+    // Le drapeau `access.e2ee` servi est ignoré : un serveur ne peut pas nous faire rejoindre en clair.
+    {
       set({ mediaStatus: 'connecting' })
       try {
+        if (!channelId) throw new Error('E2E_WAITING')
         e2ee = await openMediaE2EE('channel', channelId)
       } catch (err) {
         if (gen !== joinGeneration) return
         set({ mediaStatus: 'failed', error: t(mediaE2EEError(err)) })
         // Clé ouverte ou enveloppe reçue plus tard : se connecter alors, sans rejoindre à nouveau.
-        keyWait = retryWhenKeyReady(err, 'channel', channelId, () => {
+        keyWait = retryWhenKeyReady(err, 'channel', channelId ?? '', () => {
           keyWait = null
           if (gen === joinGeneration) void connectMedia(access)
         })

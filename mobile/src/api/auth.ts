@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { t } from '@/i18n'
+import { passwordProof } from '@/e2e/accountKey'
 import { ApiError, http } from '@/lib/http'
 import { deviceHeaders, rememberDevice } from '@/lib/deviceId'
 import type { PasskeyAssertion } from '@/lib/passkey'
@@ -80,7 +81,8 @@ export const authApi = {
     http.post('/auth/reset-password', { token, new_auth: newAuth, new_kdf_salt: newKdfSalt, new_kdf: 'argon2id' }, { auth: false }),
 
   /** Double authentification (handlers/totp.rs). Le secret n'est actif qu'après `confirmTotp`. */
-  setupTotp: () => http.post<TotpSetup>('/auth/2fa/setup'),
+  /** Exige la preuve du mot de passe (`auth`) : un jeton volé ne suffit plus à enrôler son propre 2FA. */
+  setupTotp: async (password: string) => http.post<TotpSetup>('/auth/2fa/setup', await passwordProof(password), { noQueue: true }),
   confirmTotp: (code: string) => http.post<{ enabled: boolean }>('/auth/2fa/confirm', { code: code.replace(/\s+/g, '') }),
   /** Le serveur n'exige que le code TOTP (pas le mot de passe). */
   disableTotp: (code: string) => http.post<{ enabled: boolean }>('/auth/2fa/disable', { code: code.replace(/\s+/g, '') }),

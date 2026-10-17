@@ -24,6 +24,8 @@ import { useUnread } from '@/stores/unread'
  * (format UUID) avant toute navigation.
  */
 
+// Lu aussi par les traitements de fond (notification reçue écran verrouillé) : après le 1er déverrouillage, jamais sauvegardé/migré.
+const STORE_OPTS: SecureStore.SecureStoreOptions = { keychainAccessible: SecureStore.AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY }
 const TOKEN_KEY = 'fc.push_token.v1'
 /** Secret de l'installation, conservé à la déconnexion (changement de compte sur le même téléphone). */
 const DEVICE_KEY = 'fc.push_device.v1'
@@ -157,7 +159,7 @@ async function getDeviceId(): Promise<string> {
   const known = await SecureStore.getItemAsync(DEVICE_KEY).catch(() => null)
   if (known) return known
   const id = Crypto.randomUUID()
-  await SecureStore.setItemAsync(DEVICE_KEY, id)
+  await SecureStore.setItemAsync(DEVICE_KEY, id, STORE_OPTS)
   return id
 }
 
@@ -195,7 +197,7 @@ export async function syncPushRegistration(): Promise<void> {
       device_id: await getDeviceId(),
       other_accounts: (await listAccounts()).map((a) => a.id),
     })
-    await SecureStore.setItemAsync(TOKEN_KEY, token)
+    await SecureStore.setItemAsync(TOKEN_KEY, token, STORE_OPTS)
   } catch (e) {
     // Serveur non patché (404) ou service push indisponible : l'app reste fonctionnelle.
     logger.warn('push', 'enregistrement impossible', e)

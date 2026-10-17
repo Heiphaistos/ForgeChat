@@ -4,7 +4,8 @@ import { router } from 'expo-router'
 import { useState } from 'react'
 import { Alert, ScrollView, TextInput } from 'react-native'
 import { serversApi } from '@/api/servers'
-import { Button, ErrorState, Loading, PasswordField, Row, Section, T } from '@/components/ui'
+import { Button, ErrorState, Loading, PasswordField, Row, Section, T, TextField } from '@/components/ui'
+import { deleteServerFailure } from '@/features/servers/deleteServer'
 import { useT } from '@/i18n'
 import { errorMessage } from '@/lib/http'
 import { useRouteParams } from '@/lib/params'
@@ -12,7 +13,7 @@ import { qk, queryClient } from '@/lib/queryClient'
 import { useAuth } from '@/stores/auth'
 import { colors, radius, spacing } from '@/theme'
 
-/** Transférer la propriété à un autre membre (POST /servers/:id/transfer, mot de passe requis). */
+/** Transférer la propriété à un autre membre (POST /servers/:id/transfer, mot de passe + code 2FA si activée). */
 export default function TransferScreen() {
   const { valid, ids } = useRouteParams(['serverId'] as const)
   const sid = ids.serverId ?? ''
@@ -21,6 +22,9 @@ export default function TransferScreen() {
   const [search, setSearch] = useState('')
   const [target, setTarget] = useState<string | null>(null)
   const [password, setPassword] = useState('')
+  const totpEnabled = useAuth((s) => !!s.user?.totp_enabled)
+  const [totp, setTotp] = useState('')
+  const [askTotp, setAskTotp] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const t = useT()
@@ -40,12 +44,14 @@ export default function TransferScreen() {
     setLoading(true)
     setError(null)
     try {
-      await serversApi.transfer(sid, chosen.user_id, password)
+      await serversApi.transfer(sid, chosen.user_id, password, totp)
       await Promise.all([qk.servers, qk.server(sid), qk.members(sid)].map((queryKey) => queryClient.invalidateQueries({ queryKey })))
       router.dismissAll()
       Alert.alert(t('serverSettings.audit.OWNER_TRANSFER'), t('serverSettings.transfer.doneBody', { name: chosen.username }))
     } catch (e) {
-      setError(errorMessage(e))
+      const f = deleteServerFailure(e)
+      if (f.needTotp) setAskTotp(true)
+      setError(f.message)
     } finally {
       setLoading(false)
     }
@@ -54,6 +60,7 @@ export default function TransferScreen() {
   const submit = () => {
     if (!chosen) return setError(t('serverSettings.transfer.chooseOwner'))
     if (!password) return setError(t('serverSettings.transfer.passwordRequired'))
+    if ((totpEnabled || askTotp) && !totp.trim()) return setError(t('server.deleteRules.totp'))
     Alert.alert(t('serverSettings.transfer.confirmTitle', { name: chosen.username }), t('serverSettings.transfer.confirmBody'), [
       { text: t('common.cancel'), style: 'cancel' },
       { text: t('serverSettings.transfer.transfer'), style: 'destructive', onPress: () => void doTransfer() },
@@ -79,6 +86,19 @@ export default function TransferScreen() {
         {list.length ? null : <Row title={t('serverSettings.noMembers')} />}
       </Section>
       <PasswordField label={t('serverSettings.transfer.password')} value={password} onChangeText={setPassword} autoComplete="current-password" textContentType="password" />
+      {totpEnabled || askTotp ? (
+        <TextField
+          label={t('server.delete.totp')}
+          value={totp}
+          onChangeText={setTotp}
+          placeholder={t('server.delete.totpPlaceholder')}
+          autoComplete="one-time-code"
+          textContentType="oneTimeCode"
+          autoCapitalize="none"
+          autoCorrect={false}
+          maxLength={32}
+        />
+      ) : null}
       {error ? <T variant="error">{error}</T> : null}
       <Button title={t('screen.transfer')} variant="danger" icon="swap-horizontal-outline" onPress={submit} loading={loading} />
     </ScrollView>

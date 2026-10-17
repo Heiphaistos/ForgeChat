@@ -127,6 +127,8 @@ export const fr = {
   'settings.twoFactor.title': 'Double authentification',
   'settings.twoFactor.enabledIntro': 'La double authentification est activée. Pour la désactiver, saisis un code de ton application d’authentification.',
   'settings.twoFactor.disable': 'Désactiver',
+  'settings.twoFactor.password': 'Ton mot de passe (pour confirmer)',
+  'settings.privacy.exportPassword': 'Ton mot de passe (requis pour exporter)',
   'settings.twoFactor.intro':
     'Protège ton compte : à chaque connexion, un code à 6 chiffres te sera demandé en plus du mot de passe. Il te faut une application d’authentification (Aegis, Google Authenticator, 2FAS…).',
   'settings.twoFactor.configure': 'Configurer',
@@ -205,6 +207,8 @@ export const fr = {
   'settings.privacy.myData': 'Mes données',
   'settings.privacy.exporting': 'Préparation de l’export…',
   'settings.privacy.export': 'Exporter mes données',
+  'settings.privacy.linkPreview': 'Aperçus de liens',
+  'settings.privacy.linkPreviewSub': 'Désactivé par défaut : le lien est envoyé au serveur pour construire l’aperçu.',
   'settings.privacy.exportSub': 'Profil, messages, serveurs et amis, au format JSON (RGPD).',
 
   // --- Mot de passe ---
@@ -406,6 +410,8 @@ export const en: Partial<Record<keyof typeof fr, string>> = {
   'settings.twoFactor.title': 'Two-factor authentication',
   'settings.twoFactor.enabledIntro': 'Two-factor authentication is on. To turn it off, enter a code from your authenticator app.',
   'settings.twoFactor.disable': 'Disable',
+  'settings.twoFactor.password': 'Your password (to confirm)',
+  'settings.privacy.exportPassword': 'Your password (required to export)',
   'settings.twoFactor.intro':
     'Protect your account: each time you log in, you’ll be asked for a 6-digit code in addition to your password. You need an authenticator app (Aegis, Google Authenticator, 2FAS…).',
   'settings.twoFactor.configure': 'Set up',
@@ -483,6 +489,8 @@ export const en: Partial<Record<keyof typeof fr, string>> = {
   'settings.privacy.myData': 'My data',
   'settings.privacy.exporting': 'Preparing export…',
   'settings.privacy.export': 'Export my data',
+  'settings.privacy.linkPreview': 'Link previews',
+  'settings.privacy.linkPreviewSub': 'Off by default: the link is sent to the server to build the preview.',
   'settings.privacy.exportSub': 'Profile, messages, servers and friends, as JSON (GDPR).',
 
   // --- Mot de passe ---

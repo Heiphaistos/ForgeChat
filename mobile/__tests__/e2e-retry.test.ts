@@ -21,6 +21,7 @@ jest.mock('@/e2e/accountKey', () => ({ useAccountKey: { getState: () => mockStat
 jest.mock('@/i18n', () => ({ t: (k: string) => k }))
 
 import { b64uDecode } from '@/e2e/crypto'
+import { entryHash, keyHash, userTag, GENESIS } from '@/e2e/keyTransparency'
 import { becameReady, cacheUsable, forgetConv, openRaw } from '@/e2e/conversations'
 
 const keys = {
@@ -34,7 +35,15 @@ beforeEach(() => {
   forgetConv()
   Object.assign(mockState, { status: 'locked', priv: null, userId: null })
   mockGet.mockReset()
-  mockGet.mockResolvedValue(keys)
+  // L'émetteur de l'enveloppe (1re vue) doit figurer au journal de transparence : clé servie + entrée valide.
+  mockGet.mockImplementation(async (url: string) => {
+    if (url.includes('/keys/public')) return { public: mockV.ecdh.pubA, kt_seq: 1 }
+    if (url.includes('/keys/log/')) {
+      const [tag, kh] = [await userTag(mockV.convKey.sender), await keyHash(mockV.ecdh.pubA)]
+      return { seq: 1, user_tag: tag, key_hash: kh, prev_hash: GENESIS, hash: await entryHash(1, tag, kh, GENESIS) }
+    }
+    return keys
+  })
 })
 
 test('ouvert avant la clé de compte, lisible dès qu\'elle est prête (sans oubli explicite ni attente)', async () => {

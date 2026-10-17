@@ -54,7 +54,11 @@ export function RecoveryCodeModal({ code, onDone, texts }: {
         <Text selectable style={s.code}>{shown}</Text>
         <View style={{ flexDirection: 'row', gap: spacing.sm }}>
           <Button style={{ flex: 1 }} variant="secondary" icon="copy-outline" title={t('e2e.recovery.copy')}
-            onPress={() => void Clipboard.setStringAsync(shown).then(() => Alert.alert(tr('e2e.recovery.copied')))} />
+            onPress={() => void Clipboard.setStringAsync(shown).then(() => {
+              Alert.alert(tr('e2e.recovery.copied'))
+              // Le code ne reste pas au presse-papiers (lisible par d'autres applis) : vidé au bout de 30 s.
+              setTimeout(() => void Clipboard.getStringAsync().then((c) => (c === shown ? Clipboard.setStringAsync('') : undefined)).catch(() => undefined), 30_000)
+            })} />
           <Button style={{ flex: 1 }} variant="secondary" icon="share-outline" title={t('e2e.recovery.share')}
             onPress={() => void Share.share({ message: `${fileHeader}\n\n${shown}` })} />
         </View>
