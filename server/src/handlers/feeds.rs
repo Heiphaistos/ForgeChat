@@ -107,8 +107,7 @@ pub async fn create_channel_feed(
     Path((server_id, channel_id)): Path<(Uuid, Uuid)>,
     Json(body): Json<CreateFeedRequest>,
 ) -> Result<Json<ChannelFeed>, AppError> {
-    crate::handlers::servers::require_permission(&state, claims.sub, server_id, CAN_EDIT).await?;
-    crate::handlers::servers::require_channel_in_server(&state, channel_id, server_id).await?;
+    crate::handlers::channel_access::require_channel_manage(&state, claims.sub, server_id, channel_id, CAN_EDIT).await?;
 
     // Validation basique
     let name = body.name.trim().to_string();
@@ -152,13 +151,24 @@ pub async fn create_channel_feed(
     Ok(Json(feed))
 }
 
+/// Salon d'un flux : les droits se vérifient sur ce salon (surcharges comprises).
+async fn feed_channel(state: &AppState, feed_id: Uuid, server_id: Uuid) -> Result<Uuid, AppError> {
+    sqlx::query_scalar("SELECT channel_id FROM channel_feeds WHERE id = $1 AND server_id = $2")
+        .bind(feed_id)
+        .bind(server_id)
+        .fetch_optional(&state.db)
+        .await?
+        .ok_or_else(|| AppError::NotFound("feed not found".into()))
+}
+
 /// DELETE /servers/:server_id/feeds/:feed_id
 pub async fn delete_channel_feed(
     State(state): State<AppState>,
     Extension(claims): Extension<Claims>,
     Path((server_id, feed_id)): Path<(Uuid, Uuid)>,
 ) -> Result<Json<serde_json::Value>, AppError> {
-    crate::handlers::servers::require_permission(&state, claims.sub, server_id, CAN_EDIT).await?;
+    let channel_id = feed_channel(&state, feed_id, server_id).await?;
+    crate::handlers::channel_access::require_channel_manage(&state, claims.sub, server_id, channel_id, CAN_EDIT).await?;
 
     let rows = sqlx::query(
         "DELETE FROM channel_feeds WHERE id = $1 AND server_id = $2"
@@ -181,7 +191,8 @@ pub async fn toggle_channel_feed(
     Extension(claims): Extension<Claims>,
     Path((server_id, feed_id)): Path<(Uuid, Uuid)>,
 ) -> Result<Json<serde_json::Value>, AppError> {
-    crate::handlers::servers::require_permission(&state, claims.sub, server_id, CAN_EDIT).await?;
+    let channel_id = feed_channel(&state, feed_id, server_id).await?;
+    crate::handlers::channel_access::require_channel_manage(&state, claims.sub, server_id, channel_id, CAN_EDIT).await?;
 
     let rows = sqlx::query(
         "UPDATE channel_feeds SET enabled = NOT enabled WHERE id = $1 AND server_id = $2"
@@ -215,8 +226,9 @@ pub async fn poll_rss_feeds(state: &AppState) {
     use sqlx::Row;
 
     let rows = match sqlx::query(
-        "SELECT id, channel_id, server_id, name, feed_url, last_item_guid
-         FROM channel_feeds WHERE enabled = true"
+        "SELECT f.id, f.channel_id, f.server_id, f.name, f.feed_url, f.last_item_guid
+         FROM channel_feeds f JOIN servers s ON s.id = f.server_id
+         WHERE f.enabled = true AND s.suspended_at IS NULL"
     )
     .fetch_all(&state.db)
     .await

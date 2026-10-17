@@ -159,6 +159,65 @@ pub fn valid_vanity(v: &str) -> bool {
         && (v.len() != 8 || v.contains('-'))
 }
 
+/// Bornes de texte des champs libres d'un serveur (comptées en caractères).
+pub(crate) const DESCRIPTION_MAX: usize = 1000;
+pub(crate) const WELCOME_MAX: usize = 2000;
+pub(crate) const RULES_MAX: usize = 4000;
+
+/// Refuse (400) un texte libre plus long que `max` caractères. Avant : aucune borne, jusqu'à la
+/// limite du corps (12 Mo), puis renvoyé dans /explore, /discover, l'info d'invitation publique
+/// et chaque SERVER_UPDATE.
+pub(crate) fn check_text_len(label: &str, v: Option<&str>, max: usize) -> Result<()> {
+    if v.is_some_and(|t| t.chars().count() > max) {
+        return Err(AppError::BadRequest(format!("{label} : {max} caractères au plus")));
+    }
+    Ok(())
+}
+
+/// Valeurs de `content_filter` acceptées (contrainte CHECK de la colonne, migration 010).
+const CONTENT_FILTERS: &[&str] = &["none", "members_without_roles", "all_members"];
+
+/// Bannière : vide, inchangée, ou un fichier téléversé par la route bannière (jamais une URL externe).
+pub(crate) fn banner_allowed(new: &str, current: Option<&str>) -> bool {
+    new.is_empty()
+        || current == Some(new)
+        || (new.starts_with("/uploads/server-banners/") && !new.contains("..") && !new.contains("//") && !new.contains('\\') && !new.contains(':'))
+}
+
+/// Contrôles de valeur de PATCH /servers/:id (tout est vérifié avant la première écriture).
+async fn validate_update(state: &AppState, server_id: Uuid, body: &UpdateServerRequest) -> Result<()> {
+    if let Some(n) = &body.name {
+        if !(2..=100).contains(&n.trim().chars().count()) {
+            return Err(AppError::BadRequest("Nom serveur 2-100 chars".into()));
+        }
+    }
+    check_text_len("Description", body.description.as_deref(), DESCRIPTION_MAX)?;
+    check_text_len("Message de bienvenue", body.welcome_message.as_deref(), WELCOME_MAX)?;
+    if let Some(cf) = &body.content_filter {
+        if !CONTENT_FILTERS.contains(&cf.as_str()) {
+            return Err(AppError::BadRequest("Filtre de contenu invalide".into()));
+        }
+    }
+    if body.afk_timeout.is_some_and(|t| !(1..=3600).contains(&t)) {
+        return Err(AppError::BadRequest("Délai AFK : 1 à 3600".into()));
+    }
+    if let Some(b) = &body.banner {
+        let current: Option<String> = sqlx::query_scalar("SELECT banner FROM servers WHERE id=$1")
+            .bind(server_id).fetch_optional(&state.db).await?.flatten();
+        if !banner_allowed(b, current.as_deref()) {
+            return Err(AppError::BadRequest("Bannière : utilise l'envoi d'image du serveur".into()));
+        }
+    }
+    for id in [body.system_channel_id, body.afk_channel_id, body.rules_channel_id].into_iter().flatten().flatten() {
+        let ok: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM channels WHERE id=$1 AND server_id=$2)")
+            .bind(id).bind(server_id).fetch_one(&state.db).await?;
+        if !ok {
+            return Err(AppError::BadRequest("Salon inconnu sur ce serveur".into()));
+        }
+    }
+    Ok(())
+}
+
 pub async fn update_server(
     State(state): State<AppState>,
     Extension(claims): Extension<Claims>,
@@ -166,6 +225,7 @@ pub async fn update_server(
     Json(body): Json<UpdateServerRequest>,
 ) -> Result<Json<Server>> {
     require_owner(&state, claims.sub, server_id).await?;
+    validate_update(&state, server_id, &body).await?;
 
     const VALID_CATEGORIES: &[&str] = &["gaming", "community", "tech", "music", "education", "arts", "18plus"];
     if let Some(Some(cat_str)) = &body.server_category {
@@ -290,7 +350,7 @@ pub async fn delete_server(
     Path(server_id): Path<Uuid>,
     body: Option<Json<ReauthBody>>,
 ) -> Result<Json<serde_json::Value>> {
-    require_owner(&state, claims.sub, server_id).await?;
+    require_owner_even_suspended(&state, claims.sub, server_id).await?;
     // Suppression définitive : mot de passe + 2FA, quel que soit le client (web, bureau, mobile).
     verify_reauth(&state, claims.sub, &body.map(|b| b.0).unwrap_or_default()).await?;
     // Notifier tous les membres avant suppression
@@ -418,6 +478,18 @@ pub async fn join_server(
     // El Patron n'est jamais banni d'un serveur (un ancien bannissement ne le retient pas).
     if is_banned {
         return Err(AppError::Forbidden);
+    }
+
+    // Serveur suspendu par l'administration : on ne le rejoint pas (sauf El Patron).
+    let suspended: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM servers WHERE id=$1 AND suspended_at IS NOT NULL) AND NOT fc_is_god($2)"
+    )
+    .bind(server_id)
+    .bind(claims.sub)
+    .fetch_one(&state.db)
+    .await?;
+    if suspended {
+        return Err(denied_member(&state, server_id).await);
     }
 
     let already = sqlx::query_scalar::<_, bool>(
@@ -808,8 +880,10 @@ pub async fn ban_member(
     let reason = body["reason"].as_str().map(String::from);
     // Bornée à 1 h .. 1 an : une valeur énorme faisait paniquer le calcul de date,
     // une valeur négative créait un bannissement déjà expiré.
+    // Détenteur de BAN_TEMP seul : 30 jours au plus (seul BAN_MEMBERS va jusqu'à un an).
+    let max_hours = if can_ban_forever { 24 * 365 } else { 24 * 30 };
     let expires_at = body["duration_hours"].as_i64().map(|h| {
-        chrono::Utc::now() + chrono::Duration::hours(h.clamp(1, 24 * 365))
+        chrono::Utc::now() + chrono::Duration::hours(h.clamp(1, max_hours))
     });
 
     sqlx::query(
@@ -1106,6 +1180,15 @@ pub async fn can_read_history(state: &AppState, user_id: Uuid, channel_id: Uuid)
         .is_some_and(|(_, p)| p & crate::models::role::Permissions::READ_HISTORY != 0)
 }
 
+/// MANAGE_MESSAGES effectif sur CE salon (rôles + overrides ; propriétaire et admins toujours).
+/// Avant : seul le masque global du serveur comptait, donc un override de salon qui retire le
+/// droit à un rôle restait sans effet, et un override qui l'accorde aussi.
+pub async fn require_manage_messages(state: &AppState, user_id: Uuid, channel_id: Uuid) -> Result<()> {
+    let ok = state.effective_channel_permissions(user_id, channel_id).await
+        .is_some_and(|(_, p)| p & crate::models::role::Permissions::MANAGE_MESSAGES != 0);
+    if ok { Ok(()) } else { Err(AppError::Forbidden) }
+}
+
 // ─── Hiérarchie des rôles (comme Discord) ─────────────────────────────────────
 
 /// Position du rôle le plus haut d'un membre ; -1 s'il n'a que @everyone.
@@ -1176,6 +1259,12 @@ pub async fn require_role_below(state: &AppState, actor: Uuid, role_id: Uuid, se
 /// Départ d'un membre (expulsion, bannissement, départ volontaire) : ses rôles
 /// ne doivent pas l'attendre s'il revient, et il sort du vocal du serveur.
 pub async fn purge_membership(state: &AppState, user_id: Uuid, server_id: Uuid) {
+    // Les webhooks d'un membre parti postent sous son identité : ils partent avec lui.
+    let _ = sqlx::query("DELETE FROM webhooks WHERE created_by=$1 AND server_id=$2")
+        .bind(user_id)
+        .bind(server_id)
+        .execute(&state.db)
+        .await;
     let _ = sqlx::query("DELETE FROM member_roles WHERE user_id=$1 AND server_id=$2")
         .bind(user_id)
         .bind(server_id)
@@ -1220,8 +1309,25 @@ pub async fn require_can_post(
         return Err(AppError::Forbidden);
     }
     // Verrouillage (manuel ou anti-raid) : seul le staff écrit encore.
-    if !has(crate::handlers::automod::STAFF) && crate::handlers::automod::is_locked(state, server_id).await? {
+    let staff = has(crate::handlers::automod::STAFF);
+    if !staff && crate::handlers::automod::is_locked(state, server_id).await? {
         return Err(AppError::ForbiddenMsg("Serveur verrouillé par la modération : seul le staff peut écrire pour l'instant.".into()));
+    }
+    // Porte de vérification : jusque-là seulement une modale du client, contournable par l'API.
+    if !staff {
+        let unverified: bool = sqlx::query_scalar(
+            "SELECT s.verification_enabled AND sm.verified_at IS NULL
+             FROM servers s JOIN server_members sm ON sm.server_id = s.id AND sm.user_id = $2
+             WHERE s.id = $1"
+        )
+        .bind(server_id)
+        .bind(user_id)
+        .fetch_optional(&state.db)
+        .await?
+        .unwrap_or(false);
+        if unverified {
+            return Err(AppError::ForbiddenMsg("Accepte d'abord les règles du serveur pour participer.".into()));
+        }
     }
     require_not_timed_out(state, user_id, server_id).await
 }
@@ -1252,7 +1358,8 @@ pub async fn require_channel_in_server(
     if !ok { Err(AppError::Forbidden) } else { Ok(()) }
 }
 
-pub async fn require_owner(
+/// Propriétaire du serveur, même suspendu : voie de sortie (suppression, voir l'état).
+pub async fn require_owner_even_suspended(
     state: &AppState, user_id: Uuid, server_id: Uuid,
 ) -> Result<()> {
     let ok = sqlx::query_scalar::<_, bool>(
@@ -1266,6 +1373,23 @@ pub async fn require_owner(
     if !ok { Err(AppError::Forbidden) } else { Ok(()) }
 }
 
+/// Propriétaire d'un serveur NON suspendu (un serveur suspendu est gelé, sauf pour El Patron).
+pub async fn require_owner(
+    state: &AppState, user_id: Uuid, server_id: Uuid,
+) -> Result<()> {
+    let ok = sqlx::query_scalar::<_, bool>(
+        "SELECT EXISTS(SELECT 1 FROM server_members sm JOIN servers s ON s.id = sm.server_id
+         WHERE sm.user_id=$1 AND sm.server_id=$2 AND (sm.is_owner=true OR fc_is_god(sm.user_id))
+           AND (s.suspended_at IS NULL OR fc_is_god($1)))"
+    )
+    .bind(user_id)
+    .bind(server_id)
+    .fetch_one(&state.db)
+    .await?;
+
+    if !ok { Err(denied_member(state, server_id).await) } else { Ok(()) }
+}
+
 pub async fn require_permission(
     state: &AppState, user_id: Uuid, server_id: Uuid, perm: i64,
 ) -> Result<()> {
@@ -1276,9 +1400,10 @@ pub async fn require_permission(
                 | COALESCE((SELECT permissions FROM roles WHERE server_id=$2 AND is_everyone=true), 0)
                 AS combined_perms
          FROM server_members sm
+         JOIN servers s ON s.id = sm.server_id
          LEFT JOIN member_roles mr ON mr.user_id = sm.user_id AND mr.server_id = sm.server_id
          LEFT JOIN roles r ON r.id = mr.role_id
-         WHERE sm.user_id = $1 AND sm.server_id = $2
+         WHERE sm.user_id = $1 AND sm.server_id = $2 AND (s.suspended_at IS NULL OR fc_is_god($1))
          GROUP BY sm.is_owner, sm.user_id"
     )
     .bind(user_id)
@@ -1287,7 +1412,7 @@ pub async fn require_permission(
     .await?;
 
     match row {
-        None => Err(AppError::Forbidden),
+        None => Err(denied_member(state, server_id).await),
         Some(r) => {
             if r.get::<bool, _>("is_owner") { return Ok(()); }
             let perms: i64 = r.get("combined_perms");
@@ -1393,6 +1518,7 @@ pub async fn update_server_verification(
     // aurait confondu ce `null` avec "champ absent" et gardé indéfiniment l'ancien texte,
     // rendant impossible de vider des règles de vérification une fois définies.
     let verification_rules = body["verification_rules"].as_str();
+    check_text_len("Règles de vérification", verification_rules, RULES_MAX)?;
 
     let server = sqlx::query_as::<_, Server>(
         "UPDATE servers SET
@@ -1596,7 +1722,7 @@ pub async fn discover_servers(
         "SELECT s.id, s.name, s.description, s.icon, s.banner, s.member_count, s.is_public,
                 s.created_at, s.invite_code
          FROM servers s
-         WHERE s.is_public = true
+         WHERE s.is_public = true AND s.suspended_at IS NULL
            AND ($1 = '' OR s.name ILIKE $2 OR s.description ILIKE $2)
          ORDER BY {order_clause}
          LIMIT 20 OFFSET $3"
@@ -1629,7 +1755,24 @@ pub async fn discover_servers(
 
 #[cfg(test)]
 mod vanity_tests {
-    use super::valid_vanity;
+    use super::{banner_allowed, check_text_len, valid_vanity};
+
+    #[test]
+    fn text_bounds_count_chars() {
+        assert!(check_text_len("d", Some(&"é".repeat(1000)), 1000).is_ok());
+        assert!(check_text_len("d", Some(&"é".repeat(1001)), 1000).is_err());
+        assert!(check_text_len("d", None, 1).is_ok());
+    }
+
+    #[test]
+    fn banner_only_own_uploads() {
+        assert!(banner_allowed("", Some("x")));
+        assert!(banner_allowed("/uploads/server-banners/a.png", None));
+        assert!(banner_allowed("https://old/legacy.png", Some("https://old/legacy.png")));
+        assert!(!banner_allowed("https://evil.example/x.png", None));
+        assert!(!banner_allowed("/uploads/server-banners/../../x", None));
+        assert!(!banner_allowed("/uploads/avatars/a.png", None));
+    }
 
     #[test]
     fn vanity_format() {

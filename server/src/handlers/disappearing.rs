@@ -127,7 +127,7 @@ pub async fn set_channel_messaging(
     Path((server_id, channel_id)): Path<(Uuid, Uuid)>,
     Json(body): Json<ChannelMessagingBody>,
 ) -> Result<Json<Value>> {
-    crate::handlers::servers::require_permission_and_channel(&state, claims.sub, server_id, channel_id, CAN_EDIT).await?;
+    crate::handlers::channel_access::require_channel_manage(&state, claims.sub, server_id, channel_id, CAN_EDIT).await?;
     let disappear = body.disappear_seconds.map(|s| validate(s, false)).transpose()?;
     let row = sqlx::query(
         "UPDATE channels SET

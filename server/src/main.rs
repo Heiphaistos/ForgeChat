@@ -696,6 +696,7 @@ fn protected_route_table() -> Router<AppState> {
         .route("/admin/servers/:server_id", delete(handlers::site_admin::delete_server_admin))
         .route("/admin/servers/:server_id/supervise", post(handlers::site_admin::supervise_server).delete(handlers::site_admin::end_supervision))
         .route("/admin/servers/:server_id/suspend", post(handlers::site_admin::suspend_server).delete(handlers::site_admin::unsuspend_server))
+        .route("/admin/servers/:server_id/news-public", put(handlers::site_admin::set_news_public))
         .route("/admin/invites", get(handlers::site_admin::list_invites).post(handlers::site_admin::create_invite))
         .route("/admin/invites/:invite_id", delete(handlers::site_admin::revoke_invite))
         .route("/admin/settings", get(handlers::site_admin::get_settings).put(handlers::site_admin::put_settings))

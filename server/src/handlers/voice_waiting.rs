@@ -28,7 +28,7 @@ use uuid::Uuid;
 
 use crate::{
     error::{AppError, Result},
-    handlers::{servers::require_permission, websocket::has_perm},
+    handlers::websocket::has_perm,
     middleware::auth::Claims,
     models::role::Permissions,
     state::AppState,
@@ -192,7 +192,7 @@ pub async fn set_waiting_room(
     Path((server_id, channel_id)): Path<(Uuid, Uuid)>,
     Json(body): Json<WaitingRoomBody>,
 ) -> Result<Json<serde_json::Value>> {
-    require_permission(&state, claims.sub, server_id, Permissions::MANAGE_CHANNELS | Permissions::EDIT_CHANNELS).await?;
+    crate::handlers::channel_access::require_channel_manage(&state, claims.sub, server_id, channel_id, Permissions::MANAGE_CHANNELS | Permissions::EDIT_CHANNELS).await?;
     let updated: Option<Uuid> = sqlx::query_scalar(
         "UPDATE channels SET waiting_room = $3
          WHERE id = $1 AND server_id = $2 AND type::text IN ('voice', 'stage') RETURNING id",

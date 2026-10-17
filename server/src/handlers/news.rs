@@ -15,6 +15,8 @@ use crate::{
 
 /// Articles gardés par site : les plus anciens partent au-delà.
 const KEEP_PER_SITE: i64 = 300;
+/// Sites d'actualités par serveur, au plus.
+const MAX_SITES_PER_SERVER: i64 = 200;
 
 #[derive(Deserialize)]
 pub struct NewsArticleIn {
@@ -114,11 +116,27 @@ pub async fn bot_post_news(
         .filter(|d| *d <= chrono::Utc::now() + chrono::Duration::hours(1))
         .unwrap_or_else(chrono::Utc::now);
 
+    // « À la une » (tous les comptes) : réservé aux serveurs autorisés par l'administration du site ;
+    // sinon le site reste dans les forums du serveur (public=false), sans erreur pour le bot.
+    let allowed: bool = sqlx::query_scalar("SELECT news_public_allowed FROM servers WHERE id=$1")
+        .bind(b.server_id).fetch_optional(&state.db).await?.unwrap_or(false);
+    let public = b.public && allowed;
+    // Quota de sites par serveur (la création seulement : un site déjà connu se met toujours à jour).
+    let known: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM news_sites WHERE server_id=$1 AND name=$2)")
+        .bind(b.server_id).bind(&site).fetch_one(&state.db).await?;
+    if !known {
+        let sites: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM news_sites WHERE server_id=$1")
+            .bind(b.server_id).fetch_one(&state.db).await?;
+        if sites >= MAX_SITES_PER_SERVER {
+            return Err(AppError::BadRequest(format!("Limite de {MAX_SITES_PER_SERVER} sites d'actualités par serveur atteinte")));
+        }
+    }
+
     let site_id: Uuid = sqlx::query_scalar(
         "INSERT INTO news_sites (server_id, name, category, public) VALUES ($1, $2, $3, $4)
          ON CONFLICT (server_id, name) DO UPDATE SET category = EXCLUDED.category, public = EXCLUDED.public
          RETURNING id",
-    ).bind(b.server_id).bind(&site).bind(&category).bind(b.public).fetch_one(&state.db).await?;
+    ).bind(b.server_id).bind(&site).bind(&category).bind(public).fetch_one(&state.db).await?;
 
     let inserted: Option<Uuid> = sqlx::query_scalar(
         "INSERT INTO news_articles (site_id, link, title, summary, image, published_at) VALUES ($1, $2, $3, $4, $5, $6)

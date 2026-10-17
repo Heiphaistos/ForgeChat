@@ -681,6 +681,29 @@ pub async fn suspend_server(
     Ok(StatusCode::NO_CONTENT)
 }
 
+#[derive(Deserialize)]
+pub struct NewsPublicBody {
+    pub allowed: bool,
+}
+
+/// PUT /admin/servers/:id/news-public : autorise (ou retire) la publication de ses sites d'actualités
+/// sur la page « À la une » de tous les comptes. Retirer le droit rend ses sites privés tout de suite.
+pub async fn set_news_public(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+    Path(server_id): Path<Uuid>,
+    Json(body): Json<NewsPublicBody>,
+) -> Result<StatusCode> {
+    require_site_admin(&state, &claims).await?;
+    let name = server_name(&state, server_id).await?;
+    sqlx::query("UPDATE servers SET news_public_allowed=$2 WHERE id=$1").bind(server_id).bind(body.allowed).execute(&state.db).await?;
+    if !body.allowed {
+        sqlx::query("UPDATE news_sites SET public=FALSE WHERE server_id=$1").bind(server_id).execute(&state.db).await?;
+    }
+    audit(&state, claims.sub, "set_news_public", None, json!({ "server_id": server_id, "server": name, "allowed": body.allowed })).await;
+    Ok(StatusCode::NO_CONTENT)
+}
+
 pub async fn unsuspend_server(
     State(state): State<AppState>,
     Extension(claims): Extension<Claims>,

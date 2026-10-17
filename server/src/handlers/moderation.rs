@@ -242,6 +242,12 @@ pub async fn remove_timeout(
     State(state): State<AppState>,
 ) -> Result<Json<serde_json::Value>> {
     ensure_moderator(&state, server_id, claims.sub).await?;
+    // Comme pour poser un timeout : jamais le sien, et seulement sur un membre de rang inférieur
+    // (un modérateur en timeout se libérait lui-même, ou libérait un sanctionné de rang supérieur).
+    if user_id == claims.sub {
+        return Err(AppError::Forbidden);
+    }
+    crate::handlers::servers::require_outranks(&state, claims.sub, user_id, server_id).await?;
 
     let deleted = sqlx::query(
         "DELETE FROM user_timeouts WHERE server_id = $1 AND user_id = $2"
@@ -317,6 +323,9 @@ pub async fn list_channel_tasks(
     Ok(Json(tasks))
 }
 
+const MAX_TASKS_PER_CHANNEL: i64 = 200;
+const TASK_DESCRIPTION_MAX: usize = 2000;
+
 #[derive(Debug, Deserialize)]
 pub struct CreateTask {
     pub title: String,
@@ -344,7 +353,16 @@ pub async fn create_task(
     .await?
     .ok_or_else(|| AppError::NotFound("Canal introuvable".into()))?;
 
-    crate::handlers::servers::require_member_and_channel(&state, claims.sub, server_id, channel_id).await?;
+    // Même garde que tout message : timeout, salon en lecture seule, verrouillage.
+    crate::handlers::servers::require_can_post(&state, claims.sub, server_id, channel_id, false).await?;
+    if body.description.as_deref().is_some_and(|d| d.chars().count() > TASK_DESCRIPTION_MAX) {
+        return Err(AppError::BadRequest(format!("Description : {TASK_DESCRIPTION_MAX} caractères au plus")));
+    }
+    let existing: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM channel_tasks WHERE channel_id=$1")
+        .bind(channel_id).fetch_one(&state.db).await?;
+    if existing >= MAX_TASKS_PER_CHANNEL {
+        return Err(AppError::BadRequest(format!("Limite de {MAX_TASKS_PER_CHANNEL} tâches par salon atteinte")));
+    }
 
     let priority = body.priority.as_deref().unwrap_or("normal");
     if !["low", "normal", "high", "urgent"].contains(&priority) {
@@ -411,6 +429,9 @@ pub async fn update_task(
         }
     }
 
+    if body.description.as_ref().and_then(|v| v.as_str()).is_some_and(|d| d.chars().count() > TASK_DESCRIPTION_MAX) {
+        return Err(AppError::BadRequest(format!("Description : {TASK_DESCRIPTION_MAX} caractères au plus")));
+    }
     if let Some(ref p) = body.priority {
         if !["low", "normal", "high", "urgent"].contains(&p.as_str()) {
             return Err(AppError::BadRequest("priority invalide".into()));

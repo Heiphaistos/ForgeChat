@@ -91,6 +91,8 @@ pub mod levels;
 pub mod community;
 #[cfg(test)]
 mod srv2_db_tests;
+#[cfg(test)]
+mod srvb_db_tests;
 pub mod automod;
 pub mod audit_search;
 pub mod directory;

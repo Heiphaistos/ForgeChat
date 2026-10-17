@@ -209,6 +209,16 @@ pub async fn create_post(
     if media_url.is_some_and(|u| !is_valid_media_url(u)) {
         return Err(AppError::BadRequest("Média invalide".into()));
     }
+    // Le fichier doit avoir été téléversé par l'auteur DANS ce salon : sinon n'importe quel
+    // `/uploads/<uuid>` (rencontré ailleurs) se faisait re-signer et republier dans le salon.
+    if let Some(u) = media_url {
+        let mine: bool = sqlx::query_scalar(
+            "SELECT EXISTS(SELECT 1 FROM attachments WHERE url=$1 AND uploader_id=$2 AND channel_id=$3)"
+        ).bind(u).bind(claims.sub).bind(channel_id).fetch_one(&state.db).await?;
+        if !mine {
+            return Err(AppError::BadRequest("Média invalide".into()));
+        }
+    }
     if channel_type == "media" && media_url.is_none() {
         return Err(AppError::BadRequest("Une publication de salon média exige une image ou une vidéo".into()));
     }
@@ -238,6 +248,7 @@ pub async fn create_post(
             return Err(err);
         }
     }
+    crate::handlers::post_guard::throttle(&state, claims.sub, channel_id).await?;
 
     let post = sqlx::query_as::<_, ForumPost>(
         "INSERT INTO forum_posts (channel_id, title, content, creator_id, tags, media_url, enc, client_msg_id)
@@ -456,6 +467,7 @@ pub async fn reply_to_post(
             return Err(err);
         }
     }
+    crate::handlers::post_guard::throttle(&state, claims.sub, channel_id).await?;
 
     // Transaction avec SELECT FOR UPDATE pour éviter la race condition locked/INSERT
     let mut tx = state.db.begin().await?;
@@ -539,9 +551,7 @@ pub async fn update_post(
 
     // pin/lock réservé aux modérateurs
     if pinned.is_some() || locked.is_some() {
-        use super::servers::require_permission;
-        use crate::models::role::Permissions;
-        require_permission(&state, claims.sub, server_id, Permissions::MANAGE_MESSAGES).await?;
+        super::servers::require_manage_messages(&state, claims.sub, channel_id).await?;
     }
     // content : réservé au créateur indépendamment des autres champs
     if (content.is_some() || enc.is_some()) && creator_id != claims.sub {
@@ -601,9 +611,7 @@ pub async fn delete_post(
 
     // Créateur ou modérateur MANAGE_MESSAGES peut supprimer
     if creator_id != claims.sub {
-        use super::servers::require_permission;
-        use crate::models::role::Permissions;
-        require_permission(&state, claims.sub, server_id, Permissions::MANAGE_MESSAGES).await?;
+        super::servers::require_manage_messages(&state, claims.sub, channel_id).await?;
     }
 
     // Fichiers joints aux réponses : récupérés avant la cascade pour les supprimer du disque.
@@ -723,9 +731,7 @@ pub async fn delete_reply(
 
     let author_id: Uuid = reply_row.get("user_id");
     if author_id != claims.sub {
-        use super::servers::require_permission;
-        use crate::models::role::Permissions;
-        require_permission(&state, claims.sub, server_id, Permissions::MANAGE_MESSAGES).await?;
+        super::servers::require_manage_messages(&state, claims.sub, channel_id).await?;
     }
 
     let attachment_urls: Vec<String> = sqlx::query_scalar(

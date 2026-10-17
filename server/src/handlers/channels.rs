@@ -7,7 +7,7 @@ use uuid::Uuid;
 use crate::{
     error::{AppError, Result},
     handlers::audit::log_event,
-    handlers::channel_access::{check_deletion, deletion_context, CAN_CREATE, CAN_EDIT},
+    handlers::channel_access::{check_deletion, deletion_context, require_channel_manage, CAN_CREATE, CAN_EDIT},
     handlers::servers::{require_member, require_permission, require_member_and_channel},
     middleware::auth::Claims,
     models::{
@@ -76,7 +76,7 @@ pub async fn get_channels(
 }
 
 /// Salons par serveur (Discord : 500).
-const MAX_CHANNELS_PER_SERVER: i64 = 500;
+pub(crate) const MAX_CHANNELS_PER_SERVER: i64 = 500;
 
 pub async fn create_channel(
     State(state): State<AppState>,
@@ -574,7 +574,7 @@ pub async fn put_channel_permission(
     Json(body): Json<ChannelPermOverride>,
 ) -> Result<Json<serde_json::Value>> {
     let server_id = channel_server_id(&state, channel_id).await?;
-    require_permission(&state, claims.sub, server_id, CAN_EDIT).await?;
+    require_channel_manage(&state, claims.sub, server_id, channel_id, CAN_EDIT).await?;
     if !["role", "member"].contains(&body.target_type.as_str()) {
         return Err(AppError::BadRequest("target_type invalide (role|member)".into()));
     }
@@ -653,7 +653,7 @@ pub async fn delete_channel_permission(
     Path((channel_id, target_id)): Path<(Uuid, Uuid)>,
 ) -> Result<Json<serde_json::Value>> {
     let server_id = channel_server_id(&state, channel_id).await?;
-    require_permission(&state, claims.sub, server_id, CAN_EDIT).await?;
+    require_channel_manage(&state, claims.sub, server_id, channel_id, CAN_EDIT).await?;
     let existing: Option<(String, i64, i64)> = sqlx::query_as(
         "SELECT target_type, allow, deny FROM channel_permissions WHERE channel_id=$1 AND target_id=$2",
     )
@@ -683,7 +683,7 @@ pub async fn archive_channel(
     Extension(claims): Extension<Claims>,
     Path((server_id, channel_id)): Path<(Uuid, Uuid)>,
 ) -> Result<Json<serde_json::Value>> {
-    require_permission(&state, claims.sub, server_id, CAN_EDIT).await?;
+    require_channel_manage(&state, claims.sub, server_id, channel_id, CAN_EDIT).await?;
 
     use sqlx::Row;
     let row = sqlx::query(
@@ -772,7 +772,7 @@ pub async fn move_channel(
         .map_err(|_| AppError::NotFound("Canal introuvable".into()))?;
     let server_id: Uuid = row.get("server_id");
 
-    require_permission(&state, claims.sub, server_id, CAN_EDIT).await?;
+    require_channel_manage(&state, claims.sub, server_id, channel_id, CAN_EDIT).await?;
 
     // Même IDOR que create_channel : vérifier que la catégorie cible appartient
     // bien à ce serveur avant de déplacer le canal dedans.
@@ -818,7 +818,7 @@ pub async fn purge_messages(
         .map_err(|_| AppError::NotFound("Canal introuvable".into()))?;
     let server_id: Uuid = row.get("server_id");
 
-    require_permission(&state, claims.sub, server_id, Permissions::MANAGE_CHANNELS).await?;
+    require_channel_manage(&state, claims.sub, server_id, channel_id, Permissions::MANAGE_CHANNELS).await?;
 
     let before: Option<String> = body.get("before").and_then(|v| v.as_str()).map(|s| s.to_string());
     let author_id: Option<Uuid> = body.get("author_id")
@@ -916,9 +916,7 @@ pub async fn set_github_webhook_token(
     Path((server_id, channel_id)): Path<(Uuid, Uuid)>,
     Json(body): Json<SetGithubTokenBody>,
 ) -> Result<Json<serde_json::Value>> {
-    require_permission(&state, claims.sub, server_id, CAN_EDIT).await?;
-    use crate::handlers::servers::require_channel_in_server;
-    require_channel_in_server(&state, channel_id, server_id).await?;
+    require_channel_manage(&state, claims.sub, server_id, channel_id, CAN_EDIT).await?;
 
     let token = body.token.as_deref().map(|t| t.trim()).filter(|t| !t.is_empty());
     if let Some(t) = token {
@@ -981,7 +979,7 @@ pub async fn create_channel_tag(
     Json(body): Json<CreateChannelTagBody>,
 ) -> Result<Json<serde_json::Value>> {
     let server_id = channel_server_id(&state, channel_id).await?;
-    require_permission(&state, claims.sub, server_id, CAN_EDIT).await?;
+    require_channel_manage(&state, claims.sub, server_id, channel_id, CAN_EDIT).await?;
 
     let name = body.name.trim();
     if name.is_empty() || name.len() > 32 {
@@ -1010,7 +1008,7 @@ pub async fn delete_channel_tag(
     Path((channel_id, tag_name)): Path<(Uuid, String)>,
 ) -> Result<Json<serde_json::Value>> {
     let server_id = channel_server_id(&state, channel_id).await?;
-    require_permission(&state, claims.sub, server_id, CAN_EDIT).await?;
+    require_channel_manage(&state, claims.sub, server_id, channel_id, CAN_EDIT).await?;
 
     sqlx::query("DELETE FROM forum_tags WHERE channel_id=$1 AND name=$2")
         .bind(channel_id)

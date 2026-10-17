@@ -124,6 +124,26 @@ pub async fn put_starboard(
     Ok(Json(serde_json::json!({ "ok": true })))
 }
 
+/// Un membre SANS rôle lit-il ce salon ? Même calcul que les droits effectifs (base de @everyone puis
+/// surcharges du salon). Avant : seul un refus direct de VIEW_CHANNEL à @everyone rendait le salon
+/// privé ; un salon réservé par la seule absence du droit de base, ou sans READ_HISTORY, fuitait.
+/// Erreur de lecture : traité comme privé (jamais de publication dans le doute).
+async fn open_to_everyone(state: &AppState, server_id: Uuid, channel_id: Uuid) -> bool {
+    let Ok(Some((everyone, base))) = sqlx::query_as::<_, (Uuid, i64)>(
+        "SELECT id, permissions FROM roles WHERE server_id=$1 AND is_everyone LIMIT 1"
+    ).bind(server_id).fetch_optional(&state.db).await else { return false };
+    let Ok(overrides) = sqlx::query_as::<_, (Uuid, String, i64, i64)>(
+        "SELECT target_id, target_type, allow, deny FROM channel_permissions WHERE channel_id=$1"
+    ).bind(channel_id).fetch_all(&state.db).await else { return false };
+    plain_member_can_read(base, everyone, &overrides)
+}
+
+fn plain_member_can_read(base: i64, everyone: Uuid, overrides: &[(Uuid, String, i64, i64)]) -> bool {
+    let perms = crate::state::apply_channel_overrides(base, false, Uuid::nil(), None, Some(everyone), overrides);
+    let need = Permissions::VIEW_CHANNEL | Permissions::READ_HISTORY;
+    perms & need == need
+}
+
 /// Après une réaction : au seuil atteint, publie une seule fois la référence.
 /// Un salon privé (VIEW_CHANNEL refusé à @everyone) n'est jamais mis en avant :
 /// son auteur et son nom fuiteraient vers le salon du starboard.
@@ -137,14 +157,12 @@ pub fn on_reaction(state: &AppState, server_id: Uuid, channel_id: Uuid, message_
         let (target, threshold): (Uuid, i32) = (cfg.get("channel_id"), cfg.get("threshold"));
         let Ok(Some(src)) = sqlx::query(
             "SELECT m.user_id, m.type, u.username, c.name AS channel_name,
-                    (SELECT COUNT(DISTINCT r.user_id) FROM reactions r WHERE r.message_id = m.id AND r.emoji = $3) AS stars,
-                    EXISTS(SELECT 1 FROM channel_permissions cp JOIN roles ro ON ro.id = cp.target_id AND ro.is_everyone
-                           WHERE cp.channel_id = m.channel_id AND cp.deny & $4 <> 0) AS private
+                    (SELECT COUNT(DISTINCT r.user_id) FROM reactions r WHERE r.message_id = m.id AND r.emoji = $3) AS stars
              FROM messages m JOIN users u ON u.id = m.user_id JOIN channels c ON c.id = m.channel_id
              WHERE m.id = $1 AND m.channel_id = $2"
-        ).bind(message_id).bind(channel_id).bind(&emoji).bind(Permissions::VIEW_CHANNEL)
+        ).bind(message_id).bind(channel_id).bind(&emoji)
         .fetch_optional(&state.db).await else { return };
-        if src.get::<i64, _>("stars") < threshold as i64 || src.get::<bool, _>("private")
+        if src.get::<i64, _>("stars") < threshold as i64 || !open_to_everyone(&state, server_id, channel_id).await
             || !matches!(src.get::<String, _>("type").as_str(), "default" | "reply") {
             return;
         }
@@ -231,6 +249,25 @@ pub async fn on_join(state: &AppState, server_id: Uuid, user_id: Uuid, username:
 
 #[cfg(test)]
 mod tests {
+    use crate::models::role::Permissions;
+    use uuid::Uuid;
+
+    #[test]
+    fn starboard_privacy_follows_effective_permissions() {
+        let (ev, vc, rh) = (Uuid::new_v4(), Permissions::VIEW_CHANNEL, Permissions::READ_HISTORY);
+        let ov = |allow, deny| vec![(ev, "role".to_string(), allow, deny)];
+        // Ouvert : droits de base, aucune surcharge.
+        assert!(super::plain_member_can_read(vc | rh, ev, &[]));
+        // Privé : refus direct, mais aussi droit de base absent ou READ_HISTORY retiré.
+        assert!(!super::plain_member_can_read(vc | rh, ev, &ov(0, vc)));
+        assert!(!super::plain_member_can_read(rh, ev, &[]));
+        assert!(!super::plain_member_can_read(vc | rh, ev, &ov(0, rh)));
+        // Rôle seul qui voit le salon : @everyone reste exclu.
+        assert!(!super::plain_member_can_read(0, ev, &[(Uuid::new_v4(), "role".into(), vc | rh, 0)]));
+        // Surcharge qui OUVRE le salon à @everyone.
+        assert!(super::plain_member_can_read(0, ev, &ov(vc | rh, 0)));
+    }
+
     #[test]
     fn welcome_variables() {
         assert_eq!(

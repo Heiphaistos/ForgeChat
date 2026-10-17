@@ -26,11 +26,13 @@ pub async fn create_invite(
         .map(char::from)
         .collect();
 
-    let expires_at = body.expires_hours.map(|h| {
-        // Cap à 7 jours max pour éviter les invitations quasi-permanentes
-        let h = h.clamp(1, 168);
-        Utc::now() + chrono::Duration::hours(h)
-    });
+    // Absent : 7 jours (avant : permanente). `null` explicite : permanente, comme le propose l'appli web.
+    let expires_at = body.expires_hours
+        .unwrap_or(Some(crate::models::server::DEFAULT_INVITE_HOURS))
+        .map(|h| {
+            // Cap à 7 jours max pour éviter les invitations quasi-permanentes
+            Utc::now() + chrono::Duration::hours(h.clamp(1, 168))
+        });
     if let Some(uses) = body.max_uses {
         if !(1..=1000).contains(&uses) {
             return Err(AppError::BadRequest("max_uses doit être entre 1 et 1000".into()));
@@ -48,6 +50,7 @@ pub async fn create_invite(
     .bind(expires_at)
     .fetch_one(&state.db)
     .await?;
+    crate::handlers::audit::log_event(&state, server_id, "INVITE_CREATE", Some(claims.sub), None, Some(&invite.code), None).await;
 
     Ok(Json(invite))
 }
@@ -60,7 +63,7 @@ pub async fn get_invites(
     require_permission(&state, claims.sub, server_id, Permissions::MANAGE_SERVER).await?;
 
     let invites = sqlx::query_as::<_, Invite>(
-        "SELECT * FROM invites WHERE server_id=$1 ORDER BY created_at DESC LIMIT 100"
+        "SELECT * FROM invites WHERE server_id=$1 ORDER BY created_at DESC LIMIT 500"
     )
     .bind(server_id)
     .fetch_all(&state.db)

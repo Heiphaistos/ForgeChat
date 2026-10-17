@@ -26,6 +26,14 @@ use crate::{
 /// ponytail: tout est chargé en mémoire ; au-delà de 50 000 messages seuls les
 /// plus récents sont gardés (`truncated`). Passer à un flux si ça ne suffit plus.
 const MAX_MESSAGES: i64 = 50_000;
+/// Plafond TOTAL d'une sauvegarde de catégorie : sans lui, N salons × 50 000 messages chargés
+/// d'un coup en mémoire (10 requêtes par 10 min suffisaient à saturer le serveur).
+const MAX_CATEGORY_MESSAGES: i64 = 200_000;
+
+/// Part de messages accordée au prochain salon d'une catégorie, `None` quand le budget est épuisé.
+fn channel_limit(remaining: i64) -> Option<i64> {
+    (remaining > 0).then(|| remaining.min(MAX_MESSAGES))
+}
 
 /// Chaque sauvegarde peut charger N × 50 000 messages : 10 par tranche de 10 min.
 async fn rate_limit(state: &AppState, user: Uuid) -> Result<()> {
@@ -35,7 +43,7 @@ async fn rate_limit(state: &AppState, user: Uuid) -> Result<()> {
     Ok(())
 }
 
-async fn channel_backup(state: &AppState, channel_id: Uuid) -> Result<Value> {
+async fn channel_backup(state: &AppState, channel_id: Uuid, max_messages: i64) -> Result<Value> {
     let channel = sqlx::query_as::<_, Channel>("SELECT * FROM channels WHERE id=$1")
         .bind(channel_id)
         .fetch_optional(&state.db)
@@ -68,10 +76,10 @@ async fn channel_backup(state: &AppState, channel_id: Uuid) -> Result<Value> {
          ) t ORDER BY created_at ASC, id ASC",
     )
     .bind(channel_id)
-    .bind(MAX_MESSAGES + 1)
+    .bind(max_messages + 1)
     .fetch_all(&state.db)
     .await?;
-    let truncated = rows.len() as i64 > MAX_MESSAGES;
+    let truncated = rows.len() as i64 > max_messages;
     let rows = &rows[usize::from(truncated)..];
 
     let ids: Vec<Uuid> = rows.iter().map(|r| r.get("id")).collect();
@@ -151,7 +159,7 @@ pub async fn backup_channel(
     }
     rate_limit(&state, claims.sub).await?;
 
-    let mut out = channel_backup(&state, channel_id).await?;
+    let mut out = channel_backup(&state, channel_id, MAX_MESSAGES).await?;
     out["format"] = json!("forgechat-channel-backup/1");
     out["server_id"] = json!(server_id);
     out["exported_at"] = json!(chrono::Utc::now());
@@ -184,11 +192,20 @@ pub async fn backup_category(
     let forbidden = state.hidden_channels(claims.sub, Some(server_id), None).await?;
 
     let mut channels = Vec::new();
+    let mut remaining = MAX_CATEGORY_MESSAGES;
+    let mut truncated = false;
     for id in ids.into_iter().filter(|id| !forbidden.contains(id)) {
         if !can_read_history(&state, claims.sub, id).await {
             continue;
         }
-        channels.push(channel_backup(&state, id).await?);
+        let Some(limit) = channel_limit(remaining) else {
+            truncated = true;
+            break;
+        };
+        let backup = channel_backup(&state, id, limit).await?;
+        remaining -= backup["message_count"].as_i64().unwrap_or(0);
+        truncated |= backup["truncated"].as_bool().unwrap_or(false);
+        channels.push(backup);
     }
 
     Ok(Json(json!({
@@ -196,6 +213,20 @@ pub async fn backup_category(
         "server_id": server_id,
         "exported_at": chrono::Utc::now(),
         "category": category,
+        "truncated": truncated,
         "channels": channels,
     })))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn category_budget_is_shared() {
+        assert_eq!(channel_limit(MAX_CATEGORY_MESSAGES), Some(MAX_MESSAGES));
+        assert_eq!(channel_limit(12_345), Some(12_345));
+        assert_eq!(channel_limit(0), None);
+        assert_eq!(channel_limit(-5), None);
+    }
 }

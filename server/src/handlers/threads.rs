@@ -202,6 +202,16 @@ pub async fn create_thread(
             return Err(err);
         }
     }
+    // Mode lent + anti-spam du salon, comme un message normal (un fil les contournait).
+    crate::handlers::post_guard::throttle(&state, claims.sub, channel_id).await?;
+    // Le message d'origine doit être dans CE salon (sinon un fil se rattachait à un message d'un salon privé).
+    if let Some(pid) = body.parent_message_id {
+        let in_channel: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM messages WHERE id=$1 AND channel_id=$2)")
+            .bind(pid).bind(channel_id).fetch_one(&state.db).await?;
+        if !in_channel {
+            return Err(AppError::BadRequest("Message d'origine introuvable dans ce salon".into()));
+        }
+    }
 
     let mut tx = state.db.begin().await?;
 
@@ -505,6 +515,7 @@ pub async fn send_thread_message(
             return Err(err);
         }
     }
+    crate::handlers::post_guard::throttle(&state, claims.sub, channel_id).await?;
 
     let msg = sqlx::query_as::<_, ThreadMessage>(
         "INSERT INTO thread_messages (thread_id, user_id, content, reply_to, enc, client_msg_id)
@@ -615,8 +626,7 @@ pub async fn archive_thread(
     // Locker un thread nécessite toujours MANAGE_MESSAGES (pas juste être créateur)
     // Archiver : créateur OU modérateur
     if locked.is_some() || creator_id != claims.sub {
-        let manage = Permissions::MANAGE_MESSAGES;
-        super::servers::require_permission(&state, claims.sub, server_id, manage).await?;
+        super::servers::require_manage_messages(&state, claims.sub, channel_id).await?;
     }
 
     let thread = sqlx::query_as::<_, Thread>(
@@ -734,9 +744,7 @@ pub async fn delete_thread_message(
 
     let author_id: Uuid = row.get("user_id");
     if author_id != claims.sub {
-        use super::servers::require_permission;
-        use crate::models::role::Permissions;
-        require_permission(&state, claims.sub, server_id, Permissions::MANAGE_MESSAGES).await?;
+        super::servers::require_manage_messages(&state, claims.sub, channel_id).await?;
     }
 
     // Fichiers joints : récupérés avant la cascade pour les supprimer du disque.

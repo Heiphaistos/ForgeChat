@@ -131,6 +131,9 @@ pub async fn list_events(
     Ok(Json(events))
 }
 
+/// Événements à venir par serveur, au plus.
+const MAX_UPCOMING_EVENTS: i64 = 50;
+
 #[derive(Debug, Deserialize)]
 pub struct CreateEvent {
     pub name: String,
@@ -152,14 +155,20 @@ pub async fn create_event(
     Json(body): Json<CreateEvent>,
 ) -> Result<Json<ServerEvent>> {
     ensure_member(&state, server_id, claims.sub).await?;
-
-    let is_timed_out: bool = sqlx::query_scalar(
-        "SELECT EXISTS(SELECT 1 FROM user_timeouts WHERE server_id=$1 AND user_id=$2 AND expires_at > NOW())"
-    ).bind(server_id).bind(claims.sub).fetch_one(&state.db).await?;
-    if is_timed_out { return Err(AppError::Forbidden); }
+    // Même garde qu'un message dans le salon de l'événement (lecture seule, verrouillage, timeout,
+    // porte de vérification) ; sans salon, le timeout seulement.
+    match body.channel_id {
+        Some(ch) => crate::handlers::servers::require_can_post(&state, claims.sub, server_id, ch, false).await?,
+        None => crate::handlers::servers::require_not_timed_out(&state, claims.sub, server_id).await?,
+    }
 
     if body.name.trim().is_empty() {
         return Err(AppError::BadRequest("Nom requis".into()));
+    }
+    let upcoming: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM server_events WHERE server_id=$1 AND start_time > NOW()")
+        .bind(server_id).fetch_one(&state.db).await?;
+    if upcoming >= MAX_UPCOMING_EVENTS {
+        return Err(AppError::BadRequest(format!("Limite de {MAX_UPCOMING_EVENTS} événements à venir par serveur atteinte")));
     }
 
     // Vérifier que le canal optionnel appartient bien à ce serveur

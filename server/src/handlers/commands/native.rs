@@ -334,7 +334,7 @@ async fn set_lock(state: &AppState, claims: &Claims, sid: Uuid, cid: Uuid, lock:
     let staff = Permissions::ADMINISTRATOR | Permissions::MANAGE_MESSAGES | Permissions::MANAGE_CHANNELS;
     let roles: Vec<(Uuid, i64)> = sqlx::query_as("SELECT id, permissions FROM roles WHERE server_id=$1 AND NOT is_everyone")
         .bind(sid).fetch_all(&state.db).await?;
-    for (rid, _perms) in roles.into_iter().filter(|(_, p)| p & staff != 0) {
+    for (rid, _) in roles.into_iter().filter(|(_, p)| p & staff != 0) {
         let (a, d): (i64, i64) = sqlx::query_as("SELECT allow, deny FROM channel_permissions WHERE channel_id=$1 AND target_id=$2")
             .bind(cid).bind(rid).fetch_optional(&state.db).await?.unwrap_or((0, 0));
         let a = if lock { a | send } else { a & !send };
