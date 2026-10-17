@@ -76,8 +76,13 @@ export async function monitor(state: MonitorState | null, myUserId: string, myPu
   return { status: 'ok', state: { head, ownLatest } }
 }
 
-/** La clé servie pour un contact est-elle celle inscrite à `ktSeq` ? */
-export async function contactKeyLogged(userId: string, pub: string, entry: KtEntry | null): Promise<boolean> {
+/** La clé servie pour un contact est-elle celle inscrite à `ktSeq` ? `head` : tête de chaîne déjà vérifiée par le moniteur. */
+export async function contactKeyLogged(userId: string, pub: string, entry: KtEntry | null, head: KtHead | null = null): Promise<boolean> {
   if (!entry) return false
+  // Entrée servie fabriquée : son empreinte doit se recalculer.
+  if (await entryHash(entry.seq, entry.user_tag, entry.key_hash, entry.prev_hash) !== entry.hash) return false
+  // Rattachement à la tête mémorisée : tête elle-même, ou entrée qui la suit directement.
+  if (head && entry.seq === head.seq && entry.hash !== head.hash) return false
+  if (head && entry.seq === head.seq + 1 && entry.prev_hash !== head.hash) return false
   return entry.user_tag === await userTag(userId) && entry.key_hash === await keyHash(pub)
 }

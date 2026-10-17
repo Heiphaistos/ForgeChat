@@ -5,7 +5,7 @@ import { create } from 'zustand'
 import { secureStateStorage } from '@/lib/secureStorage'
 import { useAccountKey } from './accountKey'
 import { http, path } from '@/lib/http'
-import { contactKeyLogged, type KtEntry } from './keyTransparency'
+import { contactKeyLogged, type KtEntry, type MonitorState } from './keyTransparency'
 import { checkServerKey, envelopeSender, fpOf, ownerVouches, serverSubject, sortMembers, type Pin, type SignedServerKey } from './keyPinsCore'
 
 export { fpOf } from './keyPinsCore'
@@ -16,6 +16,8 @@ const getMyId = () => useAccountKey.getState().userId
 
 const pinKey = (account: string, subject: string) => `fc_e2e_fp_${account}_${subject}`
 const cache = new Map<string, Pin | null>()
+/** Épingles gardées en mémoire seulement (écriture SecureStore échouée). */
+export const persistFailures = new Set<string>()
 
 /** Ancienne valeur (empreinte seule) ou nouvelle (JSON {fp, verified}). */
 export function parsePin(v: string | null | undefined): Pin | undefined {
@@ -40,7 +42,12 @@ async function getPin(account: string, subject: string): Promise<Pin | undefined
 async function savePin(account: string, subject: string, pin: Pin) {
   const k = pinKey(account, subject)
   cache.set(k, pin)
-  await secureStateStorage.setItem(k, JSON.stringify(pin))
+  try {
+    await secureStateStorage.setItem(k, JSON.stringify(pin))
+  } catch {
+    // Épingle non persistée (déjà journalisé) : valable pour cette session seulement, à re-épingler au prochain démarrage.
+    persistFailures.add(k)
+  }
 }
 
 export async function pinOf(subject: string): Promise<Pin | undefined> {
@@ -106,14 +113,18 @@ interface MemberLike { user_id: string; username?: string; public: string | null
 
 /**
  * Clé jamais vue d'un contact : inscrite au journal de transparence ? `false` = le journal contredit la
- * clé servie ; `null` = indéterminé (ancienne clé sans entrée, erreur réseau : l'envoi n'est pas bloqué).
+ * clé servie, ou n'en a aucune trace (`kt_seq` absent) ; `null` = indéterminé (erreur réseau : l'envoi n'est pas bloqué).
  */
-async function keyLogged(userId: string, pub: string): Promise<boolean | null> {
+export async function keyLogged(userId: string, pub: string): Promise<boolean | null> {
   try {
     const data = await http.get<{ kt_seq?: number | null }>(path`/users/${userId}/keys/public`)
-    if (typeof data.kt_seq !== 'number') return null
+    if (typeof data.kt_seq !== 'number') return false
     const entry = await http.get<KtEntry>(path`/keys/log/${data.kt_seq}`)
-    return await contactKeyLogged(userId, pub, entry)
+    const account = getMyId()
+    const saved = account ? await secureStateStorage.getItem(`fc_kt_${account}`) as string | null : null
+    let head: MonitorState['head'] = null
+    try { head = (JSON.parse(saved ?? 'null') as MonitorState | null)?.head ?? null } catch { /* état illisible : sans rattachement */ }
+    return await contactKeyLogged(userId, pub, entry, head)
   } catch {
     return null
   }
@@ -143,6 +154,8 @@ export async function trustEnvelopeSender(by: string, byPub: string): Promise<bo
   const account = getMyId()
   if (!account) return false
   const r = await envelopeSender(by, byPub, account, useAccountKey.getState().pub, (s) => getPin(account, s))
+  // 1re vue : l'émetteur doit figurer au journal de transparence, sinon enveloppe refusée.
+  if (r.fresh && (await keyLogged(by, byPub)) === false) return false
   if (r.fresh) await savePin(account, by, { fp: r.fresh })
   return r.ok
 }

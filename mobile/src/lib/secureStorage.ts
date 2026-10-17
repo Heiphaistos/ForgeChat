@@ -1,5 +1,6 @@
 import * as SecureStore from 'expo-secure-store'
 import type { StateStorage } from 'zustand/middleware'
+import { logger } from './logger'
 
 /**
  * Adaptateur de persistance Zustand adossé au Keychain/Keystore.
@@ -24,8 +25,11 @@ export const secureStateStorage: StateStorage = {
   setItem: async (name, value) => {
     try {
       await SecureStore.setItemAsync(safeKey(name), value, opts)
-    } catch {
-      /* stockage indisponible : on garde l'état en mémoire */
+    } catch (e) {
+      logger.warn('secureStorage', 'écriture impossible', safeKey(name), e)
+      // Épingles TOFU : l'appelant (keyPins) doit savoir que l'épingle n'est pas persistée.
+      if (name.startsWith('fc_e2e_fp_')) throw e
+      /* autres clés : stockage indisponible, on garde l'état en mémoire */
     }
   },
   removeItem: async (name) => {
