@@ -879,10 +879,29 @@ pub async fn add_group_dm_member(
         return Err(AppError::BadRequest("Maximum 10 membres par groupe".into()));
     }
     dm_guard::ensure_can_dm(&mut *tx, claims.sub, body.user_id).await?;
+    // Exclu par le propriétaire : lui seul peut le réinviter (n'importe quel membre le ré-ajoutait).
+    let (excluded, owner): (bool, Uuid) = sqlx::query_as(
+        "SELECT EXISTS(SELECT 1 FROM group_dm_excluded WHERE dm_id=$1 AND user_id=$2), owner_id
+         FROM group_dm_channels WHERE id=$1"
+    ).bind(group_id).bind(body.user_id).fetch_one(&mut *tx).await?;
+    if excluded && owner != claims.sub {
+        return Err(AppError::ForbiddenMsg("Ce membre a été exclu par le propriétaire : seul lui peut le réinviter.".into()));
+    }
+    // Aucun blocage, dans un sens ou l'autre, entre la personne ajoutée et UN des membres : sinon
+    // elle lirait les messages de quelqu'un qui l'a bloquée.
+    let blocked: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM blocks b JOIN group_dm_members m ON m.dm_id=$1
+           AND ((b.blocker_id=m.user_id AND b.blocked_id=$2) OR (b.blocker_id=$2 AND b.blocked_id=m.user_id)))"
+    ).bind(group_id).bind(body.user_id).fetch_one(&mut *tx).await?;
+    if blocked {
+        return Err(AppError::ForbiddenMsg("Cette personne ne peut pas rejoindre ce groupe (blocage avec un de ses membres).".into()));
+    }
 
     sqlx::query(
         "INSERT INTO group_dm_members (dm_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING"
     ).bind(group_id).bind(body.user_id).execute(&mut *tx).await?;
+    sqlx::query("DELETE FROM group_dm_excluded WHERE dm_id=$1 AND user_id=$2")
+        .bind(group_id).bind(body.user_id).execute(&mut *tx).await?;
     tx.commit().await?;
 
     let new_user = sqlx::query(
@@ -925,6 +944,8 @@ pub async fn remove_group_dm_member(
     if target_id == claims.sub { return Err(AppError::BadRequest("Utilisez /leave pour quitter".into())); }
 
     sqlx::query("DELETE FROM group_dm_members WHERE dm_id=$1 AND user_id=$2")
+        .bind(group_id).bind(target_id).execute(&state.db).await?;
+    sqlx::query("INSERT INTO group_dm_excluded (dm_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING")
         .bind(group_id).bind(target_id).execute(&state.db).await?;
     // L'exclu perd aussi l'accès à l'appel de groupe en cours.
     crate::handlers::group_calls::leave(&state, group_id, target_id).await;
