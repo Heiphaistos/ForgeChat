@@ -16,12 +16,12 @@ test('HTML : texte et coloration highlight.js seulement', () => {
   }
 })
 
-test('adresses de script : notre origine, blob: de notre origine, API YouTube', () => {
+test('adresses de script : notre origine, blob: de notre origine', () => {
   const o = 'https://forgechat.example'
-  for (const ok of ['/assets/a.js', 'https://forgechat.example/mediapipe/x.js', 'blob:https://forgechat.example/1234', 'https://www.youtube.com/iframe_api']) {
+  for (const ok of ['/assets/a.js', 'https://forgechat.example/mediapipe/x.js', 'blob:https://forgechat.example/1234']) {
     assert.equal(safeScriptUrl(ok, o), true, ok)
   }
-  for (const ko of ['https://evil.example/x.js', 'blob:https://evil.example/1', 'data:text/javascript,alert(1)', 'javascript:alert(1)', 'https://www.youtube.com/other.js', '//evil.example/x.js']) {
+  for (const ko of ['https://evil.example/x.js', 'blob:https://evil.example/1', 'data:text/javascript,alert(1)', 'javascript:alert(1)', 'https://www.youtube.com/iframe_api', 'https://www.youtube.com/other.js', '//evil.example/x.js']) {
     assert.equal(safeScriptUrl(ko, o), false, ko)
   }
 })

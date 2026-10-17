@@ -6,46 +6,14 @@ import {
   expectedPosition, needsResync, parseWatchState, parseYouTubeId, youtubeLink, type WatchState,
 } from '../../lib/watchTogether'
 import { useT, t as tr, type Key } from '../../i18n'
+import { BUFFERING, createYtEmbed, ENDED, PLAYING, type YtEmbed } from '../../lib/youtubeEmbed'
 
-// « Regarder ensemble » : lecteur YouTube (iframe officielle youtube-nocookie +
-// API IFrame Player) synchronisé par le WebSocket, voir server/src/handlers/watch.rs.
+// « Regarder ensemble » : lecteur YouTube (iframe officielle youtube-nocookie
+// pilotée en postMessage, aucun script YouTube dans la page) synchronisé par le WebSocket, voir server/src/handlers/watch.rs.
 // Aucune action n'est appliquée en local d'avance : on envoie la commande et c'est
 // l'état renvoyé par le serveur (à tout le salon, nous compris) qui pilote le lecteur.
 
-interface YTPlayer {
-  loadVideoById(o: { videoId: string; startSeconds?: number }): void
-  cueVideoById(o: { videoId: string; startSeconds?: number }): void
-  playVideo(): void
-  pauseVideo(): void
-  seekTo(seconds: number, allowSeekAhead: boolean): void
-  getCurrentTime(): number
-  getDuration(): number
-  getPlayerState(): number
-  getVideoData?(): { title?: string }
-  setVolume(volume: number): void
-  destroy(): void
-}
-interface YTNamespace { Player: new (el: HTMLElement, opts: object) => YTPlayer }
-declare global {
-  interface Window { YT?: YTNamespace; onYouTubeIframeAPIReady?: () => void }
-}
-
-// États du lecteur YouTube
-const ENDED = 0, PLAYING = 1, BUFFERING = 3
-
-let apiPromise: Promise<YTNamespace> | null = null
-function loadYouTubeApi(): Promise<YTNamespace> {
-  if (window.YT?.Player) return Promise.resolve(window.YT)
-  apiPromise ??= new Promise((resolve, reject) => {
-    const prev = window.onYouTubeIframeAPIReady
-    window.onYouTubeIframeAPIReady = () => { prev?.(); if (window.YT) resolve(window.YT) }
-    const script = document.createElement('script')
-    script.src = 'https://www.youtube.com/iframe_api'
-    script.onerror = () => { apiPromise = null; script.remove(); reject(new Error('iframe_api')) }
-    document.head.appendChild(script)
-  })
-  return apiPromise
-}
+// États du lecteur (ENDED, PLAYING, BUFFERING) et iframe : lib/youtubeEmbed.
 
 const ERRORS: Record<string, Key> = {
   rate_limited: 'watch.err.rateLimited',
@@ -88,7 +56,7 @@ export default function WatchTogether({ channelId, state, onClose }: Props) {
   const t = useT()
   const { send } = useWs()
   const hostRef = useRef<HTMLDivElement>(null)
-  const playerRef = useRef<YTPlayer | null>(null)
+  const playerRef = useRef<YtEmbed | null>(null)
   const loadedItemRef = useRef<number | null>(null)
   const stateRef = useRef(state)
   stateRef.current = state
@@ -102,38 +70,29 @@ export default function WatchTogether({ channelId, state, onClose }: Props) {
   const toggleAudioOnly = () => setAudioOnly(v => { localStorage.setItem('fc_watch_audio', String(!v)); return !v })
   const [, setTick] = useState(0)
 
-  // Lecteur créé une fois par salon ; détruit à la fermeture du panneau.
+  // Lecteur créé quand une vidéo est partagée (l'iframe porte la 1re vidéo) ; détruit à l'arrêt ou à la fermeture.
+  const active = !!state
   useEffect(() => {
-    let cancelled = false
-    loadYouTubeApi().then(YT => {
-      if (cancelled || !hostRef.current) return
-      const el = document.createElement('div')
-      hostRef.current.appendChild(el)
-      playerRef.current = new YT.Player(el, {
-        host: 'https://www.youtube-nocookie.com',
-        width: '100%',
-        height: '100%',
-        // Pas de contrôles YouTube : toute action passe par nos boutons (et donc le serveur).
-        playerVars: { controls: 0, disablekb: 1, rel: 0, playsinline: 1, origin: window.location.origin },
-        events: {
-          onReady: () => setReady(true),
-          onStateChange: (e: { data: number }) => {
-            const s = stateRef.current
-            // Fin de vidéo : chaque client le signale, le serveur n'avance qu'une fois (item).
-            if (e.data === ENDED && s) send({ type: 'WATCH_NEXT', channel_id: channelId, item: s.item })
-          },
-          onError: () => setFailed(tr('watch.cannotPlay')),
-        },
-      })
-    }).catch(() => setFailed(tr('watch.loadError')))
+    const s = stateRef.current
+    if (!active || !s || !hostRef.current) return
+    loadedItemRef.current = s.item
+    playerRef.current = createYtEmbed(hostRef.current, {
+      videoId: s.videoId, start: expectedPosition(s, Date.now()), autoplay: s.playing,
+      onReady: () => setReady(true),
+      onState: st => {
+        const cur = stateRef.current
+        // Fin de vidéo : chaque client le signale, le serveur n'avance qu'une fois (item).
+        if (st === ENDED && cur) send({ type: 'WATCH_NEXT', channel_id: channelId, item: cur.item })
+      },
+      onError: () => setFailed(tr('watch.cannotPlay')),
+    })
     return () => {
-      cancelled = true
       playerRef.current?.destroy()
       playerRef.current = null
       loadedItemRef.current = null
       setReady(false)
     }
-  }, [channelId, send])
+  }, [channelId, send, active])
 
   // Aligne le lecteur sur l'état partagé. `force` : un participant vient d'agir.
   const sync = useCallback((force: boolean) => {
@@ -143,16 +102,16 @@ export default function WatchTogether({ channelId, state, onClose }: Props) {
     if (loadedItemRef.current !== s.item) {
       loadedItemRef.current = s.item
       setFailed(null)
-      if (s.playing) p.loadVideoById({ videoId: s.videoId, startSeconds: expected })
-      else p.cueVideoById({ videoId: s.videoId, startSeconds: expected })
+      if (s.playing) p.load(s.videoId, expected)
+      else p.cue(s.videoId, expected)
       return
     }
-    const ps = p.getPlayerState()
-    const ended = ps === ENDED && expected >= p.getDuration() - 1
+    const ps = p.state()
+    const ended = ps === ENDED && expected >= p.duration() - 1
     if (ended) return
-    if (s.playing && ps !== PLAYING && ps !== BUFFERING) p.playVideo()
-    if (!s.playing && (ps === PLAYING || ps === BUFFERING)) p.pauseVideo()
-    if (needsResync(p.getCurrentTime(), expected, force ? 0.5 : undefined)) p.seekTo(expected, true)
+    if (s.playing && ps !== PLAYING && ps !== BUFFERING) p.play()
+    if (!s.playing && (ps === PLAYING || ps === BUFFERING)) p.pause()
+    if (needsResync(p.time(), expected, force ? 0.5 : undefined)) p.seekTo(expected)
   }, [ready])
 
   useEffect(() => { sync(true) }, [state, sync])
@@ -163,9 +122,9 @@ export default function WatchTogether({ channelId, state, onClose }: Props) {
   useEffect(() => { if (ready) playerRef.current?.setVolume(volume) }, [ready, volume])
 
   const player = ready ? playerRef.current : null
-  const current = player && state ? player.getCurrentTime() : state ? expectedPosition(state, Date.now()) : 0
-  const duration = player?.getDuration() || 0
-  const title = (player && state && player.getVideoData?.()?.title) || null
+  const current = player && state ? player.time() : state ? expectedPosition(state, Date.now()) : 0
+  const duration = player?.duration() || 0
+  const title = (player && state && player.title()) || null
 
   const setPlayback = (playing: boolean, position: number) => {
     if (!state) return
