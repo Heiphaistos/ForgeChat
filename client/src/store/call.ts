@@ -143,7 +143,8 @@ async function _connectNative(lk: LkAccess, set: SetFn, get: () => CallStore) {
   const res = await api.get('/voice/ice-config').catch(() => null)
   try {
     const conv = lk.conv_id ?? get().dmId
-    const keys = lk.e2ee && conv ? await nativeMediaKey('dm', conv) : null
+    if (!conv) throw new Error('E2E_WAITING') // jamais de média en clair
+    const keys = await nativeMediaKey('dm', conv)
     _stopNativeKeys = keys?.stop ?? null
     await nativeConnect('call', lk.url, lk.token, res?.data.ice_servers ?? [], true, !get().micMuted, {
       onTrack: e => {
@@ -176,32 +177,29 @@ async function _connectNative(lk: LkAccess, set: SetFn, get: () => CallStore) {
 }
 
 async function _connect(lk: LkAccess, set: SetFn, get: () => CallStore) {
-  set(() => ({ e2ee: !!lk.e2ee }))
+  set(() => ({ e2ee: true }))
   if (isNativeVoice()) return _connectNative(lk, set, get)
   if (_room) return
   // Salle chiffrée : jamais de connexion en clair, même si la clé manque.
   const conv = lk.conv_id ?? get().dmId
-  let e2ee = null
-  if (lk.e2ee) {
-    try {
-      if (!conv) throw new Error('E2E_WAITING')
-      e2ee = await openMediaE2EE('dm', conv)
-    } catch (e) {
-      toast.error(t(mediaE2EEError(e)))
-      _endCall(set, get)
-      return
-    }
-    if (_room || get().callState === 'idle') { e2ee.stop(); return }
+  // Le drapeau `lk.e2ee` servi est ignoré : un serveur ne peut pas nous faire rejoindre en clair.
+  let e2ee: Awaited<ReturnType<typeof openMediaE2EE>>
+  try {
+    if (!conv) throw new Error('E2E_WAITING')
+    e2ee = await openMediaE2EE('dm', conv)
+  } catch (e) {
+    toast.error(t(mediaE2EEError(e)))
+    _endCall(set, get)
+    return
   }
+  if (_room || get().callState === 'idle') { e2ee.stop(); return }
   const room = new Room({
     adaptiveStream: false, dynacast: true, disconnectOnPageLeave: true, stopLocalTrackOnUnpublish: false,
-    ...(e2ee ? { encryption: e2ee.encryption } : {}),
+    encryption: e2ee.encryption,
   })
   _room = room
-  if (e2ee) {
-    await enableMediaE2EE(room, e2ee)
-    watchOutdated(room, ids => set(() => ({ e2eeOutdated: ids })))
-  }
+  await enableMediaE2EE(room, e2ee)
+  watchOutdated(room, ids => set(() => ({ e2eeOutdated: ids })))
   const partner = () => get().partnerId
   room
     .on(RoomEvent.TrackSubscribed, (_t, _p, rp) => { if (rp.identity === partner()) _rebuildRemote(rp, set, get) })

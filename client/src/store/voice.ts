@@ -722,7 +722,7 @@ export const useVoice = create<VoiceStore>((set, get) => {
             return
           }
           // Sans effet si la connexion au SFU tient déjà (reconnexion du seul WebSocket).
-          await connectMedia(lk.url, lk.token, lk.room, ctx, d.can_speak !== false, lk.e2ee ? String(d.channel_id) : null)
+          await connectMedia(lk.url, lk.token, lk.room, ctx, d.can_speak !== false, String(d.channel_id))
           if (get().mediaStatus === 'connected') clearRejoin()
         })
 
