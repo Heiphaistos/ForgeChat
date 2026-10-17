@@ -66,13 +66,13 @@ async fn auth_v2_prelogin_and_migration() {
     assert_eq!(u.password_hash, NO_PASSWORD);
     assert_eq!(prelogin_lookup(&db, secret, &email).await.unwrap(), (SALT.to_string(), false, "argon2id".to_string()));
 
-    // Compte migré : auth seulement ; un mot de passe reçu = 426, jamais vérifié.
+    // Compte migré : auth seulement ; un mot de passe reçu est ignoré, refus générique (pas de 426 avant preuve).
     assert!(login_credentials(&login(json!({ "email": email, "auth": AUTH })), Some(u.clone())).unwrap().is_some());
     assert!(login_credentials(&login(json!({ "email": email, "auth": AUTH2 })), Some(u.clone())).unwrap().is_none());
-    let old_app = login_credentials(&login(json!({ "email": email, "password": "ancien mot de passe" })), Some(u.clone()));
-    assert!(matches!(old_app, Err(AppError::UpgradeRequired(_))));
-    let both = login_credentials(&login(json!({ "email": email, "auth": AUTH, "password": "x" })), Some(u));
-    assert!(matches!(both, Err(AppError::UpgradeRequired(_))));
+    assert!(login_credentials(&login(json!({ "email": email, "password": "ancien mot de passe" })), Some(u.clone())).unwrap().is_none());
+    // Preuve valide + champ password en trop : la preuve fait foi. Preuve de format invalide : refus.
+    assert!(login_credentials(&login(json!({ "email": email, "auth": AUTH, "password": "x" })), Some(u.clone())).unwrap().is_some());
+    assert!(login_credentials(&login(json!({ "email": email, "auth": "pas-du-base64" })), Some(u)).unwrap().is_none());
     // Inconnu : refus simple.
     assert!(login_credentials(&login(json!({ "email": "x@gmail.com", "auth": AUTH })), None).unwrap().is_none());
 
@@ -217,21 +217,36 @@ async fn auth_v2_email_at_rest() {
         sqlx::query("DELETE FROM users WHERE id=$1").bind(u).execute(&db).await.unwrap();
     }
 
-    // 5 mauvais codes : la demande est annulée, même le bon code ne passe plus.
+    // Demande en attente : une seconde inscription (autre pseudo) ne l'écrase pas et n'envoie rien.
     let email2 = format!("t2.{}@gmail.com", &tag[..12]);
-    let reg: crate::models::user::RegisterRequest = serde_json::from_value(json!({
-        "username": format!("b{}", &tag[..19]), "email": email2, "auth": AUTH, "kdf_salt": SALT,
-    })).unwrap();
-    let _ = crate::handlers::auth::register(State(state.clone()), ip(), HeaderMap::new(), Json(reg)).await.unwrap();
+    let uname2 = format!("b{}", &tag[..19]);
+    let reg = |name: &str| -> crate::models::user::RegisterRequest {
+        serde_json::from_value(json!({ "username": name, "email": email2, "auth": AUTH, "kdf_salt": SALT })).unwrap()
+    };
+    let _ = crate::handlers::auth::register(State(state.clone()), ip(), HeaderMap::new(), Json(reg(&uname2))).await.unwrap();
     let good = mailed_code(&mailbox, &email2).await;
+    let _ = crate::handlers::auth::register(State(state.clone()), ip(), HeaderMap::new(), Json(reg("pirate"))).await.unwrap();
+    let (name, attempts): (String, i32) = sqlx::query_as("SELECT username, attempts FROM pending_registrations WHERE email_hmac=$1")
+        .bind(crate::email_crypto::hmac(&email2)).fetch_one(&db).await.unwrap();
+    assert_eq!((name.as_str(), attempts), (uname2.as_str(), 0), "demande en attente non écrasée");
+    assert_eq!(mailed_code(&mailbox, &email2).await, good, "aucun nouveau code envoyé");
+
+    // Mauvais codes (IP différentes) : la demande n'est jamais supprimée par un tiers ; au 10e, ce code est
+    // épuisé (même le bon ne passe plus) et la victime peut se réinscrire.
     let wrong = if good == "000000" { "000001" } else { "000000" };
-    for _ in 0..5 {
+    for _ in 0..10 {
         let r = crate::handlers::auth::verify_email(State(state.clone()), ip(), HeaderMap::new(), Json(json!({ "email": email2, "code": wrong }))).await;
         assert!(r.is_err());
     }
     let left: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM pending_registrations WHERE email_hmac=$1")
         .bind(crate::email_crypto::hmac(&email2)).fetch_one(&db).await.unwrap();
-    assert_eq!(left, 0, "demande annulée au 5e mauvais code");
+    assert_eq!(left, 1, "demande conservée");
+    let r = crate::handlers::auth::verify_email(State(state.clone()), ip(), HeaderMap::new(), Json(json!({ "email": email2, "code": good }))).await;
+    assert!(r.is_err(), "code épuisé");
+    let _ = crate::handlers::auth::register(State(state.clone()), ip(), HeaderMap::new(), Json(reg(&uname2))).await.unwrap();
+    let attempts: i32 = sqlx::query_scalar("SELECT attempts FROM pending_registrations WHERE email_hmac=$1")
+        .bind(crate::email_crypto::hmac(&email2)).fetch_one(&db).await.unwrap();
+    assert_eq!(attempts, 0, "demande épuisée remplacée");
     let _ = std::fs::remove_dir_all(&mailbox);
 }
 

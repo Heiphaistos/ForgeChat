@@ -468,4 +468,6 @@ pub struct PendingRegistration {
     pub kdf_salt: String,
     pub invite_code: Option<String>,
     pub kdf: String,
+    /// Mauvais codes déjà essayés sur cette demande.
+    pub attempts: i32,
 }

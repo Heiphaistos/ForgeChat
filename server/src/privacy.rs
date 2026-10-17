@@ -3,7 +3,10 @@
 use axum::http::HeaderMap;
 use hmac::{Hmac, Mac};
 use sha2::Sha256;
-use std::{net::SocketAddr, sync::Mutex};
+use std::{
+    net::{IpAddr, SocketAddr},
+    sync::{Mutex, OnceLock},
+};
 
 /// Pseudonyme d'une valeur (IP, e-mail) pour les clés Redis de limitation de débit :
 /// HMAC-SHA256 avec un sel aléatoire tiré chaque jour et gardé en mémoire seulement.
@@ -35,14 +38,64 @@ pub fn client_key(headers: &HeaderMap, addr: &SocketAddr) -> String {
     pseudonym(&client_ip(headers, addr))
 }
 
+/// Réseaux dont l'adresse de pair est un proxy de confiance (nginx de l'hôte, serveur dans docker) :
+/// `TRUSTED_PROXIES` (IP ou CIDR séparés par des virgules) ; par défaut boucle locale + réseaux privés.
+const DEFAULT_TRUSTED: &str = "127.0.0.0/8,::1/128,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,fc00::/7";
+
+/// `(adresse, longueur du préfixe)` ; entrée invalide ignorée.
+fn parse_nets(list: &str) -> Vec<(IpAddr, u8)> {
+    list.split(',')
+        .filter_map(|e| {
+            let e = e.trim();
+            let (ip, len) = match e.split_once('/') {
+                Some((ip, l)) => (ip.parse::<IpAddr>().ok()?, l.parse::<u8>().ok()?),
+                None => {
+                    let ip = e.parse::<IpAddr>().ok()?;
+                    (ip, if ip.is_ipv4() { 32 } else { 128 })
+                }
+            };
+            (len <= if ip.is_ipv4() { 32 } else { 128 }).then_some((ip, len))
+        })
+        .collect()
+}
+
+fn in_net(ip: IpAddr, (net, len): (IpAddr, u8)) -> bool {
+    let bits = |ip: IpAddr| match ip {
+        IpAddr::V4(v) => (u128::from(u32::from(v)), 32u32),
+        IpAddr::V6(v) => (u128::from(v), 128u32),
+    };
+    let ((a, w), (n, nw)) = (bits(ip), bits(net));
+    if w != nw {
+        return false;
+    }
+    let shift = w - u32::from(len);
+    shift >= 128 || (a >> shift) == (n >> shift)
+}
+
+fn is_trusted_proxy(peer: IpAddr) -> bool {
+    static NETS: OnceLock<Vec<(IpAddr, u8)>> = OnceLock::new();
+    let nets = NETS.get_or_init(|| parse_nets(&std::env::var("TRUSTED_PROXIES").unwrap_or_else(|_| DEFAULT_TRUSTED.into())));
+    // Adresse IPv4 mappée en IPv6 (::ffff:a.b.c.d) : comparée comme IPv4.
+    let peer = match peer {
+        IpAddr::V6(v) => v.to_ipv4_mapped().map_or(peer, IpAddr::V4),
+        v4 => v4,
+    };
+    nets.iter().any(|n| in_net(peer, *n))
+}
+
+/// X-Real-IP n'est cru que si le pair TCP est un proxy de confiance ; sinon n'importe quel client
+/// joignant le port directement choisirait son IP (contournement de tous les limiteurs par IP).
 fn client_ip(headers: &HeaderMap, addr: &SocketAddr) -> String {
-    headers
-        .get("x-real-ip")
-        .and_then(|v| v.to_str().ok())
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
-        .map(str::to_string)
-        .unwrap_or_else(|| addr.ip().to_string())
+    if is_trusted_proxy(addr.ip()) {
+        if let Some(ip) = headers
+            .get("x-real-ip")
+            .and_then(|v| v.to_str().ok())
+            .and_then(|s| s.trim().parse::<IpAddr>().ok())
+        {
+            return ip.to_string();
+        }
+    }
+    addr.ip().to_string()
 }
 
 #[cfg(test)]
@@ -55,6 +108,34 @@ mod client_ip_tests {
         assert_eq!(super::client_ip(&h, &addr), "10.0.0.9");
         h.insert("x-real-ip", "5.6.7.8".parse().unwrap());
         assert_eq!(super::client_ip(&h, &addr), "5.6.7.8");
+    }
+
+    #[test]
+    fn real_ip_only_from_trusted_proxy() {
+        let mut h = axum::http::HeaderMap::new();
+        h.insert("x-real-ip", "5.6.7.8".parse().unwrap());
+        // Pair public : l'en-tête est choisi par le client, ignoré.
+        let direct: std::net::SocketAddr = "203.0.113.9:1234".parse().unwrap();
+        assert_eq!(super::client_ip(&h, &direct), "203.0.113.9");
+        // Proxy local / docker (réseaux par défaut), y compris IPv4 mappée.
+        for peer in ["127.0.0.1:1", "172.18.0.1:1", "192.168.1.5:1", "[::1]:1", "[::ffff:10.1.2.3]:1"] {
+            assert_eq!(super::client_ip(&h, &peer.parse().unwrap()), "5.6.7.8", "{peer}");
+        }
+        // En-tête illisible : repli sur le pair.
+        h.insert("x-real-ip", "pas-une-ip".parse().unwrap());
+        assert_eq!(super::client_ip(&h, &"127.0.0.1:1".parse().unwrap()), "127.0.0.1");
+    }
+
+    #[test]
+    fn trusted_proxy_list_parsing() {
+        let nets = super::parse_nets("10.0.0.0/8, 1.2.3.4 ,bad,2001:db8::/32,1.1.1.1/99");
+        assert_eq!(nets.len(), 3);
+        let ip = |s: &str| s.parse().unwrap();
+        assert!(super::in_net(ip("10.9.9.9"), nets[0]));
+        assert!(!super::in_net(ip("11.0.0.1"), nets[0]));
+        assert!(super::in_net(ip("1.2.3.4"), nets[1]) && !super::in_net(ip("1.2.3.5"), nets[1]));
+        assert!(super::in_net(ip("2001:db8::1"), nets[2]) && !super::in_net(ip("10.0.0.1"), nets[2]));
+        assert!(super::in_net(ip("1.2.3.4"), (ip("0.0.0.0"), 0)));
     }
 }
 

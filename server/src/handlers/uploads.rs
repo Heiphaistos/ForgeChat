@@ -121,6 +121,36 @@ fn fmt_bytes(n: u64) -> String {
 /// `save` écrit chaque fichier en bornant sa taille au reste du quota.
 pub struct UploadBudget {
     remaining: u64,
+    /// Octets réservés dans Redis (`upload_reserved:<compte>`), rendus à la fin de la requête.
+    reserved: u64,
+    user_id: Uuid,
+    redis: std::sync::Arc<tokio::sync::Mutex<redis::aio::ConnectionManager>>,
+}
+
+impl Drop for UploadBudget {
+    fn drop(&mut self) {
+        if self.reserved == 0 {
+            return;
+        }
+        let (redis, key, n) = (self.redis.clone(), reserved_key(self.user_id), self.reserved as i64);
+        // Rendu après un court délai : les lignes `attachments` de la requête sont validées par l'appelant
+        // juste après ; entre-temps la réservation et les lignes comptent deux fois (prudent, jamais trop peu).
+        tokio::spawn(async move {
+            tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+            let _: redis::RedisResult<i64> = redis::AsyncCommands::decr(&mut *redis.lock().await, key, n).await;
+        });
+    }
+}
+
+fn reserved_key(user_id: Uuid) -> String {
+    format!("upload_reserved:{user_id}")
+}
+
+/// Octets restants pour cette requête : quota moins l'usage en base moins les réservations des
+/// AUTRES requêtes en cours (`others`). `None` = rien de disponible.
+fn available(quota: u64, used: i64, others: i64) -> Option<u64> {
+    let r = quota.saturating_sub(used.max(0) as u64).saturating_sub(others.max(0) as u64);
+    (r > 0).then_some(r)
 }
 
 impl UploadBudget {
@@ -132,8 +162,6 @@ impl UploadBudget {
             }
             other => other?,
         }
-        // ponytail: usage lu une fois par requête, deux envois simultanés peuvent dépasser
-        // le quota d'un fichier ; verrou par compte si ça devient un problème.
         let used: i64 = sqlx::query_scalar(
             "SELECT COALESCE(SUM(size), 0)::BIGINT FROM attachments WHERE uploader_id = $1",
         )
@@ -141,14 +169,34 @@ impl UploadBudget {
         .fetch_one(&state.db)
         .await?;
         let quota = state.config.upload_quota_bytes;
-        let remaining = quota.saturating_sub(used.max(0) as u64);
-        if remaining == 0 {
-            return Err(AppError::PayloadTooLarge(format!(
-                "Quota de stockage atteint ({}) : supprimez d'anciens fichiers pour en envoyer d'autres",
-                fmt_bytes(quota)
-            )));
+        let too_full = || AppError::PayloadTooLarge(format!(
+            "Quota de stockage atteint ({}) : supprimez d'anciens fichiers pour en envoyer d'autres",
+            fmt_bytes(quota)
+        ));
+        // Réservation atomique (INCRBY) : des envois simultanés ne lisent plus tous le même usage.
+        // Au plus MAX_FILES_PER_REQUEST fichiers réservés par requête ; TTL pour qu'un plantage ne bloque pas le compte.
+        let want = (quota.saturating_sub(used.max(0) as u64))
+            .min(state.config.max_upload_size.saturating_mul(MAX_FILES_PER_REQUEST as u64));
+        if want == 0 {
+            return Err(too_full());
         }
-        Ok(Self { remaining })
+        let key = reserved_key(user_id);
+        let unavailable = |_| AppError::Unavailable("Service momentanément indisponible, réessayez dans un instant".into());
+        let total: i64 = {
+            let mut redis = state.redis.lock().await;
+            let total: i64 = redis::AsyncCommands::incr(&mut *redis, &key, want as i64).await.map_err(unavailable)?;
+            let _: bool = redis::AsyncCommands::expire(&mut *redis, &key, 1800).await.map_err(unavailable)?;
+            total
+        };
+        let mut budget = Self { remaining: 0, reserved: want, user_id, redis: state.redis.clone() };
+        match available(quota, used, total - want as i64) {
+            // `budget` rend la réservation en tombant.
+            None => Err(too_full()),
+            Some(r) => {
+                budget.remaining = r.min(want);
+                Ok(budget)
+            }
+        }
     }
 
     pub async fn save(&mut self, state: &AppState, field: axum::extract::multipart::Field<'_>, path: &std::path::Path) -> Result<i64> {
@@ -725,6 +773,15 @@ pub async fn sign_urls(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn quota_disponible_avec_reservations_concurrentes() {
+        assert_eq!(available(100, 30, 0), Some(70));
+        assert_eq!(available(100, 30, 50), Some(20)); // un envoi en cours a réservé 50
+        assert_eq!(available(100, 30, 70), None);
+        assert_eq!(available(100, 150, 0), None);
+        assert_eq!(available(100, -5, -5), Some(100));
+    }
 
     #[test]
     fn nom_de_blob_chiffre() {

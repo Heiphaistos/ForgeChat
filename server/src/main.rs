@@ -646,7 +646,7 @@ fn protected_route_table() -> Router<AppState> {
         .route("/users/me/sessions/:id", delete(handlers::auth::revoke_session))
         .route("/users/me", patch(handlers::users::update_me))
         .route("/users/me", delete(handlers::users::delete_account))
-        .route("/users/me/data-export", get(handlers::privacy::export_user_data))
+        .route("/users/me/data-export", post(handlers::privacy::export_user_data))
         .route("/users/me/stats", get(handlers::users::get_my_stats))
         .route("/users/me/login-history", get(handlers::users::get_login_history))
         .route("/users/me/avatar", post(handlers::profile_custom::upload_avatar))

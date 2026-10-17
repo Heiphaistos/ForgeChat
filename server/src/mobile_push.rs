@@ -124,19 +124,8 @@ pub async fn register_device(
     if body.provider.as_deref().unwrap_or("expo") != "expo" {
         return Err(AppError::BadRequest("Fournisseur push non pris en charge".into()));
     }
-    // 30 enregistrements par heure et par compte.
-    {
-        use redis::AsyncCommands;
-        let key = format!("push_reg:{}", claims.sub);
-        let mut redis = state.redis.lock().await;
-        let count: i64 = redis.incr(&key, 1i64).await.unwrap_or(0);
-        if count == 1 {
-            let _: () = redis.expire(&key, 3600).await.unwrap_or(());
-        }
-        if count > 30 {
-            return Err(AppError::TooManyRequests);
-        }
-    }
+    // 30 enregistrements par heure et par compte ; Redis KO : 503 (jamais un passage libre).
+    crate::handlers::auth_v2::hit(&state, &format!("push_reg:{}", claims.sub), 30, 3600).await?;
 
     let key_hash = device_key_hash(body.device_id.as_deref())?;
 

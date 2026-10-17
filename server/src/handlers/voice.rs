@@ -233,11 +233,18 @@ pub async fn livekit_webhook(State(state): State<AppState>, headers: HeaderMap, 
             // Révocation : un client exclu/sorti garde un jeton (initial ou rafraîchi par le SFU)
             // valable ~10 min. Tout (re)join au SFU sans présence ForgeChat dans ce salon
             // (VOICE_JOIN fait foi, droits revérifiés) est éjecté aussitôt.
-            if !group_call && state.user_voice.read().await.get(&user_id) != Some(&channel_id) {
+            // Appel de groupe : le membre du groupe fait foi (`gdm-<groupe>`), un ancien membre est éjecté.
+            let allowed = if group_call {
+                crate::handlers::group_calls::is_member(&state, channel_id, user_id).await
+            } else {
+                state.user_voice.read().await.get(&user_id) == Some(&channel_id)
+            };
+            if !allowed {
                 tracing::warn!(user_id = %user_id, channel_id = %channel_id, "join SFU sans présence ForgeChat : éjecté");
                 let http = state.http_client.clone();
+                let room = if group_call { crate::livekit::room_for_group(channel_id) } else { crate::livekit::room_for_channel(channel_id) };
                 tokio::spawn(async move {
-                    crate::livekit::remove_participant(&http, &lk, &crate::livekit::room_for_channel(channel_id), &user_id.to_string()).await;
+                    crate::livekit::remove_participant(&http, &lk, &room, &user_id.to_string()).await;
                 });
             }
         }

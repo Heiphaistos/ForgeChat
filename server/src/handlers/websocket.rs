@@ -294,6 +294,12 @@ async fn handle_socket(socket: WebSocket, state: AppState, user_id: Uuid, sid: O
                         tracing::warn!("WS: message trop grand ({} bytes) de {}", text.len(), user_id);
                         break;
                     }
+                    // Plafond global par compte (toutes sockets), avant toute analyse : le plus gros flux légitime
+                    // est le tableau blanc (300 / 10 s) ; la signalisation d'appel et le vocal restent loin dessous.
+                    if !rate_ok(&state_clone, format!("rl:ws_all:{user_id}"), WS_GLOBAL_PER_10S, 10).await {
+                        tracing::warn!("WS: débit global dépassé, socket fermée ({user_id})");
+                        break;
+                    }
                     handle_ws_message(&state_clone, user_id, session_id, &text, &username_clone).await;
                 }
                 Message::Close(_) => break,
@@ -676,6 +682,29 @@ mod local_rate_tests {
     }
 }
 
+#[cfg(test)]
+mod relay_tests {
+    use super::sanitize_relayed;
+    use serde_json::json;
+
+    #[test]
+    fn relayed_fields_are_typed_and_bounded() {
+        let mut m = json!({"dm_id": "<script>", "call_type": {"x": 1}, "tool": "pen", "color": "#ff0000", "size": 1e99});
+        sanitize_relayed(&mut m);
+        assert_eq!(m["dm_id"], json!(null));
+        assert_eq!(m["call_type"], "voice");
+        assert_eq!(m["tool"], "pen");
+        assert_eq!(m["color"], "#ff0000");
+        assert_eq!(m["size"], 200.0);
+        let id = "0b8f6c1e-2d3a-4e5f-9a8b-7c6d5e4f3a21";
+        let mut m = json!({"dm_id": id.to_uppercase(), "call_type": "video", "tool": "x".repeat(99), "color": "red\"}<b>", "size": "9"});
+        sanitize_relayed(&mut m);
+        assert_eq!(m["dm_id"], id);
+        assert_eq!(m["call_type"], "video");
+        assert_eq!((m["tool"].clone(), m["color"].clone(), m["size"].clone()), (json!(null), json!(null), json!(null)));
+    }
+}
+
 /// Permissions effectives de `user_id` sur `channel_id`, overrides de canal
 /// compris. `None` = pas membre du serveur du canal.
 async fn channel_perms(state: &AppState, user_id: Uuid, channel_id: Uuid) -> Option<(Uuid, i64)> {
@@ -730,6 +759,41 @@ pub(crate) async fn voice_perm_ok(
     has_perm(perms, bit) || !perm_is_administered(state, server_id, channel_id, bit).await
 }
 
+/// Messages texte acceptés par compte et par fenêtre de 10 s, toutes sockets confondues (hors PING/pong,
+/// qui ne sont pas des messages texte). Au-delà : la socket est fermée.
+const WS_GLOBAL_PER_10S: i64 = 800;
+
+/// Champs relayés tels quels aux autres clients : ramenés à un type et une taille connus.
+fn sanitize_relayed(msg: &mut serde_json::Value) {
+    use serde_json::Value;
+    let Some(o) = msg.as_object_mut() else { return };
+    if let Some(v) = o.get_mut("dm_id") {
+        *v = match v.as_str().and_then(|s| s.parse::<Uuid>().ok()) {
+            Some(u) => Value::String(u.to_string()),
+            None => Value::Null,
+        };
+    }
+    if let Some(v) = o.get_mut("call_type") {
+        *v = Value::String(if v.as_str() == Some("video") { "video" } else { "voice" }.into());
+    }
+    if let Some(v) = o.get_mut("tool") {
+        if !v.as_str().is_some_and(|s| s.len() <= 16 && s.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-')) {
+            *v = Value::Null;
+        }
+    }
+    if let Some(v) = o.get_mut("color") {
+        if !v.as_str().is_some_and(|s| s.len() <= 32 && s.bytes().all(|b| b.is_ascii_alphanumeric() || b" #(),.%".contains(&b))) {
+            *v = Value::Null;
+        }
+    }
+    if let Some(v) = o.get_mut("size") {
+        match v.as_f64() {
+            Some(n) if n.is_finite() => *v = Value::from(n.clamp(0.0, 200.0)),
+            _ => *v = Value::Null,
+        }
+    }
+}
+
 async fn handle_ws_message(
     state: &AppState,
     user_id: Uuid,
@@ -737,9 +801,10 @@ async fn handle_ws_message(
     text: &str,
     cached_username: &str,
 ) {
-    let Ok(msg) = serde_json::from_str::<serde_json::Value>(text) else {
+    let Ok(mut msg) = serde_json::from_str::<serde_json::Value>(text) else {
         return;
     };
+    sanitize_relayed(&mut msg);
 
     match msg["type"].as_str() {
         // ────────── Canal texte ──────────
@@ -749,7 +814,7 @@ async fn handle_ws_message(
         Some("TYPING_START") => {
             if let Some(channel_id) = msg["channel_id"].as_str().and_then(|s| s.parse::<Uuid>().ok()) {
                 // Rate limit: 1 TYPING_START par 3s par (user, channel) via Redis
-                let rate_key = format!("typing:{}:{}", user_id, channel_id);
+                let rate_key = format!("typing:{}", user_id);
                 {
                     use redis::AsyncCommands;
                     let mut redis = state.redis.lock().await;
@@ -842,7 +907,7 @@ async fn handle_ws_message(
             if let Some(conv_id_str) = msg["conversation_id"].as_str() {
                 if let Ok(conv_uuid) = conv_id_str.parse::<Uuid>() {
                     // Même cadence que TYPING_START (1 / 3 s par conversation).
-                    if !rate_ok(state, format!("rl:typing:{user_id}:{conv_uuid}"), 1, 3).await { return; }
+                    if !rate_ok(state, format!("rl:typing:{user_id}"), 1, 3).await { return; }
                     let event = serde_json::json!({
                         "type": "TYPING",
                         "conversation_id": conv_uuid,
@@ -864,7 +929,8 @@ async fn handle_ws_message(
                     // Also check group DMs
                     let group_ids: Vec<Uuid> = if other_ids.is_empty() {
                         sqlx::query_scalar(
-                            "SELECT user_id FROM group_dm_members WHERE dm_id=$1 AND user_id != $2"
+                            "SELECT user_id FROM group_dm_members WHERE dm_id=$1 AND user_id != $2
+                             AND EXISTS (SELECT 1 FROM group_dm_members WHERE dm_id=$1 AND user_id=$2)"
                         )
                         .bind(conv_uuid)
                         .bind(user_id)
@@ -887,7 +953,7 @@ async fn handle_ws_message(
             let thread_id = msg["thread_id"].as_str().and_then(|s| s.parse::<Uuid>().ok());
             let server_id = msg["server_id"].as_str().and_then(|s| s.parse::<Uuid>().ok());
             if let (Some(tid), Some(sid)) = (thread_id, server_id) {
-                if !rate_ok(state, format!("rl:ttyping:{user_id}:{tid}"), 1, 3).await { return; }
+                if !rate_ok(state, format!("rl:ttyping:{user_id}"), 1, 3).await { return; }
                 // Fil de ce serveur, dans un salon que l'auteur voit.
                 let parent: Option<Uuid> = sqlx::query_scalar(
                     "SELECT t.channel_id FROM threads t JOIN channels c ON c.id = t.channel_id WHERE t.id=$1 AND c.server_id=$2"
@@ -1572,6 +1638,8 @@ async fn handle_ws_message(
         }
 
         Some("GROUP_CALL_JOIN") => {
+            // Chaque join écrit en base, sonne les membres et frappe LiveKit : 10 par minute et par compte.
+            if !rate_ok(state, format!("rl:gcjoin:{user_id}"), 10, 60).await { return; }
             crate::handlers::group_calls::join(state, user_id, session_id, cached_username, &msg).await;
         }
 

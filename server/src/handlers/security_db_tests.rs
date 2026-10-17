@@ -788,8 +788,41 @@ async fn security_audit_2026_10_14b() {
     assert!(get(owner).await.is_ok());
 
     // Export RGPD : 3 par heure, la 4e est refusée.
+    sqlx::query("UPDATE users SET password_hash=$2 WHERE id=$1").bind(victim).bind(bcrypt::hash("pw", 4).unwrap()).execute(&db).await.unwrap();
     for i in 0..4 {
-        let r = crate::handlers::privacy::export_user_data(State(state.clone()), Extension(claims(victim))).await;
+        let r = crate::handlers::privacy::export_user_data(State(state.clone()), Extension(claims(victim)), axum::Json(serde_json::json!({ "password": "pw" }))).await;
         assert_eq!(r.is_ok(), i < 3, "export n° {i}");
     }
+}
+
+/// 2FA : l'activation exige la preuve du mot de passe, puis ferme les autres sessions.
+#[tokio::test]
+#[ignore]
+async fn security_totp_setup_needs_proof_and_confirm_ends_other_sessions() {
+    use axum::{Extension, Json};
+    use crate::handlers::totp::{confirm_totp, open_secret, setup_totp, TotpVerifyInput};
+    let (state, db) = setup().await;
+    std::env::set_var("TOTP_ENC_KEY", "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=");
+    crate::handlers::totp::init_enc_key().unwrap();
+    let u = user(&db).await;
+    sqlx::query("UPDATE users SET password_hash=$2 WHERE id=$1").bind(u).bind(bcrypt::hash("pw", 4).unwrap()).execute(&db).await.unwrap();
+    let (mine, other): (Uuid, Uuid) = (
+        sqlx::query_scalar("INSERT INTO user_sessions (user_id, refresh_token_hash) VALUES ($1, 'h-mine') RETURNING id").bind(u).fetch_one(&db).await.unwrap(),
+        sqlx::query_scalar("INSERT INTO user_sessions (user_id, refresh_token_hash) VALUES ($1, 'h-other') RETURNING id").bind(u).fetch_one(&db).await.unwrap(),
+    );
+    let claims = crate::middleware::auth::Claims { sub: u, exp: i64::MAX, iss: String::new(), iat: 0, sid: Some(mine) };
+    let setup_with = |b: serde_json::Value| setup_totp(State(state.clone()), Extension(claims.clone()), Json(b));
+    assert!(setup_with(serde_json::json!({})).await.is_err(), "sans preuve");
+    assert!(setup_with(serde_json::json!({ "password": "faux" })).await.is_err(), "mauvaise preuve");
+    let secret_set: bool = sqlx::query_scalar("SELECT totp_secret IS NOT NULL FROM users WHERE id=$1").bind(u).fetch_one(&db).await.unwrap();
+    assert!(!secret_set, "aucun secret posé sans preuve");
+    assert!(setup_with(serde_json::json!({ "password": "pw" })).await.is_ok());
+
+    let stored: String = sqlx::query_scalar("SELECT totp_secret FROM users WHERE id=$1").bind(u).fetch_one(&db).await.unwrap();
+    let secret = data_encoding::BASE32.decode(open_secret(u, &stored).unwrap().as_bytes()).unwrap();
+    let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs();
+    let code = totp_lite::totp_custom::<totp_lite::Sha1>(totp_lite::DEFAULT_STEP, 6, &secret, now);
+    confirm_totp(State(state.clone()), Extension(claims), Json(TotpVerifyInput { code })).await.expect("confirm");
+    let ids: Vec<Uuid> = sqlx::query_scalar("SELECT id FROM user_sessions WHERE user_id=$1").bind(u).fetch_all(&db).await.unwrap();
+    assert_eq!(ids, vec![mine], "l'autre session {other} est fermée, la mienne reste");
 }

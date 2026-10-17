@@ -116,7 +116,12 @@ async fn srv2_export_has_new_sections_and_no_secrets() {
     sqlx::query("INSERT INTO connected_accounts (user_id, platform, platform_username) VALUES ($1,'github','octo')")
         .bind(u).execute(&db).await.expect("linked");
     sqlx::query("INSERT INTO user_settings (user_id) VALUES ($1) ON CONFLICT DO NOTHING").bind(u).execute(&db).await.expect("settings");
-    let res = crate::handlers::privacy::export_user_data(State(state.clone()), Extension(claims(u))).await.expect("export").into_response();
+    // Preuve du mot de passe exigée : sans elle ou fausse, refus ; le compte non migré prouve par `password`.
+    sqlx::query("UPDATE users SET password_hash=$2 WHERE id=$1").bind(u).bind(bcrypt::hash("mon mot de passe", 4).unwrap()).execute(&db).await.unwrap();
+    let export = |b: serde_json::Value| crate::handlers::privacy::export_user_data(State(state.clone()), Extension(claims(u)), axum::Json(b));
+    assert!(export(serde_json::json!({})).await.is_err(), "sans preuve");
+    assert!(export(serde_json::json!({ "password": "faux" })).await.is_err(), "mauvaise preuve");
+    let res = export(serde_json::json!({ "password": "mon mot de passe" })).await.expect("export").into_response();
     let body = axum::body::to_bytes(res.into_body(), 10_000_000).await.expect("body");
     let text = String::from_utf8(body.to_vec()).unwrap();
     let v: serde_json::Value = serde_json::from_str(&text).unwrap();

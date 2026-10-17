@@ -244,8 +244,8 @@ pub async fn store_server_envelope(
 /// ADMINISTRATOR ou MANAGE_SERVER. Seuls eux complètent `server_missing`.
 pub async fn server_key_rights(db: &PgPool, channel: Uuid, user: Uuid) -> Result<(bool, bool)> {
     use crate::models::role::Permissions;
-    let row: Option<(bool, i64)> = sqlx::query_as(
-        "SELECT (sm.is_owner OR fc_is_god(sm.user_id)),
+    let row: Option<(bool, bool, i64)> = sqlx::query_as(
+        "SELECT sm.is_owner, fc_is_god(sm.user_id),
                 COALESCE(BIT_OR(r.permissions), 0)
                 | COALESCE((SELECT permissions FROM roles WHERE server_id=sm.server_id AND is_everyone), 0)
          FROM channels c
@@ -260,8 +260,10 @@ pub async fn server_key_rights(db: &PgPool, channel: Uuid, user: Uuid) -> Result
     .fetch_optional(db)
     .await?;
     Ok(match row {
-        Some((true, _)) => (true, true),
-        Some((false, p)) => (p & (Permissions::ADMINISTRATOR | Permissions::MANAGE_SERVER) != 0, false),
+        Some((true, _, _)) => (true, true),
+        // Le dieu du site gère les clés mais n'est pas propriétaire du serveur.
+        Some((false, true, _)) => (true, false),
+        Some((false, false, p)) => (p & (Permissions::ADMINISTRATOR | Permissions::MANAGE_SERVER) != 0, false),
         None => (false, false),
     })
 }
