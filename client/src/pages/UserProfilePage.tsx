@@ -283,7 +283,6 @@ export default function UserProfilePage() {
             src={user.banner}
             minHeight={120}
             maxHeight={420}
-            cover={look.banner.height ? { height: look.banner.height + 60 } : undefined}
             focus={look.banner.focus}
             className={look.banner.className}
             emptyClassName="h-48 bg-gradient-to-br from-indigo-700/60 via-purple-700/40 to-fc-accent/30"

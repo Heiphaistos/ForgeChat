@@ -51,7 +51,8 @@ test('apparence : nombres et « #rrggbb » calculés seulement ; profils existan
   // « solid » sans couleur : fond de l'app ; avec couleurs : l'ancien dégradé voilé.
   assert.equal(cardLook(CARD_DEFAULT).style.background, undefined)
   assert.match(cardLook(CARD_DEFAULT, 0xff0000, null).style.background, /160deg, #ff0000 0%, #ff0000 100%/)
-  assert.equal(cardLook(cleanCard({ layout: 'compact' })).banner.cover, true)
+  // Bannière jamais rognée, même en mise en page compacte ou large.
+  for (const layout of ['compact', 'wide']) assert.equal('cover' in cardLook(cleanCard({ layout })).banner, false)
   assert.equal(cardLook(cleanCard({ pattern: 'none' })).pattern, null)
 })
 

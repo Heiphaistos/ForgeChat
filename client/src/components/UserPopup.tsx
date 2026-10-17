@@ -168,13 +168,12 @@ export default function UserPopup({ userId, serverId, anchorX, anchorY, onClose 
     >
       <CardPatternLayer pattern={look.pattern} />
       {user && <ProfileEffect id={user.profile_effect} intensity={user.profile_effect_intensity} />}
-      {/* Bannière entière (rognée seulement en mise en page compacte ou large) ; l'avatar déborde dessous. */}
+      {/* Bannière entière ; l'avatar déborde dessous. */}
       <div className="relative" aria-hidden>
         <ProfileBanner
           src={banner}
           minHeight={80}
           maxHeight={220}
-          cover={look.banner.height ? { height: look.banner.height } : undefined}
           focus={look.banner.focus}
           className={look.banner.className}
           emptyClassName="h-28"

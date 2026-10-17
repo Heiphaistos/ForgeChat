@@ -66,7 +66,6 @@ export function ProfileCardPreview({ card, primary, accent, banner, name, avatar
       {children}
       <div className="relative" aria-hidden>
         <ProfileBanner src={banner} minHeight={64} maxHeight={150} focus={look.banner.focus} className={look.banner.className}
-          cover={look.banner.height ? { height: Math.round(look.banner.height * 0.8) } : undefined}
           emptyClassName="h-20" emptyStyle={{ background: profileThemeBackground(primary, accent) ?? 'linear-gradient(135deg, #5865f2 0%, #9b59b6 100%)' }} />
         <div className={`absolute -bottom-10 ${look.centered ? 'left-1/2 -translate-x-1/2' : 'left-4'}`}>{avatar}</div>
       </div>

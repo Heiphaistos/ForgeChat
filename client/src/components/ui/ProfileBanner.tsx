@@ -16,13 +16,8 @@ import AnimatedImg from './AnimatedImg'
  */
 export default function ProfileBanner({
   src, defaultRatio = 3, minHeight = 64, maxHeight = 240, focus, className = '', emptyClassName = 'h-28', emptyStyle,
-  imgClassName = '', alt = '', cover, children,
+  imgClassName = '', alt = '', children,
 }: {
-  /**
-   * Carte de profil en mise en page compacte ou large (lib/profileCard.ts) : bandeau de hauteur
-   * fixe, image rognée autour du point focal `focus`. Seule exception au « jamais rognée ».
-   */
-  cover?: { height: number }
   src?: string | null
   /** Proportions avant chargement (largeur / hauteur). */
   defaultRatio?: number
@@ -43,16 +38,7 @@ export default function ProfileBanner({
   // Proportions mémorisées avec leur image : un changement de bannière repart du défaut.
   const [loaded, setLoaded] = useState<{ src: string; ratio: number } | null>(null)
   if (!src || !mediaUrl(src)) {
-    return <div className={`relative ${cover ? '' : emptyClassName} ${className}`} style={cover ? { height: cover.height, ...emptyStyle } : emptyStyle}>{children}</div>
-  }
-  if (cover) {
-    return (
-      <div className={`relative w-full overflow-hidden bg-black/40 ${className}`} style={{ height: cover.height }}>
-        <AnimatedImg src={src} alt={alt} aria-hidden={alt ? undefined : true} loading="lazy" decoding="async" draggable={false}
-          className={`absolute inset-0 w-full h-full object-cover ${imgClassName}`} style={{ objectPosition: focus ?? '50% 50%' }} />
-        {children}
-      </div>
-    )
+    return <div className={`relative ${emptyClassName} ${className}`} style={emptyStyle}>{children}</div>
   }
   const ratio = loaded?.src === src ? loaded.ratio : defaultRatio
   const still = stillUrl(src)

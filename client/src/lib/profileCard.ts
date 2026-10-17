@@ -104,13 +104,10 @@ export function cardLook(c: ProfileCard, primary?: number | null, accent?: numbe
       style.boxShadow = `0 0 14px ${a}aa, inset 0 0 18px ${b}44`
       break
   }
-  const cover = c.layout === 'compact' || c.layout === 'wide'
   return {
     style,
-    /** Bannière : rognée (cover) en mise en page compacte ou large, entière sinon. */
+    /** Bannière toujours entière, quelle que soit la mise en page (jamais rognée). */
     banner: {
-      cover,
-      height: c.layout === 'compact' ? 72 : c.layout === 'wide' ? 170 : undefined,
       focus: `50% ${c.banner_y}%`,
       className: c.banner_fx === 'none' ? '' : `fc-bfx fc-bfx-${c.banner_fx}`,
     },

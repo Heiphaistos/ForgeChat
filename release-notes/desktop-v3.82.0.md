@@ -1,0 +1,2 @@
+- Cartes de profil : la bannière s'affiche toujours en entier, même en mise en page compacte ou large (elle était rognée).
+- Binaires Windows signés (certificat Heiphaistos).
