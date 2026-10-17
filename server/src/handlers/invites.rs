@@ -28,10 +28,11 @@ pub async fn create_invite(
 
     // Absent : 7 jours (avant : permanente). `null` explicite : permanente, comme le propose l'appli web.
     let expires_at = body.expires_hours
-        .unwrap_or(Some(crate::models::server::DEFAULT_INVITE_HOURS))
+        .unwrap_or(Some(crate::models::server::DEFAULT_INVITE_HOURS as f64))
+        .filter(|h| h.is_finite())
         .map(|h| {
-            // Cap à 7 jours max pour éviter les invitations quasi-permanentes
-            Utc::now() + chrono::Duration::hours(h.clamp(1, 168))
+            // 30 min (0,5 h, option de l'appli web) à 7 jours : au-delà, quasi-permanente.
+            Utc::now() + chrono::Duration::minutes((h.clamp(0.5, 168.0) * 60.0) as i64)
         });
     if let Some(uses) = body.max_uses {
         if !(1..=1000).contains(&uses) {
