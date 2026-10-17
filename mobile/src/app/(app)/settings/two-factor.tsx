@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { Alert, Linking, ScrollView, Share, StyleSheet, View } from 'react-native'
 import { authApi, type TotpSetup } from '@/api/auth'
-import { Button, Section, T, TextField } from '@/components/ui'
+import { Button, PasswordField, Section, T, TextField } from '@/components/ui'
 import { formatSecret } from '@/features/account/rules'
 import { t as tr, useT } from '@/i18n'
 import { errorMessage } from '@/lib/http'
@@ -18,6 +18,7 @@ export default function TwoFactorScreen() {
   const setUser = useAuth((s) => s.setUser)
   const [setup, setSetup] = useState<TotpSetup | null>(null)
   const [code, setCode] = useState('')
+  const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -33,7 +34,10 @@ export default function TwoFactorScreen() {
     }
   }
 
-  const start = () => run(async () => setSetup(await authApi.setupTotp()))
+  const start = () => run(async () => {
+    setSetup(await authApi.setupTotp(password))
+    setPassword('')
+  })
 
   // Codes de secours (amélioration n° 4) : combien restent, et régénération avec un code valide.
   const status = useQuery({ queryKey: ['2fa-status'], queryFn: authApi.totpStatus, enabled })
@@ -129,8 +133,9 @@ export default function TwoFactorScreen() {
       ) : !setup ? (
         <>
           <T>{t('settings.twoFactor.intro')}</T>
+          <PasswordField label={t('settings.twoFactor.password')} value={password} onChangeText={setPassword} autoComplete="current-password" textContentType="password" />
           {error ? <T variant="error">{error}</T> : null}
-          <Button title={t('settings.twoFactor.configure')} icon="shield-checkmark-outline" onPress={start} loading={loading} />
+          <Button title={t('settings.twoFactor.configure')} icon="shield-checkmark-outline" onPress={start} loading={loading} disabled={!password} />
         </>
       ) : (
         <>

@@ -51,7 +51,7 @@ export async function linkPreviewExtra(text: string): Promise<Record<string, unk
   if (!url || !previewAllowed(url)) return {}
   // Réglage « aperçus de liens » coupé : le lien ne part pas au serveur.
   const prefs = await queryClient.fetchQuery({ queryKey: settingsKey, queryFn: settingsApi.get, staleTime: 300_000 }).catch(() => null)
-  if (prefs?.link_preview === false) return {}
+  if (prefs?.link_preview !== true) return {}
   const ctrl = new AbortController()
   const timer = setTimeout(() => ctrl.abort(), 3000)
   try {

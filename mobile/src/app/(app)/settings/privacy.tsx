@@ -5,7 +5,7 @@ import { useState } from 'react'
 import { Alert, ScrollView, Share } from 'react-native'
 import { settingsApi, settingsKey, type ServerSideSettings } from '@/api/settings'
 import { usersApi } from '@/api/users'
-import { ErrorState, Loading, Row, Section, SwitchRow } from '@/components/ui'
+import { ErrorState, Loading, PasswordField, Row, Section, SwitchRow } from '@/components/ui'
 import { EXPORT_SHARE_MAX_CHARS } from '@/features/account/rules'
 import { t as tr, useT, type Key } from '@/i18n'
 import { errorMessage } from '@/lib/http'
@@ -58,6 +58,7 @@ export default function PrivacyScreen() {
   const t = useT()
   const q = useQuery({ queryKey: settingsKey, queryFn: settingsApi.get })
   const [exporting, setExporting] = useState(false)
+  const [password, setPassword] = useState('')
   const save = useMutation({
     mutationFn: (patch: Partial<ServerSideSettings>) => settingsApi.update(patch),
     onMutate: (patch) => queryClient.setQueryData<ServerSideSettings>(settingsKey, (old) => (old ? { ...old, ...patch } : old)),
@@ -71,7 +72,7 @@ export default function PrivacyScreen() {
   const exportData = async () => {
     setExporting(true)
     try {
-      const text = JSON.stringify(await usersApi.dataExport(), null, 2)
+      const text = JSON.stringify(await usersApi.dataExport(password), null, 2)
       if (text.length > EXPORT_SHARE_MAX_CHARS) {
         Alert.alert(tr('settings.privacy.exportTooLarge'), tr('settings.privacy.exportTooLargeBody'))
         return
@@ -80,6 +81,7 @@ export default function PrivacyScreen() {
     } catch (e) {
       Alert.alert(tr('settings.privacy.exportFailed'), errorMessage(e))
     } finally {
+      setPassword('')
       setExporting(false)
     }
   }
@@ -100,6 +102,13 @@ export default function PrivacyScreen() {
           value={s.dm_from_all}
           onValueChange={(v) => save.mutate({ dm_from_all: v })}
         />
+        <SwitchRow
+          icon="link-outline"
+          title={t('settings.privacy.linkPreview')}
+          subtitle={t('settings.privacy.linkPreviewSub')}
+          value={s.link_preview === true}
+          onValueChange={(v) => save.mutate({ link_preview: v })}
+        />
       </Section>
 
       {CHOICES.map((c) => (
@@ -119,11 +128,12 @@ export default function PrivacyScreen() {
       <Section title={t('settings.privacy.myData')}>
         <Row icon="time-outline" title={t('settings.security.loginHistory')} onPress={() => router.push('/settings/login-history')} chevron />
         <Row icon="stats-chart-outline" title={t('settings.stats.title')} onPress={() => router.push('/settings/stats')} chevron />
+        <PasswordField label={t('settings.privacy.exportPassword')} value={password} onChangeText={setPassword} autoComplete="current-password" textContentType="password" />
         <Row
           icon="download-outline"
           title={t(exporting ? 'settings.privacy.exporting' : 'settings.privacy.export')}
           subtitle={t('settings.privacy.exportSub')}
-          onPress={exporting ? undefined : () => void exportData()}
+          onPress={exporting || !password ? undefined : () => void exportData()}
         />
       </Section>
     </ScrollView>

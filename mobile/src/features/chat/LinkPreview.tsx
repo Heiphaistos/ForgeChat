@@ -48,7 +48,7 @@ function PreviewImage({ src }: { src: string }) {
 export function LinkPreview({ url, given }: { url: string; given?: LinkPreviewData | null }) {
   const t = useT()
   const settings = useQuery({ queryKey: settingsKey, queryFn: settingsApi.get, staleTime: 300_000 })
-  const enabled = settings.data?.link_preview !== false
+  const enabled = settings.data?.link_preview === true
   const query = useQuery({
     queryKey: ['og', url],
     queryFn: ({ signal }) => messagesApi.linkPreview(url, signal),

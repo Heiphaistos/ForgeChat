@@ -91,7 +91,8 @@ export const usersApi = {
   stats: () => http.get<MyStats>('/users/me/stats'),
   loginHistory: () => http.get<LoginEntry[]>('/users/me/login-history'),
   /** Export RGPD : JSON brut (texte, pour le partager tel quel). */
-  dataExport: () => http.get<unknown>('/users/me/data-export', { timeoutMs: 60_000 }),
+  /** POST avec la preuve du mot de passe (l'export complet n'est plus accessible avec un simple jeton). */
+  dataExport: async (password: string) => http.post<unknown>('/users/me/data-export', await passwordProof(password), { timeoutMs: 60_000, noQueue: true }),
   setFocusMode: (enabled: boolean) => http.patch<{ focus_mode: boolean }>('/user/focus-mode', { enabled }),
   mutualServers: (id: string) => http.get<MutualServer[]>(path`/users/${id}/mutual-servers`),
   unread: () => http.get<UnreadItem[]>('/unread'),
