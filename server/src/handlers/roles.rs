@@ -516,7 +516,7 @@ pub async fn reorder_roles(
 }
 
 /// POST /servers/:server_id/transfer { user_id, auth } (`password` : compte pas encore migré)
-/// Réservé au propriétaire, mot de passe exigé (comme Discord exige la 2FA) ;
+/// Réservé au propriétaire, mot de passe exigé + `totp_code` si la 2FA est activée ;
 /// la cible doit être un membre humain du serveur.
 pub async fn transfer_ownership(
     State(state): State<AppState>,
@@ -530,7 +530,14 @@ pub async fn transfer_ownership(
     if target == claims.sub {
         return Err(AppError::BadRequest("Vous êtes déjà propriétaire".into()));
     }
-    crate::handlers::auth_v2::verify_proof(&state, claims.sub, body["auth"].as_str(), body["password"].as_str()).await?;
+    // Comme la suppression du serveur : preuve du mot de passe ET code TOTP (ou de secours) si la
+    // double authentification est activée (`totp_code`).
+    let reauth = crate::handlers::servers::ReauthBody {
+        auth: body["auth"].as_str().map(String::from),
+        password: body["password"].as_str().map(String::from),
+        totp_code: body["totp_code"].as_str().map(String::from),
+    };
+    crate::handlers::servers::verify_reauth(&state, claims.sub, &reauth).await?;
     let target_name: Option<String> = sqlx::query_scalar(
         "SELECT u.username FROM server_members sm JOIN users u ON u.id = sm.user_id
          WHERE sm.server_id=$1 AND sm.user_id=$2 AND NOT u.is_bot",
