@@ -26,7 +26,7 @@ const PINS = [
   'x4QzPSC810K5/cMjb05Qm4k3Bw5zBn4lTdO/nEW/Td4=', // USERTrust RSA (2038)
   'ICGRfpgmOUXIWcQ/HXPLQTkFPEFPoDyjvH7ohhQpjzs=', // USERTrust ECC (2038)
 ]
-const ANDROID_EXPIRATION = '2028-06-01'
+const ANDROID_EXPIRATION = '2030-01-01'
 
 /** Hôte à épingler : nom DNS d'une URL https, sinon null. */
 function pinnedHost(apiUrl) {
@@ -41,13 +41,21 @@ function pinnedHost(apiUrl) {
   return u.hostname
 }
 
-function networkSecurityConfigXml(host) {
+/** Hôtes à épingler : l'API, plus le SFU LiveKit s'il est sur un autre hôte DNS (`host[:port]`). */
+function pinnedHosts(apiUrl, livekitHost) {
+  const api = pinnedHost(apiUrl)
+  const lk = livekitHost ? pinnedHost(`https://${livekitHost}`) : null
+  return api ? [...new Set([api, ...(lk ? [lk] : [])])] : []
+}
+
+function networkSecurityConfigXml(hosts) {
+  const domains = [].concat(hosts).map((h) => `    <domain includeSubdomains="false">${h}</domain>`).join('\n')
   const pins = PINS.map((p) => `      <pin digest="SHA-256">${p}</pin>`).join('\n')
   return `<?xml version="1.0" encoding="utf-8"?>
 <network-security-config>
   <base-config cleartextTrafficPermitted="false" />
   <domain-config cleartextTrafficPermitted="false">
-    <domain includeSubdomains="false">${host}</domain>
+${domains}
     <pin-set expiration="${ANDROID_EXPIRATION}">
 ${pins}
     </pin-set>
@@ -56,19 +64,16 @@ ${pins}
 `
 }
 
-function pinnedDomainsPlist(host) {
-  return {
-    [host]: {
-      NSIncludesSubdomains: false,
-      NSPinnedCAIdentities: PINS.map((p) => ({ 'SPKI-SHA256-BASE64': p })),
-    },
-  }
+function pinnedDomainsPlist(hosts) {
+  return Object.fromEntries(
+    [].concat(hosts).map((h) => [h, { NSIncludesSubdomains: false, NSPinnedCAIdentities: PINS.map((p) => ({ 'SPKI-SHA256-BASE64': p })) }]),
+  )
 }
 
-/** @type {import('@expo/config-plugins').ConfigPlugin<{ apiUrl: string | undefined }>} */
-const withCertPinning = (config, { apiUrl }) => {
-  const host = pinnedHost(apiUrl)
-  if (!host) return config
+/** @type {import('@expo/config-plugins').ConfigPlugin<{ apiUrl: string | undefined; livekitHost?: string | null }>} */
+const withCertPinning = (config, { apiUrl, livekitHost }) => {
+  const host = pinnedHosts(apiUrl, livekitHost)
+  if (!host.length) return config
   config = withDangerousMod(config, [
     'android',
     (cfg) => {
@@ -93,5 +98,6 @@ const withCertPinning = (config, { apiUrl }) => {
 module.exports = withCertPinning
 module.exports.PINS = PINS
 module.exports.pinnedHost = pinnedHost
+module.exports.pinnedHosts = pinnedHosts
 module.exports.networkSecurityConfigXml = networkSecurityConfigXml
 module.exports.pinnedDomainsPlist = pinnedDomainsPlist

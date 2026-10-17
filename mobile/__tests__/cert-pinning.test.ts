@@ -19,3 +19,13 @@ test('Android : pin-set avec expiration, aucun clair ; iOS : NSPinnedCAIdentitie
   // Empreintes SPKI SHA-256 : 32 octets en base64.
   for (const p of withCertPinning.PINS) expect(Buffer.from(p, 'base64')).toHaveLength(32)
 })
+
+test('hôte LiveKit épinglé en plus de l API ; pin-set valable au moins jusqu en 2030', () => {
+  expect(withCertPinning.pinnedHosts('https://a.example.org', 'lk.example.org:7881')).toEqual(['a.example.org', 'lk.example.org'])
+  expect(withCertPinning.pinnedHosts('https://a.example.org', null)).toEqual(['a.example.org'])
+  expect(withCertPinning.pinnedHosts('https://a.example.org', '10.0.0.1:7881')).toEqual(['a.example.org'])
+  expect(withCertPinning.pinnedHosts('http://a.example.org', 'lk.example.org')).toEqual([])
+  const xml = withCertPinning.networkSecurityConfigXml(['a.example.org', 'lk.example.org'])
+  expect(xml).toContain('>lk.example.org</domain>')
+  expect(xml).toContain('expiration="2030-01-01"')
+})

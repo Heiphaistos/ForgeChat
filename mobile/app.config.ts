@@ -99,9 +99,9 @@ export default (ctx: ConfigContext): ExpoConfig => {
   // (et sans chemin de la machine de build dans les bibliothèques natives).
   // Applis distribuées : autorités de certification du serveur épinglées (plugins/withCertPinning.js).
   if (APP_ENV === 'production') {
-    return withCertPinning(withoutDevClientScheme(withStripBuildPaths(withReleaseSigning(expoConfig))), { apiUrl: API_URL })
+    return withCertPinning(withoutDevClientScheme(withStripBuildPaths(withReleaseSigning(expoConfig))), { apiUrl: API_URL, livekitHost: LIVEKIT_HOST })
   }
-  if (APP_ENV === 'preview') return withCertPinning(withStripBuildPaths(withReleaseSigning(expoConfig)), { apiUrl: API_URL })
+  if (APP_ENV === 'preview') return withCertPinning(withStripBuildPaths(withReleaseSigning(expoConfig)), { apiUrl: API_URL, livekitHost: LIVEKIT_HOST })
   return expoConfig
 }
 
