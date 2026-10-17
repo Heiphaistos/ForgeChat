@@ -95,6 +95,11 @@ export async function forgetOfflineData(id: string) {
   useOffline.setState({ pending: 0, fromCache: false })
 }
 
+/** Session terminée par le serveur (refus définitif du rafraîchissement) : plus rien du compte ne reste lisible hors ligne. */
+export async function forgetOfflineOwner() {
+  if (owner) await forgetOfflineData(owner)
+}
+
 async function put(url: string, data: unknown) {
   if (!owner) return
   await tx('responses', 'readwrite', s => { s.put({ data, at: Date.now() }, `${owner}|${url}`) })

@@ -81,7 +81,7 @@ async function safetyWith(userId: string, mine: string): Promise<Safety | null> 
   try {
     const { data } = await api.get<{ public: string; kt_seq?: number | null }>(`/users/${userId}/keys/public`)
     // Journal de transparence (amélioration n° 10) : la clé servie doit y être inscrite.
-    let logged: boolean | null = null
+    let logged: boolean | null = false // pas de `kt_seq` : aucune trace au journal
     if (typeof data.kt_seq === 'number') {
       const entry = await api.get<KtEntry>(`/keys/log/${data.kt_seq}`).then(r => r.data, () => null)
       logged = await contactKeyLogged(userId, data.public, entry)

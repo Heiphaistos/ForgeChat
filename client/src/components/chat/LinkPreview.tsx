@@ -17,7 +17,7 @@ interface OGData {
 
 interface Props {
   url: string
-  /** Message chiffré : aperçu déjà dans le contenu chiffré, pas d'appel à /og (le serveur ne voit pas l'URL). */
+  /** Message chiffré : aperçu déjà dans le contenu chiffré (calculé par l'expéditeur, seulement s'il a activé le réglage, désactivé par défaut), pas d'appel à /og côté lecteur. */
   data?: unknown
 }
 

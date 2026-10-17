@@ -16,6 +16,9 @@ import { asKdf, deriveSecrets, newKdfSalt, passwordProblem } from '../e2e/authKd
 import { pwnedProblem } from '../e2e/pwned'
 import type { PasskeyAssertion } from '../lib/passkey'
 import { clearSearchIndex } from '../e2e/searchIndex'
+import toast from 'react-hot-toast'
+import { t } from '../i18n'
+import { confirm } from '../components/ui/ConfirmModal'
 import { guardArgon, markMigrated, markUserMigrated } from '../e2e/authGuard'
 
 const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
@@ -68,6 +71,12 @@ export const useAuth = create<AuthState>()(
       // Connexion v2 : seul `auth` part. Compte pas encore migré : le mot de passe part une
       // dernière fois avec la nouvelle preuve, et le serveur bascule le compte.
       const pre = await prelogin(email)
+      // Compte jamais vu migré sur cet appareil (sinon AUTH_DOWNGRADE plus haut) : un serveur compromis
+      // peut annoncer `legacy` pour recevoir le mot de passe en clair. Confirmation bloquante.
+      if (pre.legacy && !(await confirm({
+        title: t('auth.legacy.title'), message: t('auth.legacy.msg'), danger: true,
+        confirmLabel: t('auth.legacy.go'), cancelLabel: t('auth.legacy.cancel'),
+      }))) throw Object.assign(new Error('AUTH_LEGACY_CANCELLED'), { response: { data: { error: t('auth.legacy.cancelled') } } })
       const salt = pre.legacy || !pre.kdf_salt ? newKdfSalt() : pre.kdf_salt
       // Compte v1 qui migre : directement en Argon2id. Sinon : la dérivation du compte.
       const kdf = pre.legacy ? 'argon2id' : asKdf(pre.kdf)
@@ -123,8 +132,9 @@ export const useAuth = create<AuthState>()(
       // Avant la déconnexion (route authentifiée) : ce navigateur ne doit plus
       // recevoir les notifications push de ce compte.
       await disableWebPush((await listAccounts()).length > 0)
-      await api.post('/auth/logout', {}).catch(() => {})
-      if (isTauri) await clearLocalSession(true)
+      // Révocation côté serveur ratée : la session reste valide là-bas jusqu'à son expiration, on le dit.
+      await api.post('/auth/logout', {}).catch(() => { toast.error(t('auth.logout.revokeFailed'), { duration: 8000 }) })
+      await clearLocalSession(true)
       const uid = useAuth.getState().user?.id
       await clearAccountKey(uid)
       if (uid) await forgetOfflineData(uid)

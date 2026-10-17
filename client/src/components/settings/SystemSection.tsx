@@ -16,12 +16,13 @@ interface SystemState {
   start_minimized: boolean
   hardware_acceleration: boolean
   ask_save: boolean
+  send_logs: boolean
   download_dir: string | null
   autostart: boolean
   /** `windows`, `linux`, `macos` */
   platform: string
 }
-type Patch = Partial<Pick<SystemState, 'close_to_tray' | 'start_minimized' | 'hardware_acceleration' | 'ask_save'>>
+type Patch = Partial<Pick<SystemState, 'close_to_tray' | 'start_minimized' | 'hardware_acceleration' | 'ask_save' | 'send_logs'>>
 
 const H = ({ children }: { children: ReactNode }) => (
   <h3 className="text-xs font-semibold text-fc-muted uppercase tracking-wide mb-3">{children}</h3>
@@ -129,6 +130,13 @@ export default function SystemSection({ onOpenKeybindings }: { onOpenKeybindings
             <button type="button" onClick={pickDir} className={btn}>{t('system.downloads.choose')}</button>
             {sys.download_dir && <button type="button" onClick={clearDir} className={btn}>{t('system.downloads.clear')}</button>}
           </div>
+        </Row>
+      </section>
+
+      <section className="space-y-2">
+        <H>{t('system.logs.title')}</H>
+        <Row label={t('system.logs.label')} hint={t('system.logs.hint')}>
+          <Toggle value={sys.send_logs} onChange={v => update({ send_logs: v })} label={t('system.logs.label')} />
         </Row>
       </section>
 

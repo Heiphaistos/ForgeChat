@@ -21,6 +21,7 @@ export default function TransferOwnershipSection({ serverId, ownerId }: { server
   const [target, setTarget] = useState('')
   const [confirmName, setConfirmName] = useState('')
   const [password, setPassword] = useState('')
+  const [code, setCode] = useState('')
 
   const isOwner = !!me && me.id === ownerId
   const { data: members = [] } = useQuery<Member[]>({
@@ -32,11 +33,11 @@ export default function TransferOwnershipSection({ serverId, ownerId }: { server
   const transfer = useMutation({
     // Clé de récupération du serveur ré-enveloppée pour le nouveau propriétaire (null : il saisira le code).
     mutationFn: async () => api.post(`/servers/${serverId}/transfer`, {
-      user_id: target, ...(await passwordProof(password)), server_key_owner_wrapped: await serverKeyForNewOwner(serverId, target),
+      user_id: target, ...(await passwordProof(password)), totp_code: code.trim() || undefined, server_key_owner_wrapped: await serverKeyForNewOwner(serverId, target),
     }),
     onSuccess: () => {
       toast.success(t('transfer.done'))
-      setTarget(''); setConfirmName(''); setPassword('')
+      setTarget(''); setConfirmName(''); setPassword(''); setCode('')
       qc.invalidateQueries({ queryKey: ['server', serverId] })
       qc.invalidateQueries({ queryKey: ['servers'] })
     },
@@ -68,6 +69,9 @@ export default function TransferOwnershipSection({ serverId, ownerId }: { server
             className="w-full px-3 py-2 bg-fc-input rounded text-white outline-none text-sm focus:ring-2 focus:ring-fc-red" />
           <input type="password" value={password} onChange={e => setPassword(e.target.value)}
             placeholder={t('transfer.password')} aria-label={t('transfer.password')} autoComplete="current-password"
+            className="w-full px-3 py-2 bg-fc-input rounded text-white outline-none text-sm focus:ring-2 focus:ring-fc-red" />
+          <input value={code} onChange={e => setCode(e.target.value)} inputMode="numeric" autoComplete="one-time-code" maxLength={20}
+            placeholder={t('servers.delete.code')} aria-label={t('servers.delete.code')}
             className="w-full px-3 py-2 bg-fc-input rounded text-white outline-none text-sm focus:ring-2 focus:ring-fc-red" />
           <button onClick={() => transfer.mutate()} disabled={!ready || transfer.isPending}
             className="px-4 py-2 bg-fc-red hover:bg-red-600 text-white rounded text-sm font-medium transition disabled:opacity-50">

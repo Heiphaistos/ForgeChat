@@ -8,7 +8,7 @@
 // - HTML sans balise (style vide de react-hot-toast / goober) ;
 // - coloration de code de highlight.js : texte échappé et <span class="hljs-…"> seulement ;
 // - scripts et workers de NOTRE origine (assets Vite, MediaPipe, LiveKit E2EE), `blob:` de notre
-//   origine, et l'API IFrame de YouTube (Regarder ensemble).
+//   origine, aucun script tiers (le lecteur YouTube est une iframe pilotée en postMessage).
 // Testé par `node --test scripts/trustedTypes.test.mjs`.
 
 const HLJS_TAG = /<\/span>|<span class="(?:hljs-[a-z0-9_-]+|language-[a-z0-9_-]+)(?: [a-z0-9_-]+)*">/g
@@ -19,11 +19,8 @@ export function safeHtml(html: string): boolean {
   return !html.replace(HLJS_TAG, '').includes('<')
 }
 
-const YOUTUBE_API = 'https://www.youtube.com/iframe_api'
-
-/** Adresse de script admise : notre origine, `blob:` de notre origine, ou l'API YouTube. */
+/** Adresse de script admise : notre origine, ou `blob:` de notre origine. */
 export function safeScriptUrl(url: string, origin: string): boolean {
-  if (url === YOUTUBE_API) return true
   let u: URL
   try {
     u = new URL(url, origin)

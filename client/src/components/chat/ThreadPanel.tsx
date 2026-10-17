@@ -83,7 +83,7 @@ export default function ThreadPanel({ serverId, channelId, parentMessageId, thre
     queryFn: () => api.get('/user/settings').then(r => r.data),
     staleTime: 60_000,
   })
-  const linkPreviewEnabled = (userSettings?.link_preview ?? true) as boolean
+  const linkPreviewEnabled = (userSettings?.link_preview ?? false) as boolean
 
   // Recherche ciblée du fil (la liste des fils est paginée : il peut ne pas y figurer).
   // Clé préfixée par ['threads', channelId] : les invalidations existantes la couvrent.

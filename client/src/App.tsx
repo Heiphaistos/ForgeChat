@@ -1137,6 +1137,7 @@ function AppInner() {
         {showOnboarding && user && <Onboarding onDone={() => setShowOnboarding(false)} />}
       </Suspense>
       <ConfirmModal />
+      <PasswordPrompt />
       {user && <AppLockOverlay userId={user.id} />}
       {/* Bannière de reconnexion WS */}
       {showDisconnectBanner && (
@@ -1171,6 +1172,7 @@ import ErrorBoundary from './components/ErrorBoundary'
 import { Phone, Video, PhoneOff } from 'lucide-react'
 import type { IncomingCallInfo } from './store/call'
 import { ConfirmModal } from './components/ui/ConfirmModal'
+import { PasswordPrompt } from './components/ui/PasswordPrompt'
 import { t as tr, useLang, intlLocale } from './i18n'
 import { useNameStyles } from './store/nameStyles'
 import { useStreamerAuto } from './lib/streamerMode'

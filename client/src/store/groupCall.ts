@@ -97,28 +97,26 @@ async function _connect(lk: { url: string; token: string; e2ee?: boolean }, set:
   if (_room) return
   const groupId = get().groupId
   // Salle chiffrée : jamais de connexion en clair, même si la clé manque.
-  let e2ee = null
-  if (lk.e2ee && groupId) {
-    try {
-      e2ee = await openMediaE2EE('group', groupId)
-    } catch (e) {
-      toast.error(t(mediaE2EEError(e)))
-      useWs.getState().send({ type: 'GROUP_CALL_LEAVE', group_id: groupId })
-      _cleanup(set)
-      return
-    }
-    if (_room || get().groupId !== groupId) { e2ee.stop(); return }
+  // Le drapeau `lk.e2ee` servi est ignoré : un serveur ne peut pas nous faire rejoindre en clair.
+  let e2ee: Awaited<ReturnType<typeof openMediaE2EE>>
+  try {
+    if (!groupId) throw new Error('E2E_WAITING')
+    e2ee = await openMediaE2EE('group', groupId)
+  } catch (e) {
+    toast.error(t(mediaE2EEError(e)))
+    if (groupId) useWs.getState().send({ type: 'GROUP_CALL_LEAVE', group_id: groupId })
+    _cleanup(set)
+    return
   }
+  if (_room || get().groupId !== groupId) { e2ee.stop(); return }
   const room = new Room({
     adaptiveStream: true, dynacast: true, disconnectOnPageLeave: true, stopLocalTrackOnUnpublish: false,
-    ...(e2ee ? { encryption: e2ee.encryption } : {}),
+    encryption: e2ee.encryption,
   })
   _room = room
-  set({ e2ee: !!e2ee })
-  if (e2ee) {
-    await enableMediaE2EE(room, e2ee)
-    watchOutdated(room, ids => set({ e2eeOutdated: ids }))
-  }
+  set({ e2ee: true })
+  await enableMediaE2EE(room, e2ee)
+  watchOutdated(room, ids => set({ e2eeOutdated: ids }))
   room
     .on(RoomEvent.TrackSubscribed, (track: RemoteTrack, pub, rp) => {
       // Son joué par un <audio> hors de tout composant : il continue quand on change de page.

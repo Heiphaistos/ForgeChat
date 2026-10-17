@@ -72,7 +72,7 @@ self.addEventListener('push', (e) => {
       icon: '/icon.svg',
       badge: '/icon.svg',
       tag: data.tag ? String(data.tag) : undefined,
-      data: { url: typeof data.url === 'string' && data.url.startsWith('/') ? data.url : '/' },
+      data: { url: typeof data.url === 'string' && /^\/(?![/\x5c])/.test(data.url) ? data.url : '/' },
     })
   )
 })
@@ -80,7 +80,10 @@ self.addEventListener('push', (e) => {
 // Clic : réutiliser un onglet ForgeChat ouvert (focus + navigation), sinon en ouvrir un.
 self.addEventListener('notificationclick', (e) => {
   e.notification.close()
-  const url = new URL((e.notification.data && e.notification.data.url) || '/', self.location.origin).href
+  // Même règle que safeRedirect : jamais hors de notre origine (`//hote`, `/\hote`).
+  let target = new URL((e.notification.data && e.notification.data.url) || '/', self.location.origin)
+  if (target.origin !== self.location.origin) target = new URL('/', self.location.origin)
+  const url = target.href
   e.waitUntil(
     self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((wins) => {
       const win = wins.find((w) => new URL(w.url).origin === self.location.origin)

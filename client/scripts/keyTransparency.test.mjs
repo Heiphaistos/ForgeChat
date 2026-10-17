@@ -57,3 +57,17 @@ test('clé d’un contact : inscrite au journal ou non', async () => {
   assert.equal(await contactKeyLogged(ME, 'b1', bob), false)
   assert.equal(await contactKeyLogged(BOB, 'b1', null), false)
 })
+
+test('entrée servie falsifiée ou hors de la tête mémorisée : refusée', async () => {
+  const log = await chain([[ME, 'k1'], [BOB, 'b1'], [BOB, 'b2']])
+  const [e1, e2, e3] = log
+  // Empreinte d'entrée qui ne se recalcule pas.
+  assert.equal(await contactKeyLogged(BOB, 'b1', { ...e2, hash: GENESIS }), false)
+  // Contenu modifié sans recalcul de l'empreinte.
+  assert.equal(await contactKeyLogged(BOB, 'b1', { ...e2, key_hash: await keyHash('b9') }), false)
+  // Tête mémorisée : même seq mais autre hash, ou suite qui ne s'y chaîne pas.
+  assert.equal(await contactKeyLogged(BOB, 'b1', e2, { seq: 2, hash: e1.hash }), false)
+  assert.equal(await contactKeyLogged(BOB, 'b2', e3, { seq: 2, hash: e1.hash }), false)
+  assert.equal(await contactKeyLogged(BOB, 'b1', e2, { seq: 2, hash: e2.hash }), true)
+  assert.equal(await contactKeyLogged(BOB, 'b2', e3, { seq: 2, hash: e2.hash }), true)
+})

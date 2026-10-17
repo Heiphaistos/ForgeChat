@@ -7,6 +7,7 @@ import { confirm } from '../components/ui/ConfirmModal'
 import { t } from '../i18n'
 import { useAccountKey } from './accountKey'
 import { automodBlock, mentionMeta, previewAllowed, previewUrl, type AutoModBlock, type AutoModRules } from './channelText'
+import { NATIVE_COMMANDS } from './nativeCommands'
 import { completeChannelKeys, lockedText, mustEncrypt, openText, sendErrorText, withSeal } from './conversations'
 import type { EncPayload } from './crypto'
 
@@ -85,9 +86,9 @@ async function linkPreview(text: string): Promise<Record<string, unknown> | null
   const url = previewUrl(text)
   if (!url || !previewAllowed(url)) return null
   try {
-    // Réglage « aperçus de liens » coupé : le lien ne part pas au serveur.
+    // Réglage « aperçus de liens » (désactivé par défaut) : sans accord explicite, le lien ne part pas au serveur.
     const prefs = await api.get('/user/settings', { timeout: 4000 })
-    if (prefs.data?.link_preview === false) return null
+    if (prefs.data?.link_preview !== true) return null
     const { data } = await api.get(`/og?url=${encodeURIComponent(url)}`, { timeout: 4000 })
     return data && (data.title || data.description || data.image) ? data : null
   } catch {
@@ -130,8 +131,8 @@ export async function sendChannel<T>(channelId: string, text: string, post: (bod
   if (cmd && known) {
     // Jamais envoyée (même chiffrée) si le serveur me la refuse : message d'erreur local.
     if (!known.allowed) throw new CommandNotAllowed(cmd)
-    // Commande native : lue par le serveur lui-même, pas de confirmation à chaque fois.
-    if (!known.native && !(await confirmPlainCommand(o.serverId, cmd))) throw new PlainCommandCancelled()
+    // Commande native (liste locale, jamais `known.native` servi) : lue par le serveur, pas de confirmation à chaque fois.
+    if (!NATIVE_COMMANDS.has(cmd) && !(await confirmPlainCommand(o.serverId, cmd))) throw new PlainCommandCancelled()
     return post({ content: text })
   }
   const encrypt = await mustEncrypt('channel', channelId)
