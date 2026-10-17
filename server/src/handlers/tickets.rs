@@ -79,6 +79,9 @@ pub struct TicketSettingsInput {
     pub staff_role_ids: Vec<Uuid>,
 }
 
+const MAX_OPEN_TICKETS: i64 = 3;
+const MAX_TICKETS_PER_WEEK: i64 = 10;
+
 /// Droits d'un participant au salon d'un ticket.
 const TALK: i64 = Permissions::VIEW_CHANNEL | Permissions::SEND_MESSAGES | Permissions::READ_HISTORY
     | Permissions::ATTACH_FILES | Permissions::ADD_REACTIONS;
@@ -193,11 +196,26 @@ pub async fn create_ticket(
     let open: i64 = sqlx::query_scalar(
         "SELECT COUNT(*) FROM tickets WHERE server_id=$1 AND creator_id=$2 AND status NOT IN ('resolved', 'closed')"
     ).bind(server_id).bind(claims.sub).fetch_one(&state.db).await?;
-    if open >= 3 {
+    if open >= MAX_OPEN_TICKETS {
         return Err(AppError::BadRequest("3 tickets ouverts au plus : ferme un ticket d'abord".into()));
+    }
+    // Plafond glissant : ouvrir puis fermer en boucle créait un salon (et du bruit pour l'équipe)
+    // à chaque tour, sans limite.
+    let recent: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM tickets WHERE server_id=$1 AND creator_id=$2 AND created_at > NOW() - INTERVAL '7 days'"
+    ).bind(server_id).bind(claims.sub).fetch_one(&state.db).await?;
+    if recent >= MAX_TICKETS_PER_WEEK {
+        return Err(AppError::BadRequest(format!("{MAX_TICKETS_PER_WEEK} tickets par semaine au plus : réessaie plus tard")));
     }
 
     let (native, category, staff_roles) = settings(&state, server_id).await?;
+    if native {
+        let channels: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM channels WHERE server_id=$1")
+            .bind(server_id).fetch_one(&state.db).await?;
+        if channels >= crate::handlers::channels::MAX_CHANNELS_PER_SERVER {
+            return Err(AppError::BadRequest("Ce serveur a atteint sa limite de salons : impossible d'ouvrir un ticket".into()));
+        }
+    }
     let mut tx = state.db.begin().await?;
     // Numéro séquentiel par serveur (verrou du serveur : deux ouvertures simultanées
     // n'obtiennent pas le même numéro).
@@ -254,6 +272,22 @@ pub async fn create_ticket(
     Ok(Json(ticket))
 }
 
+fn is_closed(status: &str) -> bool {
+    status == "resolved" || status == "closed"
+}
+
+/// Ce que le créateur (hors équipe) peut faire du statut de son ticket : le fermer ou le résoudre,
+/// le rouvrir seulement s'il l'a fermé lui-même ; « en cours » est du triage (équipe).
+fn check_creator_status(new: &str, old: &str, closed_by: Option<Uuid>, user: Uuid) -> Result<()> {
+    if new == "in_progress" {
+        return Err(AppError::Forbidden);
+    }
+    if is_closed(old) && !is_closed(new) && closed_by != Some(user) {
+        return Err(AppError::ForbiddenMsg("Ce ticket a été fermé par l'équipe : seule l'équipe peut le rouvrir.".into()));
+    }
+    Ok(())
+}
+
 pub async fn update_ticket(
     State(state): State<AppState>,
     Extension(claims): Extension<Claims>,
@@ -275,8 +309,8 @@ pub async fn update_ticket(
 
     // Seul le créateur ou l'équipe peut modifier un ticket ; assignation et priorité
     // sont du triage (équipe seulement), le créateur ne change que le statut du sien.
-    let (creator_id, channel_id, old_status): (Uuid, Option<Uuid>, String) = sqlx::query_as(
-        "SELECT creator_id, channel_id, status FROM tickets WHERE id=$1 AND server_id=$2"
+    let (creator_id, channel_id, old_status, closed_by): (Uuid, Option<Uuid>, String, Option<Uuid>) = sqlx::query_as(
+        "SELECT creator_id, channel_id, status, closed_by FROM tickets WHERE id=$1 AND server_id=$2"
     )
     .bind(ticket_id)
     .bind(server_id)
@@ -289,6 +323,20 @@ pub async fn update_ticket(
     }
     if !staff && (input.assigned_to.is_some() || input.priority.is_some()) {
         return Err(AppError::Forbidden);
+    }
+    if !staff {
+        if let Some(s) = input.status.as_deref() {
+            check_creator_status(s, &old_status, closed_by, claims.sub)?;
+            // Rouvrir compte dans les 3 tickets ouverts (sinon : fermer/rouvrir pour en cumuler plus).
+            if is_closed(&old_status) && !is_closed(s) {
+                let open: i64 = sqlx::query_scalar(
+                    "SELECT COUNT(*) FROM tickets WHERE server_id=$1 AND creator_id=$2 AND status NOT IN ('resolved', 'closed')"
+                ).bind(server_id).bind(claims.sub).fetch_one(&state.db).await?;
+                if open >= MAX_OPEN_TICKETS {
+                    return Err(AppError::BadRequest("3 tickets ouverts au plus : ferme un ticket d'abord".into()));
+                }
+            }
+        }
     }
 
     if let Some(assignee) = input.assigned_to {
@@ -310,6 +358,7 @@ pub async fn update_ticket(
             priority = COALESCE($4, priority),
             assigned_to = COALESCE($5, assigned_to),
             closed_at = CASE WHEN COALESCE($3, status) IN ('resolved', 'closed') THEN COALESCE(closed_at, NOW()) ELSE NULL END,
+            closed_by = CASE WHEN COALESCE($3, status) IN ('resolved', 'closed') THEN COALESCE(closed_by, $6) ELSE NULL END,
             updated_at = NOW()
          WHERE id = $1 AND server_id = $2
          RETURNING *"
@@ -319,6 +368,7 @@ pub async fn update_ticket(
     .bind(input.status.as_deref())
     .bind(input.priority)
     .bind(input.assigned_to)
+    .bind(claims.sub)
     .fetch_optional(&state.db)
     .await?
     .ok_or_else(|| AppError::NotFound("Ticket introuvable".into()))?;
@@ -436,5 +486,23 @@ async fn broadcast_ticket(state: &AppState, server_id: Uuid, event: &serde_json:
     let text = event.to_string();
     for uid in targets {
         state.broadcast_to_user(uid, text.clone()).await;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn creator_status_rules() {
+        let (me, staff) = (Uuid::new_v4(), Uuid::new_v4());
+        // Fermer : toujours permis ; « en cours » : équipe seulement.
+        assert!(check_creator_status("closed", "open", None, me).is_ok());
+        assert!(check_creator_status("resolved", "in_progress", None, me).is_ok());
+        assert!(check_creator_status("in_progress", "open", None, me).is_err());
+        // Rouvrir : seulement ce qu'on a fermé soi-même.
+        assert!(check_creator_status("open", "closed", Some(me), me).is_ok());
+        assert!(check_creator_status("open", "closed", Some(staff), me).is_err());
+        assert!(check_creator_status("open", "resolved", None, me).is_err());
     }
 }

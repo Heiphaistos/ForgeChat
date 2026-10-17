@@ -76,7 +76,7 @@ pub async fn get_channels(
 }
 
 /// Salons par serveur (Discord : 500).
-const MAX_CHANNELS_PER_SERVER: i64 = 500;
+pub(crate) const MAX_CHANNELS_PER_SERVER: i64 = 500;
 
 pub async fn create_channel(
     State(state): State<AppState>,
