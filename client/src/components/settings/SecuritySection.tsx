@@ -6,6 +6,7 @@ import QRCode from 'qrcode'
 import toast from 'react-hot-toast'
 import { useT } from '../../i18n'
 import { E2EKeySection } from '../../e2e/E2ESettings'
+import { askPasswordProof } from '../ui/PasswordPrompt'
 import AppLockSection from './AppLockSection'
 import PasskeysSection from './PasskeysSection'
 
@@ -31,9 +32,13 @@ export default function SecuritySection() {
   })
 
   const setupMutation = useMutation({
-    mutationFn: () => api.post('/auth/2fa/setup').then(r => r.data),
+    mutationFn: async () => {
+      const proof = await askPasswordProof(t('pwp.2fa'))
+      if (!proof) throw new Error('CANCELLED')
+      return api.post('/auth/2fa/setup', proof).then(r => r.data)
+    },
     onSuccess: (data) => { setSetupData(data); setStep('setup') },
-    onError: (e: any) => toast.error(e.response?.data?.error ?? t('settings.security.setupError')),
+    onError: (e: any) => { if (e?.message !== 'CANCELLED') toast.error(e.response?.data?.error ?? t('settings.security.setupError')) },
   })
 
   const confirmMutation = useMutation({

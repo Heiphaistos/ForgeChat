@@ -3,6 +3,7 @@ import { useQuery, useMutation } from '@tanstack/react-query'
 import { Toggle, Select, Field } from './shared'
 import api from '../../api/client'
 import { AUTO_ACTIVITY_KEY } from '../../hooks/useGameActivity'
+import { askPasswordProof } from '../ui/PasswordPrompt'
 import toast from 'react-hot-toast'
 import { useT } from '../../i18n'
 
@@ -102,8 +103,10 @@ export default function PrivacySection() {
         <div className="text-sm font-medium text-white mb-1">{t('settings.privacy.export')}</div>
         <div className="text-xs text-fc-muted mb-3">{t('settings.privacy.exportDesc')}</div>
         <button
-          onClick={() => {
-            api.get('/users/me/data-export', { responseType: 'blob' }).then(res => {
+          onClick={async () => {
+            const proof = await askPasswordProof(t('pwp.export'))
+            if (!proof) return
+            api.post('/users/me/data-export', proof, { responseType: 'blob' }).then(res => {
               const url = URL.createObjectURL(res.data)
               const a = document.createElement('a')
               a.href = url
