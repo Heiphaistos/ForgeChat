@@ -22,6 +22,7 @@ import Theme6Pins from './news/Theme6Pins'
 import Theme7Mega from './news/Theme7Mega'
 import Theme8Tabs from './news/Theme8Tabs'
 import Theme9Columns from './news/Theme9Columns'
+import { useProxiedImage } from '../hooks/useProxiedImage'
 
 interface Article { id: string; title: string; link: string; summary: string | null; image: string | null; published_at: string; site?: string; site_id?: string; category?: string }
 
