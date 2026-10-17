@@ -13,7 +13,7 @@
 use std::collections::HashMap;
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{mpsc, Arc, Condvar, Mutex};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
@@ -206,7 +206,25 @@ fn random_secret() -> String {
     bytes.iter().map(|b| format!("{b:02x}")).collect()
 }
 
+/// Connexions simultanées maximales (tuiles + fenêtres détachées) ; au-delà, on ferme aussitôt.
+const MAX_CONNEXIONS: usize = 16;
+/// Délai de lecture de la requête : un client muet ne garde pas son fil indéfiniment.
+const DELAI_LECTURE: Duration = Duration::from_secs(10);
+
+/// Décrémente le compteur de connexions à la fin du fil.
+struct Place(Arc<AtomicUsize>);
+impl Drop for Place {
+    fn drop(&mut self) {
+        self.0.fetch_sub(1, Ordering::SeqCst);
+    }
+}
+
 impl VideoServer {
+    /// Port d'écoute réel (comparé par `nv_popout`).
+    pub fn port(&self) -> u16 {
+        self.port
+    }
+
     pub fn start() -> std::io::Result<Arc<Self>> {
         let listener = TcpListener::bind("127.0.0.1:0")?;
         let server = Arc::new(Self {
@@ -215,14 +233,24 @@ impl VideoServer {
             frames: Arc::new(Frames::default()),
         });
         let s = server.clone();
+        let actives = Arc::new(AtomicUsize::new(0));
         thread::Builder::new()
             .name("fc-mjpeg".into())
             .spawn(move || {
                 for stream in listener.incoming().flatten() {
+                    if actives.fetch_add(1, Ordering::SeqCst) >= MAX_CONNEXIONS {
+                        actives.fetch_sub(1, Ordering::SeqCst);
+                        continue; // stream dropped = connexion fermée
+                    }
+                    let place = Place(actives.clone());
                     let s = s.clone();
+                    let _ = stream.set_read_timeout(Some(DELAI_LECTURE));
                     let _ = thread::Builder::new()
                         .name("fc-mjpeg-client".into())
-                        .spawn(move || s.serve(stream));
+                        .spawn(move || {
+                            let _place = place;
+                            s.serve(stream)
+                        });
                 }
             })?;
         Ok(server)
@@ -626,6 +654,25 @@ mod tests {
         let (y, u, v) = buf.data();
         assert!(y[..4].iter().all(|&p| p == 128));
         assert_eq!((u[0], v[0]), (128, 128));
+    }
+
+    #[test]
+    fn le_serveur_plafonne_les_connexions() {
+        let s = VideoServer::start().unwrap();
+        // Connexions muettes : elles occupent chacune une place jusqu'au délai de lecture.
+        let muets: Vec<_> = (0..MAX_CONNEXIONS)
+            .map(|_| TcpStream::connect(("127.0.0.1", s.port())).unwrap())
+            .collect();
+        std::thread::sleep(Duration::from_millis(300));
+        let mut c = TcpStream::connect(("127.0.0.1", s.port())).unwrap();
+        c.set_read_timeout(Some(Duration::from_secs(3))).unwrap();
+        let _ = c.write_all(b"GET /w/t?k=x HTTP/1.1
+
+");
+        let mut buf = [0u8; 64];
+        // Fermée sans réponse (0 octet) ou réinitialisée, jamais un « 403 ».
+        assert!(!matches!(c.read(&mut buf), Ok(n) if n > 0));
+        drop(muets);
     }
 
     #[test]

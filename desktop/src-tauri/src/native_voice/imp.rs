@@ -443,6 +443,11 @@ pub async fn set_audio_processing(aec: bool, ns: bool, agc: bool) -> Result<(), 
     Ok(())
 }
 
+/// Port du serveur vidéo local de la session en cours (`None` hors appel).
+pub async fn video_port() -> Option<u16> {
+    session().lock().await.as_ref().map(|s| s.video.port())
+}
+
 pub async fn set_deafen(deafened: bool) -> Result<(), String> {
     prefs().lock().unwrap_or_else(|e| e.into_inner()).deafened = deafened;
     if let Some(s) = session().lock().await.as_ref() {

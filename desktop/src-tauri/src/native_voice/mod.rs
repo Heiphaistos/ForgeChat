@@ -207,6 +207,11 @@ pub async fn nv_popout(app: tauri::AppHandle, url: String, title: String) -> Res
         return Err("URL de flux invalide".into());
     }
     let port = page.port();
+    // Le port doit être celui du serveur vidéo de la session, pas n'importe quel service local.
+    #[cfg(target_os = "linux")]
+    if port != imp::video_port().await {
+        return Err("URL de flux invalide".into());
+    }
     let label = format!("popout-{}", N.fetch_add(1, Ordering::Relaxed));
     tauri::WebviewWindowBuilder::new(&app, label, tauri::WebviewUrl::External(page))
         .title(title)
