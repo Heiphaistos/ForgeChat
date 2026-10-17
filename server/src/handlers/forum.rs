@@ -238,6 +238,7 @@ pub async fn create_post(
             return Err(err);
         }
     }
+    crate::handlers::post_guard::throttle(&state, claims.sub, channel_id).await?;
 
     let post = sqlx::query_as::<_, ForumPost>(
         "INSERT INTO forum_posts (channel_id, title, content, creator_id, tags, media_url, enc, client_msg_id)
@@ -456,6 +457,7 @@ pub async fn reply_to_post(
             return Err(err);
         }
     }
+    crate::handlers::post_guard::throttle(&state, claims.sub, channel_id).await?;
 
     // Transaction avec SELECT FOR UPDATE pour éviter la race condition locked/INSERT
     let mut tx = state.db.begin().await?;

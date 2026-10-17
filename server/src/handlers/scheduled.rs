@@ -346,6 +346,14 @@ pub async fn dispatch_scheduled_messages(state: AppState) {
             }
         }
 
+        // Mode lent + anti-spam du salon, à l'heure de l'envoi (jamais à la programmation : des
+        // messages programmés pour la même minute partaient d'un bloc). Trop tôt : on réessaie
+        // au prochain passage, le message reste en attente.
+        if let Err(e) = crate::handlers::post_guard::throttle(&state, user_id, channel_id).await {
+            tracing::debug!("Message programmé {sched_id} retardé par le mode lent / l'anti-spam : {e}");
+            continue;
+        }
+
         // Messages éphémères du salon : appliqués à l'heure de l'envoi.
         let expires_at = crate::handlers::disappearing::setting(&state.db, crate::handlers::e2e_conv::Conv::Channel(channel_id))
             .await

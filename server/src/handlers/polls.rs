@@ -86,6 +86,16 @@ pub(crate) async fn create_poll_with(
         &state.db, channel_id, has_text, body.enc.as_ref(), body.client_msg_id, exempt,
     ).await?;
     let cmid = enc.as_ref().and(body.client_msg_id);
+    // Mêmes freins qu'un message : débit AutoMod, filtre (clair seulement), mode lent + anti-spam.
+    crate::handlers::automod::check_rate(&state, server_id, claims.sub).await?;
+    if enc.is_none() {
+        let text = std::iter::once(body.question.as_str()).chain(body.options.iter().map(String::as_str)).collect::<Vec<_>>().join("
+");
+        if let Some(err) = crate::handlers::audit::check_automod(&state, server_id, claims.sub, &text).await {
+            return Err(err);
+        }
+    }
+    crate::handlers::post_guard::throttle(&state, claims.sub, channel_id).await?;
 
     let is_timed_out: bool = sqlx::query_scalar(
         "SELECT EXISTS(SELECT 1 FROM user_timeouts WHERE server_id=$1 AND user_id=$2 AND expires_at > NOW())"
