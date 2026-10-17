@@ -38,6 +38,8 @@ const bot = (await api('POST', `/api/servers/${srv.id}/bots`, { token: owner, bo
 ok(!!bot, 'bot RSSDI créé', '')
 const forum = (await api('POST', `/api/servers/${srv.id}/channels`, { token: owner, body: { name: 'Informatique', type: 'forum' } })).body
 const PSQL = process.env.FORGECHAT_PSQL ?? 'postgres://forgechat:ci@127.0.0.1:5432/forgechat'
+// Les sites « publics » (fil À la une de tous) exigent l'autorisation du site pour ce serveur (audit 2026-10-17).
+execFileSync('psql', [PSQL, '-At', '-c', `UPDATE servers SET news_public_allowed = true WHERE id = '${srv.id}'`])
 const sqlPost = (channel, title) => execFileSync('psql', [PSQL, '-At', '-c',
   `INSERT INTO forum_posts (channel_id, title, creator_id) SELECT '${channel}', '${title}', owner_id FROM servers s JOIN channels c ON c.server_id = s.id WHERE c.id = '${channel}' RETURNING id`], { encoding: 'utf8' }).trim().split(/\s+/)[0]
 const postId = sqlPost(forum.id, 'Presse Citron')

@@ -118,10 +118,14 @@ fn fmt_bytes(n: u64) -> String {
 }
 
 /// Droit d'envoi d'un compte pour une requête : débit (429) puis quota de stockage (413).
-/// `save` écrit chaque fichier en bornant sa taille au reste du quota.
+/// `save` réserve dans Redis, AVANT d'écrire chaque fichier, la place maximale qu'il peut prendre
+/// (`upload_reserved:<compte>`, INCRBY atomique), puis ramène la réservation à la taille réelle :
+/// des envois simultanés d'un même compte ne lisent plus tous le même usage. Tout est rendu quand
+/// la requête se termine (`Drop`), c'est-à-dire après l'écriture des lignes `attachments`.
 pub struct UploadBudget {
-    remaining: u64,
-    /// Octets réservés dans Redis (`upload_reserved:<compte>`), rendus à la fin de la requête.
+    quota: u64,
+    used: u64,
+    /// Octets encore réservés dans Redis par CETTE requête.
     reserved: u64,
     user_id: Uuid,
     redis: std::sync::Arc<tokio::sync::Mutex<redis::aio::ConnectionManager>>,
@@ -133,10 +137,7 @@ impl Drop for UploadBudget {
             return;
         }
         let (redis, key, n) = (self.redis.clone(), reserved_key(self.user_id), self.reserved as i64);
-        // Rendu après un court délai : les lignes `attachments` de la requête sont validées par l'appelant
-        // juste après ; entre-temps la réservation et les lignes comptent deux fois (prudent, jamais trop peu).
         tokio::spawn(async move {
-            tokio::time::sleep(std::time::Duration::from_secs(5)).await;
             let _: redis::RedisResult<i64> = redis::AsyncCommands::decr(&mut *redis.lock().await, key, n).await;
         });
     }
@@ -146,11 +147,25 @@ fn reserved_key(user_id: Uuid) -> String {
     format!("upload_reserved:{user_id}")
 }
 
-/// Octets restants pour cette requête : quota moins l'usage en base moins les réservations des
-/// AUTRES requêtes en cours (`others`). `None` = rien de disponible.
-fn available(quota: u64, used: i64, others: i64) -> Option<u64> {
-    let r = quota.saturating_sub(used.max(0) as u64).saturating_sub(others.max(0) as u64);
+/// Octets restants : quota moins l'usage en base moins les réservations en cours (toutes requêtes
+/// confondues). `None` = rien de disponible.
+fn available(quota: u64, used: i64, reserved: i64) -> Option<u64> {
+    let r = quota.saturating_sub(used.max(0) as u64).saturating_sub(reserved.max(0) as u64);
     (r > 0).then_some(r)
+}
+
+/// Une réservation orpheline (plantage en pleine écriture) ne bloque pas le compte plus de 30 min.
+const RESERVATION_TTL_SECS: i64 = 1800;
+
+fn too_full(quota: u64) -> AppError {
+    AppError::PayloadTooLarge(format!(
+        "Quota de stockage atteint ({}) : supprimez d'anciens fichiers pour en envoyer d'autres",
+        fmt_bytes(quota)
+    ))
+}
+
+fn redis_unavailable<E>(_: E) -> AppError {
+    AppError::Unavailable("Service momentanément indisponible, réessayez dans un instant".into())
 }
 
 impl UploadBudget {
@@ -169,52 +184,68 @@ impl UploadBudget {
         .fetch_one(&state.db)
         .await?;
         let quota = state.config.upload_quota_bytes;
-        let too_full = || AppError::PayloadTooLarge(format!(
-            "Quota de stockage atteint ({}) : supprimez d'anciens fichiers pour en envoyer d'autres",
-            fmt_bytes(quota)
-        ));
-        // Réservation atomique (INCRBY) : des envois simultanés ne lisent plus tous le même usage.
-        // Au plus MAX_FILES_PER_REQUEST fichiers réservés par requête ; TTL pour qu'un plantage ne bloque pas le compte.
-        let want = (quota.saturating_sub(used.max(0) as u64))
-            .min(state.config.max_upload_size.saturating_mul(MAX_FILES_PER_REQUEST as u64));
-        if want == 0 {
-            return Err(too_full());
-        }
-        let key = reserved_key(user_id);
-        let unavailable = |_| AppError::Unavailable("Service momentanément indisponible, réessayez dans un instant".into());
-        let total: i64 = {
+        // Lecture seule ici : la réservation se fait fichier par fichier dans `save`.
+        let reserved: i64 = {
             let mut redis = state.redis.lock().await;
-            let total: i64 = redis::AsyncCommands::incr(&mut *redis, &key, want as i64).await.map_err(unavailable)?;
-            let _: bool = redis::AsyncCommands::expire(&mut *redis, &key, 1800).await.map_err(unavailable)?;
-            total
+            redis::AsyncCommands::get::<_, Option<i64>>(&mut *redis, reserved_key(user_id)).await.map_err(redis_unavailable)?.unwrap_or(0)
         };
-        let mut budget = Self { remaining: 0, reserved: want, user_id, redis: state.redis.clone() };
-        match available(quota, used, total - want as i64) {
-            // `budget` rend la réservation en tombant.
-            None => Err(too_full()),
-            Some(r) => {
-                budget.remaining = r.min(want);
-                Ok(budget)
-            }
+        if available(quota, used, reserved).is_none() {
+            return Err(too_full(quota));
         }
+        Ok(Self { quota, used: used.max(0) as u64, reserved: 0, user_id, redis: state.redis.clone() })
+    }
+
+    /// Réserve jusqu'à `want` octets de plus et rend ce qui a vraiment pu l'être (0 = quota atteint).
+    async fn reserve(&mut self, want: u64) -> Result<u64> {
+        let key = reserved_key(self.user_id);
+        let mut redis = self.redis.lock().await;
+        let total: i64 = redis::AsyncCommands::incr(&mut *redis, &key, want as i64).await.map_err(redis_unavailable)?;
+        let _: bool = redis::AsyncCommands::expire(&mut *redis, &key, RESERVATION_TTL_SECS).await.map_err(redis_unavailable)?;
+        // Place qu'il restait AVANT cette réservation (les autres requêtes comprises).
+        let room = available(self.quota, self.used as i64, total - want as i64).unwrap_or(0);
+        let got = want.min(room);
+        if got < want {
+            // Rendu immédiat de l'excédent : les autres requêtes ne le voient que le temps d'un aller-retour.
+            let _: i64 = redis::AsyncCommands::decr(&mut *redis, &key, (want - got) as i64).await.map_err(redis_unavailable)?;
+        }
+        self.reserved += got;
+        Ok(got)
+    }
+
+    /// Rend `n` octets réservés mais non écrits.
+    async fn release(&mut self, n: u64) {
+        if n == 0 {
+            return;
+        }
+        self.reserved = self.reserved.saturating_sub(n);
+        let _: redis::RedisResult<i64> =
+            redis::AsyncCommands::decr(&mut *self.redis.lock().await, reserved_key(self.user_id), n as i64).await;
     }
 
     pub async fn save(&mut self, state: &AppState, field: axum::extract::multipart::Field<'_>, path: &std::path::Path) -> Result<i64> {
         let per_file = state.config.max_upload_size;
-        let (max, remaining) = (per_file.min(self.remaining), self.remaining);
-        let size = write_field(field, path, max, || {
+        let max = self.reserve(per_file).await?;
+        if max == 0 {
+            return Err(too_full(self.quota));
+        }
+        let quota = self.quota;
+        let written = write_field(field, path, max, || {
             if max < per_file {
-                format!(
-                    "Quota de stockage dépassé : il vous reste {} sur {}",
-                    fmt_bytes(remaining),
-                    fmt_bytes(state.config.upload_quota_bytes)
-                )
+                format!("Quota de stockage dépassé : il vous reste {} sur {}", fmt_bytes(max), fmt_bytes(quota))
             } else {
                 format!("Fichier trop volumineux (max {} Mo)", per_file / 1_048_576)
             }
-        }).await?;
-        self.remaining -= size;
-        Ok(size as i64)
+        }).await;
+        match written {
+            Ok(size) => {
+                self.release(max - size).await;
+                Ok(size as i64)
+            }
+            Err(e) => {
+                self.release(max).await;
+                Err(e)
+            }
+        }
     }
 }
 
@@ -776,6 +807,7 @@ mod tests {
 
     #[test]
     fn quota_disponible_avec_reservations_concurrentes() {
+        // `reserved` = toutes les réservations en cours, la nôtre comprise une fois l'INCRBY passé.
         assert_eq!(available(100, 30, 0), Some(70));
         assert_eq!(available(100, 30, 50), Some(20)); // un envoi en cours a réservé 50
         assert_eq!(available(100, 30, 70), None);
