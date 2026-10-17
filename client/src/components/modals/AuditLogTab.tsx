@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import {
   ScrollText, UserPlus, UserMinus, UserX, ShieldOff, ShieldCheck,
-  Hash, Trash2, Crown, PenLine, MessageSquareX, Settings, Download, Lock, Unlock, Ticket,
+  Hash, Trash2, Crown, PenLine, MessageSquareX, Settings, Download, Lock, Unlock, Ticket, Bot, Webhook, Link2,
 } from 'lucide-react'
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
@@ -36,6 +36,12 @@ const ACTION_CONFIG: Record<string, { color: string; Icon: any }> = {
   MEMBER_JOIN:     { color: 'text-fc-green',   Icon: UserPlus },
   MEMBER_LEAVE:    { color: 'text-fc-muted',   Icon: UserMinus },
   MEMBER_KICK:     { color: 'text-orange-400', Icon: UserX },
+  BOT_CREATE:      { color: 'text-cyan-400', Icon: Bot },
+  BOT_DELETE:      { color: 'text-fc-red', Icon: Bot },
+  BOT_TOKEN_REGEN: { color: 'text-yellow-400', Icon: Bot },
+  WEBHOOK_CREATE:  { color: 'text-cyan-400', Icon: Webhook },
+  WEBHOOK_DELETE:  { color: 'text-fc-red', Icon: Webhook },
+  INVITE_CREATE:   { color: 'text-green-400', Icon: Link2 },
   MEMBER_BAN:      { color: 'text-fc-red',     Icon: ShieldOff },
   MEMBER_UNBAN:    { color: 'text-fc-green',   Icon: ShieldCheck },
   MEMBER_NICKNAME_CHANGE: { color: 'text-blue-400', Icon: PenLine },
