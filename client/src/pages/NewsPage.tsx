@@ -193,14 +193,15 @@ function Feed({ view, query, seen, muted, wide, onSite }: { view: View; query: s
 
 function Card({ a, seen, big, showSite, onSite }: { a: Article; seen: number; big?: boolean; showSite: boolean; onSite: (id: string) => void }) {
   const t = useT()
-  const [broken, setBroken] = useState(false)
+  // Image via le proxy du serveur : ni fuite de l'IP du lecteur vers le site, ni `img-src https:` dans la CSP.
+  const image = useProxiedImage(a.image)
   const isNew = seen > 0 && new Date(a.published_at).getTime() > seen
   const label = a.site ?? host(a.link)
   return (
     <article className={`group rounded-xl overflow-hidden bg-fc-channel border border-fc-hover hover:border-fc-accent/60 transition flex ${big ? 'flex-col md:flex-row' : 'flex-col'}`}>
       <a href={safeHref(a.link)} target="_blank" rel="noopener noreferrer nofollow" className={`relative block flex-shrink-0 bg-black ${big ? 'md:w-1/2 aspect-video md:aspect-auto md:min-h-[260px]' : 'aspect-video'}`} tabIndex={-1} aria-hidden>
-        {a.image && !broken
-          ? <img src={a.image} alt="" loading="lazy" decoding="async" referrerPolicy="no-referrer" onError={() => setBroken(true)} className="absolute inset-0 w-full h-full object-cover group-hover:scale-[1.02] transition-transform duration-300" />
+        {image
+          ? <img src={image} alt="" loading="lazy" decoding="async" referrerPolicy="no-referrer" className="absolute inset-0 w-full h-full object-cover group-hover:scale-[1.02] transition-transform duration-300" />
           : <div className="absolute inset-0 flex items-center justify-center text-4xl font-black text-white/80" style={{ background: `linear-gradient(135deg, hsl(${hue(label)} 55% 30%), hsl(${(hue(label) + 50) % 360} 55% 18%))` }}>{label.charAt(0).toUpperCase()}</div>}
         {isNew && <span className="absolute top-2 left-2 text-[10px] font-bold uppercase tracking-wide bg-fc-accent text-white rounded px-1.5 py-0.5">{t('news.new')}</span>}
       </a>

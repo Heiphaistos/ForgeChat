@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { t as tr } from '../../i18n'
 import api from '../../api/client'
+import { useProxiedImage } from '../../hooks/useProxiedImage'
 import { ExternalLink } from 'lucide-react'
 import { isSafeUrl } from '../../utils/safeUrl'
 import { previewAllowed } from '../../e2e/channelText'
@@ -33,21 +34,9 @@ function asOg(v: unknown): OGData | null {
   return url ? { url, title: clip('title', 200), description: clip('description', 400), image: str('image'), site_name: clip('site_name', 100), nsfw: o.nsfw === true } : null
 }
 
-/**
- * Image d'aperçu récupérée par le serveur (GET /og/image, jeton d'accès requis : donc via axios,
- * en blob) : le site du lien ne voit jamais l'IP du lecteur, même si l'adresse vient d'un
- * expéditeur malveillant. Échec : pas d'image.
- */
+/** Image d'aperçu via le proxy du serveur (useProxiedImage) : le site du lien ne voit jamais l'IP du lecteur. */
 function PreviewImage({ src, alt }: { src: string; alt: string }) {
-  const { data: blobUrl } = useQuery<string | null>({
-    queryKey: ['og-image', src],
-    queryFn: () => api.get('/og/image', { params: { url: src }, responseType: 'blob', timeout: 10_000 })
-      .then(r => URL.createObjectURL(r.data as Blob)),
-    staleTime: Infinity,
-    gcTime: 600_000,
-    retry: false,
-  })
-  // ponctuel : l'URL blob (3 Mo au plus) reste valide tant que la requête est en cache ; pas de revoke.
+  const blobUrl = useProxiedImage(src)
   if (!blobUrl) return null
   return (
     <img src={blobUrl} alt={alt} loading="lazy" decoding="async" referrerPolicy="no-referrer"
