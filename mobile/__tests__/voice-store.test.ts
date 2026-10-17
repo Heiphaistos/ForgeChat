@@ -49,7 +49,7 @@ const mockAccess = jest.fn()
 // Chiffrement des médias (module natif) : testé à part (e2e-media.test.ts).
 jest.mock('@/e2e/media', () => ({
   E2EE_CLAIM: { e2ee: true },
-  openMediaE2EE: jest.fn(),
+  openMediaE2EE: async () => ({ encryption: {}, stop: () => undefined }), // toujours appelée : le drapeau e2ee servi est ignoré
   enableMediaE2EE: jest.fn(),
   watchOutdated: jest.fn(),
   mediaE2EEError: () => 'e2e.call.failed',

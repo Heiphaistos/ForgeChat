@@ -122,12 +122,14 @@ export const useGroupCall = create<GroupCallState>((set, get) => {
     const gen = generation
     // Salle chiffrée : jamais de connexion en clair, même si la clé manque.
     let e2ee: MediaE2EE | null = null
-    if (res.access.e2ee && groupId) {
+    // Le drapeau `access.e2ee` servi est ignoré : un serveur ne peut pas nous faire rejoindre en clair.
+    {
       try {
+        if (!groupId) throw new Error('E2E_WAITING')
         e2ee = await openMediaE2EE('group', groupId)
       } catch (err) {
         if (gen !== generation) return
-        realtime.send({ type: 'GROUP_CALL_LEAVE', group_id: groupId })
+        if (groupId) realtime.send({ type: 'GROUP_CALL_LEAVE', group_id: groupId })
         cleanup(t(mediaE2EEError(err)))
         return
       }

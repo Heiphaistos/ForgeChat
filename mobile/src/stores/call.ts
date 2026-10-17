@@ -221,7 +221,8 @@ export const useCall = create<CallState>((set, get) => {
     const gen = callGeneration
     // Salle chiffrée : jamais de connexion en clair, même si la clé manque.
     let e2ee: MediaE2EE | null = null
-    if (access.e2ee) {
+    // Le drapeau `access.e2ee` servi est ignoré : un serveur ne peut pas nous faire rejoindre en clair.
+    {
       try {
         const conv = access.convId ?? get().dmId
         if (!conv) throw new Error('E2E_WAITING')

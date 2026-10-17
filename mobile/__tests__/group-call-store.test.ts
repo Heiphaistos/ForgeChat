@@ -27,7 +27,7 @@ const mockAccess = { url: 'wss://chat.example.org/livekit', token: 't'.repeat(40
 // Chiffrement des médias (module natif) : testé à part (e2e-media.test.ts).
 jest.mock('@/e2e/media', () => ({
   E2EE_CLAIM: { e2ee: true },
-  openMediaE2EE: jest.fn(),
+  openMediaE2EE: async () => ({ encryption: {}, stop: () => undefined }),
   enableMediaE2EE: jest.fn(),
   watchOutdated: jest.fn(),
   mediaE2EEError: () => 'e2e.call.failed',
