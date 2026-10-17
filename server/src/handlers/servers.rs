@@ -159,6 +159,65 @@ pub fn valid_vanity(v: &str) -> bool {
         && (v.len() != 8 || v.contains('-'))
 }
 
+/// Bornes de texte des champs libres d'un serveur (comptées en caractères).
+pub(crate) const DESCRIPTION_MAX: usize = 1000;
+pub(crate) const WELCOME_MAX: usize = 2000;
+pub(crate) const RULES_MAX: usize = 4000;
+
+/// Refuse (400) un texte libre plus long que `max` caractères. Avant : aucune borne, jusqu'à la
+/// limite du corps (12 Mo), puis renvoyé dans /explore, /discover, l'info d'invitation publique
+/// et chaque SERVER_UPDATE.
+pub(crate) fn check_text_len(label: &str, v: Option<&str>, max: usize) -> Result<()> {
+    if v.is_some_and(|t| t.chars().count() > max) {
+        return Err(AppError::BadRequest(format!("{label} : {max} caractères au plus")));
+    }
+    Ok(())
+}
+
+/// Valeurs de `content_filter` acceptées (contrainte CHECK de la colonne, migration 010).
+const CONTENT_FILTERS: &[&str] = &["none", "members_without_roles", "all_members"];
+
+/// Bannière : vide, inchangée, ou un fichier téléversé par la route bannière (jamais une URL externe).
+pub(crate) fn banner_allowed(new: &str, current: Option<&str>) -> bool {
+    new.is_empty()
+        || current == Some(new)
+        || (new.starts_with("/uploads/server-banners/") && !new.contains("..") && !new.contains("//") && !new.contains('\\') && !new.contains(':'))
+}
+
+/// Contrôles de valeur de PATCH /servers/:id (tout est vérifié avant la première écriture).
+async fn validate_update(state: &AppState, server_id: Uuid, body: &UpdateServerRequest) -> Result<()> {
+    if let Some(n) = &body.name {
+        if !(2..=100).contains(&n.trim().chars().count()) {
+            return Err(AppError::BadRequest("Nom serveur 2-100 chars".into()));
+        }
+    }
+    check_text_len("Description", body.description.as_deref(), DESCRIPTION_MAX)?;
+    check_text_len("Message de bienvenue", body.welcome_message.as_deref(), WELCOME_MAX)?;
+    if let Some(cf) = &body.content_filter {
+        if !CONTENT_FILTERS.contains(&cf.as_str()) {
+            return Err(AppError::BadRequest("Filtre de contenu invalide".into()));
+        }
+    }
+    if body.afk_timeout.is_some_and(|t| !(1..=3600).contains(&t)) {
+        return Err(AppError::BadRequest("Délai AFK : 1 à 3600".into()));
+    }
+    if let Some(b) = &body.banner {
+        let current: Option<String> = sqlx::query_scalar("SELECT banner FROM servers WHERE id=$1")
+            .bind(server_id).fetch_optional(&state.db).await?.flatten();
+        if !banner_allowed(b, current.as_deref()) {
+            return Err(AppError::BadRequest("Bannière : utilise l'envoi d'image du serveur".into()));
+        }
+    }
+    for id in [body.system_channel_id, body.afk_channel_id, body.rules_channel_id].into_iter().flatten().flatten() {
+        let ok: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM channels WHERE id=$1 AND server_id=$2)")
+            .bind(id).bind(server_id).fetch_one(&state.db).await?;
+        if !ok {
+            return Err(AppError::BadRequest("Salon inconnu sur ce serveur".into()));
+        }
+    }
+    Ok(())
+}
+
 pub async fn update_server(
     State(state): State<AppState>,
     Extension(claims): Extension<Claims>,
@@ -166,6 +225,7 @@ pub async fn update_server(
     Json(body): Json<UpdateServerRequest>,
 ) -> Result<Json<Server>> {
     require_owner(&state, claims.sub, server_id).await?;
+    validate_update(&state, server_id, &body).await?;
 
     const VALID_CATEGORIES: &[&str] = &["gaming", "community", "tech", "music", "education", "arts", "18plus"];
     if let Some(Some(cat_str)) = &body.server_category {
@@ -1393,6 +1453,7 @@ pub async fn update_server_verification(
     // aurait confondu ce `null` avec "champ absent" et gardé indéfiniment l'ancien texte,
     // rendant impossible de vider des règles de vérification une fois définies.
     let verification_rules = body["verification_rules"].as_str();
+    check_text_len("Règles de vérification", verification_rules, RULES_MAX)?;
 
     let server = sqlx::query_as::<_, Server>(
         "UPDATE servers SET
@@ -1629,7 +1690,24 @@ pub async fn discover_servers(
 
 #[cfg(test)]
 mod vanity_tests {
-    use super::valid_vanity;
+    use super::{banner_allowed, check_text_len, valid_vanity};
+
+    #[test]
+    fn text_bounds_count_chars() {
+        assert!(check_text_len("d", Some(&"é".repeat(1000)), 1000).is_ok());
+        assert!(check_text_len("d", Some(&"é".repeat(1001)), 1000).is_err());
+        assert!(check_text_len("d", None, 1).is_ok());
+    }
+
+    #[test]
+    fn banner_only_own_uploads() {
+        assert!(banner_allowed("", Some("x")));
+        assert!(banner_allowed("/uploads/server-banners/a.png", None));
+        assert!(banner_allowed("https://old/legacy.png", Some("https://old/legacy.png")));
+        assert!(!banner_allowed("https://evil.example/x.png", None));
+        assert!(!banner_allowed("/uploads/server-banners/../../x", None));
+        assert!(!banner_allowed("/uploads/avatars/a.png", None));
+    }
 
     #[test]
     fn vanity_format() {

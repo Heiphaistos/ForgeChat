@@ -145,6 +145,7 @@ pub async fn create_server_from(
     if name.len() < 2 || name.len() > 100 {
         return Err(AppError::BadRequest("Nom serveur 2-100 chars".into()));
     }
+    crate::handlers::servers::check_text_len("Description", description, crate::handlers::servers::DESCRIPTION_MAX)?;
     let owned: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM servers WHERE owner_id=$1")
         .bind(owner).fetch_one(&state.db).await?;
     if owned >= 100 {
