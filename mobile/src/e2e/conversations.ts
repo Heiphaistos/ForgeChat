@@ -123,7 +123,10 @@ async function load(kind: ConvKind, id: string, force = false): Promise<ConvStat
 /** Faut-il chiffrer ici ? (dès que j'ai une clé de compte : sans elle, on ne peut pas écrire). */
 export async function mustEncrypt(kind: ConvKind, id: string): Promise<boolean> {
   // Clé de compte ouverte ici : toujours chiffrer, jamais de repli en clair sur la foi d'un champ servi (`encrypt:false`).
-  if (useAccountKey.getState().priv) return true
+  const ak = useAccountKey.getState()
+  if (ak.priv) return true
+  // Compte muni d'une clé mais verrouillée : jamais de repli en clair sur le champ servi.
+  if (ak.status === 'locked' && ak.mode === 'unlock') throw new Error('E2E_LOCKED')
   return (await load(kind, id)).encrypt
 }
 
