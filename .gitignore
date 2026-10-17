@@ -28,3 +28,6 @@ dist-desktop/
 # Sauvegarde du Redis local de test
 dump.rdb
 *.tsbuildinfo
+
+# Correctifs locaux de dépendances (desktop/vendor/README.md) : versionnés malgré un vendor/ ignoré globalement.
+!desktop/vendor/
