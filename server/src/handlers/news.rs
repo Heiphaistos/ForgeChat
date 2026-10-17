@@ -53,6 +53,12 @@ fn web_url(u: &str) -> Option<String> {
     ok.then(|| u.to_string())
 }
 
+/// Adresse lue dans un flux : les flux échappent les « & » (`&amp;`), non décodée elle casse
+/// (L'Express répondait 400 à `?auth=…&amp;`).
+fn feed_url(u: &str) -> Option<String> {
+    web_url(&crate::handlers::audit::decode_entities(u))
+}
+
 /// Texte d'un extrait de flux RSS (souvent du HTML) : balises retirées, entités décodées, blancs réduits.
 fn html_text(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
@@ -103,12 +109,12 @@ pub async fn bot_post_news(
     let site = clip(&b.site, 80);
     let category = clip(&b.category, 60);
     let title = clip(&crate::handlers::audit::decode_entities(&b.title), 300);
-    let link = web_url(&b.link).ok_or_else(|| AppError::BadRequest("Lien d'article invalide".into()))?;
+    let link = feed_url(&b.link).ok_or_else(|| AppError::BadRequest("Lien d'article invalide".into()))?;
     if site.is_empty() || category.is_empty() || title.is_empty() {
         return Err(AppError::BadRequest("Site, rubrique et titre requis".into()));
     }
     let summary = b.summary.as_deref().map(|s| clip(&html_text(s), 1200)).filter(|s| !s.is_empty());
-    let image = b.image.as_deref().and_then(web_url).filter(|u| u.starts_with("https://"))
+    let image = b.image.as_deref().and_then(feed_url).filter(|u| u.starts_with("https://"))
         .or_else(|| b.summary.as_deref().and_then(first_img))
         .or_else(|| youtube_thumb(&link));
     let published = b.published_at
@@ -369,6 +375,7 @@ mod tests {
         assert_eq!(super::html_text(h), "Le serveur DNS, c'est clé.");
         assert_eq!(super::first_img(h).as_deref(), Some("https://img.fr/a.jpg?x=1&y=2"));
         assert!(super::first_img(r#"<img src="http://x.fr/a.jpg">"#).is_none());
+        assert_eq!(super::feed_url("https://www.lexpress.fr/r/a.jpg?auth=ab&amp;w=1").as_deref(), Some("https://www.lexpress.fr/r/a.jpg?auth=ab&w=1"));
         assert_eq!(super::youtube_thumb("https://www.youtube.com/shorts/0oudvTK55rA").as_deref(), Some("https://i.ytimg.com/vi/0oudvTK55rA/hqdefault.jpg"));
         assert_eq!(super::youtube_thumb("https://www.youtube.com/watch?v=fICk_d6lnKU&t=3").as_deref(), Some("https://i.ytimg.com/vi/fICk_d6lnKU/hqdefault.jpg"));
         assert!(super::youtube_thumb("https://www.numerama.com/x").is_none());
