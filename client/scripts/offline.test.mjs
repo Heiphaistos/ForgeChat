@@ -34,3 +34,8 @@ test('conversation visée par un envoi', () => {
   assert.deepEqual(convOf(`/servers/x/channels/${U}/messages`), ['channel', U])
   assert.equal(convOf('/users/me'), null)
 })
+
+test('forgetOfflineOwner : sans compte gardé, ne fait rien et ne lève pas', async () => {
+  const { forgetOfflineOwner } = await import('../src/lib/offline.ts')
+  assert.equal(await forgetOfflineOwner(), undefined)
+})

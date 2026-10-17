@@ -1,7 +1,7 @@
 import axios from 'axios'
 import { create } from 'zustand'
 import { accessToken, clearLocalSession, refreshAccess } from '../lib/localSession'
-import { installOffline } from '../lib/offline'
+import { forgetOfflineOwner, installOffline } from '../lib/offline'
 import { isMediaUrl } from '../utils/safeUrl'
 
 const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
@@ -135,6 +135,7 @@ api.interceptors.response.use(
           return Promise.reject(err)
         }
         if (isTauri) await clearLocalSession()
+        await forgetOfflineOwner()
         // Relu ici (et non avant le refresh) : AuthGuard a pu entre-temps aller sur
         // /login?redirect=… ; un rechargement vers /login nu perdait la destination
         const { pathname, search } = window.location
