@@ -91,6 +91,8 @@ pub async fn create_webhook(
     .bind(&preview)
     .fetch_one(&state.db)
     .await?;
+    let wid: Uuid = row.get("id");
+    crate::handlers::audit::log_event(&state, server_id, "WEBHOOK_CREATE", Some(claims.sub), Some(wid), Some(body.name.trim()), None).await;
 
     Ok(Json(WebhookRow {
         id: row.get("id"),
@@ -122,8 +124,11 @@ pub async fn delete_webhook(
     Path((server_id, webhook_id)): Path<(Uuid, Uuid)>,
 ) -> Result<Json<serde_json::Value>, AppError> {
     _check_manage(claims.sub, server_id, &state).await?;
-    sqlx::query("DELETE FROM webhooks WHERE id=$1 AND server_id=$2")
-        .bind(webhook_id).bind(server_id).execute(&state.db).await?;
+    let name: Option<String> = sqlx::query_scalar("DELETE FROM webhooks WHERE id=$1 AND server_id=$2 RETURNING name")
+        .bind(webhook_id).bind(server_id).fetch_optional(&state.db).await?;
+    if let Some(n) = name {
+        crate::handlers::audit::log_event(&state, server_id, "WEBHOOK_DELETE", Some(claims.sub), Some(webhook_id), Some(&n), None).await;
+    }
     Ok(Json(serde_json::json!({ "ok": true })))
 }
 

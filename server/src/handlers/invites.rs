@@ -48,6 +48,7 @@ pub async fn create_invite(
     .bind(expires_at)
     .fetch_one(&state.db)
     .await?;
+    crate::handlers::audit::log_event(&state, server_id, "INVITE_CREATE", Some(claims.sub), None, Some(&invite.code), None).await;
 
     Ok(Json(invite))
 }

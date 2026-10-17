@@ -15,6 +15,9 @@ use crate::{
     state::AppState,
 };
 
+/// Bots par serveur, au plus.
+const MAX_BOTS_PER_SERVER: i64 = 25;
+
 #[derive(serde::Deserialize)]
 pub struct CreateBotRequest {
     pub name: String,
@@ -48,6 +51,21 @@ pub async fn create_bot(
         None => None,
     };
     let bot_username = format!("{}Bot", name.replace(' ', ""));
+    // `users.username` est VARCHAR(32) et unique : un nom trop long ou déjà pris (un vrai membre
+    // « AliceBot ») finissait en erreur 500 / 409 opaque, ou pire se faisait passer pour lui.
+    if bot_username.chars().count() > 32 {
+        return Err(AppError::BadRequest("Nom de bot trop long (29 caractères au plus sans espaces)".into()));
+    }
+    let taken: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM users WHERE lower(username)=lower($1))")
+        .bind(&bot_username).fetch_one(&state.db).await?;
+    if taken {
+        return Err(AppError::Conflict("Ce nom est déjà utilisé par un compte : choisis-en un autre".into()));
+    }
+    let bots: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM bot_tokens WHERE server_id=$1")
+        .bind(server_id).fetch_one(&state.db).await?;
+    if bots >= MAX_BOTS_PER_SERVER {
+        return Err(AppError::BadRequest(format!("Limite de {MAX_BOTS_PER_SERVER} bots par serveur atteinte")));
+    }
     let disc = format!("{:04}", rand::thread_rng().gen_range(1..9999u32));
     let fake_hash = bcrypt::hash("bot_no_login", 4)
         .map_err(|e| AppError::Internal(anyhow::anyhow!(e)))?;
@@ -89,6 +107,8 @@ pub async fn create_bot(
     .bind(&callback_url)
     .execute(&state.db)
     .await?;
+
+    crate::handlers::audit::log_event(&state, server_id, "BOT_CREATE", Some(claims.sub), Some(bot_user_id), Some(&name), None).await;
 
     Ok(Json(serde_json::json!({
         "bot_user_id": bot_user_id,
@@ -150,6 +170,7 @@ pub async fn delete_bot(
     sqlx::query("DELETE FROM server_members WHERE user_id=$1 AND server_id=$2 AND NOT is_owner")
         .bind(bot_user_id).bind(server_id)
         .execute(&state.db).await?;
+    crate::handlers::audit::log_event(&state, server_id, "BOT_DELETE", Some(claims.sub), Some(bot_user_id), None, None).await;
 
     Ok(Json(serde_json::json!({ "ok": true })))
 }
@@ -176,6 +197,7 @@ pub async fn regenerate_token(
     if updated.rows_affected() == 0 {
         return Err(AppError::NotFound("Bot introuvable".into()));
     }
+    crate::handlers::audit::log_event(&state, server_id, "BOT_TOKEN_REGEN", Some(claims.sub), Some(bot_user_id), None, None).await;
 
     Ok(Json(serde_json::json!({
         "token": raw_token,

@@ -880,8 +880,10 @@ pub async fn ban_member(
     let reason = body["reason"].as_str().map(String::from);
     // Bornée à 1 h .. 1 an : une valeur énorme faisait paniquer le calcul de date,
     // une valeur négative créait un bannissement déjà expiré.
+    // Détenteur de BAN_TEMP seul : 30 jours au plus (seul BAN_MEMBERS va jusqu'à un an).
+    let max_hours = if can_ban_forever { 24 * 365 } else { 24 * 30 };
     let expires_at = body["duration_hours"].as_i64().map(|h| {
-        chrono::Utc::now() + chrono::Duration::hours(h.clamp(1, 24 * 365))
+        chrono::Utc::now() + chrono::Duration::hours(h.clamp(1, max_hours))
     });
 
     sqlx::query(
