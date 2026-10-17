@@ -48,13 +48,40 @@ pub fn clean_tags(tags: &[String]) -> std::result::Result<Vec<String>, String> {
     Ok(out)
 }
 
-const SELECT: &str = "SELECT s.id, s.name, s.icon, s.banner, s.description, s.member_count, s.invite_code,
+/// Colonnes communes ; `activity` s'ajoute (profil : compte direct ; liste : classement en cache).
+const SELECT_COLS: &str = "s.id, s.name, s.icon, s.banner, s.description, s.member_count, s.invite_code,
         s.server_category, s.discovery_tags, s.created_at, s.vanity_url,
-        (SELECT COUNT(*) FROM messages m JOIN channels c ON c.id = m.channel_id
-          WHERE c.server_id = s.id AND m.created_at > NOW() - INTERVAL '7 days') AS activity,
         (SELECT COUNT(*) FROM server_members sm JOIN users u ON u.id = sm.user_id
-          WHERE sm.server_id = s.id AND u.status NOT IN ('offline', 'invisible')) AS online_count
-    FROM servers s";
+          WHERE sm.server_id = s.id AND u.status NOT IN ('offline', 'invisible')) AS online_count";
+
+/// Durée de vie du classement d'activité (secondes).
+const ACTIVITY_TTL: u64 = 300;
+const ACTIVITY_KEY: &str = "explore:activity:v1";
+
+/// Messages des 7 derniers jours par serveur, pour TOUS les serveurs en une requête, gardés 5 min
+/// dans Redis : avant, chaque /explore recomptait les messages de chaque serveur public.
+/// Redis indisponible : on compte (le cache n'est jamais une condition de service).
+async fn activity_by_server(state: &AppState) -> Result<(Vec<Uuid>, Vec<i64>)> {
+    use redis::AsyncCommands;
+    let cached: Option<String> = {
+        let mut r = state.redis.lock().await;
+        r.get(ACTIVITY_KEY).await.unwrap_or(None)
+    };
+    if let Some(rows) = cached.and_then(|s| serde_json::from_str::<Vec<(Uuid, i64)>>(&s).ok()) {
+        return Ok(rows.into_iter().unzip());
+    }
+    let rows: Vec<(Uuid, i64)> = sqlx::query_as(
+        "SELECT c.server_id, COUNT(*) FROM messages m JOIN channels c ON c.id = m.channel_id
+         WHERE m.created_at > NOW() - INTERVAL '7 days' GROUP BY c.server_id",
+    )
+    .fetch_all(&state.db)
+    .await?;
+    if let Ok(json) = serde_json::to_string(&rows) {
+        let mut r = state.redis.lock().await;
+        let _: std::result::Result<(), _> = r.set_ex(ACTIVITY_KEY, json, ACTIVITY_TTL).await;
+    }
+    Ok(rows.into_iter().unzip())
+}
 
 fn server_json(r: &sqlx::postgres::PgRow) -> serde_json::Value {
     serde_json::json!({
@@ -93,9 +120,11 @@ pub async fn discover_servers(
         Some("alpha") => "lower(name)",
         _ => "member_count DESC, activity DESC",
     };
+    let (act_ids, act_counts) = activity_by_server(&state).await?;
     let sql = format!(
-        "SELECT * FROM ({SELECT}
-          WHERE s.is_public
+        "SELECT * FROM (SELECT {SELECT_COLS}, COALESCE(a.cnt, 0)::bigint AS activity
+          FROM servers s LEFT JOIN unnest($6::uuid[], $7::bigint[]) AS a(sid, cnt) ON a.sid = s.id
+          WHERE s.is_public AND s.suspended_at IS NULL
             AND ($1::TEXT IS NULL OR s.server_category = $1)
             AND ($2::TEXT IS NULL OR $2 = ANY(s.discovery_tags))
             AND ($3::TEXT IS NULL OR s.name ILIKE $3 OR s.description ILIKE $3
@@ -108,6 +137,8 @@ pub async fn discover_servers(
         .bind(search)
         .bind(q.limit.unwrap_or(60).clamp(1, 100))
         .bind(q.offset.unwrap_or(0).clamp(0, 10_000))
+        .bind(&act_ids)
+        .bind(&act_counts)
         .fetch_all(&state.db)
         .await?;
     Ok(Json(rows.iter().map(server_json).collect()))
@@ -119,7 +150,12 @@ pub async fn server_profile(
     _claims: Extension<Claims>,
     Path(server_id): Path<Uuid>,
 ) -> Result<Json<serde_json::Value>> {
-    let r = sqlx::query(&format!("{SELECT} WHERE s.id = $1 AND s.is_public"))
+    let r = sqlx::query(&format!(
+        "SELECT {SELECT_COLS},
+                (SELECT COUNT(*) FROM messages m JOIN channels c ON c.id = m.channel_id
+                  WHERE c.server_id = s.id AND m.created_at > NOW() - INTERVAL '7 days') AS activity
+         FROM servers s WHERE s.id = $1 AND s.is_public AND s.suspended_at IS NULL"
+    ))
         .bind(server_id)
         .fetch_optional(&state.db)
         .await?
