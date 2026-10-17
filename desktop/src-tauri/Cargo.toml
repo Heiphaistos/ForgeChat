@@ -16,13 +16,17 @@ tauri-build = { version = "2", features = [] }
 # build.rs : verifie que tauri.conf.json et Cargo.toml portent la meme version.
 serde_json = "1"
 
+[features]
+# Outils de developpement (F12) dans une build de production : OFF par defaut (ils exposent
+# la console et le reseau du webview qui porte l'IPC). Les builds debug les ont de toute facon.
+devtools = ["tauri/devtools"]
+
 [dependencies]
-tauri = { version = "2", features = ["devtools", "tray-icon", "image-png"] }
+tauri = { version = "2", features = ["tray-icon", "image-png"] }
 tauri-plugin-shell = "2"
 tauri-plugin-notification = "2"
 tauri-plugin-single-instance = "2"
 tauri-plugin-window-state = "2"
-tauri-plugin-deep-link = "2"
 # Push-to-talk global, actif fenetre non focalisee (correctif A9)
 tauri-plugin-global-shortcut = "2"
 # Boite native « Enregistrer sous » / choix de dossier (appelee cote Rust seulement).
