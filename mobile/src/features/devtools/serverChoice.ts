@@ -29,7 +29,7 @@ export async function storedOrigin(appEnv: string): Promise<string | null> {
 }
 
 export async function saveOrigin(origin: string): Promise<void> {
-  await SecureStore.setItemAsync(KEY, origin)
+  await SecureStore.setItemAsync(KEY, origin, { keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY })
 }
 
 export async function clearOrigin(): Promise<void> {
