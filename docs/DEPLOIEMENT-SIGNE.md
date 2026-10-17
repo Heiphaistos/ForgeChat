@@ -1,5 +1,10 @@
 # Déploiement signé (audit 2026-10-12, M8)
 
+> **En place depuis le 2026-10-17** : clé `D:\MDPorgechat-signingorgechat_signing` (copie E:\MDP), signature
+> automatique configurée dans le dépôt local (`commit.gpgsign`, `gpg.format ssh`), garde installée sur le VPS et appelée par
+> `/usr/local/sbin/deployer` avant tout alignement de `/opt/forgechat`. Une fusion faite sur GitHub (Dependabot) n'est
+> déployée qu'une fois recouverte par un commit signé poussé depuis ce PC.
+
 Aujourd'hui `deployer-auto` aligne `/opt/forgechat` sur la branche par défaut de GitHub toutes les
 2 minutes. Quiconque peut pousser sur cette branche (compte GitHub volé, jeton fuité, application
 tierce) fait donc exécuter son code sur le VPS et servir un client web piégé à tous les
