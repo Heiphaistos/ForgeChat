@@ -23,6 +23,7 @@ import { createThread as createThreadE2E, openThreadMessages, openThreads, sendS
 import { sealBody } from '../../e2e/conversations'
 import { UnencryptedBadge } from '../../e2e/ChannelBadge'
 import { outgoingText } from '../../lib/uxPrefs'
+import AnimatedImg, { isForeignImage } from '../ui/AnimatedImg'
 
 interface Props {
   serverId: string
@@ -573,13 +574,14 @@ export default function ThreadPanel({ serverId, channelId, parentMessageId, thre
                 onClick={e => {
                   e.stopPropagation()
                   const uid = msg.author_id ?? msg.user_id
-                  if (uid) setUserPopup({ userId: uid, x: e.clientX, y: e.clientY })
+                  // Message importé / webhook (avatar d'un autre site) : ce n'est pas le membre qui l'a posté.
+                  if (uid && !isForeignImage(msg.author?.avatar)) setUserPopup({ userId: uid, x: e.clientX, y: e.clientY })
                 }}
                 aria-label={tr('hc.p.profileOf', { name: msg.author?.username ?? msg.author_username ?? tr('hc.p.theAuthor') })}
                 className="w-6 h-6 rounded-full bg-fc-accent flex items-center justify-center text-xs font-bold text-white flex-shrink-0 mt-0.5 overflow-hidden hover:ring-2 hover:ring-fc-accent/60 transition cursor-pointer"
               >
                 {msg.author?.avatar
-                  ? <img src={mediaUrl(msg.author.avatar)} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" onError={e => { e.currentTarget.style.display = 'none' }} />
+                  ? <AnimatedImg src={msg.author.avatar} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" onError={e => { e.currentTarget.style.display = 'none' }} />
                   : msg.author?.username?.charAt(0).toUpperCase()}
               </button>
               <div className="flex-1 min-w-0">

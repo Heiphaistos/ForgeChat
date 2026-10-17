@@ -1,6 +1,7 @@
 import { useEffect, useState, type ImgHTMLAttributes } from 'react'
 import { mediaUrl } from '../../api/client'
 import { stillUrl } from '../../lib/nameStyle'
+import { useProxiedImage } from '../../hooks/useProxiedImage'
 
 export type AvatarAnimation = 'always' | 'hover' | 'never'
 const KEY = 'fc.animateAvatars'
@@ -46,7 +47,15 @@ function useAnimationMode(): AvatarAnimation {
  * profile_custom.rs) est remplacée par sa première image selon le réglage — toujours
  * fixe, ou animée seulement au survol. Les autres images passent telles quelles.
  */
+/** Image d'un autre site (avatar Discord d'un message importé, webhook) : passe par le proxy du serveur. */
+export function isForeignImage(src: string | null | undefined): boolean {
+  return !!src && /^https?:\/\//i.test(src) && !src.startsWith(location.origin)
+}
+
 export default function AnimatedImg({ src, ...rest }: Omit<ImgHTMLAttributes<HTMLImageElement>, 'src'> & { src: string | null | undefined }) {
+  // Proxy : l'IP du lecteur ne part pas chez le site d'origine, et la CSP n'autorise pas img-src https:.
+  const proxied = useProxiedImage(isForeignImage(src) ? src : null)
+  if (isForeignImage(src)) src = proxied
   const mode = useAnimationMode()
   const [hover, setHover] = useState(false)
   const still = src ? stillUrl(src) : null

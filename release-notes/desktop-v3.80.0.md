@@ -1,0 +1,2 @@
+- Messages importés de Discord et messages de webhooks : l'avatar de l'auteur d'origine s'affiche de nouveau (il passe par le serveur, sans exposer ton adresse IP à Discord) ; ils n'affichent plus le rôle du membre qui les a importés et n'ouvrent plus son profil.
+- Binaires Windows signés (certificat Heiphaistos).

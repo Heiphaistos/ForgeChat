@@ -1,0 +1,1 @@
+- Messages importés de Discord et messages de webhooks : ils n'affichent plus le rôle du membre qui les a importés et n'ouvrent plus son profil.

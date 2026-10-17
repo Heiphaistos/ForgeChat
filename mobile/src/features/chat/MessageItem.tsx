@@ -220,6 +220,11 @@ export const MessageItem = memo(function MessageItem({
   supportReply,
 }: Props) {
   const t = useT()
+  // Message importé de Discord / webhook : posté sous l'id d'un membre avec l'avatar (autre site) de
+  // l'auteur d'origine. Ni le rôle, ni le profil, ni le menu de ce membre ne s'y appliquent.
+  const external = !m.authorIsBot && /^https?:\/\//i.test(m.authorAvatar ?? '')
+  if (external) { decor = undefined; ring = undefined }
+  const pressAuthor = () => { if (!external) onPressAuthor(m.authorId) }
   const mentioned = m.authorId !== myId && mentionsUser(m.content, myId, myName)
   // Personne ignorée (menu utilisateur, sur cet appareil) : message replié, affiché au toucher.
   const ignored = useMyLocalPrefs().ignored.includes(m.authorId)
@@ -229,7 +234,7 @@ export const MessageItem = memo(function MessageItem({
   const showAttachments = useUxPrefs((s) => s.showAttachments)
   const [attachmentsOpened, setAttachmentsOpened] = useState(false)
   const attachmentCount = displayAttachments(m.attachments, m.files).length
-  const authorMenu = m.authorIsBot ? undefined : () => openUserMenu({ userId: m.authorId, name: m.authorName, avatar: m.authorAvatar, serverId })
+  const authorMenu = m.authorIsBot || external ? undefined : () => openUserMenu({ userId: m.authorId, name: m.authorName, avatar: m.authorAvatar, serverId })
   if (ignored && !revealed) {
     return (
       <Pressable onPress={() => setRevealed(true)} style={styles.ignored} accessibilityRole="button">
@@ -260,7 +265,7 @@ export const MessageItem = memo(function MessageItem({
       >
         <View style={styles.gutter}>
           {grouped ? null : (
-            <Pressable onPress={() => onPressAuthor(m.authorId)} onLongPress={authorMenu} delayLongPress={300} accessibilityRole="button" accessibilityLabel={t('msg.authorProfile', { name: m.authorName })}>
+            <Pressable onPress={pressAuthor} onLongPress={authorMenu} delayLongPress={300} accessibilityRole="button" accessibilityLabel={t('msg.authorProfile', { name: m.authorName })}>
               <AvatarRing ring={ring} size={40}>
                 <Avatar uri={m.authorAvatar} name={m.authorName} size={40} decoration={m.authorDecoration} decorationOpts={m.authorDecorationOpts} />
               </AvatarRing>
@@ -271,13 +276,13 @@ export const MessageItem = memo(function MessageItem({
           {grouped ? null : (
             <View style={styles.header}>
               <UserName
-                userId={m.authorIsBot ? undefined : m.authorId}
+                userId={m.authorIsBot || external ? undefined : m.authorId}
                 name={m.authorName}
                 roleColor={decor?.color}
                 serverId={serverId}
                 style={styles.author}
                 showTag
-                onPress={() => onPressAuthor(m.authorId)}
+                onPress={pressAuthor}
                 onLongPress={authorMenu}
               />
               <RoleIcon icon={decor?.icon} title={decor?.iconTitle} />

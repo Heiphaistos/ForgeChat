@@ -25,6 +25,7 @@ import { filesExtra, prepareFiles, uploadPrepared } from '../../e2e/files'
 import { channelSendError } from '../../e2e/channels'
 import { openPost, openReplies, sealPost, sendScoped } from '../../e2e/channelScopes'
 import { UnencryptedBadge } from '../../e2e/ChannelBadge'
+import AnimatedImg, { isForeignImage } from '../ui/AnimatedImg'
 
 const REPLY_PAGE = 50
 
@@ -424,12 +425,12 @@ export default function PostView({ serverId, channelId, post, onBack, canManageM
           <div className="bg-fc-hover/30 rounded-lg p-4 border border-fc-hover group">
             <div className="flex items-center gap-2 mb-3">
               <button
-                onClick={e => { e.stopPropagation(); setUserPopup({ userId: post.creator_id, x: e.clientX, y: e.clientY }) }}
+                onClick={e => { e.stopPropagation(); if (!isForeignImage(post.creator_avatar)) setUserPopup({ userId: post.creator_id, x: e.clientX, y: e.clientY }) }}
                 aria-label={t('gdm.profileOf', { name: post.creator_username })}
                 className="w-7 h-7 rounded-full bg-fc-accent flex items-center justify-center text-xs font-bold text-white overflow-hidden hover:ring-2 hover:ring-fc-accent/60 transition cursor-pointer"
               >
                 {post.creator_avatar
-                  ? <img src={mediaUrl(post.creator_avatar)} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" onError={e => { e.currentTarget.style.display = 'none' }} />
+                  ? <AnimatedImg src={post.creator_avatar} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" onError={e => { e.currentTarget.style.display = 'none' }} />
                   : post.creator_username.charAt(0).toUpperCase()}
               </button>
               <span className="text-sm font-medium text-white">{post.creator_username}</span>
@@ -538,12 +539,12 @@ export default function PostView({ serverId, channelId, post, onBack, canManageM
             }}
           >
             <button
-              onClick={e => { e.stopPropagation(); setUserPopup({ userId: r.user_id, x: e.clientX, y: e.clientY }) }}
+              onClick={e => { e.stopPropagation(); if (!isForeignImage(r.author?.avatar)) setUserPopup({ userId: r.user_id, x: e.clientX, y: e.clientY }) }}
               aria-label={t('gdm.profileOf', { name: r.author?.username ?? t('post.author') })}
               className="w-8 h-8 rounded-full bg-fc-accent flex items-center justify-center text-sm font-bold text-white flex-shrink-0 overflow-hidden hover:ring-2 hover:ring-fc-accent/60 transition cursor-pointer"
             >
               {r.author?.avatar
-                ? <img src={mediaUrl(r.author.avatar)} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" onError={e => { e.currentTarget.style.display = 'none' }} />
+                ? <AnimatedImg src={r.author.avatar} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" onError={e => { e.currentTarget.style.display = 'none' }} />
                 : (r.author?.username ?? '?').charAt(0).toUpperCase()}
             </button>
             <div className="flex-1 min-w-0">

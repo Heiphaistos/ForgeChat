@@ -19,7 +19,8 @@ import { handleMarkdownShortcut, stripMarkdown } from '../../utils/mdShortcuts'
 import { REACTION_PICKER_EMOJIS, formatBytes, extractFirstUrl, EphemeralBadge, AfterReadBadge } from './messageListShared'
 import { AvatarDecoration } from '../ui/ProfileDecor'
 import AvatarRing from '../ui/AvatarRing'
-import AnimatedImg from '../ui/AnimatedImg'
+import AnimatedImg, { isForeignImage } from '../ui/AnimatedImg'
+import { useLook } from '../../store/nameStyles'
 import UserName from '../ui/UserName'
 import { dateLocale, useT, t as tr } from '../../i18n'
 import { ThreadCountsContext } from './threadCounts'
@@ -119,6 +120,13 @@ function MessageRow({
   onReport, onDeleteRequest,
 }: MessageRowProps) {
   const t = useT()
+  // Message importé de Discord ou posté par un webhook : enregistré sous l'id d'un membre (souvent le
+  // propriétaire) avec le nom et l'avatar de l'auteur d'origine. Ni le rôle, ni le profil, ni le menu
+  // de ce membre ne s'appliquent à cet auteur.
+  const look = useLook(msg.author_id)
+  const external = !msg.author_is_bot
+    && (isForeignImage(msg.author_avatar) || (!!look?.username && look.username !== msg.author_username))
+  if (external) roleDecor = undefined
   const aiTranslate = useAiSettings(s => s.translate)
   const threadCounts = useContext(ThreadCountsContext)
   const threadInfo = threadCounts?.get(msg.id)
@@ -189,9 +197,9 @@ function MessageRow({
               <AvatarRing ring={roleDecor?.ring} size={compact ? 28 : 40}>
               <button
                 className={`fc-avatar rounded-full bg-fc-accent flex items-center justify-center font-bold text-sm text-white overflow-hidden hover:opacity-80 transition ${compact ? 'w-7 h-7' : 'w-8 h-8 md:w-10 md:h-10'}`}
-                onClick={e => onOpenUserPopup(e, msg.author_id)}
-                onContextMenu={e => onAvatarContextMenu(e, msg)}
-                title={t('msg.profileOf', { name: msg.author_username })}
+                onClick={e => { if (!external) onOpenUserPopup(e, msg.author_id) }}
+                onContextMenu={e => { if (!external) onAvatarContextMenu(e, msg) }}
+                title={external ? msg.author_username : t('msg.profileOf', { name: msg.author_username })}
               >
                 {msg.author_avatar
                   ? <AnimatedImg src={msg.author_avatar} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" onError={e => { e.currentTarget.style.display = 'none' }} />
@@ -208,9 +216,9 @@ function MessageRow({
           {!isGrouped && !ultraCompact && (
             <div className="fc-msg-head flex items-baseline gap-2 mb-0.5">
               <button
-                className="fc-msg-name font-semibold text-white text-sm hover:underline cursor-pointer"
-                onClick={e => onOpenUserPopup(e, msg.author_id)}
-                onContextMenu={e => onAvatarContextMenu(e, msg)}
+                className={`fc-msg-name font-semibold text-white text-sm ${external ? 'cursor-default' : 'hover:underline cursor-pointer'}`}
+                onClick={e => { if (!external) onOpenUserPopup(e, msg.author_id) }}
+                onContextMenu={e => { if (!external) onAvatarContextMenu(e, msg) }}
               >
                 <UserName userId={msg.author_id} name={msg.author_username} roleStyle={roleDecor?.style} roleOverrides={roleDecor?.overridesName} serverStyle={roleDecor?.nameStyle} clanTags={roleDecor?.tags} withTag />
               </button>
