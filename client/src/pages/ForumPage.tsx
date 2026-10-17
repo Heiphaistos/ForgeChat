@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useRef } from 'react'
 import { useQuery, useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { MessagesSquare, Images, Play, Plus, Tag, MessageSquare, ChevronRight, Pin, Lock, X, ArrowLeft, Trash2, Pencil, Check, ChevronLeft, Paperclip, Loader2, Search, Link2, SmilePlus } from 'lucide-react'
 import { useSearchParams } from 'react-router-dom'
-import api, { mediaUrl } from '../api/client'
+import api from '../api/client'
 import { useFormatDate } from '../hooks/useFormatDate'
 import { useAuth } from '../store/auth'
 import { useWs } from '../store/ws'
@@ -24,6 +24,7 @@ import { ChannelLock } from '../e2e/ChannelBadge'
 import UserPopup from '../components/UserPopup'
 import ForumGuidelines from '../components/forum/ForumGuidelines'
 import { isToday, isYesterday, format } from 'date-fns'
+import AnimatedImg from '../components/ui/AnimatedImg'
 
 /** Aperçu de la liste : sans chemins d'images du serveur (affichées dans la publication). */
 const snippet = (c: string | null | undefined) => (c ?? '').replace(/\/uploads\/[\w.-]+\.(?:png|jpe?g|gif|webp|mp4|webm|mov|enc)/gi, ' ').replace(/\s+/g, ' ').trim()
@@ -478,7 +479,7 @@ export default function ForumPage({ channel, serverId, channelId, canManageMessa
             <div className="flex items-start gap-3">
               <div className="w-10 h-10 rounded-full bg-fc-accent flex items-center justify-center text-sm font-bold text-white flex-shrink-0 overflow-hidden">
                 {post.creator_avatar
-                  ? <img src={mediaUrl(post.creator_avatar)} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" onError={e => { e.currentTarget.style.display = 'none' }} />
+                  ? <AnimatedImg src={post.creator_avatar} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" onError={e => { e.currentTarget.style.display = 'none' }} />
                   : post.creator_username.charAt(0).toUpperCase()}
               </div>
               <div className="flex-1 min-w-0">

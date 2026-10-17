@@ -3,11 +3,12 @@
 // depuis son salon d'origine et déchiffré ici, par un membre qui en a la clé.
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
-import api, { mediaUrl } from '../../api/client'
+import api from '../../api/client'
 import { openMessage } from '../../e2e/conversations'
 import { renderMarkdown } from '../../utils/markdown'
 import { useT } from '../../i18n'
 import GeneratedCard from './GeneratedCard'
+import AnimatedImg from '../ui/AnimatedImg'
 
 export const isCommunitySystemMessage = (msg: { type?: string }) => msg.type === 'welcome' || msg.type === 'starboard'
 
@@ -37,7 +38,7 @@ function Starboard({ msg, serverId }: { msg: any; serverId: string }) {
       </div>
       {data ? (
         <div className="flex gap-2">
-          {data.author_avatar && <img src={mediaUrl(data.author_avatar)} alt="" className="w-6 h-6 rounded-full flex-shrink-0" />}
+          {data.author_avatar && <AnimatedImg src={data.author_avatar} alt="" className="w-6 h-6 rounded-full flex-shrink-0" />}
           <div className="min-w-0">
             <div className="text-sm font-semibold text-white">{data.author_username}</div>
             <div className="text-sm text-fc-text break-words">{renderMarkdown(data.content ?? '', {})}</div>

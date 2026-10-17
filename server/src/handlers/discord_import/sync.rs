@@ -1011,6 +1011,22 @@ impl Ctx<'_> {
                     .execute(&mut *tx)
                     .await?;
 
+                    // Un auteur qui a changé d'avatar Discord : l'ancienne adresse répond 404. Ses anciens
+                    // messages de ce salon reprennent le nouvel avatar (une requête par lot).
+                    let fresh = fresh_avatars(keep.iter().map(|r| Some(r.avatar.as_str())));
+                    if !fresh.is_empty() {
+                        sqlx::query(
+                            "UPDATE messages m SET webhook_avatar_url = t.url
+                             FROM UNNEST($2::text[], $3::text[]) AS t(prefix, url)
+                             WHERE m.channel_id = $1 AND m.webhook_avatar_url LIKE t.prefix AND m.webhook_avatar_url <> t.url",
+                        )
+                        .bind(channel_id)
+                        .bind(fresh.iter().map(|(p, _)| format!("{p}%")).collect::<Vec<_>>())
+                        .bind(fresh.iter().map(|(_, u)| u.clone()).collect::<Vec<_>>())
+                        .execute(&mut *tx)
+                        .await?;
+                    }
+
                     // Pièces jointes imputées au quota de stockage du propriétaire.
                     let atts: Vec<(Uuid, DateTime<Utc>, &Att)> =
                         keep.iter().flat_map(|r| r.atts.iter().map(move |a| (r.id, r.created_at, a))).collect();
@@ -1552,8 +1568,35 @@ pub async fn list_tree(
     Ok(Json(json!({ "categories": categories, "uncategorized": loose })))
 }
 
+/// Dernier avatar Discord de chaque auteur d'un lot (ordre chronologique) : (préfixe
+/// `https://cdn.discordapp.com/avatars/<id>/`, adresse complète).
+fn fresh_avatars<'a>(avatars: impl Iterator<Item = Option<&'a str>>) -> Vec<(String, String)> {
+    let mut last: HashMap<String, String> = HashMap::new();
+    for a in avatars.flatten() {
+        let Some(rest) = a.strip_prefix("https://cdn.discordapp.com/avatars/") else { continue };
+        let Some((id, _)) = rest.split_once('/') else { continue };
+        if !id.is_empty() && id.bytes().all(|c| c.is_ascii_digit()) {
+            last.insert(format!("https://cdn.discordapp.com/avatars/{id}/"), a.to_string());
+        }
+    }
+    last.into_iter().collect()
+}
+
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn fresh_avatars_keeps_the_last_per_author() {
+        let v = super::fresh_avatars([
+            Some("https://cdn.discordapp.com/avatars/394720555825102858/old.png"),
+            Some("https://cdn.discordapp.com/embed/avatars/2.png"),
+            None,
+            Some("https://cdn.discordapp.com/avatars/394720555825102858/new.png?size=64"),
+            Some("https://cdn.discordapp.com/avatars/abc/x.png"),
+        ].into_iter());
+        assert_eq!(v, vec![("https://cdn.discordapp.com/avatars/394720555825102858/".to_string(),
+            "https://cdn.discordapp.com/avatars/394720555825102858/new.png?size=64".to_string())]);
+    }
+
     use super::*;
 
     #[test]
