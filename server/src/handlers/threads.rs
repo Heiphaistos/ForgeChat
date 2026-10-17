@@ -626,8 +626,7 @@ pub async fn archive_thread(
     // Locker un thread nécessite toujours MANAGE_MESSAGES (pas juste être créateur)
     // Archiver : créateur OU modérateur
     if locked.is_some() || creator_id != claims.sub {
-        let manage = Permissions::MANAGE_MESSAGES;
-        super::servers::require_permission(&state, claims.sub, server_id, manage).await?;
+        super::servers::require_manage_messages(&state, claims.sub, channel_id).await?;
     }
 
     let thread = sqlx::query_as::<_, Thread>(
@@ -745,9 +744,7 @@ pub async fn delete_thread_message(
 
     let author_id: Uuid = row.get("user_id");
     if author_id != claims.sub {
-        use super::servers::require_permission;
-        use crate::models::role::Permissions;
-        require_permission(&state, claims.sub, server_id, Permissions::MANAGE_MESSAGES).await?;
+        super::servers::require_manage_messages(&state, claims.sub, channel_id).await?;
     }
 
     // Fichiers joints : récupérés avant la cascade pour les supprimer du disque.

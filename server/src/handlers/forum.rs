@@ -541,9 +541,7 @@ pub async fn update_post(
 
     // pin/lock réservé aux modérateurs
     if pinned.is_some() || locked.is_some() {
-        use super::servers::require_permission;
-        use crate::models::role::Permissions;
-        require_permission(&state, claims.sub, server_id, Permissions::MANAGE_MESSAGES).await?;
+        super::servers::require_manage_messages(&state, claims.sub, channel_id).await?;
     }
     // content : réservé au créateur indépendamment des autres champs
     if (content.is_some() || enc.is_some()) && creator_id != claims.sub {
@@ -603,9 +601,7 @@ pub async fn delete_post(
 
     // Créateur ou modérateur MANAGE_MESSAGES peut supprimer
     if creator_id != claims.sub {
-        use super::servers::require_permission;
-        use crate::models::role::Permissions;
-        require_permission(&state, claims.sub, server_id, Permissions::MANAGE_MESSAGES).await?;
+        super::servers::require_manage_messages(&state, claims.sub, channel_id).await?;
     }
 
     // Fichiers joints aux réponses : récupérés avant la cascade pour les supprimer du disque.
@@ -725,9 +721,7 @@ pub async fn delete_reply(
 
     let author_id: Uuid = reply_row.get("user_id");
     if author_id != claims.sub {
-        use super::servers::require_permission;
-        use crate::models::role::Permissions;
-        require_permission(&state, claims.sub, server_id, Permissions::MANAGE_MESSAGES).await?;
+        super::servers::require_manage_messages(&state, claims.sub, channel_id).await?;
     }
 
     let attachment_urls: Vec<String> = sqlx::query_scalar(

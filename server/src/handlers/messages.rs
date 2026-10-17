@@ -9,7 +9,7 @@ use crate::{
     error::{AppError, Result},
     handlers::audit::log_event,
     handlers::e2e_channel,
-    handlers::servers::{require_member_and_channel, require_permission, require_permission_and_channel},
+    handlers::servers::{require_member_and_channel, require_permission},
     models::role::Permissions,
     middleware::auth::Claims,
     models::message::{EditMessageRequest, ForwardMessageRequest, GetMessagesQuery, MessageWithAuthor, MsgE2e, SendMessageRequest},
@@ -516,7 +516,7 @@ pub async fn delete_message(
     .ok_or_else(|| AppError::NotFound("Message introuvable".into()))?;
 
     if msg_user != claims.sub {
-        require_permission(&state, claims.sub, server_id, Permissions::MANAGE_MESSAGES).await?;
+        crate::handlers::servers::require_manage_messages(&state, claims.sub, channel_id).await?;
     }
 
     // Récupérer les fichiers attachés avant la suppression pour nettoyage disque
@@ -653,7 +653,8 @@ pub async fn pin_message(
     Extension(claims): Extension<Claims>,
     Path((server_id, channel_id, message_id)): Path<(Uuid, Uuid, Uuid)>,
 ) -> Result<Json<serde_json::Value>> {
-    require_permission_and_channel(&state, claims.sub, server_id, channel_id, Permissions::MANAGE_MESSAGES).await?;
+    require_member_and_channel(&state, claims.sub, server_id, channel_id).await?;
+    crate::handlers::servers::require_manage_messages(&state, claims.sub, channel_id).await?;
     // Le message doit appartenir à CE salon : sinon on épinglait le message d'un
     // autre serveur (ou d'un salon privé) dans le sien, puis on le lisait via les épingles.
     let in_channel: bool = sqlx::query_scalar(
@@ -713,7 +714,8 @@ pub async fn unpin_message(
     Extension(claims): Extension<Claims>,
     Path((server_id, channel_id, message_id)): Path<(Uuid, Uuid, Uuid)>,
 ) -> Result<Json<serde_json::Value>> {
-    require_permission_and_channel(&state, claims.sub, server_id, channel_id, Permissions::MANAGE_MESSAGES).await?;
+    require_member_and_channel(&state, claims.sub, server_id, channel_id).await?;
+    crate::handlers::servers::require_manage_messages(&state, claims.sub, channel_id).await?;
 
     sqlx::query("DELETE FROM pinned_messages WHERE channel_id=$1 AND message_id=$2")
         .bind(channel_id)

@@ -371,10 +371,7 @@ pub async fn close_poll(
 
     let creator_id = creator_id.ok_or_else(|| AppError::NotFound("Sondage introuvable".into()))?;
 
-    use crate::models::role::Permissions;
-    let is_mod = crate::handlers::servers::require_permission(
-        &state, claims.sub, server_id, Permissions::MANAGE_MESSAGES
-    ).await.is_ok();
+    let is_mod = crate::handlers::servers::require_manage_messages(&state, claims.sub, channel_id).await.is_ok();
 
     if creator_id != claims.sub && !is_mod {
         return Err(AppError::Forbidden);

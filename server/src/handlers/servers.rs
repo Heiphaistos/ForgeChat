@@ -1178,6 +1178,15 @@ pub async fn can_read_history(state: &AppState, user_id: Uuid, channel_id: Uuid)
         .is_some_and(|(_, p)| p & crate::models::role::Permissions::READ_HISTORY != 0)
 }
 
+/// MANAGE_MESSAGES effectif sur CE salon (rôles + overrides ; propriétaire et admins toujours).
+/// Avant : seul le masque global du serveur comptait, donc un override de salon qui retire le
+/// droit à un rôle restait sans effet, et un override qui l'accorde aussi.
+pub async fn require_manage_messages(state: &AppState, user_id: Uuid, channel_id: Uuid) -> Result<()> {
+    let ok = state.effective_channel_permissions(user_id, channel_id).await
+        .is_some_and(|(_, p)| p & crate::models::role::Permissions::MANAGE_MESSAGES != 0);
+    if ok { Ok(()) } else { Err(AppError::Forbidden) }
+}
+
 // ─── Hiérarchie des rôles (comme Discord) ─────────────────────────────────────
 
 /// Position du rôle le plus haut d'un membre ; -1 s'il n'a que @everyone.
