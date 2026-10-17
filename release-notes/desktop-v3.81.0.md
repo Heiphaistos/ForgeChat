@@ -1,0 +1,4 @@
+- Bannières : jusqu'à 25 Mo (GIF animés), affichées en entier, et elles bougent même quand les animations de Windows sont coupées.
+- Messages et forums importés de Discord : l'avatar de l'auteur s'affiche de nouveau après un changement d'avatar (sinon l'avatar Discord par défaut), plus de miniature rouge dans les forums, les épingles et la recherche.
+- Actualités : les images de certains sites (L'Express…) s'affichent.
+- Binaires Windows signés (certificat Heiphaistos).
