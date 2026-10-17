@@ -1298,8 +1298,25 @@ pub async fn require_can_post(
         return Err(AppError::Forbidden);
     }
     // Verrouillage (manuel ou anti-raid) : seul le staff écrit encore.
-    if !has(crate::handlers::automod::STAFF) && crate::handlers::automod::is_locked(state, server_id).await? {
+    let staff = has(crate::handlers::automod::STAFF);
+    if !staff && crate::handlers::automod::is_locked(state, server_id).await? {
         return Err(AppError::ForbiddenMsg("Serveur verrouillé par la modération : seul le staff peut écrire pour l'instant.".into()));
+    }
+    // Porte de vérification : jusque-là seulement une modale du client, contournable par l'API.
+    if !staff {
+        let unverified: bool = sqlx::query_scalar(
+            "SELECT s.verification_enabled AND sm.verified_at IS NULL
+             FROM servers s JOIN server_members sm ON sm.server_id = s.id AND sm.user_id = $2
+             WHERE s.id = $1"
+        )
+        .bind(server_id)
+        .bind(user_id)
+        .fetch_optional(&state.db)
+        .await?
+        .unwrap_or(false);
+        if unverified {
+            return Err(AppError::ForbiddenMsg("Accepte d'abord les règles du serveur pour participer.".into()));
+        }
     }
     require_not_timed_out(state, user_id, server_id).await
 }
