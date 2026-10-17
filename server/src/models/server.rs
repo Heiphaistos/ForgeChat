@@ -94,5 +94,10 @@ pub struct Invite {
 #[derive(Debug, Deserialize)]
 pub struct CreateInviteRequest {
     pub max_uses: Option<i32>,
-    pub expires_hours: Option<i64>,
+    /// Absent : 7 jours ; `null` explicite : sans expiration (option « Jamais » de l'appli web).
+    #[serde(default, deserialize_with = "deserialize_double_option")]
+    pub expires_hours: Option<Option<i64>>,
 }
+
+/// Durée de vie par défaut d'une invitation quand le client n'en indique aucune.
+pub const DEFAULT_INVITE_HOURS: i64 = 168;
