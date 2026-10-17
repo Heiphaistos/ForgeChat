@@ -63,8 +63,12 @@ if docker compose ps --status running postgres 2>/dev/null | grep -q postgres; t
     ls -1t "$BACKUP_DIR"/forgechat-avant-deploy-*.sql.gz 2>/dev/null | tail -n +8 | xargs -r rm -f
 fi
 SERVER_IMAGE="$(docker compose config --images 2>/dev/null | grep -E '(^|/)forgechat[-_]server' | head -1 || true)"
-PREV_IMAGE="$(docker compose images -q server 2>/dev/null | head -1 || true)"
-[[ -n "$PREV_IMAGE" ]] && docker tag "$PREV_IMAGE" forgechat-server:prev
+# Image du conteneur qui tourne (pas `compose images -q`, qui peut citer une image déjà supprimée).
+PREV_IMAGE="$(docker inspect -f '{{.Image}}' "$(docker compose ps -q server 2>/dev/null | head -1)" 2>/dev/null || true)"
+if [[ -n "$PREV_IMAGE" ]] && ! docker tag "$PREV_IMAGE" forgechat-server:prev 2>/dev/null; then
+    log "⚠️  Image précédente introuvable : pas de retour arrière automatique possible"
+    PREV_IMAGE=""
+fi
 
 # ── Docker Compose ──────────────────────────────────────────────────
 log "Démarrage des services..."
