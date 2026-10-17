@@ -242,6 +242,12 @@ pub async fn remove_timeout(
     State(state): State<AppState>,
 ) -> Result<Json<serde_json::Value>> {
     ensure_moderator(&state, server_id, claims.sub).await?;
+    // Comme pour poser un timeout : jamais le sien, et seulement sur un membre de rang inférieur
+    // (un modérateur en timeout se libérait lui-même, ou libérait un sanctionné de rang supérieur).
+    if user_id == claims.sub {
+        return Err(AppError::Forbidden);
+    }
+    crate::handlers::servers::require_outranks(&state, claims.sub, user_id, server_id).await?;
 
     let deleted = sqlx::query(
         "DELETE FROM user_timeouts WHERE server_id = $1 AND user_id = $2"
