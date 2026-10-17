@@ -159,7 +159,10 @@ pub async fn put_lockdown(
     Path(server_id): Path<Uuid>,
     Json(b): Json<LockdownInput>,
 ) -> Result<Json<serde_json::Value>> {
-    require_permission(&state, claims.sub, server_id, STAFF).await?;
+    // Verrouiller : tout le staff ; lever : MANAGE_SERVER (un simple modérateur ne défait plus
+    // le verrouillage décidé par l'administration, ni un raid-lock qu'il a lui-même subi).
+    let needed = if b.enabled { STAFF } else { Permissions::MANAGE_SERVER };
+    require_permission(&state, claims.sub, server_id, needed).await?;
     set_lockdown(&state, server_id, b.enabled, b.enabled.then_some("manual"), Some(claims.sub)).await?;
     Ok(Json(serde_json::json!({ "ok": true, "lockdown": b.enabled })))
 }
