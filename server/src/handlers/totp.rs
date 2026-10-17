@@ -128,11 +128,16 @@ pub async fn migrate_at_rest(db: &PgPool) -> anyhow::Result<u64> {
 
 // ─── Routes ──────────────────────────────────────────────────────────────────
 
+/// POST /auth/2fa/setup { auth } (ou { password } pour un compte pas encore migré) : exige la preuve
+/// du mot de passe, sinon un jeton volé suffirait à poser le 2FA de l'attaquant sur le compte.
 pub async fn setup_totp(
     State(state): State<AppState>,
     Extension(claims): Extension<Claims>,
+    Json(body): Json<serde_json::Value>,
 ) -> Result<impl IntoResponse, AppError> {
     use sqlx::Row;
+
+    crate::handlers::auth_v2::verify_proof(&state, claims.sub, body["auth"].as_str(), body["password"].as_str()).await?;
 
     let secret_bytes: [u8; 20] = rand::thread_rng().gen();
     let secret = BASE32.encode(&secret_bytes);
@@ -228,6 +233,16 @@ pub async fn confirm_totp(
         .bind(claims.sub)
         .execute(&state.db).await
         .map_err(|e| AppError::Internal(anyhow::anyhow!("{}", e)))?;
+
+    // Les autres appareils (peut-être celui d'un voleur de jeton) perdent leur session ; celui qui
+    // vient de prouver le mot de passe et le code garde la sienne.
+    let others: Vec<Uuid> = sqlx::query_scalar("SELECT id FROM user_sessions WHERE user_id = $1 AND ($2::uuid IS NULL OR id <> $2)")
+        .bind(claims.sub)
+        .bind(claims.sid)
+        .fetch_all(&state.db).await?;
+    for sid in others {
+        crate::handlers::auth::end_session(&state, claims.sub, sid).await?;
+    }
 
     Ok(Json(serde_json::json!({ "enabled": true })))
 }
