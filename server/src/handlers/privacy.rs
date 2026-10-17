@@ -53,9 +53,97 @@ async fn extra_sections(state: &AppState, uid: Uuid) -> Result<serde_json::Value
     }))
 }
 
+/// Lignes lues par requête pour les grosses tables : la mémoire ne dépend plus du nombre de messages.
+const EXPORT_PAGE: i64 = 2_000;
+
+/// Une grosse section de l'export : requête paginée (`$1` = compte, `$2` = LIMIT, `$3` = OFFSET) et mise en JSON d'une ligne.
+struct BigSection {
+    key: &'static str,
+    sql: &'static str,
+    row: fn(&sqlx::postgres::PgRow) -> serde_json::Value,
+}
+
+fn date(r: &sqlx::postgres::PgRow) -> String {
+    use sqlx::Row;
+    r.get::<chrono::DateTime<chrono::Utc>, _>("created_at").to_rfc3339()
+}
+
+const BIG_SECTIONS: [BigSection; 3] = [
+    BigSection {
+        key: "messages",
+        sql: "SELECT m.content, m.enc IS NOT NULL AS encrypted, m.created_at, c.name as channel_name
+              FROM messages m JOIN channels c ON c.id = m.channel_id
+              WHERE m.user_id = $1 ORDER BY m.created_at DESC, m.id DESC LIMIT $2 OFFSET $3",
+        row: |m| {
+            use sqlx::Row;
+            // Chiffré de bout en bout : le serveur n'en a pas le texte.
+            serde_json::json!({ "content": m.get::<Option<String>, _>("content"), "channel": m.get::<String, _>("channel_name"),
+                "encrypted": m.get::<bool, _>("encrypted"), "date": date(m) })
+        },
+    },
+    BigSection {
+        key: "dm_messages",
+        sql: "SELECT dm.content, dm.enc IS NOT NULL AS encrypted, dm.created_at, u.username as other_username
+              FROM dm_messages dm
+              JOIN dm_channels dc ON dc.id = dm.dm_channel_id
+              JOIN users u ON u.id = (CASE WHEN dc.user1_id = $1 THEN dc.user2_id ELSE dc.user1_id END)
+              WHERE dm.sender_id = $1 ORDER BY dm.created_at DESC, dm.id DESC LIMIT $2 OFFSET $3",
+        row: |m| {
+            use sqlx::Row;
+            serde_json::json!({ "content": m.get::<Option<String>, _>("content"), "with": m.get::<String, _>("other_username"),
+                "encrypted": m.get::<bool, _>("encrypted"), "date": date(m) })
+        },
+    },
+    BigSection {
+        key: "group_dm_messages",
+        sql: "SELECT gm.content, gm.enc IS NOT NULL AS encrypted, gm.created_at, gc.name as group_name
+              FROM group_dm_messages gm JOIN group_dm_channels gc ON gc.id = gm.dm_id
+              WHERE gm.sender_id = $1 ORDER BY gm.created_at DESC, gm.id DESC LIMIT $2 OFFSET $3",
+        row: |m| {
+            use sqlx::Row;
+            serde_json::json!({ "content": m.get::<Option<String>, _>("content"), "group": m.get::<String, _>("group_name"),
+                "encrypted": m.get::<bool, _>("encrypted"), "date": date(m) })
+        },
+    },
+];
+
+type ChunkTx = tokio::sync::mpsc::Sender<std::result::Result<bytes::Bytes, std::io::Error>>;
+
+/// Écrit les grosses sections dans le corps de la réponse, page par page. Une erreur en cours de route
+/// coupe la réponse (fichier JSON invalide) : mieux vaut un export qui échoue franchement qu'un export
+/// qui se prétend complet sans l'être.
+async fn stream_big_sections(db: sqlx::PgPool, uid: Uuid, head: String, tx: ChunkTx) -> std::result::Result<(), ()> {
+    async fn send(tx: &ChunkTx, s: String) -> std::result::Result<(), ()> {
+        tx.send(Ok(bytes::Bytes::from(s))).await.map_err(|_| ())
+    }
+    send(&tx, head).await?;
+    for sec in &BIG_SECTIONS {
+        send(&tx, format!(",\"{}\":[", sec.key)).await?;
+        let mut offset = 0i64;
+        loop {
+            let rows = sqlx::query(sec.sql).bind(uid).bind(EXPORT_PAGE).bind(offset).fetch_all(&db).await.map_err(|e| {
+                tracing::error!("export de données : {e}");
+            })?;
+            let chunk: Vec<String> = rows.iter().map(|r| (sec.row)(r).to_string()).collect();
+            if !chunk.is_empty() {
+                send(&tx, format!("{}{}", if offset > 0 { "," } else { "" }, chunk.join(","))).await?;
+            }
+            if (rows.len() as i64) < EXPORT_PAGE {
+                break;
+            }
+            offset += EXPORT_PAGE;
+        }
+        send(&tx, "]".into()).await?;
+    }
+    send(&tx, "}".into()).await
+}
+
+/// POST /users/me/data-export { auth } (ou { password } pour un compte pas encore migré) : exige la preuve
+/// du mot de passe (un jeton volé ne suffit plus à aspirer toutes les conversations) ; réponse en flux.
 pub async fn export_user_data(
     State(state): State<AppState>,
     Extension(claims): Extension<Claims>,
+    axum::Json(body): axum::Json<serde_json::Value>,
 ) -> Result<impl IntoResponse> {
     use sqlx::Row;
 
@@ -63,44 +151,12 @@ pub async fn export_user_data(
     // Export complet et sans borne (tous les messages) : 3 par heure et par compte, sinon un jeton
     // suffisait à répéter la requête la plus lourde du serveur. Redis KO : 503.
     crate::handlers::auth_v2::hit(&state, &format!("data_export:{uid}"), 3, 3600).await?;
+    crate::handlers::auth_v2::verify_proof(&state, uid, body["auth"].as_str(), body["password"].as_str()).await?;
 
-    // Toutes les données utilisateur en parallèle. L'export était présenté comme
-    // couvrant "vos messages" (conformité RGPD, droit à la portabilité) mais ne
-    // lisait QUE la table `messages` (serveur) -- les DM 1-à-1 et les messages de
-    // groupe DM, souvent le contenu le plus personnel, n'étaient jamais inclus.
-    let (user_res, messages, dm_messages, group_dm_messages, servers, friends) = tokio::join!(
+    let (user_res, servers, friends) = tokio::join!(
         sqlx::query(
             "SELECT username, email_enc, bio, pronouns, created_at FROM users WHERE id=$1"
         ).bind(uid).fetch_one(&state.db),
-        // Pas de LIMIT -- un export RGPD (droit à la portabilité) doit couvrir la
-        // TOTALITÉ des messages, pas un échantillon. `LIMIT 100` tronquait
-        // silencieusement l'export dès qu'un utilisateur avait posté plus de 100
-        // messages au total (n'importe quel utilisateur actif sur plusieurs
-        // semaines), sans jamais l'indiquer -- l'utilisateur recevait un fichier
-        // qui se présentait comme complet mais ne l'était pas.
-        sqlx::query(
-            "SELECT m.content, m.enc IS NOT NULL AS encrypted, m.created_at, c.name as channel_name
-             FROM messages m
-             JOIN channels c ON c.id = m.channel_id
-             WHERE m.user_id = $1
-             ORDER BY m.created_at DESC"
-        ).bind(uid).fetch_all(&state.db),
-        sqlx::query(
-            "SELECT dm.content, dm.enc IS NOT NULL AS encrypted, dm.created_at,
-                    u.username as other_username
-             FROM dm_messages dm
-             JOIN dm_channels dc ON dc.id = dm.dm_channel_id
-             JOIN users u ON u.id = (CASE WHEN dc.user1_id = $1 THEN dc.user2_id ELSE dc.user1_id END)
-             WHERE dm.sender_id = $1
-             ORDER BY dm.created_at DESC"
-        ).bind(uid).fetch_all(&state.db),
-        sqlx::query(
-            "SELECT gm.content, gm.enc IS NOT NULL AS encrypted, gm.created_at, gc.name as group_name
-             FROM group_dm_messages gm
-             JOIN group_dm_channels gc ON gc.id = gm.dm_id
-             WHERE gm.sender_id = $1
-             ORDER BY gm.created_at DESC"
-        ).bind(uid).fetch_all(&state.db),
         sqlx::query(
             "SELECT s.name FROM servers s
              JOIN server_members sm ON sm.server_id = s.id
@@ -114,15 +170,6 @@ pub async fn export_user_data(
         ).bind(uid).fetch_all(&state.db),
     );
     let user = user_res.map_err(|_| AppError::NotFound("Utilisateur introuvable".into()))?;
-    // `.unwrap_or_default()` sur une vraie erreur DB (pas juste "aucune ligne", fetch_all
-    // renvoie déjà Ok(vec![]) dans ce cas) produisait silencieusement un export RGPD
-    // amputé d'une section entière -- même défaut que les deux bugs déjà corrigés dans
-    // cette fonction (LIMIT tronquant, DM absents) : présenté comme complet, ne l'était
-    // pas. Propager l'erreur : mieux vaut un export qui échoue franchement qu'un export
-    // qui ment sur son contenu.
-    let messages = messages?;
-    let dm_messages = dm_messages?;
-    let group_dm_messages = group_dm_messages?;
     let servers = servers?;
     let friends = friends?;
 
@@ -136,41 +183,41 @@ pub async fn export_user_data(
             "pronouns": user.get::<Option<String>, _>("pronouns"),
             "created_at": user.get::<chrono::DateTime<chrono::Utc>, _>("created_at").to_rfc3339(),
         },
-        "messages": messages.iter().map(|m| serde_json::json!({
-            "content": m.get::<Option<String>, _>("content"),
-            "channel": m.get::<String, _>("channel_name"),
-            // Chiffré de bout en bout : le serveur n'en a pas le texte.
-            "encrypted": m.get::<bool, _>("encrypted"),
-            "date": m.get::<chrono::DateTime<chrono::Utc>, _>("created_at").to_rfc3339(),
-        })).collect::<Vec<_>>(),
-        "dm_messages": dm_messages.iter().map(|m| serde_json::json!({
-            "content": m.get::<Option<String>, _>("content"),
-            "with": m.get::<String, _>("other_username"),
-            // Chiffré de bout en bout : le serveur n'en a pas le texte.
-            "encrypted": m.get::<bool, _>("encrypted"),
-            "date": m.get::<chrono::DateTime<chrono::Utc>, _>("created_at").to_rfc3339(),
-        })).collect::<Vec<_>>(),
-        "group_dm_messages": group_dm_messages.iter().map(|m| serde_json::json!({
-            "content": m.get::<Option<String>, _>("content"),
-            "group": m.get::<String, _>("group_name"),
-            "encrypted": m.get::<bool, _>("encrypted"),
-            "date": m.get::<chrono::DateTime<chrono::Utc>, _>("created_at").to_rfc3339(),
-        })).collect::<Vec<_>>(),
         "servers": servers.iter().map(|s| s.get::<String, _>("name")).collect::<Vec<String>>(),
         "friends": friends.iter().map(|f| f.get::<String, _>("username")).collect::<Vec<String>>(),
     });
-
     if let (Some(e), Some(x)) = (export.as_object_mut(), extra.as_object()) {
         e.extend(x.iter().map(|(k, v)| (k.clone(), v.clone())));
     }
-    let json_str = serde_json::to_string_pretty(&export)
-        .map_err(|e| AppError::Internal(anyhow::anyhow!("Sérialisation: {}", e)))?;
+    // Début de l'objet JSON sans son accolade fermante : les grosses sections suivent dans le flux.
+    let mut head = serde_json::to_string(&export).map_err(|e| AppError::Internal(anyhow::anyhow!("Sérialisation: {}", e)))?;
+    head.pop();
 
+    let (tx, rx) = tokio::sync::mpsc::channel(4);
+    let db = state.db.clone();
+    tokio::spawn(async move {
+        if stream_big_sections(db, uid, head, tx.clone()).await.is_err() {
+            let _ = tx.send(Err(std::io::Error::other("export interrompu"))).await;
+        }
+    });
     Ok((
         [
             (header::CONTENT_TYPE, "application/json; charset=utf-8"),
             (header::CONTENT_DISPOSITION, "attachment; filename=\"forgechat-mes-donnees.json\""),
         ],
-        json_str,
+        axum::body::Body::from_stream(tokio_stream::wrappers::ReceiverStream::new(rx)),
     ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn big_sections_are_paginated_and_stable() {
+        for s in &BIG_SECTIONS {
+            assert!(s.sql.contains("LIMIT $2 OFFSET $3"), "{}", s.key);
+            assert!(s.sql.contains(".id DESC"), "tri stable : {}", s.key);
+        }
+    }
 }
