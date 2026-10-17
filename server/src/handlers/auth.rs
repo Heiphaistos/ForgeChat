@@ -99,7 +99,7 @@ pub(crate) fn is_secure(state: &AppState) -> bool {
 /// Durée de validité du code de vérification d'e-mail.
 const PENDING_TTL_MIN: i64 = 15;
 /// Mauvais codes avant que la demande d'inscription soit annulée.
-const VERIFY_MAX_ATTEMPTS: i32 = 5;
+const VERIFY_MAX_ATTEMPTS: i32 = 10;
 
 /// Empreinte gardée en base à la place du code (lié à l'adresse) : jamais le code en clair.
 fn verify_code_mac(email_hmac: &str, code: &str) -> String {
@@ -199,12 +199,13 @@ pub async fn register(
 
     let code = format!("{:06}", rand::thread_rng().gen_range(0..1_000_000));
     let discriminator = format!("{:04}", rand::thread_rng().gen_range(1..=9999));
-    sqlx::query(
+    let inserted = sqlx::query(
         "INSERT INTO pending_registrations (email_hmac, username, password_hash, discriminator, code, expires_at, auth_hash, kdf_salt, invite_code, kdf)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
          ON CONFLICT (email_hmac) DO UPDATE SET username=EXCLUDED.username, discriminator=EXCLUDED.discriminator,
             code=EXCLUDED.code, attempts=0, expires_at=EXCLUDED.expires_at, auth_hash=EXCLUDED.auth_hash,
-            kdf_salt=EXCLUDED.kdf_salt, invite_code=EXCLUDED.invite_code, kdf=EXCLUDED.kdf, created_at=NOW()",
+            kdf_salt=EXCLUDED.kdf_salt, invite_code=EXCLUDED.invite_code, kdf=EXCLUDED.kdf, created_at=NOW()
+         WHERE pending_registrations.expires_at < NOW() OR pending_registrations.attempts >= $11",
     )
     .bind(&email_hmac)
     .bind(&body.username)
@@ -216,8 +217,14 @@ pub async fn register(
     .bind(kdf_salt)
     .bind(invite_hash)
     .bind(kdf)
+    .bind(VERIFY_MAX_ATTEMPTS)
     .execute(&state.db)
     .await?;
+    // Demande déjà en attente (non expirée, code non épuisé) : ni écrasée (un tiers ne peut pas remplacer
+    // le mot de passe ou le pseudo choisis) ni renvoyée ; réponse identique, rien ne se voit de l'extérieur.
+    if inserted.rows_affected() == 0 {
+        return Ok(ok);
+    }
     let html = mail_html(
         "Confirme ton adresse",
         &format!(
@@ -244,9 +251,12 @@ pub async fn verify_email(
         .as_str()
         .map(str::trim)
         .ok_or_else(|| AppError::BadRequest("code requis".into()))?;
-    hit(&state, &account_key("verify_attempts", &email), 5, 900).await?;
+    // Par adresse ET par IP : un tiers qui échoue 5 fois depuis son IP ne verrouille plus la victime.
+    // Le plafond global par demande est la colonne `attempts` (ci-dessous).
+    let ip = crate::privacy::client_key(&req_headers, &addr);
+    hit(&state, &format!("{}:{ip}", account_key("verify_attempts", &email)), 5, 900).await?;
     // Par IP aussi : sinon un même client essaie 5 codes sur chaque adresse en attente.
-    hit(&state, &format!("verify_ip:{}", crate::privacy::client_key(&req_headers, &addr)), 20, 900).await?;
+    hit(&state, &format!("verify_ip:{ip}"), 20, 900).await?;
 
     let bad = || AppError::BadRequest("Code incorrect ou expiré".into());
     let email_hmac = crate::email_crypto::hmac(&email);
@@ -255,20 +265,17 @@ pub async fn verify_email(
         .fetch_optional(&state.db)
         .await?
         .ok_or_else(bad)?;
-    if pending.expires_at < Utc::now() || pending.auth_hash.is_empty() {
+    if pending.expires_at < Utc::now() || pending.auth_hash.is_empty() || pending.attempts >= VERIFY_MAX_ATTEMPTS {
         return Err(bad());
     }
     if !constant_time_eq(pending.code.as_bytes(), verify_code_mac(&email_hmac, code).as_bytes()) {
-        // Compté en base aussi (le compteur Redis ci-dessus repart à chaque fenêtre) :
-        // au 5e mauvais code, la demande est annulée et il faut se réinscrire.
-        let attempts: i32 = sqlx::query_scalar("UPDATE pending_registrations SET attempts=attempts+1 WHERE id=$1 RETURNING attempts")
+        // Compté en base (toutes IP confondues) : à VERIFY_MAX_ATTEMPTS, ce code est épuisé. La ligne
+        // n'est PAS supprimée (un tiers ne peut pas effacer la demande d'autrui) ; l'inscription
+        // reste possible à nouveau, car register remplace une demande épuisée ou expirée.
+        sqlx::query("UPDATE pending_registrations SET attempts=attempts+1 WHERE id=$1")
             .bind(pending.id)
-            .fetch_optional(&state.db)
-            .await?
-            .unwrap_or(VERIFY_MAX_ATTEMPTS);
-        if attempts >= VERIFY_MAX_ATTEMPTS {
-            sqlx::query("DELETE FROM pending_registrations WHERE id=$1").bind(pending.id).execute(&state.db).await?;
-        }
+            .execute(&state.db)
+            .await?;
         return Err(bad());
     }
 
@@ -368,16 +375,29 @@ pub(crate) fn login_credentials(
 ) -> Result<Option<crate::models::user::User>> {
     // Hash constant pour égaliser le timing même quand l'email n'existe pas
     const DUMMY_HASH: &str = "$2b$12$KIkwRMJIlEHNBFdnfwDnSOkypZs5yWjn7KDSnT5hHUH2EPT3HCVNS";
+    // Un seul bcrypt (coût 12) dans TOUS les cas, y compris format invalide ou compte migré qui reçoit un
+    // mot de passe : ni le temps ni la réponse (401) ne distinguent inconnu, migré et mauvaise preuve.
+    // (L'ancienne réponse 426 avant toute preuve révélait un compte migré ; les applis trop anciennes
+    // n'ont plus qu'un refus générique.)
+    let dummy = || {
+        let _ = verify("x", DUMMY_HASH);
+    };
     let Some(user) = user_opt else {
-        let _ = verify(body.auth.as_deref().or(body.password.as_deref()).unwrap_or(""), DUMMY_HASH);
+        dummy();
         return Ok(None);
     };
-    if user.auth_hash.is_some() && body.password.is_some() {
-        // Ancienne appli sur un compte migré : le champ n'est ni vérifié ni journalisé.
-        return Err(AppError::UpgradeRequired(UPGRADE_MSG.into()));
-    }
-    let ok = auth_v2::check_proof(&user.password_hash, user.auth_hash.as_deref(), body.auth.as_deref(), body.password.as_deref())
-        == auth_v2::ProofCheck::Ok;
+    let ok = match (user.auth_hash.as_deref(), body.auth.as_deref(), body.password.as_deref()) {
+        (Some(_), Some(a), _) if check_auth(a).is_ok() => {
+            auth_v2::check_proof(&user.password_hash, user.auth_hash.as_deref(), Some(a), None) == auth_v2::ProofCheck::Ok
+        }
+        (None, _, Some(p)) if !p.is_empty() && p.len() <= 128 => {
+            auth_v2::check_proof(&user.password_hash, None, None, Some(p)) == auth_v2::ProofCheck::Ok
+        }
+        _ => {
+            dummy();
+            false
+        }
+    };
     Ok(ok.then_some(user))
 }
 
@@ -597,6 +617,15 @@ pub(crate) async fn rotate_refresh_token(state: &AppState, token: &str) -> Resul
     .ok()
     .flatten();
 
+    // Trace du jeton consommé (24 h) : sa réutilisation hors fenêtre de grâce = vol probable (grace_retry).
+    {
+        let mut redis = state.redis.lock().await;
+        let _: () = redis
+            .set_ex(format!("rtused:{token_hash}"), format!("{user_id}|{}", sid.map(|s| s.to_string()).unwrap_or_default()), 24 * 3600)
+            .await
+            .unwrap_or(());
+    }
+
     // Grâce posée une seule fois (NX), jamais prolongée.
     if let Some(sealed) = seal_successor(token, &grace_value(user_id, Utc::now().timestamp(), sid, &new_refresh_token)) {
         let mut redis = state.redis.lock().await;
@@ -624,6 +653,21 @@ async fn grace_retry(state: &AppState, token: &str, grace_key: &str) -> Result<(
         let mut redis = state.redis.lock().await;
         redis.get(grace_key).await.map_err(|_| AppError::Unavailable("Service momentanément indisponible".into()))?
     };
+    if sealed.is_none() {
+        // Plus de grâce : un jeton déjà consommé qui revient est celui d'un voleur ou d'un client
+        // désynchronisé ; dans les deux cas la session est fermée (détection de vol, RTR).
+        let used: Option<String> = {
+            let mut redis = state.redis.lock().await;
+            redis.get(format!("rtused:{}", hash_token(token))).await.map_err(|_| AppError::Unavailable("Service momentanément indisponible".into()))?
+        };
+        if let Some((user, sid)) = used.as_deref().and_then(|u| u.split_once('|')) {
+            if let (Ok(user), Ok(sid)) = (user.parse::<Uuid>(), sid.parse::<Uuid>()) {
+                tracing::warn!(%user, %sid, "refresh token consommé réutilisé hors grâce : session fermée");
+                end_session(state, user, sid).await?;
+            }
+        }
+        return Err(AppError::Unauthorized);
+    }
     let (user_id, issued, sid, successor) = sealed
         .as_deref()
         .and_then(|s| open_successor(token, s))
@@ -715,6 +759,18 @@ mod grace_tests {
         let _ = open_session(&state, user, &HeaderMap::new()).await.expect("reconnexion");
         assert!(rotate_refresh_token(&state, &u0).await.is_err(), "jeton tourné avant la révocation");
         assert!(rotate_refresh_token(&state, &u1).await.is_err(), "successeur supprimé");
+
+        // Jeton consommé réutilisé APRÈS la fenêtre de grâce (clé de grâce expirée) : vol probable, la session est fermée.
+        let (v0, _) = open_session(&state, user, &HeaderMap::new()).await.expect("session 3");
+        let (_, v1, _) = rotate_refresh_token(&state, &v0).await.expect("rotation 3");
+        {
+            use redis::AsyncCommands;
+            let _: () = state.redis.lock().await.del(format!("rtgrace:{}", hash_token(&v0))).await.unwrap();
+        }
+        assert!(rotate_refresh_token(&state, &v0).await.is_err(), "réutilisation hors grâce");
+        let alive: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM refresh_tokens WHERE token_hash=$1").bind(hash_token(&v1)).fetch_one(&db).await.unwrap();
+        assert_eq!(alive, 0, "le successeur est révoqué avec la session");
+        assert!(rotate_refresh_token(&state, &v1).await.is_err());
     }
 }
 
