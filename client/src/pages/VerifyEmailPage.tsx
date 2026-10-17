@@ -128,7 +128,7 @@ export default function VerifyEmailPage() {
         {form.el && <div className="mb-4">{form.el}</div>}
         <button
           onClick={submit}
-          disabled={loading || digits.join('').length !== 4}
+          disabled={loading || digits.join('').length !== CODE_LEN}
           aria-busy={loading}
           className="w-full py-2.5 bg-fc-accent hover:bg-indigo-500 text-white font-medium rounded
                      transition disabled:opacity-50 mb-4"

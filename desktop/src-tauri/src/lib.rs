@@ -572,6 +572,7 @@ pub fn run() {
                 systeme::set_app_icon,
                 systeme::streaming_software_running,
                 ghd::ghd_installed,
+                ghd::ghd_device_id,
                 ghd::ghd_launch
             ]);
 

@@ -167,6 +167,15 @@ function IdForm({ onSubmit, onCancel }: { onSubmit: (id: string) => void; onCanc
   const t = useT()
   const [id, setId] = useState(savedId)
   const ok = isDeviceId(id)
+  // Appli de bureau : identifiant lu dans GhostHandDesk lui-même (relu au retour dans ForgeChat,
+  // le temps que GhostHandDesk se lance la première fois) ; plus rien à recopier.
+  useEffect(() => {
+    if (!isTauri) return
+    const read = () => void tauri<string | null>('ghd_device_id').then(v => { if (v) setId(v) }).catch(e => console.warn('[remoteSupport] ghd_device_id', e))
+    read()
+    window.addEventListener('focus', read)
+    return () => window.removeEventListener('focus', read)
+  }, [])
   return (
     <form className="space-y-2" onSubmit={e => { e.preventDefault(); if (ok) onSubmit(id.replace(/\D/g, '')) }}>
       <label className="block text-xs text-fc-muted">
@@ -259,8 +268,10 @@ export function RemoteSupportCard({ msg, isOwn }: { msg: any; isOwn: boolean }) 
   const rs = parseSupport(msg.e2e_body?.rs)
   const dmId: string = msg.channel_id
   const cmid: string = msg.client_msg_id ?? ''
-  // Réponses déjà échangées (accept / decline / invite en retour d'une offre).
-  const replyKind = useChat(s => (s.messagesByChannel[dmId] ?? []).map(m => parseSupport(m.e2e_body?.rs)).find(r => r?.ref === cmid && r.k !== 'offer')?.k ?? null)
+  // Réponses déjà échangées (accept / decline / invite en retour d'une offre) ; une offre acceptée
+  // reçoit d'abord `accept` puis l'invitation : la plus avancée l'emporte.
+  const replies = useChat(s => (s.messagesByChannel[dmId] ?? []).map(m => parseSupport(m.e2e_body?.rs)).filter(r => r?.ref === cmid && r.k !== 'offer').map(r => r!.k).join(' '))
+  const replyKind = (['invite', 'decline', 'accept'] as const).find(k => replies.split(' ').includes(k)) ?? null
   const reply = replyKind ? { k: replyKind } : null
   // Offre acceptée : panneau hôte (false = fermé, null = pas Windows).
   const [host, setHost] = useState<Armed | null | false>(false)
@@ -297,7 +308,10 @@ export function RemoteSupportCard({ msg, isOwn }: { msg: any; isOwn: boolean }) 
   // Personne aidée : confirmation (dans l'appli : confirm() natif est muet sous macOS), puis GhostHandDesk.
   const acceptOffer = async () => {
     if (!canHost) { setHost(null); return }
-    if (await confirm({ message: t('rs.confirmOpen', { name }), confirmLabel: t('rs.openGhd'), cancelLabel: t('rs.cancel') })) setHost(arm())
+    if (!(await confirm({ message: t('rs.confirmOpen', { name }), confirmLabel: t('rs.openGhd'), cancelLabel: t('rs.cancel') }))) return
+    setHost(arm())
+    // L'aidant voit tout de suite que c'est accepté (l'identifiant suit avec l'invitation).
+    if (!reply) send(dmId, { v: 1, k: 'accept', ref: cmid })
   }
 
   return (
@@ -305,7 +319,7 @@ export function RemoteSupportCard({ msg, isOwn }: { msg: any; isOwn: boolean }) 
       <div className="mb-1 flex items-center gap-2 font-semibold text-white"><LifeBuoy size={16} className="text-fc-accent" aria-hidden />{t('rs.card.title')}</div>
       {rs.k === 'offer' && (
         <>
-          <p className="text-fc-text">{t(isOwn ? 'rs.card.offerOut' : 'rs.card.offerIn', { name })}</p>
+          <p className="text-fc-text">{t(isOwn ? (replyKind === 'accept' ? 'rs.card.offerAccepted' : 'rs.card.offerOut') : 'rs.card.offerIn', { name })}</p>
           {!isOwn && !reply && <p className="mt-1 text-[11px] font-medium text-fc-yellow">{t('rs.scam')}</p>}
           {!isOwn && !actionable && <p className="mt-1 text-xs text-fc-muted">{t('rs.friendsOnly')}</p>}
           {!isOwn && actionable && !reply && host === false && (
@@ -314,7 +328,7 @@ export function RemoteSupportCard({ msg, isOwn }: { msg: any; isOwn: boolean }) 
               <button className={`${btn} text-fc-muted hover:text-white`} onClick={() => send(dmId, { v: 1, k: 'decline', ref: cmid })}>{t('rs.decline')}</button>
             </div>
           )}
-          {host !== false && !reply && <div className="mt-2"><HostSetup armed={host} onCancel={() => setHost(false)} onSubmit={(id, a) => { setHost(false); void startHosting(dmId, id, a, cmid) }} /></div>}
+          {host !== false && replyKind !== 'invite' && replyKind !== 'decline' && <div className="mt-2"><HostSetup armed={host} onCancel={() => setHost(false)} onSubmit={(id, a) => { setHost(false); void startHosting(dmId, id, a, cmid) }} /></div>}
         </>
       )}
       {rs.k === 'invite' && rs.id && rs.code && (

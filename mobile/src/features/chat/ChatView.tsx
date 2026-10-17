@@ -159,8 +159,15 @@ export function ChatView({
   const dmId = conversation.kind === 'dm' ? conversation.dmId : undefined
   // Support à distance : réponse (acceptée, refusée, invitation en retour) donnée à chaque carte.
   const supportReplies = useMemo(() => {
-    const map = new Map<string, SupportPayload['k']>()
-    for (const m of conv.messages) if (m.support?.ref && m.support.k !== 'offer') map.set(m.support.ref, m.support.k)
+    const map = new Map<string, { k: SupportPayload['k']; by: string }>()
+    // Une offre acceptée reçoit `accept` puis l'invitation : la réponse la plus avancée l'emporte.
+    const rank = { offer: 0, accept: 1, decline: 2, invite: 3 }
+    for (const m of conv.messages) {
+      const s = m.support
+      if (!s?.ref || s.k === 'offer') continue
+      const cur = map.get(s.ref)
+      if (!cur || rank[s.k] > rank[cur.k]) map.set(s.ref, { k: s.k, by: m.authorName })
+    }
     return map
   }, [conv.messages])
   const members = useQuery({ queryKey: qk.members(serverId), queryFn: () => serversApi.members(serverId), enabled: !!serverId })

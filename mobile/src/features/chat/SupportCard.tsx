@@ -44,7 +44,7 @@ export async function promptSupport(dmId: string, partnerId: string | undefined)
   ])
 }
 
-export function SupportCard({ m, dmId, mine, reply }: { m: ChatMessage; dmId: string; mine: boolean; reply?: SupportPayload['k'] }) {
+export function SupportCard({ m, dmId, mine, reply, replyBy }: { m: ChatMessage; dmId: string; mine: boolean; reply?: SupportPayload['k']; replyBy?: string }) {
   const t = useT()
   const rs = m.support
   const cmid = m.clientMsgId ?? ''
@@ -61,7 +61,8 @@ export function SupportCard({ m, dmId, mine, reply }: { m: ChatMessage; dmId: st
     sendSupport(dmId, { v: 1, k, ref: cmid }, t(`rs.text.${k}`)).catch((e) => Alert.alert(t('rs.sendError'), errorMessage(e)))
   const time = rs.exp ? new Date(rs.exp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''
   const isExpired = expired(rs)
-  const name = m.authorName
+  // Ma carte : le nom du correspondant (auteur de la réponse), pas le mien.
+  const name = mine ? replyBy ?? '' : m.authorName
   const open = () => {
     if (!rs.id || !rs.code) return
     used.add(cmid)
@@ -76,7 +77,7 @@ export function SupportCard({ m, dmId, mine, reply }: { m: ChatMessage; dmId: st
   ].filter(Boolean).join(' · ')
 
   let body: string
-  if (rs.k === 'offer') body = t(mine ? 'rs.card.offerOut' : 'rs.card.offerIn', { name })
+  if (rs.k === 'offer') body = t(mine ? (reply === 'accept' ? 'rs.card.offerAccepted' : 'rs.card.offerOut') : 'rs.card.offerIn', { name })
   else body = t(mine ? 'rs.card.inviteOut' : 'rs.card.inviteIn', { name, id: formatId(rs.id ?? ''), time })
 
   return (

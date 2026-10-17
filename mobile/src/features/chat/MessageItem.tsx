@@ -55,7 +55,7 @@ interface Props {
   ring?: AvatarRingData | null
   /** MP : identifiant de la conversation (cartes de support à distance) et réponse déjà donnée. */
   dmId?: string
-  supportReply?: SupportPayload['k']
+  supportReply?: { k: SupportPayload['k']; by: string }
 }
 
 /**
@@ -322,7 +322,7 @@ export const MessageItem = memo(function MessageItem({
           {m.content && !m.system && !(isVoiceMessageText(m.content) && displayAttachments(m.attachments, m.files).some(isVoiceAttachment)) ? (
             <View style={m.pending ? { opacity: 0.6 } : undefined}>
               {SpecialContent({ content: m.content, pending: m.pending, onLongPress: () => onLongPress(m) }) ?? <TextWithPreview m={m} myName={myName} />}
-              {m.support && dmId ? <SupportCard m={m} dmId={dmId} mine={m.authorId === myId} reply={supportReply} /> : null}
+              {m.support && dmId ? <SupportCard m={m} dmId={dmId} mine={m.authorId === myId} reply={supportReply?.k} replyBy={supportReply?.by} /> : null}
             </View>
           ) : null}
 

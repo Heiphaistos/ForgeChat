@@ -1,0 +1,4 @@
+- Support à distance (GhostHandDesk) : quand ton ami accepte ton aide, tu le vois tout de suite, et son identifiant GhostHandDesk est rempli tout seul (plus rien à recopier).
+- Inscription : le bouton « Confirmer » du code reçu par e-mail fonctionne de nouveau (il restait grisé avec les 6 chiffres).
+- Lien de téléchargement de GhostHandDesk mis à jour (0.10.0).
+- Binaires Windows signés (certificat Heiphaistos).

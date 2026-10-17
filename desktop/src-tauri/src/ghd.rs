@@ -24,6 +24,35 @@ pub async fn ghd_installed() -> bool {
     }
 }
 
+/// Identifiant GhostHandDesk : 9 chiffres, sans zéro en tête.
+fn id_ghd_valide(id: &str) -> bool {
+    id.len() == 9 && id.bytes().all(|b| b.is_ascii_digit()) && !id.starts_with('0')
+}
+
+/// Identifiant GhostHandDesk de cet ordinateur, lu dans `device_id.txt` : dossier `data` à côté
+/// de l'exécutable (version portable, celui du lien inscrit) sinon `%APPDATA%\GhostHandDesk`.
+/// `None` tant que GhostHandDesk n'a jamais été lancé ici.
+#[tauri::command]
+pub async fn ghd_device_id() -> Option<String> {
+    #[cfg(windows)]
+    {
+        let portable = lire_hkcu_defaut(r"Software\Classes\ghosthanddesk\shell\open\command")
+            .and_then(|c| exe_de_commande(&c))
+            .and_then(|exe| Path::new(&exe).parent().map(|d| d.join("data").join("device_id.txt")));
+        let itinerant = std::env::var_os("APPDATA").map(|d| Path::new(&d).join("GhostHandDesk").join("device_id.txt"));
+        [portable, itinerant]
+            .into_iter()
+            .flatten()
+            .filter_map(|f| std::fs::read_to_string(f).ok())
+            .map(|s| s.trim().to_string())
+            .find(|id| id_ghd_valide(id))
+    }
+    #[cfg(not(windows))]
+    {
+        None
+    }
+}
+
 /// Lien `ghosthanddesk://` construit ici à partir de champs validés (audit D1) :
 /// `share` (code à armer, durée en secondes) ou `connect` (identifiant + code).
 /// Rend le lien et la question posée à l'utilisateur.
@@ -64,9 +93,7 @@ fn lien_ghd(
         }
         ("connect", Some(id)) if ttl.is_none() => {
             let id: String = id.chars().filter(|c| !matches!(c, ' ' | '-')).collect();
-            let id_ok =
-                id.len() == 9 && id.bytes().all(|b| b.is_ascii_digit()) && !id.starts_with('0');
-            if !id_ok {
+            if !id_ghd_valide(&id) {
                 return Err("identifiant GhostHandDesk invalide".into());
             }
             Ok((

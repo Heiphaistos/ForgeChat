@@ -1,0 +1,2 @@
+- Support à distance : quand ton ami accepte ton aide, tu le vois tout de suite ; ta carte affiche le bon nom.
+- Lien de téléchargement de GhostHandDesk mis à jour (0.10.0).
