@@ -215,8 +215,9 @@ pub async fn poll_rss_feeds(state: &AppState) {
     use sqlx::Row;
 
     let rows = match sqlx::query(
-        "SELECT id, channel_id, server_id, name, feed_url, last_item_guid
-         FROM channel_feeds WHERE enabled = true"
+        "SELECT f.id, f.channel_id, f.server_id, f.name, f.feed_url, f.last_item_guid
+         FROM channel_feeds f JOIN servers s ON s.id = f.server_id
+         WHERE f.enabled = true AND s.suspended_at IS NULL"
     )
     .fetch_all(&state.db)
     .await

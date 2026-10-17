@@ -350,7 +350,7 @@ pub async fn delete_server(
     Path(server_id): Path<Uuid>,
     body: Option<Json<ReauthBody>>,
 ) -> Result<Json<serde_json::Value>> {
-    require_owner(&state, claims.sub, server_id).await?;
+    require_owner_even_suspended(&state, claims.sub, server_id).await?;
     // Suppression définitive : mot de passe + 2FA, quel que soit le client (web, bureau, mobile).
     verify_reauth(&state, claims.sub, &body.map(|b| b.0).unwrap_or_default()).await?;
     // Notifier tous les membres avant suppression
@@ -478,6 +478,18 @@ pub async fn join_server(
     // El Patron n'est jamais banni d'un serveur (un ancien bannissement ne le retient pas).
     if is_banned {
         return Err(AppError::Forbidden);
+    }
+
+    // Serveur suspendu par l'administration : on ne le rejoint pas (sauf El Patron).
+    let suspended: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM servers WHERE id=$1 AND suspended_at IS NOT NULL) AND NOT fc_is_god($2)"
+    )
+    .bind(server_id)
+    .bind(claims.sub)
+    .fetch_one(&state.db)
+    .await?;
+    if suspended {
+        return Err(denied_member(&state, server_id).await);
     }
 
     let already = sqlx::query_scalar::<_, bool>(
@@ -1236,6 +1248,12 @@ pub async fn require_role_below(state: &AppState, actor: Uuid, role_id: Uuid, se
 /// Départ d'un membre (expulsion, bannissement, départ volontaire) : ses rôles
 /// ne doivent pas l'attendre s'il revient, et il sort du vocal du serveur.
 pub async fn purge_membership(state: &AppState, user_id: Uuid, server_id: Uuid) {
+    // Les webhooks d'un membre parti postent sous son identité : ils partent avec lui.
+    let _ = sqlx::query("DELETE FROM webhooks WHERE created_by=$1 AND server_id=$2")
+        .bind(user_id)
+        .bind(server_id)
+        .execute(&state.db)
+        .await;
     let _ = sqlx::query("DELETE FROM member_roles WHERE user_id=$1 AND server_id=$2")
         .bind(user_id)
         .bind(server_id)
@@ -1312,7 +1330,8 @@ pub async fn require_channel_in_server(
     if !ok { Err(AppError::Forbidden) } else { Ok(()) }
 }
 
-pub async fn require_owner(
+/// Propriétaire du serveur, même suspendu : voie de sortie (suppression, voir l'état).
+pub async fn require_owner_even_suspended(
     state: &AppState, user_id: Uuid, server_id: Uuid,
 ) -> Result<()> {
     let ok = sqlx::query_scalar::<_, bool>(
@@ -1326,6 +1345,23 @@ pub async fn require_owner(
     if !ok { Err(AppError::Forbidden) } else { Ok(()) }
 }
 
+/// Propriétaire d'un serveur NON suspendu (un serveur suspendu est gelé, sauf pour El Patron).
+pub async fn require_owner(
+    state: &AppState, user_id: Uuid, server_id: Uuid,
+) -> Result<()> {
+    let ok = sqlx::query_scalar::<_, bool>(
+        "SELECT EXISTS(SELECT 1 FROM server_members sm JOIN servers s ON s.id = sm.server_id
+         WHERE sm.user_id=$1 AND sm.server_id=$2 AND (sm.is_owner=true OR fc_is_god(sm.user_id))
+           AND (s.suspended_at IS NULL OR fc_is_god($1)))"
+    )
+    .bind(user_id)
+    .bind(server_id)
+    .fetch_one(&state.db)
+    .await?;
+
+    if !ok { Err(denied_member(state, server_id).await) } else { Ok(()) }
+}
+
 pub async fn require_permission(
     state: &AppState, user_id: Uuid, server_id: Uuid, perm: i64,
 ) -> Result<()> {
@@ -1336,9 +1372,10 @@ pub async fn require_permission(
                 | COALESCE((SELECT permissions FROM roles WHERE server_id=$2 AND is_everyone=true), 0)
                 AS combined_perms
          FROM server_members sm
+         JOIN servers s ON s.id = sm.server_id
          LEFT JOIN member_roles mr ON mr.user_id = sm.user_id AND mr.server_id = sm.server_id
          LEFT JOIN roles r ON r.id = mr.role_id
-         WHERE sm.user_id = $1 AND sm.server_id = $2
+         WHERE sm.user_id = $1 AND sm.server_id = $2 AND (s.suspended_at IS NULL OR fc_is_god($1))
          GROUP BY sm.is_owner, sm.user_id"
     )
     .bind(user_id)
@@ -1347,7 +1384,7 @@ pub async fn require_permission(
     .await?;
 
     match row {
-        None => Err(AppError::Forbidden),
+        None => Err(denied_member(state, server_id).await),
         Some(r) => {
             if r.get::<bool, _>("is_owner") { return Ok(()); }
             let perms: i64 = r.get("combined_perms");
@@ -1657,7 +1694,7 @@ pub async fn discover_servers(
         "SELECT s.id, s.name, s.description, s.icon, s.banner, s.member_count, s.is_public,
                 s.created_at, s.invite_code
          FROM servers s
-         WHERE s.is_public = true
+         WHERE s.is_public = true AND s.suspended_at IS NULL
            AND ($1 = '' OR s.name ILIKE $2 OR s.description ILIKE $2)
          ORDER BY {order_clause}
          LIMIT 20 OFFSET $3"

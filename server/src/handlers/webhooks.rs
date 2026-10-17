@@ -211,7 +211,10 @@ pub async fn execute_webhook(
     // un canal auxiliaire théorique. Fetch par id seul, comparaison XOR-fold en Rust.
     let row = sqlx::query(
         "SELECT w.channel_id, w.name, w.created_by, COALESCE(w.token_hash, '') AS token_hash, c.server_id
-         FROM webhooks w JOIN channels c ON c.id = w.channel_id WHERE w.id=$1"
+         FROM webhooks w JOIN channels c ON c.id = w.channel_id
+         JOIN servers s ON s.id = c.server_id
+         WHERE w.id=$1 AND s.suspended_at IS NULL
+           AND EXISTS(SELECT 1 FROM server_members sm WHERE sm.user_id = w.created_by AND sm.server_id = c.server_id)"
     )
         .bind(webhook_id)
         .fetch_optional(&state.db).await?
@@ -346,7 +349,7 @@ pub async fn receive_github_webhook(
     };
 
     let row = sqlx::query(
-        "SELECT s.owner_id, c.server_id FROM channels c JOIN servers s ON s.id = c.server_id WHERE c.id = $1"
+        "SELECT s.owner_id, c.server_id FROM channels c JOIN servers s ON s.id = c.server_id WHERE c.id = $1 AND s.suspended_at IS NULL"
     )
     .bind(channel_id)
     .fetch_optional(&state.db)
