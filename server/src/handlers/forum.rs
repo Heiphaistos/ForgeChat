@@ -209,6 +209,16 @@ pub async fn create_post(
     if media_url.is_some_and(|u| !is_valid_media_url(u)) {
         return Err(AppError::BadRequest("Média invalide".into()));
     }
+    // Le fichier doit avoir été téléversé par l'auteur DANS ce salon : sinon n'importe quel
+    // `/uploads/<uuid>` (rencontré ailleurs) se faisait re-signer et republier dans le salon.
+    if let Some(u) = media_url {
+        let mine: bool = sqlx::query_scalar(
+            "SELECT EXISTS(SELECT 1 FROM attachments WHERE url=$1 AND uploader_id=$2 AND channel_id=$3)"
+        ).bind(u).bind(claims.sub).bind(channel_id).fetch_one(&state.db).await?;
+        if !mine {
+            return Err(AppError::BadRequest("Média invalide".into()));
+        }
+    }
     if channel_type == "media" && media_url.is_none() {
         return Err(AppError::BadRequest("Une publication de salon média exige une image ou une vidéo".into()));
     }
