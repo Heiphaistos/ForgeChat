@@ -6,14 +6,11 @@ import api from '../api/client'
 import { useAuth } from '../store/auth'
 import { t } from '../i18n'
 import { useAccountKey } from './accountKey'
-import { monitor, type KtEntry, type KtHead, type MonitorState } from './keyTransparency'
+import { loadMonitorState, monitor, type KtEntry, type KtHead, type MonitorState } from './keyTransparency'
 
 const EVERY_MS = 6 * 3600_000
 const storeKey = (uid: string) => `fc_kt_${uid}`
 
-function load(uid: string): MonitorState | null {
-  try { return JSON.parse(localStorage.getItem(storeKey(uid)) ?? 'null') } catch { return null }
-}
 function save(uid: string, s: MonitorState) {
   try { localStorage.setItem(storeKey(uid), JSON.stringify(s)) } catch { /* sans mémoire : reprise depuis le début */ }
 }
@@ -21,7 +18,7 @@ function save(uid: string, s: MonitorState) {
 export async function runKeyTransparencyCheck(uid: string, pub: string): Promise<void> {
   const fetchPage = async (after: number) =>
     (await api.get<{ entries: KtEntry[]; head: KtHead | null }>('/keys/log', { params: { after, limit: 1000 } })).data
-  const r = await monitor(load(uid), uid, pub, fetchPage)
+  const r = await monitor(loadMonitorState(uid), uid, pub, fetchPage)
   if (r.status === 'ok') return save(uid, r.state)
   toast.error(t(r.status === 'rewritten' ? 'guard.kt.rewritten' : 'guard.kt.foreign'), { id: 'kt-alert', duration: Infinity })
 }

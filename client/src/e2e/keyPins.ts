@@ -5,7 +5,7 @@ import { create } from 'zustand'
 import { useAuth } from '../store/auth'
 import { useAccountKey } from './accountKey'
 import api from '../api/client'
-import { contactKeyLogged, type KtEntry } from './keyTransparency'
+import { contactKeyLogged, loadMonitorState, type KtEntry } from './keyTransparency'
 import { checkServerKey, envelopeSender, fpOf, ownerVouches, serverSubject, sortMembers, type Pin, type SignedServerKey } from './keyPinsCore'
 
 export { fpOf } from './keyPinsCore'
@@ -135,14 +135,14 @@ interface MemberLike { user_id: string; username?: string; public: string | null
 
 /**
  * Clé jamais vue d'un contact : inscrite au journal de transparence ? `false` = le journal contredit la
- * clé servie ; `null` = indéterminé (ancienne clé sans entrée, erreur réseau : l'envoi n'est pas bloqué).
+ * clé servie, ou n'en a aucune trace (`kt_seq` absent) ; `null` = indéterminé (erreur réseau : l'envoi n'est pas bloqué).
  */
-async function keyLogged(userId: string, pub: string): Promise<boolean | null> {
+export async function keyLogged(userId: string, pub: string): Promise<boolean | null> {
   try {
     const { data } = await api.get<{ kt_seq?: number | null }>(`/users/${userId}/keys/public`)
-    if (typeof data.kt_seq !== 'number') return null
+    if (typeof data.kt_seq !== 'number') return false
     const entry = (await api.get<KtEntry>(`/keys/log/${data.kt_seq}`)).data
-    return await contactKeyLogged(userId, pub, entry)
+    return await contactKeyLogged(userId, pub, entry, loadMonitorState(me() ?? '')?.head ?? null)
   } catch {
     return null
   }
@@ -174,6 +174,8 @@ export async function trustEnvelopeSender(by: string, byPub: string): Promise<bo
   const account = me()
   if (!account) return false
   const r = await envelopeSender(by, byPub, account, useAccountKey.getState().pub, s => getPin(account, s))
+  // 1re vue : l'émetteur doit figurer au journal de transparence, sinon enveloppe refusée (« unreadable »).
+  if (r.fresh && (await keyLogged(by, byPub)) === false) return false
   if (r.fresh) await savePin(account, by, { fp: r.fresh })
   return r.ok
 }
