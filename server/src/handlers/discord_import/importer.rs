@@ -121,7 +121,8 @@ pub async fn run(db: &PgPool, upload_dir: &str, user_id: Uuid, import_id: Uuid, 
         let file = std::fs::File::open(&path)?;
         let archive = ZipArchive::new(file)
             .map_err(|_| user_err("Le fichier téléchargé n'est pas une archive ZIP valide."))?;
-        let entries: HashSet<String> = archive.file_names().map(String::from).collect();
+        // zip 9 : un nom d'entrée invalide (UTF-8, `..`) est une erreur ; on l'ignore, il ne sera jamais extrait.
+        let entries: HashSet<String> = archive.file_names().filter_map(|n| n.ok()).map(|n| n.into_owned()).collect();
         Ok((archive, entries))
     })
     .await??;

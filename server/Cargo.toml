@@ -1,6 +1,6 @@
 [package]
 name = "forgechat-server"
-version = "3.322.0"
+version = "3.323.0"
 edition = "2021"
 
 [[bin]]
@@ -44,7 +44,7 @@ totp-lite = "2"
 data-encoding = "2.6"
 urlencoding = "2"
 unicode-normalization = "0.1"
-zip = { version = "8.6.0", default-features = false, features = ["deflate"] }
+zip = { version = "9", default-features = false, features = ["deflate"] }
 # Web Push (aes128gcm) en Rust pur : la crate `web-push` tire `ece` -> openssl. Jeton VAPID signé
 # dans push.rs (ES256 via p256) : la fonctionnalité `vapid` tirait jwt-simple -> superboring -> rsa.
 web-push-native = { version = "0.5", default-features = false }
