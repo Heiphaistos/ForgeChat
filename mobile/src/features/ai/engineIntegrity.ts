@@ -35,7 +35,11 @@ export async function loadVerifiedEngine(origin: string, get: Fetcher = defaultF
       if (hex(await get(`${origin}${u}`)) !== expected[u]) throw new Error(u)
     }
     for (const u of urls) if (!expected[u]) throw new Error(`inconnu ${u}`)
-    return html.replace(/<(script|link)\b([^>]*?)(\/assets\/[A-Za-z0-9._-]+\.js)"/g, (_m, tag: string, pre: string, u: string) =>
+    // Le Worker est lancé par la page elle-même : son empreinte y est posée, la page le relit avec
+    // `integrity` et le démarre depuis cette copie (client/src/ai/engineCore.ts).
+    const worker = Object.keys(expected).find((k) => /\/engine\.worker-[A-Za-z0-9_-]+\.js$/.test(k))
+    if (!worker || !html.includes('</head>')) throw new Error('worker')
+    return html.replace('</head>', `<meta name="fc-worker-integrity" content="${sri(expected[worker]!)}"></head>`).replace(/<(script|link)\b([^>]*?)(\/assets\/[A-Za-z0-9._-]+\.js)"/g, (_m, tag: string, pre: string, u: string) =>
       `<${tag}${pre}${u}" integrity="${sri(expected[u]!)}"`)
   } catch (e) {
     logger.warn('ai', 'page moteur refusée (empreinte différente ou injoignable)', e)

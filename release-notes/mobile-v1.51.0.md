@@ -1,0 +1,1 @@
+- IA sur l'appareil : le moteur de calcul (Worker) est relu avec l'empreinte vérifiée par l'appli et démarré depuis cette copie ; un serveur ne peut plus lui substituer un autre code.

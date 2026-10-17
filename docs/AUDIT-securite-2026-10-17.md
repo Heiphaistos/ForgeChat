@@ -13,7 +13,7 @@ Bilan : **0 critique**, 4 hautes, ~30 moyennes, ~40 faibles. Tout ce qui est lis
 | H1 | web `store/call.ts`, `groupCall.ts`, `voiceSfu.ts` ; mobile `stores/call.ts`, `groupCall.ts`, `voice.ts` | Le chiffrement des médias LiveKit n'était activé que si le serveur annonçait `e2ee:true`. Un serveur menteur faisait rejoindre l'appel en clair sans erreur. | `openMediaE2EE` toujours appelé dès que la clé de compte est prête ; sans clé, refus de rejoindre (message FR). Le drapeau servi est ignoré. |
 | H2 | desktop `tauri.conf.json`, `nginx.conf` | `script-src` autorisait `www.youtube.com` et `s.ytimg.com` dans l'origine qui porte l'IPC Tauri (jetons, trousseau, updater). | « Regarder ensemble » pilote désormais une iframe `youtube-nocookie` en postMessage (`lib/youtubeEmbed.ts`), origine et `source` vérifiés ; l'API IFrame n'est plus chargée ; les deux hôtes sont retirés des deux CSP. |
 | H3 | serveur `servers.rs`, `templates.rs` | `description`, `welcome_message`, `verification_rules` sans borne (corps de 12 Mo), renvoyés dans `/explore`, la découverte, `SERVER_UPDATE` et la route publique `get_invite_info`. | Bornes en caractères (1000 / 2000 / 4000), nom 2–100, sur toutes les écritures. |
-| H4 | infra | La garde de déploiement signé (`deploy/verify-signed-head.sh`) n'a jamais été installée sur le VPS : un push sur `main` exécute du code en production. | **Non installée** : exige de signer chaque commit (clé + `allowed_signers` sur le VPS), ce qui bloquerait les push de Claude sans clé dédiée. Décision à prendre par le propriétaire (voir §6). En attendant : sauvegarde + retour arrière automatiques dans `deploy.sh`. |
+| H4 | infra | La garde de déploiement signé (`deploy/verify-signed-head.sh`) n'a jamais été installée sur le VPS : un push sur `main` exécute du code en production. | **Installée le 2026-10-17** (`docs/DEPLOIEMENT-SIGNE.md`) : le déployeur refuse tout commit non signé par la clé de `/etc/forgechat/allowed_signers` et tout retour en arrière ; testé (commit non signé refusé, commit signé déployé). |
 
 ## 2. Serveur
 
@@ -56,7 +56,7 @@ Métier (branche fc-fix-srv-b, migration 141) :
 
 ## 5. Application mobile
 
-- Moteur d'IA : la page et ses 5 scripts sont téléchargés puis comparés à des SHA-256 embarqués (`engineHashes.ts`, SRI) avant d'être injectés dans la WebView ; au moindre écart, refus. **À chaque release web qui change la page moteur : `node mobile/scripts/ai-engine-hashes.mjs client/dist` puis nouvelle release mobile.** Reste : le Worker n'est pas couvert par le SRI (embarquement complet à planifier).
+- Moteur d'IA : la page et ses 5 scripts sont téléchargés puis comparés à des SHA-256 embarqués (`engineHashes.ts`, SRI) avant d'être injectés dans la WebView ; au moindre écart, refus. **À chaque release web qui change la page moteur : `node mobile/scripts/ai-engine-hashes.mjs client/dist` puis nouvelle release mobile.** Le Worker, lancé par la page elle-même, est relu avec son empreinte (`<meta name="fc-worker-integrity">` posée par l'appli, `fetch(..., { integrity })`) et démarré depuis cette copie (web 3.690.0 / mobile 1.51.0) ; testé avec une vraie traduction, et refusé avec une fausse empreinte.
 - Parité avec le web : E2EE média forcé, `keyLogged` à la première vue, `mustEncrypt` verrouillé, journal de transparence vérifié, aperçus de liens désactivés par défaut, liste locale des commandes natives, preuves pour 2FA / export / transfert.
 - SecureStore : échec d'écriture journalisé et propagé pour les épingles TOFU ; accessibilité iOS fixée (`*_THIS_DEVICE_ONLY`) ; presse-papiers vidé 30 s après la copie du code de récupération ; épinglage de certificats prolongé (2030) et étendu à LiveKit.
 - Toujours sans `REQUEST_INSTALL_PACKAGES`.
@@ -69,8 +69,7 @@ Dépôt (`nginx.conf`, `docker-compose.yml`, `deploy.sh`) :
 - `deploy.sh` : `pg_dump` avant toute construction (7 sauvegardes gardées), image précédente taguée `forgechat-server:prev`, retour arrière automatique si le serveur n'est pas sain après 3 minutes.
 
 Reste à décider par le propriétaire :
-- **Garde de déploiement signé (H4)** : installer `forgechat-verify-head` + `allowed_signers` sur le VPS, ce qui impose de signer chaque commit poussé sur `main` (clé SSH de signature dédiée, par exemple rangée dans D:\MDP et utilisée par les sessions Claude).
-- Signature Authenticode / notarisation des binaires de bureau.
+- Notarisation macOS : impossible sans le programme développeur Apple (payant). Windows : exe signés avec le certificat Heiphaistos (gratuit, auto-signé).
 - Expiration/rotation de la clé de signature des releases (un serveur compromis peut figer un client sur une ancienne release signée).
 
 ## 7. Vérifications
