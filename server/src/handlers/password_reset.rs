@@ -162,6 +162,10 @@ pub async fn reset_password(
         .and_then(|s| Uuid::parse_str(&s).ok())
         .ok_or_else(invalid)?;
 
+    // Jetons d'accès déjà émis (appareil volé) révoqués AVANT la base, comme change_password : si Redis
+    // refuse (503), le mot de passe n'a pas changé et un voleur ne garde jamais de jeton valide.
+    revoke_all_tokens(&state, user_id).await?;
+
     let mut tx = state.db.begin().await?;
     // Le nouveau mot de passe rouvre aussi un compte verrouillé en urgence.
     sqlx::query("UPDATE users SET auth_hash=$2, kdf_salt=$3, password_hash=$4, kdf=$5, locked_at=NULL, updated_at=NOW() WHERE id=$1")
@@ -185,8 +189,6 @@ pub async fn reset_password(
         let mut redis = state.redis.lock().await;
         let _: () = redis.del(user_key(user_id)).await.unwrap_or(());
     }
-    // Les jetons d'accès déjà émis (appareil volé) deviennent invalides.
-    revoke_all_tokens(&state, user_id).await?;
     state.disconnect_user_sockets(user_id).await;
     Ok(Json(serde_json::json!({ "ok": true })))
 }
